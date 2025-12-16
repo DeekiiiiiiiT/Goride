@@ -61,9 +61,16 @@ app.get("/make-server-37f42386/trips", async (c) => {
 app.get("/make-server-37f42386/notifications", async (c) => {
   try {
     const notifications = await kv.getByPrefix("notification:");
-    // Sort by timestamp desc
-    notifications.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    return c.json(notifications);
+    if (Array.isArray(notifications)) {
+        // Sort by timestamp desc safely
+        notifications.sort((a: any, b: any) => {
+            const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+        });
+        return c.json(notifications);
+    }
+    return c.json([]);
   } catch (e: any) {
     console.error("Error fetching notifications:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);

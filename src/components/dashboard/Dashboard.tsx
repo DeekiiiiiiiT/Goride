@@ -52,12 +52,24 @@ export function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tripsData, notificationsData] = await Promise.all([
-            api.getTrips(),
-            api.getNotifications()
-        ]);
-        setTrips(tripsData);
-        setNotifications(notificationsData);
+        // Fetch trips independently
+        try {
+            const tripsData = await api.getTrips();
+            setTrips(tripsData);
+        } catch (tripErr: any) {
+            console.error("Failed to load trips", tripErr);
+            setError("Failed to load trips data");
+        }
+
+        // Fetch notifications independently so it doesn't block the dashboard
+        try {
+            const notificationsData = await api.getNotifications();
+            setNotifications(notificationsData);
+        } catch (notifErr: any) {
+            console.error("Failed to load notifications", notifErr);
+            // Don't set main error state, just log it. 
+            // Or maybe show a toast? For now, we just let notifications be empty.
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {

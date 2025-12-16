@@ -8,6 +8,22 @@ export interface Trip {
   status: 'Completed' | 'Cancelled' | 'Processing';
   distance?: number;
   duration?: number; // minutes
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  vehicleId?: string;
+  notes?: string;
+  [key: string]: any; // Allow dynamic properties
+}
+
+export type FieldType = 'text' | 'number' | 'date' | 'address';
+
+export interface FieldDefinition {
+  key: string;
+  label: string;
+  type: FieldType;
+  required?: boolean; // If true, cannot be deleted and must be mapped for import to proceed
+  removable?: boolean; // If true, can be deleted from the list
+  description?: string;
 }
 
 export interface CsvMapping {
@@ -16,7 +32,14 @@ export interface CsvMapping {
   driverId: string;
   platform?: string;
   status?: string;
-  id?: string;
+  distance?: string;
+  duration?: string;
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  driverName?: string;
+  vehicleId?: string;
+  notes?: string;
+  [key: string]: string | undefined; // Allow dynamic mapping
 }
 
 export interface ParsedRow {

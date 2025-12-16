@@ -43,7 +43,8 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch notifications`);
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch notifications: ${response.status} ${errorText}`);
     }
 
     return response.json();
