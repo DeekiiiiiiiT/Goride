@@ -1,4 +1,4 @@
-import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType } from '../types/data';
+import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics, VehicleMetrics, RentalContract } from '../types/data';
 import Papa from 'papaparse';
 
 // ... (Legacy code support if needed, but we focus on new logic)
@@ -74,9 +74,19 @@ export function detectFileType(headers: string[]): FileData['type'] {
 // Helper to normalize keys for merging (e.g., lower case UUIDs)
 const cleanId = (id: any) => String(id || '').trim();
 
-export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[]): Trip[] {
+export interface ProcessedBatch {
+    trips: Trip[];
+    driverMetrics: DriverMetrics[];
+    vehicleMetrics: VehicleMetrics[];
+    rentalContracts: RentalContract[];
+}
+
+export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[]): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
     const genericTrips: Trip[] = [];
+    const driverMetrics: DriverMetrics[] = [];
+    const vehicleMetrics: VehicleMetrics[] = [];
+    const rentalContracts: RentalContract[] = [];
 
     // 1. Process all files
     files.forEach(file => {
@@ -90,83 +100,104 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
         // Process Uber Files
         file.rows.forEach(row => {
-            const tripId = cleanId(row['Trip UUID'] || row['trip uuid']);
-            if (!tripId) return; // Skip rows without ID
+             // ... existing trip logic ...
+             if (file.type === 'uber_trip' || file.type === 'uber_payment') {
+                const tripId = cleanId(row['Trip UUID'] || row['trip uuid']);
+                if (!tripId) return; 
 
-            // Get existing or create new
-            const current = tripMap.get(tripId) || { id: tripId, platform: 'Uber' };
+                const current = tripMap.get(tripId) || { id: tripId, platform: 'Uber' };
+                
+                if (file.type === 'uber_trip') {
+                    const schema = UBER_SCHEMAS.TRIP_ACTIVITY.mapping;
+                    if (row[schema.date]) {
+                         try { current.date = new Date(String(row[schema.date])).toISOString(); } catch(e) { current.date = new Date().toISOString(); }
+                    }
+                    if (row[schema.pickupLocation]) current.pickupLocation = String(row[schema.pickupLocation]);
+                    if (row[schema.dropoffLocation]) current.dropoffLocation = String(row[schema.dropoffLocation]);
+                    if (row[schema.driverId]) current.driverId = String(row[schema.driverId]);
+                    if (row[schema.vehicleId]) current.vehicleId = String(row[schema.vehicleId]);
+                    if (row[schema.distance]) current.distance = parseFloat(String(row[schema.distance]).replace(/[^0-9.]/g, '')) || 0;
+                    if (row[schema.status]) {
+                        const s = String(row[schema.status]).toLowerCase();
+                        if (s.includes('cancel')) current.status = 'Cancelled';
+                        else if (s.includes('complet')) current.status = 'Completed';
+                        else current.status = 'Processing';
+                    }
+                } else if (file.type === 'uber_payment') {
+                    const schema = UBER_SCHEMAS.PAYMENTS_ORDER.mapping;
+                    
+                    // 1. Earnings ("Paid to you")
+                    let amountVal = row['Paid to you'] || row['Paid to you : Your earnings'];
+                    if (amountVal) current.amount = parseFloat(String(amountVal).replace(/[^0-9.-]/g, '')) || 0;
+                    
+                    // 2. Cash Collected (Crucial for Phase 3 Reconciliation)
+                    // Checks strictly for 'Cash Collected' column common in Uber Fleet reports
+                    let cashVal = row['Cash Collected'] || row['Cash collected'];
+                    if (cashVal) {
+                        current.cashCollected = parseFloat(String(cashVal).replace(/[^0-9.-]/g, '')) || 0;
+                    } else {
+                        // Ensure it's initialized if not present to avoid undefined math later
+                        if (current.cashCollected === undefined) current.cashCollected = 0;
+                    }
 
-            if (file.type === 'uber_trip') {
-                // Map Operational Data
-                const schema = UBER_SCHEMAS.TRIP_ACTIVITY.mapping;
-                
-                // Date
-                if (row[schema.date]) {
-                     try {
-                         // Uber format often "14/12/2025 2:16" - parse carefully if needed
-                         // but new Date() usually handles many formats. 
-                         // Note: Uber CSVs sometimes use DD/MM/YYYY which JS might read as MM/DD/YYYY.
-                         // For now relies on standard parsing.
-                         current.date = new Date(String(row[schema.date])).toISOString();
-                     } catch(e) {
-                         current.date = new Date().toISOString();
-                     }
+                    if (!current.date && row['vs reporting']) {
+                         try { current.date = new Date(String(row['vs reporting'])).toISOString(); } catch(e) {}
+                    }
+                    if (!current.driverId && row[schema.driverId]) current.driverId = String(row[schema.driverId]);
                 }
-                
-                if (row[schema.pickupLocation]) current.pickupLocation = String(row[schema.pickupLocation]);
-                if (row[schema.dropoffLocation]) current.dropoffLocation = String(row[schema.dropoffLocation]);
-                if (row[schema.driverId]) current.driverId = String(row[schema.driverId]);
-                if (row[schema.vehicleId]) current.vehicleId = String(row[schema.vehicleId]);
-                
-                // Distance
-                if (row[schema.distance]) {
-                    current.distance = parseFloat(String(row[schema.distance]).replace(/[^0-9.]/g, '')) || 0;
-                }
-                
-                // Status
-                if (row[schema.status]) {
-                    const s = String(row[schema.status]).toLowerCase();
-                    if (s.includes('cancel')) current.status = 'Cancelled';
-                    else if (s.includes('complet')) current.status = 'Completed';
-                    else current.status = 'Processing';
-                }
-            } 
-            else if (file.type === 'uber_payment') {
-                // Map Financial Data
-                const schema = UBER_SCHEMAS.PAYMENTS_ORDER.mapping;
-                
-                // Amount - Uber has many columns, usually "Paid to you" is net or "Paid to you : Your earnings"
-                // The user's file has 'Paid to you' (col 10) and 'Paid to you : Your earnings' (col 11)
-                // Let's prefer 'Paid to you' as it seems to be the total settlement amount for that transaction
-                let amountVal = row['Paid to you'] || row['Paid to you : Your earnings'];
-                if (amountVal) {
-                    current.amount = parseFloat(String(amountVal).replace(/[^0-9.-]/g, '')) || 0;
-                }
-
-                // If date is missing (e.g. only had payment file), try to use transaction date?
-                // Payment file usually has a timestamp column like "vs reporting" or similar.
-                // In user file: "vs reporting" = "2025-12-08 13:45:54..."
-                if (!current.date && row['vs reporting']) {
-                     try {
-                        current.date = new Date(String(row['vs reporting'])).toISOString();
-                     } catch(e) {}
-                }
-                
-                // Driver ID redundancy
-                if (!current.driverId && row[schema.driverId]) current.driverId = String(row[schema.driverId]);
-            }
-
-            tripMap.set(tripId, current);
+                tripMap.set(tripId, current);
+             }
+             
+             // --- NEW: Parse Side-Channel Data ---
+             
+             else if (file.type === 'uber_driver_quality') {
+                 // Simple extraction, in reality needs better date handling from filename or metadata
+                 driverMetrics.push({
+                     id: `dm-${Math.random()}`,
+                     driverId: String(row['Driver UUID'] || ''),
+                     driverName: `${row['Driver First Name']} ${row['Driver Surname']}`,
+                     periodStart: new Date().toISOString(), // Placeholder
+                     periodEnd: new Date().toISOString(),   // Placeholder
+                     acceptanceRate: parseFloat(String(row['Acceptance Rate']).replace('%','')) / 100 || 0,
+                     cancellationRate: parseFloat(String(row['Cancellation Rate']).replace('%','')) / 100 || 0,
+                     completionRate: parseFloat(String(row['Completion Rate']).replace('%','')) / 100 || 0,
+                     ratingLast500: parseFloat(String(row['Driver Ratings (Previous 500 Trips)'])) || 0,
+                     ratingLast4Weeks: parseFloat(String(row['Driver Ratings (Last 4 Weeks)'])) || 0,
+                     onlineHours: 0,
+                     onTripHours: 0,
+                     tripsCompleted: parseInt(String(row['Trips Completed'])) || 0
+                 });
+             }
+             
+             else if (file.type === 'uber_rental_contract') {
+                 // Basic extraction for Phase 6 awareness
+                 rentalContracts.push({
+                     termId: String(row['TermUUID'] || `term-${Math.random()}`),
+                     driverId: String(row['DriverUUID'] || ''),
+                     organizationId: String(row['OrganizationUUID'] || ''),
+                     startDate: new Date().toISOString(), // Placeholder
+                     endDate: new Date().toISOString(), // Placeholder
+                     status: 'Active',
+                     balanceStart: parseFloat(String(row['Balance at the beginning of the period']).replace(/[^0-9.-]/g, '')) || 0,
+                     totalCharges: parseFloat(String(row['Amount to charge']).replace(/[^0-9.-]/g, '')) || 0,
+                     totalPaid: parseFloat(String(row['Amount Charged/ Paid']).replace(/[^0-9.-]/g, '')) || 0,
+                     balanceEnd: parseFloat(String(row['Balance at the end of the period']).replace(/[^0-9.-]/g, '')) || 0
+                 });
+             }
         });
     });
 
     // 2. Convert Map to Array and Finalize
     const mergedTrips = Array.from(tripMap.values()).map(t => {
-        // Ensure defaults
+        const amount = t.amount || 0;
+        const cashCollected = t.cashCollected || 0;
+        
         return {
             id: t.id || `trip-${Math.random()}`,
             date: t.date || new Date().toISOString(),
-            amount: t.amount || 0,
+            amount: amount,
+            cashCollected: cashCollected,
+            netPayout: amount - cashCollected, // Phase 3: Auto-calculate reconciliation
             driverId: t.driverId || 'unknown',
             platform: t.platform || 'Other',
             status: t.status || 'Completed',
@@ -174,7 +205,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         } as Trip;
     });
 
-    return [...mergedTrips, ...genericTrips];
+    return {
+        trips: [...mergedTrips, ...genericTrips],
+        driverMetrics,
+        vehicleMetrics,
+        rentalContracts
+    };
 }
 
 

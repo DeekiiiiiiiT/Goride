@@ -38,11 +38,24 @@ import {
   Check,
   RefreshCw,
   Link as LinkIcon,
-  Download
+  Download,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner@2.0.3';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../ui/alert-dialog";
 
 export function SettingsPage() {
   return (
@@ -90,6 +103,21 @@ export function SettingsPage() {
 }
 
 function GeneralPanel() {
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetData = async () => {
+    setIsResetting(true);
+    try {
+      const result = await api.clearAllData();
+      toast.success(`System reset complete. Cleared ${result.deletedTrips} trips.`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to reset system data");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <div className="grid gap-6">
       <Card>
@@ -179,6 +207,51 @@ function GeneralPanel() {
               </div>
               <Switch />
            </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-rose-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-rose-600 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Danger Zone
+          </CardTitle>
+          <CardDescription>
+            Destructive actions that affect your entire workspace.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 border border-rose-100 rounded-lg bg-rose-50 dark:bg-rose-950/20">
+             <div className="space-y-1">
+                <h4 className="font-medium text-rose-900 dark:text-rose-100">Reset System Data</h4>
+                <p className="text-sm text-rose-700 dark:text-rose-300">
+                  Permanently delete all imported trips, batches, and cached reports. This action cannot be undone.
+                </p>
+             </div>
+             <AlertDialog>
+               <AlertDialogTrigger asChild>
+                 <Button variant="destructive">Reset Data</Button>
+               </AlertDialogTrigger>
+               <AlertDialogContent>
+                 <AlertDialogHeader>
+                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                   <AlertDialogDescription>
+                     This action cannot be undone. This will permanently delete all your imported trips
+                     and reset your dashboard metrics to zero.
+                   </AlertDialogDescription>
+                 </AlertDialogHeader>
+                 <AlertDialogFooter>
+                   <AlertDialogCancel>Cancel</AlertDialogCancel>
+                   <AlertDialogAction 
+                     onClick={handleResetData}
+                     className="bg-rose-600 hover:bg-rose-700"
+                   >
+                     {isResetting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, Delete Everything"}
+                   </AlertDialogAction>
+                 </AlertDialogFooter>
+               </AlertDialogContent>
+             </AlertDialog>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -316,20 +389,52 @@ function TeamPanel() {
 
 function IntegrationsPanel() {
   const [integrations, setIntegrations] = useState([
-    { id: 'uber', name: 'Uber Fleet', status: 'connected', lastSync: '10 mins ago', icon: 'https://images.unsplash.com/photo-1626071485672-b5b637956b44?auto=format&fit=crop&w=64&h=64&q=80' },
-    { id: 'lyft', name: 'Lyft Business', status: 'connected', lastSync: '10 mins ago', icon: 'https://images.unsplash.com/photo-1626071485672-b5b637956b44?auto=format&fit=crop&w=64&h=64&q=80' }, // Using same placeholder for now
-    { id: 'bolt', name: 'Bolt', status: 'disconnected', lastSync: '-', icon: 'https://images.unsplash.com/photo-1626071485672-b5b637956b44?auto=format&fit=crop&w=64&h=64&q=80' }
+    { id: 'uber', name: 'Uber Fleet', status: 'disconnected', lastSync: '-', icon: 'figma:asset/e81b41be1a56e0ba817406c557cd6e02c443dfd4.png' }, // Using the image from the user's screenshot context if valid, otherwise fallback
+    { id: 'lyft', name: 'Lyft Business', status: 'disconnected', lastSync: '-', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Lyft_logo.svg/1200px-Lyft_logo.svg.png' },
+    { id: 'bolt', name: 'Bolt', status: 'disconnected', lastSync: '-', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Bolt-logo-green.svg/2560px-Bolt-logo-green.svg.png' }
   ]);
+  
+  const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState({ clientId: '', clientSecret: '' });
+
+  const handleConnectClick = (platformId: string) => {
+      setSelectedPlatform(platformId);
+      setIsConnectDialogOpen(true);
+  };
+
+  const handleSaveCredentials = () => {
+      // In a real app, we would send this to the backend
+      console.log(`Saving credentials for ${selectedPlatform}:`, credentials);
+      
+      setIntegrations(prev => prev.map(int => {
+          if (int.id === selectedPlatform) {
+              return { ...int, status: 'connected', lastSync: 'Just now' };
+          }
+          return int;
+      }));
+      
+      toast.success(`${selectedPlatform} connected successfully!`);
+      setIsConnectDialogOpen(false);
+      setCredentials({ clientId: '', clientSecret: '' });
+  };
 
   const toggleIntegration = (id: string) => {
-    setIntegrations(prev => prev.map(int => {
-      if (int.id === id) {
-        const newStatus = int.status === 'connected' ? 'disconnected' : 'connected';
-        toast.success(`${int.name} ${newStatus === 'connected' ? 'connected' : 'disconnected'}`);
-        return { ...int, status: newStatus, lastSync: newStatus === 'connected' ? 'Just now' : '-' };
-      }
-      return int;
-    }));
+    // If it's already connected, disconnect it
+    const target = integrations.find(i => i.id === id);
+    if (target?.status === 'connected') {
+        setIntegrations(prev => prev.map(int => {
+            if (int.id === id) {
+                return { ...int, status: 'disconnected', lastSync: '-' };
+            }
+            return int;
+        }));
+        toast.info(`${target.name} disconnected.`);
+        return;
+    }
+
+    // Otherwise open the dialog
+    handleConnectClick(id);
   };
 
   return (
@@ -337,16 +442,16 @@ function IntegrationsPanel() {
       <CardHeader>
         <CardTitle>Platform Integrations</CardTitle>
         <CardDescription>
-          Connect your fleet accounts to automatically import trip data.
+          Connect your fleet accounts to automatically import trip data via API.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {integrations.map((item) => (
           <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-slate-950">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden">
-                 {/* Placeholder for platform logos */}
-                 <span className="font-bold text-slate-400">{item.name.charAt(0)}</span>
+              <div className="h-12 w-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden p-2">
+                 {/* Simple fallback icon logic if image fails */}
+                 <div className="font-bold text-slate-400 text-xl">{item.name.charAt(0)}</div>
               </div>
               <div>
                 <h4 className="font-medium text-slate-900 dark:text-slate-100">{item.name}</h4>
@@ -382,11 +487,52 @@ function IntegrationsPanel() {
             </div>
           </div>
         ))}
+
+        <Dialog open={isConnectDialogOpen} onOpenChange={setIsConnectDialogOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Connect {integrations.find(i => i.id === selectedPlatform)?.name}</DialogTitle>
+                    <DialogDescription>
+                        Enter your API credentials from the {selectedPlatform} Developer Dashboard.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label>Client ID</Label>
+                        <Input 
+                            value={credentials.clientId}
+                            onChange={(e) => setCredentials(prev => ({...prev, clientId: e.target.value}))}
+                            placeholder="e.g. j48f-2k9d-..."
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Client Secret</Label>
+                        <Input 
+                            type="password"
+                            value={credentials.clientSecret}
+                            onChange={(e) => setCredentials(prev => ({...prev, clientSecret: e.target.value}))}
+                            placeholder="••••••••••••••••"
+                        />
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded text-xs text-slate-500">
+                        <p className="font-medium mb-1">Redirect URL:</p>
+                        <code className="bg-slate-100 p-1 rounded">https://goride.app/api/auth/{selectedPlatform}/callback</code>
+                        <p className="mt-2">Copy this URL to your app settings in the developer dashboard.</p>
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsConnectDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={handleSaveCredentials} disabled={!credentials.clientId || !credentials.clientSecret}>
+                        Save & Connect
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
       </CardContent>
       <CardFooter className="bg-slate-50 dark:bg-slate-900 border-t px-6 py-4">
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <LinkIcon className="h-4 w-4" />
-          <span>Need to connect a custom API? <a href="#" className="text-indigo-600 hover:underline">View API Documentation</a></span>
+          <span>Need help finding your keys? <a href="#" className="text-indigo-600 hover:underline">View Integration Guide</a></span>
         </div>
       </CardFooter>
     </Card>

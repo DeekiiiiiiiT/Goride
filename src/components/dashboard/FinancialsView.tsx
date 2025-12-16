@@ -11,7 +11,7 @@ import {
   ComposedChart
 } from 'recharts';
 import { Trip } from '../../types/data';
-import { DollarSign, TrendingUp, CreditCard, Wallet } from "lucide-react";
+import { DollarSign, TrendingUp, Wallet } from "lucide-react";
 
 interface FinancialsViewProps {
   trips: Trip[];
@@ -77,7 +77,7 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
   return (
     <div className="space-y-6">
       {/* Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard 
           title="Total Earnings"
           value={`$${metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
@@ -95,12 +95,6 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
           value={metrics.bestPlatform}
           icon={<TrendingUp className="h-4 w-4 text-blue-600" />}
           subtext="Highest revenue source"
-        />
-        <MetricCard 
-          title="Payout Pending"
-          value="$0.00"
-          icon={<CreditCard className="h-4 w-4 text-slate-600" />}
-          subtext="Estimated pending payouts"
         />
       </div>
 

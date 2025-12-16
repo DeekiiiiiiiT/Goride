@@ -8,6 +8,7 @@ import { DriversPage } from './components/drivers/DriversPage';
 import { VehiclesPage } from './components/vehicles/VehiclesPage';
 import { FinancialsPage } from './components/financials/FinancialsPage';
 import { ReportsPage } from './components/reports/ReportsPage';
+import { TransactionsPage } from './components/transactions/TransactionsPage';
 
 // Driver Portal Components
 import { DriverAuth } from './components/driver-portal/DriverAuth';
@@ -65,6 +66,7 @@ export default function App() {
       {currentPage === 'trips' && <TripLogsPage />}
       {currentPage === 'financials' && <FinancialsPage />}
       {currentPage === 'reports' && <ReportsPage />}
+      {currentPage === 'transactions' && <TransactionsPage />}
       {currentPage === 'settings' && <SettingsPage />}
     </AppLayout>
   );

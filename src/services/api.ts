@@ -1,11 +1,59 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { Trip, Notification } from '../types/data';
+import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics } from '../types/data';
 
 const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
+  try {
+    const response = await fetch(url, options);
+    // If 5xx error, retry
+    if (response.status >= 500 && retries > 0) {
+        throw new Error(`Server error: ${response.status}`);
+    }
+    return response;
+  } catch (err) {
+    if (retries > 0) {
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+    }
+    throw err;
+  }
+}
+
 export const api = {
+  async getBatches(): Promise<ImportBatch[]> {
+    const response = await fetchWithRetry(`${BASE_URL}/batches`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch batches");
+    return response.json();
+  },
+
+  async createBatch(batch: ImportBatch) {
+    const response = await fetchWithRetry(`${BASE_URL}/batches`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(batch)
+    });
+    if (!response.ok) throw new Error("Failed to create batch");
+    return response.json();
+  },
+
+  async deleteBatch(id: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/batches/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete batch");
+    return response.json();
+  },
+
   async saveTrips(trips: Trip[]) {
-    const response = await fetch(`${BASE_URL}/trips`, {
+    const response = await fetchWithRetry(`${BASE_URL}/trips`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -21,8 +69,34 @@ export const api = {
     return response.json();
   },
 
+  async saveDriverMetrics(metrics: DriverMetrics[]) {
+      const response = await fetchWithRetry(`${BASE_URL}/driver-metrics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(metrics),
+      });
+      if (!response.ok) throw new Error(`Failed to save driver metrics`);
+      return response.json();
+  },
+
+  async saveVehicleMetrics(metrics: VehicleMetrics[]) {
+      const response = await fetchWithRetry(`${BASE_URL}/vehicle-metrics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(metrics),
+      });
+      if (!response.ok) throw new Error(`Failed to save vehicle metrics`);
+      return response.json();
+  },
+
   async getTrips(): Promise<Trip[]> {
-    const response = await fetch(`${BASE_URL}/trips`, {
+    const response = await fetchWithRetry(`${BASE_URL}/trips`, {
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
         }
@@ -35,8 +109,21 @@ export const api = {
     return response.json();
   },
 
+  async clearAllData() {
+    const response = await fetchWithRetry(`${BASE_URL}/trips`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to clear data: ${response.statusText}`);
+    }
+    
+    return response.json();
+  },
+
   async getNotifications(): Promise<Notification[]> {
-    const response = await fetch(`${BASE_URL}/notifications`, {
+    const response = await fetchWithRetry(`${BASE_URL}/notifications`, {
       headers: {
         'Authorization': `Bearer ${publicAnonKey}`
       }
@@ -51,7 +138,7 @@ export const api = {
   },
 
   async markNotificationAsRead(id: string) {
-    const response = await fetch(`${BASE_URL}/notifications/${id}/read`, {
+    const response = await fetchWithRetry(`${BASE_URL}/notifications/${id}/read`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${publicAnonKey}`
@@ -66,7 +153,7 @@ export const api = {
   },
 
   async createNotification(notification: Partial<Notification>) {
-    const response = await fetch(`${BASE_URL}/notifications`, {
+    const response = await fetchWithRetry(`${BASE_URL}/notifications`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -83,7 +170,7 @@ export const api = {
   },
 
   async getAlertRules() {
-    const response = await fetch(`${BASE_URL}/alert-rules`, {
+    const response = await fetchWithRetry(`${BASE_URL}/alert-rules`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch alert rules");
@@ -91,7 +178,7 @@ export const api = {
   },
 
   async saveAlertRule(rule: any) {
-    const response = await fetch(`${BASE_URL}/alert-rules`, {
+    const response = await fetchWithRetry(`${BASE_URL}/alert-rules`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -104,7 +191,7 @@ export const api = {
   },
 
   async deleteAlertRule(id: string) {
-     const response = await fetch(`${BASE_URL}/alert-rules/${id}`, {
+     const response = await fetchWithRetry(`${BASE_URL}/alert-rules/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

@@ -8,11 +8,8 @@ import {
   Activity, 
   Wifi, 
   WifiOff, 
-  MapPin, 
-  Clock, 
   CheckCircle2, 
   XCircle, 
-  AlertTriangle,
   RefreshCw,
   Zap
 } from "lucide-react";
@@ -220,45 +217,6 @@ export function RealTimeView({ trips }: RealTimeViewProps) {
                  </div>
                </div>
             </CardContent>
-          </Card>
-
-          <Card>
-             <CardHeader>
-               <CardTitle>System Health</CardTitle>
-               <CardDescription>API & Data Pipeline Status</CardDescription>
-             </CardHeader>
-             <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
-                    <span className="text-sm font-medium">Uber API Integration</span>
-                  </div>
-                  <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Connected</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
-                    <span className="text-sm font-medium">Lyft Data Sync</span>
-                  </div>
-                  <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Connected</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
-                    <span className="text-sm font-medium">Supabase Edge Network</span>
-                  </div>
-                  <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Optimal</span>
-                </div>
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Minor Latency Detected</p>
-                      <p className="text-[10px] text-slate-500">Bolt API response time &gt; 500ms</p>
-                    </div>
-                  </div>
-                </div>
-             </CardContent>
           </Card>
         </div>
       </div>

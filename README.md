@@ -1,7 +1,7 @@
 
-  # Budget App Feature List
+  # GoRide
 
-  This is a code bundle for Budget App Feature List. The original project is available at https://www.figma.com/design/iTvvmMZeHvtMVaQPh3M6e5/Budget-App-Feature-List.
+  This is a code bundle for GoRide. The original project is available at https://www.figma.com/design/iTvvmMZeHvtMVaQPh3M6e5/GoRide.
 
   ## Running the code
 

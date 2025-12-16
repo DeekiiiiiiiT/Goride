@@ -27,13 +27,21 @@ import {
   PlusCircle,
   FileText,
   Merge,
-  Layers
+  Layers,
+  Car,
+  Zap,
+  HelpCircle,
+  Globe,
+  MapPin
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Badge } from "../ui/badge";
+import { DriverScorecard } from '../drivers/DriverScorecard';
+import { VehicleHealthCard } from '../vehicles/VehicleHealthCard';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
@@ -44,13 +52,13 @@ import {
     FileData, 
     DEFAULT_FIELDS 
 } from '../../utils/csvHelpers';
-import { Trip, FieldDefinition, FieldType, ParsedRow } from '../../types/data';
+import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics } from '../../types/data';
 import { api } from '../../services/api';
 
-type Step = 'upload' | 'review_files' | 'preview_merged' | 'success';
+type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
 export function ImportsPage() {
-  const [step, setStep] = useState<Step>('upload');
+  const [step, setStep] = useState<Step>('select_platform');
   
   // Staging: Multiple files
   const [uploadedFiles, setUploadedFiles] = useState<FileData[]>([]);
@@ -60,12 +68,16 @@ export function ImportsPage() {
   
   // Merged Data
   const [processedData, setProcessedData] = useState<Trip[]>([]);
+  const [processedDriverMetrics, setProcessedDriverMetrics] = useState<DriverMetrics[]>([]);
+  const [processedVehicleMetrics, setProcessedVehicleMetrics] = useState<VehicleMetrics[]>([]);
+  const [processedRentalContracts, setProcessedRentalContracts] = useState<any[]>([]);
   
   // UI States
   const [isParsing, setIsParsing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [manageFieldsOpen, setManageFieldsOpen] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
 
   // Load Fields
   useEffect(() => {
@@ -144,15 +156,58 @@ export function ImportsPage() {
 
   const handleMerge = () => {
       // 1. Merge
-      const merged = mergeAndProcessData(uploadedFiles, availableFields);
-      setProcessedData(merged);
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts } = mergeAndProcessData(uploadedFiles, availableFields);
+
+      // 2. Apply Platform Override
+      const finalTrips = trips.map(t => ({
+          ...t,
+          platform: selectedPlatform as any
+      }));
+
+      setProcessedData(finalTrips);
+      setProcessedDriverMetrics(driverMetrics);
+      setProcessedVehicleMetrics(vehicleMetrics);
+      setProcessedRentalContracts(rentalContracts);
       setStep('preview_merged');
   };
 
   const handleConfirmImport = async () => {
       setIsUploading(true);
       try {
-          await api.saveTrips(processedData);
+          // Generate a Batch ID
+          const batchId = crypto.randomUUID();
+          
+          // Create Batch Metadata
+          const batchMeta = {
+            id: batchId,
+            fileName: uploadedFiles.map(f => f.name).join(', '),
+            uploadDate: new Date().toISOString(),
+            status: 'completed' as const,
+            recordCount: processedData.length,
+            type: 'merged_import',
+            processedBy: 'Admin' // In real app, use user name
+          };
+
+          // Assign batchId to all trips
+          const tripsWithBatch = processedData.map(trip => ({
+            ...trip,
+            batchId
+          }));
+
+          // Save Batch Record FIRST
+          await api.createBatch(batchMeta);
+          
+          // Save Trips
+          await api.saveTrips(tripsWithBatch);
+
+          // Save Metrics
+          if (processedDriverMetrics.length > 0) {
+              await api.saveDriverMetrics(processedDriverMetrics);
+          }
+          if (processedVehicleMetrics.length > 0) {
+              await api.saveVehicleMetrics(processedVehicleMetrics);
+          }
+          
           setStep('success');
       } catch (e: any) {
           setError(e.message || "Failed to save trips");
@@ -164,7 +219,7 @@ export function ImportsPage() {
   const reset = () => {
       setUploadedFiles([]);
       setProcessedData([]);
-      setStep('upload');
+      setStep('select_platform');
       setError(null);
   };
 
@@ -192,12 +247,17 @@ export function ImportsPage() {
   const getFileIcon = (type: FileData['type']) => {
       if (type === 'uber_trip') return <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><Merge className="h-5 w-5" /></div>;
       if (type === 'uber_payment') return <div className="p-2 bg-green-100 rounded-lg text-green-600"><CheckCircle className="h-5 w-5" /></div>;
+      if (type === 'uber_driver_quality') return <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Zap className="h-5 w-5" /></div>;
+      if (type === 'uber_vehicle_performance') return <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><Car className="h-5 w-5" /></div>;
       return <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><FileText className="h-5 w-5" /></div>;
   };
 
   const getFileBadge = (type: FileData['type']) => {
       if (type === 'uber_trip') return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200">Trip Activity</Badge>;
       if (type === 'uber_payment') return <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-green-200">Payment Order</Badge>;
+      if (type === 'uber_driver_quality') return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">Driver Quality</Badge>;
+      if (type === 'uber_vehicle_performance') return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">Vehicle Perf.</Badge>;
+      if (type === 'uber_rental_contract') return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-yellow-200">Rental Contract</Badge>;
       return <Badge variant="secondary">Generic CSV</Badge>;
   };
 
@@ -221,6 +281,9 @@ export function ImportsPage() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Manage System Fields</DialogTitle>
+                        <DialogDescription>
+                            Add, remove, or modify the data fields used during import mapping.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="flex gap-2 items-end">
@@ -257,7 +320,7 @@ export function ImportsPage() {
                 </DialogContent>
            </Dialog>
 
-           {(step !== 'upload' && step !== 'success') && (
+           {(step !== 'select_platform' && step !== 'upload' && step !== 'success') && (
                <Button variant="ghost" onClick={reset}>Cancel</Button>
            )}
         </div>
@@ -271,14 +334,62 @@ export function ImportsPage() {
         </Alert>
       )}
 
+      {/* STEP 0: SELECT PLATFORM */}
+      {step === 'select_platform' && (
+        <div className="space-y-6">
+            <div className="text-center space-y-2">
+                <h3 className="text-lg font-medium text-slate-900">Select Platform</h3>
+                <p className="text-slate-500">Choose the service provider for the data you are importing.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {[
+                    { id: 'Uber', icon: Car, color: 'text-slate-900', bg: 'bg-slate-100', border: 'hover:border-slate-900', desc: 'Rides & Eats' },
+                    { id: 'Lyft', icon: Car, color: 'text-pink-600', bg: 'bg-pink-50', border: 'hover:border-pink-500', desc: 'Ride History' },
+                    { id: 'Bolt', icon: Zap, color: 'text-green-600', bg: 'bg-green-50', border: 'hover:border-green-500', desc: 'Trip Reports' },
+                    { id: 'InDrive', icon: Globe, color: 'text-blue-600', bg: 'bg-blue-50', border: 'hover:border-blue-500', desc: 'Bid Activity' },
+                    { id: 'Other', icon: Layers, color: 'text-slate-600', bg: 'bg-slate-50', border: 'hover:border-slate-400', desc: 'Generic CSV' }
+                ].map((p) => (
+                    <Card 
+                        key={p.id}
+                        onClick={() => {
+                            setSelectedPlatform(p.id);
+                            setStep('upload');
+                        }}
+                        className={`cursor-pointer transition-all duration-200 border-2 hover:shadow-md ${p.border}`}
+                    >
+                        <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
+                            <div className={`h-12 w-12 rounded-full ${p.bg} flex items-center justify-center`}>
+                                <p.icon className={`h-6 w-6 ${p.color}`} />
+                            </div>
+                            <div className="text-center space-y-1">
+                                <h4 className="font-semibold text-slate-900">{p.id}</h4>
+                                <p className="text-xs text-slate-500">{p.desc}</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+        </div>
+      )}
+
       {/* STEP 1: UPLOAD */}
       {step === 'upload' && (
         <Card>
           <CardHeader>
-            <CardTitle>Drop Files</CardTitle>
-            <CardDescription>
-                Upload "Trip Activity" AND "Payment Orders" files together.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+                <div>
+                    <CardTitle>Upload {selectedPlatform} Data</CardTitle>
+                    <CardDescription>
+                        {selectedPlatform === 'Uber' 
+                        ? 'Upload "Trip Activity" AND "Payment Orders" files together.' 
+                        : `Upload your ${selectedPlatform} CSV export files.`}
+                    </CardDescription>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setStep('select_platform')}>
+                    Change Platform
+                </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div 
@@ -367,6 +478,10 @@ export function ImportsPage() {
                                   <span className="text-slate-500">Payment Sources:</span>
                                   <span className="font-medium">{uploadedFiles.filter(f => f.type === 'uber_payment').length}</span>
                               </div>
+                              <div className="flex justify-between text-sm mb-4">
+                                  <span className="text-slate-500">Performance Sources:</span>
+                                  <span className="font-medium">{uploadedFiles.filter(f => f.type.includes('driver_quality') || f.type.includes('vehicle_performance')).length}</span>
+                              </div>
 
                               <Button onClick={handleMerge} className="w-full" size="lg">
                                   Merge & Preview <ArrowRight className="ml-2 h-4 w-4" />
@@ -378,14 +493,15 @@ export function ImportsPage() {
           </div>
       )}
 
-      {/* STEP 3: PREVIEW MERGED */}
       {step === 'preview_merged' && (
-          <Card className="flex flex-col h-[600px]">
-              <CardHeader className="flex flex-row items-center justify-between">
+          <Card className="flex flex-col h-[700px]">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div>
                       <CardTitle>Preview Merged Data</CardTitle>
                       <CardDescription>
-                          Found <strong>{processedData.length}</strong> unique trips from <strong>{uploadedFiles.length}</strong> files.
+                          Found <strong>{processedData.length}</strong> unique trips, 
+                          <strong> {processedDriverMetrics.length}</strong> driver reports, 
+                          and <strong> {processedVehicleMetrics.length}</strong> vehicle reports.
                       </CardDescription>
                   </div>
                   <div className="flex gap-2">
@@ -397,46 +513,79 @@ export function ImportsPage() {
                       </Button>
                   </div>
               </CardHeader>
-              <CardContent className="flex-1 overflow-auto">
-                  <Table>
-                      <TableHeader>
-                          <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Platform</TableHead>
-                              <TableHead>Driver</TableHead>
-                              <TableHead>From</TableHead>
-                              <TableHead>To</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Status</TableHead>
-                          </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                          {processedData.slice(0, 100).map(trip => (
-                              <TableRow key={trip.id}>
-                                  <TableCell className="whitespace-nowrap text-xs">
-                                      {new Date(trip.date).toLocaleDateString()}
-                                      <br/>
-                                      <span className="text-slate-400">{new Date(trip.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                  </TableCell>
-                                  <TableCell>{trip.platform}</TableCell>
-                                  <TableCell className="text-xs truncate max-w-[100px]" title={trip.driverId}>{trip.driverId}</TableCell>
-                                  <TableCell className="text-xs truncate max-w-[150px]" title={trip.pickupLocation}>{trip.pickupLocation || '-'}</TableCell>
-                                  <TableCell className="text-xs truncate max-w-[150px]" title={trip.dropoffLocation}>{trip.dropoffLocation || '-'}</TableCell>
-                                  <TableCell className="font-medium">
-                                      {trip.amount > 0 ? `$${trip.amount.toFixed(2)}` : <span className="text-red-400 font-normal">Missing</span>}
-                                  </TableCell>
-                                  <TableCell>
-                                      <Badge variant="outline" className={
-                                          trip.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
-                                          trip.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border-rose-200' : ''
-                                      }>
-                                          {trip.status}
-                                      </Badge>
-                                  </TableCell>
-                              </TableRow>
-                          ))}
-                      </TableBody>
-                  </Table>
+              <CardContent className="flex-1 overflow-auto pt-0">
+                  <Tabs defaultValue="trips" className="w-full">
+                      <TabsList className="mb-4">
+                          <TabsTrigger value="trips">Trips & Financials ({processedData.length})</TabsTrigger>
+                          <TabsTrigger value="drivers" disabled={processedDriverMetrics.length === 0}>
+                              Driver Performance {processedDriverMetrics.length > 0 && `(${processedDriverMetrics.length})`}
+                          </TabsTrigger>
+                          <TabsTrigger value="vehicles" disabled={processedVehicleMetrics.length === 0}>
+                               Vehicle Health {processedVehicleMetrics.length > 0 && `(${processedVehicleMetrics.length})`}
+                          </TabsTrigger>
+                      </TabsList>
+                      
+                      <TabsContent value="trips" className="h-[500px] overflow-auto border rounded-md">
+                        <Table>
+                            <TableHeader className="bg-slate-50 sticky top-0">
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Platform</TableHead>
+                                    <TableHead>Driver</TableHead>
+                                    <TableHead>From</TableHead>
+                                    <TableHead>Earnings</TableHead>
+                                    <TableHead>Cash</TableHead>
+                                    <TableHead>Net</TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {processedData.slice(0, 100).map(trip => (
+                                    <TableRow key={trip.id}>
+                                        <TableCell className="whitespace-nowrap text-xs">
+                                            {new Date(trip.date).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell>{trip.platform}</TableCell>
+                                        <TableCell className="text-xs truncate max-w-[100px]" title={trip.driverId}>{trip.driverId}</TableCell>
+                                        <TableCell className="text-xs truncate max-w-[150px]" title={trip.pickupLocation}>{trip.pickupLocation || '-'}</TableCell>
+                                        
+                                        {/* Phase 3: Financial Columns */}
+                                        <TableCell className="font-medium text-emerald-600">
+                                            {trip.amount !== undefined ? `$${trip.amount.toFixed(2)}` : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-slate-500">
+                                            {trip.cashCollected && trip.cashCollected > 0 ? `$${trip.cashCollected.toFixed(2)}` : '-'}
+                                        </TableCell>
+                                        <TableCell className="font-bold">
+                                            {trip.netPayout !== undefined ? (
+                                                <span className={trip.netPayout < 0 ? 'text-red-600' : 'text-slate-900'}>
+                                                    ${trip.netPayout.toFixed(2)}
+                                                </span>
+                                            ) : '-'}
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <Badge variant="outline" className={
+                                                trip.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                                                trip.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border-rose-200' : ''
+                                            }>
+                                                {trip.status}
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                      </TabsContent>
+
+                      <TabsContent value="drivers" className="h-[500px] overflow-auto">
+                          <DriverScorecard metrics={processedDriverMetrics} />
+                      </TabsContent>
+                      
+                      <TabsContent value="vehicles" className="h-[500px] overflow-auto">
+                          <VehicleHealthCard metrics={processedVehicleMetrics} />
+                      </TabsContent>
+                  </Tabs>
               </CardContent>
           </Card>
       )}

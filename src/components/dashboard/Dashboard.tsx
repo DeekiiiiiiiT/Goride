@@ -12,7 +12,8 @@ import {
   AlertCircle, 
   Calendar,
   Download,
-  Loader2
+  Loader2,
+  XCircle
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -21,8 +22,6 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
@@ -61,14 +60,12 @@ export function Dashboard() {
             setError("Failed to load trips data");
         }
 
-        // Fetch notifications independently so it doesn't block the dashboard
+        // Fetch notifications independently
         try {
             const notificationsData = await api.getNotifications();
             setNotifications(notificationsData);
         } catch (notifErr: any) {
             console.error("Failed to load notifications", notifErr);
-            // Don't set main error state, just log it. 
-            // Or maybe show a toast? For now, we just let notifications be empty.
         }
       } catch (err: any) {
         setError(err.message);
@@ -80,22 +77,77 @@ export function Dashboard() {
   }, []);
 
   const stats = useMemo(() => {
-    const totalRevenue = trips.reduce((acc, t) => acc + (t.status === 'Completed' ? t.amount : 0), 0);
-    const totalTrips = trips.length;
-    const activeDrivers = new Set(trips.map(t => t.driverId)).size;
+    // Determine "Current Period" (Last 7 Days) vs "Previous Period" (7 Days before that)
+    const now = new Date();
+    // Reset time to end of day for consistency or just use now. 
+    // For simplicity, let's look at the last 7 * 24 hours.
     
-    // Calculate simple trends (mock logic for demo purposes as we don't have historical snapshots)
-    const revenueTrend = "+12.5%"; 
-    const tripsTrend = "+5.2%";
-    const driversTrend = "+3.1%";
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
+    const currentTrips = trips.filter(t => {
+        const d = new Date(t.date);
+        return d >= sevenDaysAgo && d <= now;
+    });
+
+    const previousTrips = trips.filter(t => {
+        const d = new Date(t.date);
+        return d >= fourteenDaysAgo && d < sevenDaysAgo;
+    });
+
+    const calcMetrics = (subset: Trip[]) => {
+        const revenue = subset.reduce((acc, t) => acc + (t.status === 'Completed' ? t.amount : 0), 0);
+        const total = subset.length;
+        const drivers = new Set(subset.map(t => t.driverId)).size;
+        const cancelled = subset.filter(t => t.status === 'Cancelled').length;
+        const cancelRate = total > 0 ? (cancelled / total) * 100 : 0;
+        return { revenue, total, drivers, cancelRate };
+    };
+
+    const current = calcMetrics(currentTrips);
+    const previous = calcMetrics(previousTrips);
+
+    // Helper for trend %
+    const calcTrend = (curr: number, prev: number) => {
+        if (prev === 0) return curr === 0 ? "0%" : "+100%";
+        const diff = ((curr - prev) / prev) * 100;
+        const sign = diff > 0 ? "+" : "";
+        return `${sign}${diff.toFixed(1)}%`;
+    };
+
+    const revenueTrend = calcTrend(current.revenue, previous.revenue);
+    const tripsTrend = calcTrend(current.total, previous.total);
+    const driversTrend = calcTrend(current.drivers, previous.drivers);
+    const cancelRateTrend = calcTrend(current.cancelRate, previous.cancelRate);
+
+    // Determine direction (up/down) for styling. 
+    // Note: For revenue/trips/drivers, Up is Good. For Cancel Rate, Down is Good.
+    const revenueTrendUp = current.revenue >= previous.revenue;
+    const tripsTrendUp = current.total >= previous.total;
+    const driversTrendUp = current.drivers >= previous.drivers;
+    
+    // For cancel rate, if current < previous, that's "Good" (green), but mathematically it's a decrease (negative trend).
+    // The KpiCard 'trendUp' prop usually controls color (green vs red). 
+    // We want Green if cancel rate went DOWN.
+    const cancelRateImproved = current.cancelRate < previous.cancelRate;
+    
+    // However, if we pass the raw trend string (e.g. "-5%"), we want it to be green.
+    // If we pass "+5%", we want it to be red.
+    // Let's customize KpiCard logic or just pass a boolean 'isPositiveOutcome'.
+    
     return {
-      totalRevenue,
-      totalTrips,
-      activeDrivers,
+      totalRevenue: current.revenue,
+      totalTrips: current.total,
+      activeDrivers: current.drivers,
+      cancellationRate: current.cancelRate,
       revenueTrend,
       tripsTrend,
-      driversTrend
+      driversTrend,
+      cancelRateTrend,
+      revenueTrendUp,
+      tripsTrendUp,
+      driversTrendUp,
+      cancelRateImproved: current.cancelRate <= previous.cancelRate // Lower or equal is better
     };
   }, [trips]);
 
@@ -111,10 +163,8 @@ export function Dashboard() {
       dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + t.amount);
     });
 
-    // If no data, return empty or last 7 days of 0
     if (dailyMap.size === 0) return [];
 
-    // Return last 7 entries for the chart if we have enough data
     return Array.from(dailyMap.entries())
       .map(([name, revenue]) => ({ name, revenue }))
       .slice(-7);
@@ -226,36 +276,36 @@ export function Dashboard() {
           {/* KPI Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard 
-              title="Total Revenue" 
+              title="Total Revenue (7d)" 
               value={`$${stats.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               icon={<DollarSign className="h-4 w-4 text-emerald-600" />}
               trend={stats.revenueTrend}
-              trendUp={true}
-              description="from last period"
+              isPositive={stats.revenueTrendUp}
+              description="vs prev 7 days"
             />
             <KpiCard 
-              title="Active Drivers" 
+              title="Active Drivers (7d)" 
               value={stats.activeDrivers.toLocaleString()} 
               icon={<Users className="h-4 w-4 text-indigo-600" />}
               trend={stats.driversTrend}
-              trendUp={true}
-              description="active in period"
+              isPositive={stats.driversTrendUp}
+              description="vs prev 7 days"
             />
             <KpiCard 
-              title="Total Trips" 
+              title="Total Trips (7d)" 
               value={stats.totalTrips.toLocaleString()} 
               icon={<Car className="h-4 w-4 text-blue-600" />}
               trend={stats.tripsTrend}
-              trendUp={true}
-              description="from last period"
+              isPositive={stats.tripsTrendUp}
+              description="vs prev 7 days"
             />
             <KpiCard 
-              title="Fleet Utilization" 
-              value="87%" 
-              icon={<Activity className="h-4 w-4 text-orange-600" />}
-              trend="-2.5%"
-              trendUp={false}
-              description="from last week"
+              title="Cancellation Rate (7d)" 
+              value={`${stats.cancellationRate.toFixed(1)}%`}
+              icon={<XCircle className="h-4 w-4 text-rose-600" />}
+              trend={stats.cancelRateTrend}
+              isPositive={stats.cancelRateImproved}
+              description="vs prev 7 days"
             />
           </div>
 
@@ -436,7 +486,7 @@ export function Dashboard() {
   );
 }
 
-function KpiCard({ title, value, icon, trend, trendUp, description }: { title: string, value: string, icon: React.ReactNode, trend: string, trendUp: boolean, description: string }) {
+function KpiCard({ title, value, icon, trend, isPositive, description }: { title: string, value: string, icon: React.ReactNode, trend: string, isPositive: boolean, description: string }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -448,12 +498,12 @@ function KpiCard({ title, value, icon, trend, trendUp, description }: { title: s
       <CardContent>
         <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</div>
         <p className="text-xs text-slate-500 flex items-center mt-1">
-          {trendUp ? (
+          {isPositive ? (
             <TrendingUp className="text-emerald-500 h-3 w-3 mr-1" />
           ) : (
             <TrendingDown className="text-rose-500 h-3 w-3 mr-1" />
           )}
-          <span className={trendUp ? "text-emerald-500 font-medium" : "text-rose-500 font-medium"}>
+          <span className={isPositive ? "text-emerald-500 font-medium" : "text-rose-500 font-medium"}>
             {trend}
           </span>
           <span className="ml-1 text-slate-400">{description}</span>

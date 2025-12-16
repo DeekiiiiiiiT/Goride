@@ -15,7 +15,8 @@ import {
   CreditCard,
   BarChart3,
   Bell,
-  UploadCloud
+  UploadCloud,
+  History
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -97,6 +98,12 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             label="Reports" 
             active={currentPage === 'reports'}
             onClick={() => onNavigate?.('reports')}
+          />
+          <NavItem 
+            icon={<History className="h-4 w-4" />} 
+            label="Transactions" 
+            active={currentPage === 'transactions'}
+            onClick={() => onNavigate?.('transactions')}
           />
         </SidebarMenu>
         

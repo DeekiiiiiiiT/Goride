@@ -1,6 +1,6 @@
 export interface Trip {
   id: string;
-  platform: 'Uber' | 'Lyft' | 'Bolt' | 'Other';
+  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Other';
   date: string; // ISO date string
   driverId: string;
   driverName?: string;
@@ -12,7 +12,23 @@ export interface Trip {
   dropoffLocation?: string;
   vehicleId?: string;
   notes?: string;
+  batchId?: string; // ID of the upload batch this trip belongs to
+  
+  // Financial Reconciliation (Phase 3)
+  cashCollected?: number; // The amount of physical cash the driver collected
+  netPayout?: number;     // Calculated: amount - cashCollected
+  
   [key: string]: any; // Allow dynamic properties
+}
+
+export interface ImportBatch {
+  id: string;
+  fileName: string; // or multiple files joined
+  uploadDate: string;
+  status: 'completed' | 'error';
+  recordCount: number;
+  type: string; // 'uber_trip', 'uber_payment', 'merged', etc.
+  processedBy?: string;
 }
 
 export type FieldType = 'text' | 'number' | 'date' | 'address';
@@ -87,4 +103,78 @@ export interface FleetConfig {
   vehicleTypes: string[];
   currency: string;
   timezone: string;
+}
+
+// --- Phase 1: New Data Architecture for Uber Reporting ---
+
+// 1. Driver Performance & Quality
+export interface DriverMetrics {
+  id: string; // Composite key (driverId_date)
+  driverId: string;
+  driverName: string;
+  periodStart: string; // ISO Date
+  periodEnd: string;   // ISO Date
+  
+  // Quality Metrics (REPORT_TYPE_DRIVER_QUALITY)
+  acceptanceRate: number;    // 0.0 to 1.0
+  cancellationRate: number;  // 0.0 to 1.0
+  completionRate: number;    // 0.0 to 1.0
+  ratingLast500: number;     // e.g. 4.85
+  ratingLast4Weeks: number;  // e.g. 4.90
+  
+  // Activity Metrics (REPORT_TYPE_DRIVER_ACTIVITY)
+  onlineHours: number;       // Decimal format (e.g., 8.5)
+  onTripHours: number;
+  tripsCompleted: number;
+}
+
+// 2. Vehicle ROI & Health
+export interface VehicleMetrics {
+  id: string; // Composite key (plate_date)
+  vehicleId: string; // Internal UUID if mapped, otherwise plate
+  plateNumber: string;
+  vehicleName: string; // Year Make Model
+  periodStart: string;
+  periodEnd: string;
+
+  // Performance (REPORT_TYPE_VEHICLE_PERFORMANCE)
+  totalEarnings: number;
+  earningsPerHour: number;
+  tripsPerHour: number;
+  onlineHours: number;
+  onTripHours: number;
+  totalTrips: number;
+}
+
+// 3. Financial Reconciliation
+export interface FinancialRecord {
+  id: string; // Transaction UUID
+  driverId: string;
+  tripId?: string; // Optional: Links to Trip Table
+  organizationId?: string;
+  
+  timestamp: string;
+  description: string;
+  category: 'Trip_Earnings' | 'Fare_Adjustment' | 'Incentive' | 'Fee' | 'Tax' | 'Cash_Collection' | 'Transfer';
+  
+  amount: number;        // Net impact on wallet (Earnings - Fees)
+  cashCollected: number; // Specific cash field for reconciliation
+  taxes: number;
+}
+
+// 4. Leasing / Rental
+export interface RentalContract {
+  termId: string; // Term UUID
+  driverId: string;
+  organizationId: string;
+  
+  startDate: string;
+  endDate: string;
+  status: 'Active' | 'Closed' | 'Default';
+  
+  // Financials (REPORT_TYPE_RENTAL_PAYMENTS_CONTRACT)
+  balanceStart: number;
+  totalCharges: number; // Rental fees + debits
+  totalPaid: number;    // Deducted from earnings
+  balanceEnd: number;
 }
