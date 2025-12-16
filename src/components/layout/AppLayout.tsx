@@ -1,5 +1,5 @@
 import React from 'react';
-import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarRail, SidebarFooter } from "../ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarRail, SidebarFooter, SidebarTrigger } from "../ui/sidebar";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -14,18 +14,23 @@ import {
   Menu,
   CreditCard,
   BarChart3,
-  Bell
+  Bell,
+  UploadCloud
 } from "lucide-react";
+
+import { NotificationCenter } from "../notifications/NotificationCenter";
 
 interface AppLayoutProps {
   children: React.ReactNode;
+  currentPage?: string;
+  onNavigate?: (page: string) => void;
 }
 
-export function AppLayout({ children }: AppLayoutProps) {
+export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps) {
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-900">
-        <AppSidebar />
+        <AppSidebar currentPage={currentPage} onNavigate={onNavigate} />
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <AppHeader />
           <div className="flex-1 overflow-auto p-4 md:p-8">
@@ -39,7 +44,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
 }
 
-function AppSidebar() {
+function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   return (
     <Sidebar className="border-r border-slate-200 dark:border-slate-800">
       <SidebarHeader className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800">
@@ -51,19 +56,60 @@ function AppSidebar() {
       
       <SidebarContent className="px-2 py-4">
         <SidebarMenu>
-          <NavItem icon={<LayoutDashboard className="h-4 w-4" />} label="Dashboard" active />
-          <NavItem icon={<Users className="h-4 w-4" />} label="Drivers" />
-          <NavItem icon={<Car className="h-4 w-4" />} label="Vehicles" />
-          <NavItem icon={<FileText className="h-4 w-4" />} label="Trip Logs" />
-          <NavItem icon={<CreditCard className="h-4 w-4" />} label="Financials" />
-          <NavItem icon={<BarChart3 className="h-4 w-4" />} label="Reports" />
+          <NavItem 
+            icon={<LayoutDashboard className="h-4 w-4" />} 
+            label="Dashboard" 
+            active={currentPage === 'dashboard'} 
+            onClick={() => onNavigate?.('dashboard')}
+          />
+          <NavItem 
+            icon={<UploadCloud className="h-4 w-4" />} 
+            label="Import Data" 
+            active={currentPage === 'imports'} 
+            onClick={() => onNavigate?.('imports')}
+          />
+          <NavItem 
+            icon={<Users className="h-4 w-4" />} 
+            label="Drivers" 
+            active={currentPage === 'drivers'}
+            onClick={() => onNavigate?.('drivers')}
+          />
+          <NavItem 
+            icon={<Car className="h-4 w-4" />} 
+            label="Vehicles" 
+            active={currentPage === 'vehicles'}
+            onClick={() => onNavigate?.('vehicles')}
+          />
+          <NavItem 
+            icon={<FileText className="h-4 w-4" />} 
+            label="Trip Logs" 
+            active={currentPage === 'trips'}
+            onClick={() => onNavigate?.('trips')}
+          />
+          <NavItem 
+            icon={<CreditCard className="h-4 w-4" />} 
+            label="Financials" 
+            active={currentPage === 'financials'}
+            onClick={() => onNavigate?.('financials')}
+          />
+          <NavItem 
+            icon={<BarChart3 className="h-4 w-4" />} 
+            label="Reports" 
+            active={currentPage === 'reports'}
+            onClick={() => onNavigate?.('reports')}
+          />
         </SidebarMenu>
         
         <div className="mt-8 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
           System
         </div>
         <SidebarMenu>
-          <NavItem icon={<Settings className="h-4 w-4" />} label="Settings" />
+          <NavItem 
+            icon={<Settings className="h-4 w-4" />} 
+            label="Settings" 
+            active={currentPage === 'settings'} 
+            onClick={() => onNavigate?.('settings')}
+          />
         </SidebarMenu>
       </SidebarContent>
       
@@ -84,13 +130,14 @@ function AppSidebar() {
   );
 }
 
-function NavItem({ icon, label, active = false }: { icon: React.ReactNode, label: string, active?: boolean }) {
+function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton 
         isActive={active}
         tooltip={label}
         className={active ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-600"}
+        onClick={onClick}
       >
         {icon}
         <span>{label}</span>
@@ -103,10 +150,7 @@ function AppHeader() {
   return (
     <header className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
       <div className="md:hidden">
-        {/* Mobile Menu Trigger would go here */}
-        <Button variant="ghost" size="icon">
-          <Menu className="h-5 w-5" />
-        </Button>
+        <SidebarTrigger />
       </div>
       
       <div className="flex-1 md:flex-none">
@@ -114,9 +158,7 @@ function AppHeader() {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="text-slate-500">
-          <Bell className="h-5 w-5" />
-        </Button>
+        <NotificationCenter />
         <Separator orientation="vertical" className="h-6" />
         <Button variant="outline" size="sm" className="hidden md:flex">
           <LogOut className="mr-2 h-4 w-4" />

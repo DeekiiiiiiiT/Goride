@@ -1,0 +1,99 @@
+import React from 'react';
+import { 
+  LayoutDashboard, 
+  DollarSign, 
+  FileText, 
+  User, 
+  Car,
+  LogOut,
+  Bell
+} from "lucide-react";
+import { Button } from "../ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
+import { NotificationCenter } from "../notifications/NotificationCenter";
+
+interface DriverLayoutProps {
+  children: React.ReactNode;
+  currentPage: string;
+  onNavigate: (page: string) => void;
+  onLogout: () => void;
+}
+
+export function DriverLayout({ children, currentPage, onNavigate, onLogout }: DriverLayoutProps) {
+  return (
+    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
+      {/* Mobile Header */}
+      <header className="sticky top-0 z-30 flex items-center justify-between px-4 h-16 bg-indigo-600 text-white shadow-md">
+        <div className="flex items-center gap-2">
+          <Car className="h-6 w-6 text-indigo-100" />
+          <span className="font-bold text-lg">GoRide Driver</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="text-indigo-100 hover:bg-indigo-500 hover:text-white rounded-full">
+            <Bell className="h-5 w-5" />
+          </Button>
+          <Avatar className="h-8 w-8 border-2 border-indigo-400">
+            <AvatarImage src="https://github.com/shadcn.png" />
+            <AvatarFallback>DR</AvatarFallback>
+          </Avatar>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-auto p-4 pb-20">
+        <div className="mx-auto max-w-md md:max-w-2xl">
+          {children}
+        </div>
+      </main>
+
+      {/* Bottom Navigation for Mobile */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 pb-safe">
+        <div className="flex items-center justify-around h-16 px-2">
+          <NavButton 
+            icon={<LayoutDashboard className="h-5 w-5" />} 
+            label="Home" 
+            active={currentPage === 'dashboard'} 
+            onClick={() => onNavigate('dashboard')}
+          />
+          <NavButton 
+            icon={<DollarSign className="h-5 w-5" />} 
+            label="Earnings" 
+            active={currentPage === 'earnings'} 
+            onClick={() => onNavigate('earnings')}
+          />
+          <NavButton 
+            icon={<FileText className="h-5 w-5" />} 
+            label="Trips" 
+            active={currentPage === 'trips'} 
+            onClick={() => onNavigate('trips')}
+          />
+          <NavButton 
+            icon={<User className="h-5 w-5" />} 
+            label="Profile" 
+            active={currentPage === 'profile'} 
+            onClick={() => onNavigate('profile')}
+          />
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${
+        active 
+          ? "text-indigo-600 dark:text-indigo-400" 
+          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+      }`}
+    >
+      <div className={`p-1 rounded-full ${active ? "bg-indigo-50 dark:bg-indigo-900/30" : ""}`}>
+        {icon}
+      </div>
+      <span className="text-[10px] font-medium">{label}</span>
+    </button>
+  );
+}
