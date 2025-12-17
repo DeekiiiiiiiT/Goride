@@ -18,7 +18,31 @@ export interface Trip {
   cashCollected?: number; // The amount of physical cash the driver collected
   netPayout?: number;     // Calculated: amount - cashCollected
   
+  // Phase 4: Trip Analysis
+  speed?: number;       // Distance / Duration
+  timeOfDay?: number;   // 0-23 hour
+  pickupArea?: string;  // Extracted from address
+  dropoffArea?: string; // Extracted from address
+  efficiency?: number;  // Amount / Distance
+  
   [key: string]: any; // Allow dynamic properties
+}
+
+export interface TripAnalytics {
+  geographic: {
+    topPickups: { area: string; count: number }[];
+    topDropoffs: { area: string; count: number }[];
+    mostProfitableRoutes: { route: string; earningsPerKm: number }[];
+  };
+  patterns: {
+    avgDistance: number;
+    avgDuration: number;
+    peakHours: { hour: number; count: number }[];
+  };
+  cancellations: {
+    rate: number;
+    byHour: { hour: number; count: number }[];
+  };
 }
 
 export interface ImportBatch {
@@ -126,6 +150,21 @@ export interface DriverMetrics {
   onlineHours: number;       // Decimal format (e.g., 8.5)
   onTripHours: number;
   tripsCompleted: number;
+
+  // Financial Metrics (REPORT_TYPE_PAYMENTS_DRIVER)
+  totalEarnings?: number;
+  cashCollected?: number;
+  
+  // Phase 2 New Metrics
+  netEarnings?: number;       // totalEarnings - expenses
+  cashFlowRisk?: 'HIGH' | 'OK'; 
+  expenseRatio?: number;      // (expenses / totalEarnings) * 100
+  refundsAndExpenses?: number;
+
+  // Phase 3: Scorecard & Tiers
+  score?: number; // 0 to 100
+  tier?: 'Platinum' | 'Gold' | 'Silver' | 'Bronze';
+  recommendation?: string;
 }
 
 // 2. Vehicle ROI & Health
@@ -144,6 +183,15 @@ export interface VehicleMetrics {
   onlineHours: number;
   onTripHours: number;
   totalTrips: number;
+  
+  // Phase 2 New Metrics
+  utilizationRate?: number; // (onTripHours / onlineHours) * 100
+  costEfficiency?: number;  // earningsPerHour / target (default target needed)
+  
+  // Phase 4: Vehicle Health & Maintenance
+  maintenanceStatus?: 'Good' | 'Due Soon' | 'Critical';
+  roiScore?: number; // 0-100 score based on earnings vs average
+  mileageEfficiency?: number; // Earnings / Distance (if distance available)
 }
 
 // 3. Financial Reconciliation
@@ -155,11 +203,17 @@ export interface FinancialRecord {
   
   timestamp: string;
   description: string;
-  category: 'Trip_Earnings' | 'Fare_Adjustment' | 'Incentive' | 'Fee' | 'Tax' | 'Cash_Collection' | 'Transfer';
+  category: 'Trip_Earnings' | 'Fare_Adjustment' | 'Incentive' | 'Fee' | 'Tax' | 'Cash_Collection' | 'Transfer' | 'Tip' | 'Settlement';
   
   amount: number;        // Net impact on wallet (Earnings - Fees)
   cashCollected: number; // Specific cash field for reconciliation
   taxes: number;
+  
+  // Phase 2 New Metrics
+  netTransaction?: number; // Earnings - Payouts
+  cashPercentage?: number; // (Cash Collected / Earnings) * 100
+  payouts?: number;
+  earnings?: number;
 }
 
 // 4. Leasing / Rental
@@ -177,4 +231,31 @@ export interface RentalContract {
   totalCharges: number; // Rental fees + debits
   totalPaid: number;    // Deducted from earnings
   balanceEnd: number;
+
+  // Phase 5: Rental Logic
+  paymentStatus?: 'On Track' | 'Overdue' | 'Paid Off';
+  collectionRate?: number; // (totalPaid / totalCharges) * 100
+  weeksRemaining?: number; // If total contract value known (placeholder)
+}
+
+// 5. Organization Metrics (Phase 2 New)
+export interface OrganizationMetrics {
+    periodStart: string;
+    periodEnd: string;
+    totalEarnings: number;
+    netFare: number;
+    balanceStart: number;
+    balanceEnd: number;
+    
+    // Calculated
+    periodChange: number;       // End - Start
+    fleetProfitMargin: number;  // (NetFare / TotalEarnings) * 100
+    cashPosition: number;       // CashCollected / TotalEarnings
+    
+    // Phase 6: Fleet Analytics
+    activeDrivers?: number;
+    activeVehicles?: number;
+    totalTrips?: number;
+    fleetUtilization?: number; // Average of all vehicle utilizations
+    totalCashExposure?: number; // Sum of all cash collected
 }

@@ -197,5 +197,26 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to delete alert rule");
     return response.json();
+  },
+
+  async getIntegrations() {
+    const response = await fetchWithRetry(`${BASE_URL}/settings/integrations`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch integrations");
+    return response.json();
+  },
+
+  async saveIntegration(integration: any) {
+    const response = await fetchWithRetry(`${BASE_URL}/settings/integrations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(integration)
+    });
+    if (!response.ok) throw new Error("Failed to save integration");
+    return response.json();
   }
 };

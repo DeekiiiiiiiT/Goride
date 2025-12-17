@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { 
   BarChart, 
@@ -9,28 +9,53 @@ import {
   Tooltip, 
   ScatterChart,
   Scatter,
-  ZAxis
+  ZAxis,
+  AreaChart,
+  Area
 } from 'recharts';
-import { Trip } from '../../types/data';
-import { Users, Award, TrendingUp, Zap } from "lucide-react";
+import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
+import { Trip, DriverMetrics } from '../../types/data';
+import { Users, Award, TrendingUp, Zap, Search, User, ChevronLeft } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Avatar, AvatarFallback } from "../ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 
 interface DriverPerformanceViewProps {
   trips: Trip[];
+  driverMetrics?: DriverMetrics[];
 }
 
-export function DriverPerformanceView({ trips }: DriverPerformanceViewProps) {
-  // Driver Metrics Calculation
+export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerformanceViewProps) {
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+
+  // --- Aggregate Data for Leaderboard ---
   const { driverStats, topDriversByRevenue, scatterData } = useMemo(() => {
     const stats: Record<string, { 
       id: string, 
       revenue: number, 
       trips: number, 
       platforms: Set<string>,
-      lastActive: Date
+      lastActive: Date,
+      score: number,
+      tier: string
     }> = {};
 
+    // 1. Init from Metrics if available (for score/tier)
+    driverMetrics.forEach(dm => {
+        stats[dm.driverId] = {
+            id: dm.driverId,
+            revenue: dm.totalEarnings || 0,
+            trips: dm.tripsCompleted || 0,
+            platforms: new Set(),
+            lastActive: new Date(dm.periodEnd || 0),
+            score: dm.score || 0,
+            tier: dm.tier || 'Bronze'
+        };
+    });
+
+    // 2. Supplement with Trip Data (for granular revenue/trips if metrics not fresh)
     trips.forEach(t => {
       if (t.status !== 'Completed') return;
       
@@ -40,13 +65,25 @@ export function DriverPerformanceView({ trips }: DriverPerformanceViewProps) {
           revenue: 0, 
           trips: 0, 
           platforms: new Set(),
-          lastActive: new Date(0)
+          lastActive: new Date(0),
+          score: 0,
+          tier: 'Bronze'
         };
       }
       
       const driver = stats[t.driverId];
-      driver.revenue += t.amount;
-      driver.trips += 1;
+      driver.revenue += t.amount; // Cumulative logic might double count if metrics already has it. 
+      // Assumption: metrics are pre-calculated period summaries. trips are raw. 
+      // If we have metrics, use them? Or use trips for "real-time"?
+      // For simplicity, let's use Trips for revenue/counts if metrics are empty, or override.
+      // Actually, let's stick to Trips for the leaderboard to be dynamic.
+      
+      // Override revenue calc from trips to be safe
+      if (driverMetrics.length === 0) {
+          driver.revenue += t.amount;
+          driver.trips += 1;
+      }
+      
       driver.platforms.add(t.platform);
       
       const tripDate = new Date(t.date);
@@ -57,21 +94,20 @@ export function DriverPerformanceView({ trips }: DriverPerformanceViewProps) {
 
     const driverArray = Object.values(stats).map(d => ({
       ...d,
-      avgPerTrip: d.revenue / d.trips,
+      avgPerTrip: d.trips > 0 ? d.revenue / d.trips : 0,
       platformCount: d.platforms.size,
-      topPlatform: Array.from(d.platforms)[0] // Simplified
     }));
 
-    // Sort by revenue for top drivers
+    // Sort by revenue
     const topByRevenue = [...driverArray]
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5)
       .map(d => ({
-        name: d.id, // Using ID as name since we don't have names
+        name: d.id.substring(0, 8),
         revenue: d.revenue
       }));
 
-    // Scatter plot data: x=trips, y=revenue, z=avgPerTrip
+    // Scatter
     const scatter = driverArray.map(d => ({
       x: d.trips,
       y: d.revenue,
@@ -80,24 +116,142 @@ export function DriverPerformanceView({ trips }: DriverPerformanceViewProps) {
     }));
 
     return {
-      driverStats: driverArray.sort((a, b) => b.revenue - a.revenue), // Default sort by revenue for table
+      driverStats: driverArray.sort((a, b) => b.revenue - a.revenue),
       topDriversByRevenue: topByRevenue,
       scatterData: scatter
     };
-  }, [trips]);
+  }, [trips, driverMetrics]);
 
+
+  // --- Specific Driver Data ---
+  const selectedDriverData = useMemo(() => {
+      if (!selectedDriverId) return null;
+      
+      const metrics = driverMetrics.find(d => d.driverId === selectedDriverId);
+      const driverTrips = trips.filter(t => t.driverId === selectedDriverId).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      // Calculate daily earnings for chart
+      const dailyMap = new Map<string, number>();
+      driverTrips.forEach(t => {
+          if (t.status === 'Completed') {
+              const d = new Date(t.date).toLocaleDateString();
+              dailyMap.set(d, (dailyMap.get(d)||0) + t.amount);
+          }
+      });
+      const historyChart = Array.from(dailyMap.entries()).map(([date, val]) => ({ date, val }));
+
+      // Fallback calculations if metrics missing
+      const earnings = metrics?.totalEarnings ?? driverTrips.reduce((acc, t) => acc + (t.status === 'Completed' ? t.amount : 0), 0);
+      const tripsCount = metrics?.tripsCompleted ?? driverTrips.length;
+      
+      return {
+          id: selectedDriverId,
+          name: metrics?.driverName || selectedDriverId,
+          tier: metrics?.tier || 'Bronze',
+          score: metrics?.score || 0,
+          earnings,
+          tripsCount,
+          historyChart,
+          acceptance: (metrics?.acceptanceRate || 0) * 100,
+          cancellation: (metrics?.cancellationRate || 0) * 100,
+          completion: (metrics?.completionRate || 0) * 100,
+          rating: metrics?.ratingLast500 || 5.0,
+          utilization: metrics?.onlineHours ? ((metrics.onTripHours / metrics.onlineHours) * 100) : 0
+      };
+  }, [selectedDriverId, driverMetrics, trips]);
+
+
+  if (selectedDriverId && selectedDriverData) {
+      // --- VIEW 2: SINGLE DRIVER PROFILE (Phase 7.2) ---
+      return (
+          <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                  <Button variant="outline" size="icon" onClick={() => setSelectedDriverId(null)}>
+                      <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <h2 className="text-2xl font-bold text-slate-900">{selectedDriverData.name}</h2>
+                  <Badge variant="outline" className={`
+                    ${selectedDriverData.tier === 'Platinum' ? 'bg-slate-100 text-slate-800 border-slate-300' : 
+                      selectedDriverData.tier === 'Gold' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      selectedDriverData.tier === 'Silver' ? 'bg-slate-50 text-slate-600 border-slate-200' :
+                      'bg-orange-50 text-orange-800 border-orange-200'}
+                  `}>
+                      {selectedDriverData.tier} Tier
+                  </Badge>
+                  <Badge className={selectedDriverData.score >= 80 ? 'bg-emerald-100 text-emerald-800' : 'bg-yellow-100 text-yellow-800'}>
+                      Score: {selectedDriverData.score}
+                  </Badge>
+              </div>
+
+              {/* Performance Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <MetricCard title="Acceptance" value={`${selectedDriverData.acceptance.toFixed(0)}%`} icon={<Zap className="h-4 w-4" />} subtext="Target: 85%" />
+                  <MetricCard title="Cancellation" value={`${selectedDriverData.cancellation.toFixed(1)}%`} icon={<Users className="h-4 w-4" />} subtext="Target: <5%" />
+                  <MetricCard title="Completion" value={`${selectedDriverData.completion.toFixed(0)}%`} icon={<Award className="h-4 w-4" />} subtext="Target: 95%" />
+                  <MetricCard title="Rating" value={selectedDriverData.rating.toFixed(2)} icon={<Award className="h-4 w-4" />} subtext="Target: 4.8" />
+                  <MetricCard title="Earnings Today" value={`$${selectedDriverData.earnings.toFixed(0)}`} icon={<TrendingUp className="h-4 w-4" />} subtext="Daily Avg" />
+                  <MetricCard title="Utilization" value={`${selectedDriverData.utilization.toFixed(0)}%`} icon={<Zap className="h-4 w-4" />} subtext="Target: 60%" />
+              </div>
+
+              {/* Charts */}
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Performance History</CardTitle>
+                      <CardDescription>Daily earnings trend (Last 30 Days)</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <div className="h-[300px] w-full" style={{ minWidth: '300px' }}>
+                          <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={200}>
+                              <AreaChart data={selectedDriverData.historyChart}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                  <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
+                                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `$${v}`} />
+                                  <Tooltip formatter={v => `$${Number(v).toFixed(2)}`} />
+                                  <Area type="monotone" dataKey="val" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.1} />
+                              </AreaChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </CardContent>
+              </Card>
+          </div>
+      );
+  }
+
+  // --- VIEW 1: FLEET LEADERBOARD (Original + Select) ---
   const totalDrivers = driverStats.length;
   const avgRevenuePerDriver = totalDrivers > 0 
     ? driverStats.reduce((acc, d) => acc + d.revenue, 0) / totalDrivers 
     : 0;
   
-  // Find "Most Efficient" driver (highest avg per trip with min 5 trips)
   const efficientDriver = driverStats
     .filter(d => d.trips > 5)
     .sort((a, b) => b.avgPerTrip - a.avgPerTrip)[0];
 
   return (
     <div className="space-y-6">
+      
+      {/* Driver Selection Header */}
+      <div className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-200">
+          <div>
+              <h3 className="font-medium text-slate-900">Driver Lookup</h3>
+              <p className="text-sm text-slate-500">View detailed scorecard for any driver</p>
+          </div>
+          <div className="w-[300px]">
+             <Select onValueChange={setSelectedDriverId}>
+                 <SelectTrigger>
+                     <SelectValue placeholder="Select a driver..." />
+                 </SelectTrigger>
+                 <SelectContent>
+                     {driverStats.map(d => (
+                         <SelectItem key={d.id} value={d.id}>
+                             {d.id} ({d.tier})
+                         </SelectItem>
+                     ))}
+                 </SelectContent>
+             </Select>
+          </div>
+      </div>
+
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard 
@@ -114,13 +268,13 @@ export function DriverPerformanceView({ trips }: DriverPerformanceViewProps) {
         />
         <MetricCard 
           title="Top Performer"
-          value={driverStats[0]?.id || 'N/A'}
+          value={driverStats[0]?.id.substring(0,8) || 'N/A'}
           icon={<Award className="h-4 w-4 text-amber-500" />}
           subtext={`Generated $${driverStats[0]?.revenue.toFixed(2) || 0}`}
         />
         <MetricCard 
           title="Most Efficient"
-          value={efficientDriver?.id || 'N/A'}
+          value={efficientDriver?.id.substring(0,8) || 'N/A'}
           icon={<Zap className="h-4 w-4 text-blue-500" />}
           subtext={`Avg $${efficientDriver?.avgPerTrip.toFixed(2) || 0} / trip`}
         />
@@ -238,13 +392,13 @@ export function DriverPerformanceView({ trips }: DriverPerformanceViewProps) {
                   <TableHead>Total Revenue</TableHead>
                   <TableHead>Trips</TableHead>
                   <TableHead>Avg / Trip</TableHead>
-                  <TableHead>Platforms</TableHead>
+                  <TableHead>Tier</TableHead>
                   <TableHead className="text-right">Last Active</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {driverStats.slice(0, 10).map((driver) => (
-                  <TableRow key={driver.id}>
+                  <TableRow key={driver.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setSelectedDriverId(driver.id)}>
                     <TableCell className="font-medium flex items-center gap-2">
                        <Avatar className="h-6 w-6">
                           <AvatarFallback className="text-[10px] bg-indigo-100 text-indigo-700">
@@ -257,13 +411,7 @@ export function DriverPerformanceView({ trips }: DriverPerformanceViewProps) {
                     <TableCell>{driver.trips}</TableCell>
                     <TableCell>${driver.avgPerTrip.toFixed(2)}</TableCell>
                     <TableCell>
-                      <div className="flex gap-1">
-                        {Array.from(driver.platforms).map(p => (
-                          <span key={p} className="text-[10px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 border border-slate-200">
-                            {p}
-                          </span>
-                        ))}
-                      </div>
+                      <Badge variant="secondary" className="text-xs">{driver.tier}</Badge>
                     </TableCell>
                     <TableCell className="text-right text-xs text-slate-500">
                       {driver.lastActive.toLocaleDateString()}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import * as RechartsPrimitive from "recharts@2.15.2";
+import { SafeResponsiveContainer } from "./SafeResponsiveContainer";
 
 import { cn } from "./utils";
 
@@ -61,9 +62,9 @@ function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
+        <SafeResponsiveContainer>
           {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        </SafeResponsiveContainer>
       </div>
     </ChartContext.Provider>
   );

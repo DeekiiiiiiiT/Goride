@@ -40,9 +40,14 @@ import {
   Link as LinkIcon,
   Download,
   AlertTriangle,
-  Loader2
+  Loader2,
+  FileJson,
+  BookOpen,
+  HelpCircle,
+  Database
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
+import { projectId } from '../../utils/supabase/info';
 import { toast } from 'sonner@2.0.3';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import {
@@ -56,6 +61,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
+import { Separator } from "../ui/separator";
 
 export function SettingsPage() {
   return (
@@ -75,6 +81,8 @@ export function SettingsPage() {
             <TabsTrigger value="alerts">Alert Rules</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+            <TabsTrigger value="help">Help & Training</TabsTrigger>
           </TabsList>
         </div>
         
@@ -96,6 +104,14 @@ export function SettingsPage() {
 
         <TabsContent value="billing">
           <BillingPanel />
+        </TabsContent>
+
+        <TabsContent value="maintenance">
+          <MaintenancePanel />
+        </TabsContent>
+        
+        <TabsContent value="help">
+          <HelpPanel />
         </TabsContent>
       </Tabs>
     </div>
@@ -181,6 +197,7 @@ function GeneralPanel() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="usd">USD ($)</SelectItem>
+                    <SelectItem value="jmd">JMD (J$)</SelectItem>
                     <SelectItem value="eur">EUR (€)</SelectItem>
                     <SelectItem value="gbp">GBP (£)</SelectItem>
                   </SelectContent>
@@ -195,6 +212,7 @@ function GeneralPanel() {
                   <SelectContent>
                     <SelectItem value="pst">Pacific Time (PT)</SelectItem>
                     <SelectItem value="est">Eastern Time (ET)</SelectItem>
+                    <SelectItem value="est-jam">Jamaica (EST)</SelectItem>
                     <SelectItem value="gmt">Greenwich Mean Time (GMT)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -388,48 +406,95 @@ function TeamPanel() {
 }
 
 function IntegrationsPanel() {
-  const [integrations, setIntegrations] = useState([
-    { id: 'uber', name: 'Uber Fleet', status: 'disconnected', lastSync: '-', icon: 'figma:asset/e81b41be1a56e0ba817406c557cd6e02c443dfd4.png' }, // Using the image from the user's screenshot context if valid, otherwise fallback
+  // Default structure for available platforms
+  const defaultIntegrations = [
+    { id: 'uber', name: 'Uber Fleet', status: 'disconnected', lastSync: '-', icon: 'figma:asset/e81b41be1a56e0ba817406c557cd6e02c443dfd4.png' },
     { id: 'lyft', name: 'Lyft Business', status: 'disconnected', lastSync: '-', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Lyft_logo.svg/1200px-Lyft_logo.svg.png' },
     { id: 'bolt', name: 'Bolt', status: 'disconnected', lastSync: '-', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Bolt-logo-green.svg/2560px-Bolt-logo-green.svg.png' }
-  ]);
+  ];
+
+  const [integrations, setIntegrations] = useState(defaultIntegrations);
   
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [credentials, setCredentials] = useState({ clientId: '', clientSecret: '' });
+
+  useEffect(() => {
+    loadIntegrations();
+  }, []);
+
+  const loadIntegrations = async () => {
+    try {
+      const savedIntegrations = await api.getIntegrations();
+      // Merge saved data with default structure
+      setIntegrations(prev => prev.map(def => {
+        const saved = savedIntegrations.find((s: any) => s.id === def.id);
+        return saved ? { ...def, ...saved } : def;
+      }));
+    } catch (error) {
+      console.error("Failed to load integrations", error);
+      // Don't show toast on load failure to avoid annoyance
+    }
+  };
 
   const handleConnectClick = (platformId: string) => {
       setSelectedPlatform(platformId);
       setIsConnectDialogOpen(true);
   };
 
-  const handleSaveCredentials = () => {
-      // In a real app, we would send this to the backend
-      console.log(`Saving credentials for ${selectedPlatform}:`, credentials);
+  const handleSaveCredentials = async () => {
+      if (!selectedPlatform) return;
       
-      setIntegrations(prev => prev.map(int => {
-          if (int.id === selectedPlatform) {
-              return { ...int, status: 'connected', lastSync: 'Just now' };
+      const targetIntegration = integrations.find(i => i.id === selectedPlatform);
+      if (!targetIntegration) return;
+
+      const updatedIntegration = {
+          ...targetIntegration,
+          status: 'connected',
+          lastSync: 'Just now',
+          credentials: { // In a real production app, never store secrets in client-side readable KV
+              clientId: credentials.clientId,
+              clientSecret: credentials.clientSecret
           }
-          return int;
-      }));
-      
-      toast.success(`${selectedPlatform} connected successfully!`);
-      setIsConnectDialogOpen(false);
-      setCredentials({ clientId: '', clientSecret: '' });
+      };
+
+      try {
+          await api.saveIntegration(updatedIntegration);
+          
+          setIntegrations(prev => prev.map(int => {
+              if (int.id === selectedPlatform) {
+                  return updatedIntegration;
+              }
+              return int;
+          }));
+          
+          toast.success(`${selectedPlatform} connected successfully!`);
+          setIsConnectDialogOpen(false);
+          setCredentials({ clientId: '', clientSecret: '' });
+      } catch (error) {
+          console.error(error);
+          toast.error("Failed to save credentials");
+      }
   };
 
-  const toggleIntegration = (id: string) => {
+  const toggleIntegration = async (id: string) => {
     // If it's already connected, disconnect it
     const target = integrations.find(i => i.id === id);
     if (target?.status === 'connected') {
-        setIntegrations(prev => prev.map(int => {
-            if (int.id === id) {
-                return { ...int, status: 'disconnected', lastSync: '-' };
-            }
-            return int;
-        }));
-        toast.info(`${target.name} disconnected.`);
+        const updatedIntegration = { ...target, status: 'disconnected', lastSync: '-', credentials: null };
+        
+        try {
+            await api.saveIntegration(updatedIntegration);
+            setIntegrations(prev => prev.map(int => {
+                if (int.id === id) {
+                    return updatedIntegration;
+                }
+                return int;
+            }));
+            toast.info(`${target.name} disconnected.`);
+        } catch (error) {
+            toast.error("Failed to disconnect");
+        }
         return;
     }
 
@@ -516,8 +581,29 @@ function IntegrationsPanel() {
                     </div>
                     <div className="bg-slate-50 p-3 rounded text-xs text-slate-500">
                         <p className="font-medium mb-1">Redirect URL:</p>
-                        <code className="bg-slate-100 p-1 rounded">https://goride.app/api/auth/{selectedPlatform}/callback</code>
+                        <code className="bg-slate-100 p-1 rounded break-all block">https://chorus-tech-15470154.figma.site</code>
                         <p className="mt-2">Copy this URL to your app settings in the developer dashboard.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Requested Scopes</Label>
+                        <div className="bg-slate-50 p-3 rounded text-xs border border-slate-100 space-y-2">
+                           <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-[10px] h-5">profile</Badge>
+                              <span className="text-slate-500">Basic account details</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-[10px] h-5">history</Badge>
+                              <span className="text-slate-500">Trip history and financial data</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-[10px] h-5">places</Badge>
+                              <span className="text-slate-500">Saved locations</span>
+                           </div>
+                           <p className="text-slate-400 italic mt-2 text-[10px]">
+                              Note: As the app owner, you have "Limited Access" to these scopes immediately for testing.
+                           </p>
+                        </div>
                     </div>
                 </div>
                 <DialogFooter>
@@ -843,6 +929,142 @@ function AlertRulesPanel() {
             </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function MaintenancePanel() {
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportData = () => {
+    setIsExporting(true);
+    setTimeout(() => {
+        // Mock export
+        const blob = new Blob([JSON.stringify({ timestamp: Date.now(), system: 'GoRide', version: '1.0' }, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `goride_backup_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setIsExporting(false);
+        toast.success("System backup created successfully");
+    }, 1500);
+  };
+
+  return (
+    <div className="grid gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>System Maintenance</CardTitle>
+          <CardDescription>Manage data retention, backups, and system logs.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50 dark:bg-slate-900">
+             <div className="space-y-1">
+               <h4 className="font-medium">Data Backup</h4>
+               <p className="text-sm text-slate-500">Create a full JSON export of all system configuration and trip data.</p>
+             </div>
+             <Button onClick={handleExportData} disabled={isExporting}>
+               {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+               Create Backup
+             </Button>
+          </div>
+          
+           <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50 dark:bg-slate-900">
+             <div className="space-y-1">
+               <h4 className="font-medium">System Logs</h4>
+               <p className="text-sm text-slate-500">Download server-side error and activity logs for debugging.</p>
+             </div>
+             <Button variant="outline">
+               <FileJson className="mr-2 h-4 w-4" />
+               Download Logs
+             </Button>
+          </div>
+
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50 dark:bg-slate-900">
+             <div className="space-y-1">
+               <h4 className="font-medium">Database Optimization</h4>
+               <p className="text-sm text-slate-500">Clean up old temporary records and optimize query performance.</p>
+             </div>
+             <Button variant="outline" onClick={() => toast.success("Database optimized successfully")}>
+               <Database className="mr-2 h-4 w-4" />
+               Optimize DB
+             </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function HelpPanel() {
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      <Card className="md:col-span-2">
+         <CardHeader>
+           <CardTitle>Documentation & Training</CardTitle>
+           <CardDescription>Resources to help you get the most out of GoRide Fleet Management.</CardDescription>
+         </CardHeader>
+         <CardContent className="grid gap-4 md:grid-cols-3">
+            <a href="#" className="block p-6 border rounded-lg hover:bg-slate-50 transition-colors group">
+               <BookOpen className="h-8 w-8 text-indigo-600 mb-4 group-hover:scale-110 transition-transform" />
+               <h3 className="font-semibold mb-2">Getting Started Guide</h3>
+               <p className="text-sm text-slate-500">Learn the basics of setting up your fleet, adding drivers, and importing trips.</p>
+            </a>
+            <a href="#" className="block p-6 border rounded-lg hover:bg-slate-50 transition-colors group">
+               <Activity className="h-8 w-8 text-emerald-600 mb-4 group-hover:scale-110 transition-transform" />
+               <h3 className="font-semibold mb-2">Understanding Analytics</h3>
+               <p className="text-sm text-slate-500">Deep dive into financial reports, driver performance metrics, and system health.</p>
+            </a>
+            <a href="#" className="block p-6 border rounded-lg hover:bg-slate-50 transition-colors group">
+               <LinkIcon className="h-8 w-8 text-blue-600 mb-4 group-hover:scale-110 transition-transform" />
+               <h3 className="font-semibold mb-2">Integration Setup</h3>
+               <p className="text-sm text-slate-500">Step-by-step guide to connecting Uber, Lyft, and other providers.</p>
+            </a>
+         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>FAQ</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+           <div className="space-y-2">
+              <h4 className="font-medium text-sm">How often is data synced?</h4>
+              <p className="text-sm text-slate-500">Data from connected platforms is synced every hour automatically. You can also trigger a manual sync from the Integrations tab.</p>
+           </div>
+           <Separator />
+           <div className="space-y-2">
+              <h4 className="font-medium text-sm">How do I reset my password?</h4>
+              <p className="text-sm text-slate-500">Contact your system administrator to request a password reset link.</p>
+           </div>
+           <Separator />
+           <div className="space-y-2">
+              <h4 className="font-medium text-sm">What formats can I import?</h4>
+              <p className="text-sm text-slate-500">We support CSV files from Uber Fleet and standard Excel exports. Please see the "Import Data" section for templates.</p>
+           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Support</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+           <p className="text-sm text-slate-500">Need technical assistance? Our support team is available Mon-Fri, 9am-5pm EST.</p>
+           <Button className="w-full">
+             <Mail className="mr-2 h-4 w-4" />
+             Contact Support
+           </Button>
+           <div className="text-center">
+             <p className="text-xs text-slate-400">Version 1.2.4 (Build 20251217)</p>
+           </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

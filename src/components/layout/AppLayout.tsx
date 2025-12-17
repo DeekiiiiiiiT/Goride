@@ -12,7 +12,6 @@ import {
   Settings, 
   LogOut, 
   Menu,
-  CreditCard,
   BarChart3,
   Bell,
   UploadCloud,
@@ -86,12 +85,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             label="Trip Logs" 
             active={currentPage === 'trips'}
             onClick={() => onNavigate?.('trips')}
-          />
-          <NavItem 
-            icon={<CreditCard className="h-4 w-4" />} 
-            label="Financials" 
-            active={currentPage === 'financials'}
-            onClick={() => onNavigate?.('financials')}
           />
           <NavItem 
             icon={<BarChart3 className="h-4 w-4" />} 

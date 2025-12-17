@@ -32,7 +32,8 @@ import {
   Zap,
   HelpCircle,
   Globe,
-  MapPin
+  MapPin,
+  CloudDownload
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
@@ -50,7 +51,10 @@ import {
     detectFileType, 
     mergeAndProcessData, 
     FileData, 
-    DEFAULT_FIELDS 
+    DEFAULT_FIELDS,
+    downloadTemplate,
+    validateFile,
+    extractReportDate
 } from '../../utils/csvHelpers';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics } from '../../types/data';
 import { api } from '../../services/api';
@@ -76,6 +80,7 @@ export function ImportsPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [manageFieldsOpen, setManageFieldsOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
 
@@ -115,14 +120,20 @@ export function ImportsPage() {
                 completed++;
                 
                 if (results.meta.fields) {
-                    const type = detectFileType(results.meta.fields);
-                    newFiles.push({
+                    const type = detectFileType(results.meta.fields, file.name);
+                    const fileData: FileData = {
                         id: Math.random().toString(36).substr(2, 9),
                         name: file.name,
                         rows: results.data as ParsedRow[],
                         headers: results.meta.fields,
                         type
-                    });
+                    };
+
+                    // Run Validation & Date Extraction
+                    fileData.validationErrors = validateFile(fileData);
+                    fileData.reportDate = extractReportDate(fileData);
+
+                    newFiles.push(fileData);
                 }
 
                 if (completed === acceptedFiles.length) {
@@ -221,6 +232,7 @@ export function ImportsPage() {
       setProcessedData([]);
       setStep('select_platform');
       setError(null);
+      setWarning(null);
   };
 
   // --- Field Management Handlers (Simplified for this view) ---
@@ -247,7 +259,10 @@ export function ImportsPage() {
   const getFileIcon = (type: FileData['type']) => {
       if (type === 'uber_trip') return <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><Merge className="h-5 w-5" /></div>;
       if (type === 'uber_payment') return <div className="p-2 bg-green-100 rounded-lg text-green-600"><CheckCircle className="h-5 w-5" /></div>;
+      if (type === 'uber_payment_driver') return <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600"><CheckCircle className="h-5 w-5" /></div>;
+      if (type === 'uber_payment_org') return <div className="p-2 bg-teal-100 rounded-lg text-teal-600"><CheckCircle className="h-5 w-5" /></div>;
       if (type === 'uber_driver_quality') return <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Zap className="h-5 w-5" /></div>;
+      if (type === 'uber_driver_activity') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Zap className="h-5 w-5" /></div>;
       if (type === 'uber_vehicle_performance') return <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><Car className="h-5 w-5" /></div>;
       return <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><FileText className="h-5 w-5" /></div>;
   };
@@ -255,10 +270,153 @@ export function ImportsPage() {
   const getFileBadge = (type: FileData['type']) => {
       if (type === 'uber_trip') return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200">Trip Activity</Badge>;
       if (type === 'uber_payment') return <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-green-200">Payment Order</Badge>;
+      if (type === 'uber_payment_driver') return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200">Driver Payment</Badge>;
+      if (type === 'uber_payment_org') return <Badge className="bg-teal-100 text-teal-700 hover:bg-teal-200 border-teal-200">Org. Payment</Badge>;
       if (type === 'uber_driver_quality') return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">Driver Quality</Badge>;
       if (type === 'uber_vehicle_performance') return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">Vehicle Perf.</Badge>;
+      if (type === 'uber_driver_activity') return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200">Driver Activity</Badge>;
       if (type === 'uber_rental_contract') return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-yellow-200">Rental Contract</Badge>;
       return <Badge variant="secondary">Generic CSV</Badge>;
+  };
+
+  // --- API Sync Handler ---
+  const handleUberSync = async () => {
+    setIsParsing(true);
+    setWarning(null);
+    setError(null);
+
+    const performSync = async () => {
+        try {
+            const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
+            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/uber/sync`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${publicAnonKey}`
+                }
+            });
+
+            if (response.status === 401) {
+                // Auth Required - Trigger Login Flow
+                return "AUTH_REQUIRED";
+            }
+
+            if (!response.ok) {
+                let errorMsg = "Failed to sync with Uber";
+                try {
+                    const errData = await response.json();
+                    errorMsg = errData.error || errData.message || JSON.stringify(errData);
+                } catch (e) {
+                    errorMsg = await response.text();
+                }
+                throw new Error(errorMsg);
+            }
+
+            const data = await response.json();
+            
+            if (data.warning) {
+                setWarning(data.warning);
+            }
+
+            const newTrips = data.trips.map((t: any) => ({
+                ...t,
+                id: t.trip_id || crypto.randomUUID(),
+                source: 'uber_api'
+            }));
+
+            setProcessedData(newTrips);
+            setStep('preview_merged');
+            return "SUCCESS";
+
+        } catch (e: any) {
+            setError(e.message);
+            return "ERROR";
+        }
+    };
+
+    try {
+        // 1. Try to Sync
+        const result = await performSync();
+
+        // 2. If Auth Required, Start OAuth Flow
+        if (result === "AUTH_REQUIRED") {
+            const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
+            
+            // ALWAYS use the production URL for consistency (No trailing slash)
+            const redirectUri = "https://chorus-tech-15470154.figma.site";
+            
+            // Request permissions. 
+            // NOTE: You must enable these in Uber Dashboard -> Scopes / Products
+            const scope = "profile history";
+
+            // Get Auth URL
+            const urlRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/uber/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`, {
+                headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+            });
+            const urlData = await urlRes.json();
+            
+            if (urlData.url) {
+                // Open Popup
+                const width = 600;
+                const height = 700;
+                const left = (window.screen.width / 2) - (width / 2);
+                const top = (window.screen.height / 2) - (height / 2);
+                const popup = window.open(urlData.url, 'UberAuth', `width=${width},height=${height},top=${top},left=${left}`);
+
+                // Listen for Success or Code
+                const messageHandler = async (event: MessageEvent) => {
+                    // Handle the new frontend-based flow
+                    if (event.data?.type === 'uber-auth-code') {
+                        const code = event.data.code;
+                        window.removeEventListener('message', messageHandler);
+                        
+                        // Exchange Code
+                        try {
+                            const exchangeRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/uber/exchange`, {
+                                method: 'POST',
+                                headers: { 
+                                    'Authorization': `Bearer ${publicAnonKey}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ code, redirect_uri: redirectUri })
+                            });
+                            
+                            if (!exchangeRes.ok) {
+                                throw new Error("Token exchange failed");
+                            }
+
+                            // Retry Sync
+                            await performSync();
+                        } catch (e: any) {
+                            setError(e.message);
+                        } finally {
+                            setIsParsing(false);
+                        }
+                    }
+                };
+                window.addEventListener('message', messageHandler);
+
+                // Check if popup closed manually
+                const timer = setInterval(() => {
+                    if (popup && popup.closed) {
+                        clearInterval(timer);
+                        window.removeEventListener('message', messageHandler);
+                        // If we didn't get a message by now, user closed it.
+                        // We check if isParsing is still true to decide if we should stop loading
+                        // But since we can't share state easily with the event listener, we just rely on the user trying again.
+                        setIsParsing(false);
+                    }
+                }, 1000);
+            } else {
+                 throw new Error("Could not generate login URL.");
+            }
+        } else {
+            setIsParsing(false);
+        }
+
+    } catch (e: any) {
+        setError(e.message);
+        setIsParsing(false);
+    }
   };
 
   return (
@@ -334,6 +492,14 @@ export function ImportsPage() {
         </Alert>
       )}
 
+      {warning && (
+        <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
+          <Info className="h-4 w-4 text-yellow-800" />
+          <AlertTitle>System Notice</AlertTitle>
+          <AlertDescription>{warning}</AlertDescription>
+        </Alert>
+      )}
+
       {/* STEP 0: SELECT PLATFORM */}
       {step === 'select_platform' && (
         <div className="space-y-6">
@@ -343,8 +509,28 @@ export function ImportsPage() {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {/* Special API Sync Card */}
+                <Card 
+                    onClick={handleUberSync}
+                    className="cursor-pointer transition-all duration-200 border-2 border-indigo-100 hover:border-indigo-600 hover:shadow-md bg-indigo-50/50"
+                >
+                    <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
+                        <div className="h-12 w-12 rounded-full bg-indigo-600 flex items-center justify-center">
+                            {isParsing ? (
+                                <Zap className="h-6 w-6 text-white animate-pulse" /> 
+                            ) : (
+                                <CloudDownload className="h-6 w-6 text-white" />
+                            )}
+                        </div>
+                        <div className="text-center space-y-1">
+                            <h4 className="font-semibold text-indigo-900">Connect & Sync</h4>
+                            <p className="text-xs text-indigo-700">{isParsing ? 'Syncing...' : 'Secure OAuth Login'}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {[
-                    { id: 'Uber', icon: Car, color: 'text-slate-900', bg: 'bg-slate-100', border: 'hover:border-slate-900', desc: 'Rides & Eats' },
+                    { id: 'Uber', icon: Car, color: 'text-slate-900', bg: 'bg-slate-100', border: 'hover:border-slate-900', desc: 'CSV Import' },
                     { id: 'Lyft', icon: Car, color: 'text-pink-600', bg: 'bg-pink-50', border: 'hover:border-pink-500', desc: 'Ride History' },
                     { id: 'Bolt', icon: Zap, color: 'text-green-600', bg: 'bg-green-50', border: 'hover:border-green-500', desc: 'Trip Reports' },
                     { id: 'InDrive', icon: Globe, color: 'text-blue-600', bg: 'bg-blue-50', border: 'hover:border-blue-500', desc: 'Bid Activity' },
@@ -386,9 +572,14 @@ export function ImportsPage() {
                         : `Upload your ${selectedPlatform} CSV export files.`}
                     </CardDescription>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setStep('select_platform')}>
-                    Change Platform
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => downloadTemplate(availableFields)}>
+                        <CloudDownload className="mr-2 h-4 w-4" /> Template
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setStep('select_platform')}>
+                        Change Platform
+                    </Button>
+                </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -436,10 +627,26 @@ export function ImportsPage() {
                                       <div className="flex items-center gap-2">
                                           <p className="font-medium text-slate-900">{file.name}</p>
                                           {getFileBadge(file.type)}
+                                          {file.reportDate && (
+                                              <Badge variant="outline" className="text-xs font-normal">
+                                                  {new Date(file.reportDate).toLocaleDateString()}
+                                              </Badge>
+                                          )}
                                       </div>
-                                      <p className="text-xs text-slate-500 mt-0.5">
-                                          {file.rows.length} rows &bull; {file.headers.length} columns
-                                      </p>
+                                      <div className="space-y-1 mt-1">
+                                          <p className="text-xs text-slate-500">
+                                              {file.rows.length} rows &bull; {file.headers.length} columns
+                                          </p>
+                                          {file.validationErrors && file.validationErrors.length > 0 && (
+                                              <div className="text-xs text-red-600 font-medium flex flex-col gap-0.5">
+                                                  {file.validationErrors.map((err, i) => (
+                                                      <span key={i} className="flex items-center">
+                                                          <AlertCircle className="h-3 w-3 mr-1 inline" /> {err}
+                                                      </span>
+                                                  ))}
+                                              </div>
+                                          )}
+                                      </div>
                                   </div>
                               </div>
                               <Button variant="ghost" size="icon" onClick={() => removeFile(file.id)} className="text-slate-400 hover:text-red-500">
@@ -514,6 +721,15 @@ export function ImportsPage() {
                   </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-auto pt-0">
+                  {processedData.some(t => !t.amount || !t.driverId || t.driverId === 'unknown') && (
+                      <Alert variant="destructive" className="mb-4 bg-orange-50 border-orange-200 text-orange-800">
+                          <AlertCircle className="h-4 w-4 text-orange-600" />
+                          <AlertTitle className="text-orange-900">Validation Issues Detected</AlertTitle>
+                          <AlertDescription className="text-orange-800">
+                              {processedData.filter(t => !t.amount || !t.driverId || t.driverId === 'unknown').length} trips have missing financial or driver data. These may cause reconciliation errors.
+                          </AlertDescription>
+                      </Alert>
+                  )}
                   <Tabs defaultValue="trips" className="w-full">
                       <TabsList className="mb-4">
                           <TabsTrigger value="trips">Trips & Financials ({processedData.length})</TabsTrigger>
@@ -525,7 +741,21 @@ export function ImportsPage() {
                           </TabsTrigger>
                       </TabsList>
                       
-                      <TabsContent value="trips" className="h-[500px] overflow-auto border rounded-md">
+                      <TabsContent value="trips" className="space-y-4">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {uploadedFiles.filter(f => ['uber_trip', 'uber_payment', 'uber_payment_org', 'generic'].includes(f.type)).map(f => (
+                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                            {f.name}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-[500px] overflow-auto border rounded-md">
                         <Table>
                             <TableHeader className="bg-slate-50 sticky top-0">
                                 <TableRow>
@@ -546,7 +776,9 @@ export function ImportsPage() {
                                             {new Date(trip.date).toLocaleDateString()}
                                         </TableCell>
                                         <TableCell>{trip.platform}</TableCell>
-                                        <TableCell className="text-xs truncate max-w-[100px]" title={trip.driverId}>{trip.driverId}</TableCell>
+                                        <TableCell className="text-xs truncate max-w-[100px]" title={trip.driverName || trip.driverId}>
+                                            {trip.driverName || trip.driverId}
+                                        </TableCell>
                                         <TableCell className="text-xs truncate max-w-[150px]" title={trip.pickupLocation}>{trip.pickupLocation || '-'}</TableCell>
                                         
                                         {/* Phase 3: Financial Columns */}
@@ -576,14 +808,45 @@ export function ImportsPage() {
                                 ))}
                             </TableBody>
                         </Table>
+                        </div>
                       </TabsContent>
 
-                      <TabsContent value="drivers" className="h-[500px] overflow-auto">
+                      <TabsContent value="drivers" className="space-y-4">
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {uploadedFiles.filter(f => ['uber_driver_quality', 'uber_driver_activity', 'uber_payment_driver'].includes(f.type)).map(f => (
+                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                            {f.name}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-[500px] overflow-auto">
                           <DriverScorecard metrics={processedDriverMetrics} />
+                        </div>
                       </TabsContent>
                       
-                      <TabsContent value="vehicles" className="h-[500px] overflow-auto">
+                      <TabsContent value="vehicles" className="space-y-4">
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {uploadedFiles.filter(f => ['uber_vehicle_performance'].includes(f.type)).map(f => (
+                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                            {f.name}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-[500px] overflow-auto">
                           <VehicleHealthCard metrics={processedVehicleMetrics} />
+                        </div>
                       </TabsContent>
                   </Tabs>
               </CardContent>

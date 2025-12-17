@@ -8,23 +8,70 @@ import {
   Tooltip, 
   Legend, 
   Line,
-  ComposedChart
+  ComposedChart,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
+import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { Trip } from '../../types/data';
-import { DollarSign, TrendingUp, Wallet } from "lucide-react";
+import { DollarSign, TrendingUp, Wallet, CreditCard, PiggyBank, Receipt } from "lucide-react";
 
 interface FinancialsViewProps {
   trips: Trip[];
 }
 
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
 export function FinancialsView({ trips }: FinancialsViewProps) {
   // Financial Metrics Calculation
   const metrics = useMemo(() => {
-    const totalRevenue = trips.reduce((sum, t) => sum + (t.status === 'Completed' ? t.amount : 0), 0);
-    const completedTrips = trips.filter(t => t.status === 'Completed');
-    const avgRevenuePerTrip = completedTrips.length > 0 ? totalRevenue / completedTrips.length : 0;
+    let totalRevenue = 0;
+    let totalCash = 0;
+    let totalRefunds = 0;
+    let totalTips = 0;
     
-    // Group by Platform
+    // Revenue Breakdown by Type
+    const revenueByType = {
+        'Fare': 0,
+        'Tip': 0,
+        'Promotion': 0,
+        'Other': 0
+    };
+
+    const completedTrips = trips.filter(t => t.status === 'Completed' || t.transactionType);
+    
+    completedTrips.forEach(t => {
+        const amt = t.amount || 0;
+        
+        // 1. Total Revenue
+        if (amt > 0) totalRevenue += amt;
+        
+        // 2. Cash Collected
+        if (t.cashCollected) totalCash += t.cashCollected;
+        
+        // 3. Refunds/Expenses (Negative amounts usually)
+        if (amt < 0) totalRefunds += Math.abs(amt);
+
+        // 4. Breakdown
+        const type = t.transactionType || 'Fare'; // Default to Fare
+        if (type.includes('Tip')) {
+            revenueByType['Tip'] += amt;
+            totalTips += amt;
+        } else if (type.includes('Promo') || type.includes('Incentive')) {
+            revenueByType['Promotion'] += amt;
+        } else if (type.includes('Fare') || type === 'Completed Trip') {
+            revenueByType['Fare'] += amt;
+        } else {
+            revenueByType['Other'] += amt;
+        }
+    });
+
+    const avgRevenuePerTrip = completedTrips.length > 0 ? totalRevenue / completedTrips.length : 0;
+    const expenseRatio = totalRevenue > 0 ? (totalRefunds / totalRevenue) * 100 : 0;
+    const cashPercentage = totalRevenue > 0 ? (totalCash / totalRevenue) * 100 : 0;
+
+    // Platform Grouping (Keep existing logic)
     const platformStats: Record<string, { revenue: number, count: number }> = {};
     trips.forEach(t => {
       if (t.status !== 'Completed') return;
@@ -32,7 +79,7 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
       platformStats[t.platform].revenue += t.amount;
       platformStats[t.platform].count += 1;
     });
-
+    
     // Find best platform
     let bestPlatform = 'N/A';
     let maxRev = 0;
@@ -43,11 +90,21 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
       }
     });
 
+    const pieData = Object.entries(revenueByType)
+        .filter(([_, val]) => val > 0)
+        .map(([name, value]) => ({ name, value }));
+
     return {
       totalRevenue,
       avgRevenuePerTrip,
       bestPlatform,
-      platformStats
+      platformStats,
+      totalCash,
+      totalRefunds,
+      totalTips,
+      expenseRatio,
+      cashPercentage,
+      pieData
     };
   }, [trips]);
 
@@ -77,24 +134,36 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
   return (
     <div className="space-y-6">
       {/* Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <MetricCard 
           title="Total Earnings"
-          value={`$${metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          value={`$${metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
           icon={<DollarSign className="h-4 w-4 text-emerald-600" />}
-          subtext="Gross revenue across all platforms"
+          subtext="Gross Revenue"
         />
         <MetricCard 
-          title="Avg. Trip Fare"
-          value={`$${metrics.avgRevenuePerTrip.toFixed(2)}`}
+          title="Net Profit (Est)"
+          value={`$${(metrics.totalRevenue - metrics.totalRefunds).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
           icon={<Wallet className="h-4 w-4 text-indigo-600" />}
-          subtext="Average earnings per completed ride"
+          subtext="After expenses"
+        />
+         <MetricCard 
+          title="Avg / Driver"
+          value={`$${metrics.avgRevenuePerTrip.toFixed(2)}`} // Placeholder for per driver
+          icon={<TrendingUp className="h-4 w-4 text-blue-600" />}
+          subtext="Per Trip Average"
         />
         <MetricCard 
-          title="Top Platform"
-          value={metrics.bestPlatform}
-          icon={<TrendingUp className="h-4 w-4 text-blue-600" />}
-          subtext="Highest revenue source"
+          title="Expense Ratio"
+          value={`${metrics.expenseRatio.toFixed(1)}%`}
+          icon={<Receipt className="h-4 w-4 text-rose-600" />}
+          subtext={`$${metrics.totalRefunds.toFixed(0)} refunded`}
+        />
+        <MetricCard 
+          title="Cash %"
+          value={`${metrics.cashPercentage.toFixed(1)}%`}
+          icon={<PiggyBank className="h-4 w-4 text-amber-600" />}
+          subtext={`$${metrics.totalCash.toLocaleString()} collected`}
         />
       </div>
 
@@ -110,39 +179,41 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
           <CardContent>
             <div className="h-[350px] w-full overflow-x-auto flex justify-center">
               {chartData.length > 0 ? (
-                <div style={{ minWidth: '600px' }}>
-                  <ComposedChart width={700} height={350} data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis 
-                      dataKey="date" 
-                      stroke="#64748b" 
-                      fontSize={12} 
-                      tickLine={false} 
-                      axisLine={false} 
-                    />
-                    <YAxis 
-                      yAxisId="left" 
-                      stroke="#64748b" 
-                      fontSize={12} 
-                      tickLine={false} 
-                      axisLine={false} 
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <YAxis 
-                      yAxisId="right" 
-                      orientation="right" 
-                      stroke="#64748b" 
-                      fontSize={12} 
-                      tickLine={false} 
-                      axisLine={false}
-                    />
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    />
-                    <Legend verticalAlign="top" height={36}/>
-                    <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={30} />
-                    <Line yAxisId="right" type="monotone" dataKey="trips" name="Trip Count" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
-                  </ComposedChart>
+                <div style={{ minWidth: '600px', height: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={600} minHeight={300}>
+                    <ComposedChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis 
+                        dataKey="date" 
+                        stroke="#64748b" 
+                        fontSize={12} 
+                        tickLine={false} 
+                        axisLine={false} 
+                        />
+                        <YAxis 
+                        yAxisId="left" 
+                        stroke="#64748b" 
+                        fontSize={12} 
+                        tickLine={false} 
+                        axisLine={false} 
+                        tickFormatter={(value) => `$${value}`}
+                        />
+                        <YAxis 
+                        yAxisId="right" 
+                        orientation="right" 
+                        stroke="#64748b" 
+                        fontSize={12} 
+                        tickLine={false} 
+                        axisLine={false}
+                        />
+                        <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Legend verticalAlign="top" height={36}/>
+                        <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={30} />
+                        <Line yAxisId="right" type="monotone" dataKey="trips" name="Trip Count" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-slate-400">
@@ -153,39 +224,57 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
           </CardContent>
         </Card>
 
-        {/* Platform Breakdown */}
+        {/* Revenue Breakdown (Pie) */}
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>Platform Performance</CardTitle>
-            <CardDescription>Revenue share by provider.</CardDescription>
+            <CardTitle>Revenue Breakdown</CardTitle>
+            <CardDescription>Source of earnings.</CardDescription>
           </CardHeader>
           <CardContent>
-             <div className="space-y-6">
-               {Object.entries(metrics.platformStats).map(([platform, stats]) => (
-                 <div key={platform} className="space-y-2">
-                   <div className="flex items-center justify-between text-sm">
-                     <span className="font-medium text-slate-700 dark:text-slate-300">{platform}</span>
-                     <span className="text-slate-900 dark:text-slate-100 font-bold">${stats.revenue.toFixed(2)}</span>
-                   </div>
-                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                     <div 
-                        className={`h-full rounded-full ${
-                          platform === 'Uber' ? 'bg-black' : 
-                          platform === 'Lyft' ? 'bg-pink-500' : 
-                          'bg-indigo-500'
-                        }`} 
-                        style={{ width: `${(stats.revenue / metrics.totalRevenue) * 100}%` }} 
-                     />
-                   </div>
-                   <div className="flex justify-between text-xs text-slate-500">
-                     <span>{stats.count} trips</span>
-                     <span>{((stats.revenue / metrics.totalRevenue) * 100).toFixed(1)}%</span>
-                   </div>
+             <div className="h-[250px] w-full" style={{ minWidth: '200px' }}>
+                {metrics.pieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={200}>
+                        <PieChart>
+                            <Pie
+                                data={metrics.pieData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                            >
+                                {metrics.pieData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip formatter={(val) => `$${Number(val).toFixed(2)}`} />
+                            <Legend verticalAlign="bottom" height={36} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400">
+                        No breakdown available
+                    </div>
+                )}
+             </div>
+             {/* Expense Summary List */}
+             <div className="mt-4 space-y-3 pt-4 border-t">
+                 <h4 className="text-sm font-medium text-slate-700">Expense Analysis</h4>
+                 <div className="flex justify-between text-sm">
+                     <span className="text-slate-500">Refunds</span>
+                     <span className="font-medium text-rose-600">${metrics.totalRefunds.toFixed(2)}</span>
                  </div>
-               ))}
-               {Object.keys(metrics.platformStats).length === 0 && (
-                 <div className="text-center text-slate-400 py-8">No platform data</div>
-               )}
+                 <div className="flex justify-between text-sm">
+                     <span className="text-slate-500">Tolls & Fees</span>
+                     <span className="font-medium text-slate-900">$0.00</span>
+                 </div>
+                 <div className="flex justify-between text-sm">
+                     <span className="text-slate-500">Net Profit Margin</span>
+                     <span className="font-medium text-emerald-600">
+                         {metrics.totalRevenue > 0 ? (100 - metrics.expenseRatio).toFixed(1) : 0}%
+                     </span>
+                 </div>
              </div>
           </CardContent>
         </Card>
