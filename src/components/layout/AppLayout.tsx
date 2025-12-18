@@ -104,9 +104,15 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
           />
           <NavItem 
             icon={<History className="h-4 w-4" />} 
-            label="Transactions" 
+            label="Financial Analytics" 
             active={currentPage === 'transactions'}
             onClick={() => onNavigate?.('transactions')}
+          />
+          <NavItem 
+            icon={<FileText className="h-4 w-4" />} 
+            label="Transaction List" 
+            active={currentPage === 'transaction-list'}
+            onClick={() => onNavigate?.('transaction-list')}
           />
         </SidebarMenu>
         

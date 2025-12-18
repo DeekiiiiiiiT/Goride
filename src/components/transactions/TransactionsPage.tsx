@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { TransactionsTab } from '../finance/TransactionsTab';
 import { toast } from "sonner@2.0.3";
 
-export function TransactionsPage() {
+export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 'list' }) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,13 +36,17 @@ export function TransactionsPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-slate-900">Financial Analytics</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-slate-900">
+          {mode === 'list' ? 'Transaction List' : 'Financial Analytics'}
+        </h2>
         <p className="text-slate-500">
-          Manage cash flow, expenses, payroll, and generate financial reports.
+          {mode === 'list' 
+            ? 'View and manage your complete transaction history.' 
+            : 'Manage cash flow, expenses, payroll, and generate financial reports.'}
         </p>
       </div>
 
-      <TransactionsTab trips={trips} />
+      <TransactionsTab trips={trips} mode={mode} />
     </div>
   );
 }

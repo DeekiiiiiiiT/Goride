@@ -115,7 +115,8 @@ export default function App() {
       {currentPage === 'vehicles' && <VehiclesPage />}
       {currentPage === 'trips' && <TripLogsPage />}
       {currentPage === 'reports' && <ReportsPage />}
-      {currentPage === 'transactions' && <TransactionsPage />}
+      {currentPage === 'transactions' && <TransactionsPage mode="analytics" />}
+      {currentPage === 'transaction-list' && <TransactionsPage mode="list" />}
       {currentPage === 'settings' && <SettingsPage />}
     </AppLayout>
   );

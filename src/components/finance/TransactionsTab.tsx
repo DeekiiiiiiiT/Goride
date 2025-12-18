@@ -27,9 +27,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 interface TransactionsTabProps {
   trips: Trip[];
+  mode?: 'analytics' | 'list';
 }
 
-export function TransactionsTab({ trips }: TransactionsTabProps) {
+export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabProps) {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTxns, setSelectedTxns] = useState<Set<string>>(new Set());
@@ -190,38 +191,8 @@ export function TransactionsTab({ trips }: TransactionsTabProps) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
-  return (
-    <div className="space-y-6">
-      <Tabs defaultValue="dashboard" className="w-full">
-        <div className="flex items-center justify-between mb-4">
-             <TabsList>
-                <TabsTrigger value="dashboard">Cash Flow Analysis</TabsTrigger>
-                <TabsTrigger value="list">Transaction List</TabsTrigger>
-                <TabsTrigger value="expenses">Expense Management</TabsTrigger>
-                <TabsTrigger value="payroll">Payroll System</TabsTrigger>
-                <TabsTrigger value="reports">Report Center</TabsTrigger>
-             </TabsList>
-             
-             {/* Global Actions could go here */}
-        </div>
-
-        <TabsContent value="dashboard">
-             <CashFlowDashboard transactions={transactions} />
-        </TabsContent>
-        
-        <TabsContent value="expenses">
-            <ExpensesTab transactions={transactions} onAddTransaction={handleAddTransaction} vehicles={vehicles} />
-        </TabsContent>
-
-        <TabsContent value="payroll">
-            <PayrollTab transactions={transactions} onAddTransaction={handleAddTransaction} drivers={drivers} />
-        </TabsContent>
-
-        <TabsContent value="reports">
-            <ReportCenter transactions={transactions} />
-        </TabsContent>
-
-        <TabsContent value="list" className="space-y-4">
+  const listViewContent = (
+     <div className="space-y-4">
             {/* Quick Analysis Views */}
             <div className="flex gap-2 overflow-x-auto pb-2">
                 <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={() => applyQuickView('today')}>
@@ -406,6 +377,41 @@ export function TransactionsTab({ trips }: TransactionsTabProps) {
                 </Table>
                 </CardContent>
             </Card>
+      </div>
+  );
+
+  if (mode === 'list') {
+      return listViewContent;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="dashboard" className="w-full">
+        <div className="flex items-center justify-between mb-4">
+             <TabsList>
+                <TabsTrigger value="dashboard">Cash Flow Analysis</TabsTrigger>
+                <TabsTrigger value="expenses">Expense Management</TabsTrigger>
+                <TabsTrigger value="payroll">Payroll System</TabsTrigger>
+                <TabsTrigger value="reports">Report Center</TabsTrigger>
+             </TabsList>
+             
+             {/* Global Actions could go here */}
+        </div>
+
+        <TabsContent value="dashboard">
+             <CashFlowDashboard transactions={transactions} />
+        </TabsContent>
+        
+        <TabsContent value="expenses">
+            <ExpensesTab transactions={transactions} onAddTransaction={handleAddTransaction} vehicles={vehicles} />
+        </TabsContent>
+
+        <TabsContent value="payroll">
+            <PayrollTab transactions={transactions} onAddTransaction={handleAddTransaction} drivers={drivers} />
+        </TabsContent>
+
+        <TabsContent value="reports">
+            <ReportCenter transactions={transactions} />
         </TabsContent>
       </Tabs>
     </div>
