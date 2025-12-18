@@ -239,6 +239,42 @@ export interface ProcessedBatch {
     tripAnalytics?: TripAnalytics; // Phase 4
 }
 
+// Helper to extract and clean driver name
+const extractDriverName = (row: ParsedRow, schema: any = {}): string => {
+    let name = '';
+    
+    // 1. Try schema specific fields first
+    if (schema.driverName) {
+        const names = Array.isArray(schema.driverName) ? schema.driverName : [schema.driverName];
+        name = names.map(n => row[n]).filter(Boolean).join(' ').trim();
+    }
+    
+    // 2. Fallback to common columns
+    if (!name) {
+        const firstName = row['Driver First Name'] || row['First Name'] || row['Driver first name'];
+        const lastName = row['Driver Surname'] || row['Driver Last Name'] || row['Last Name'] || row['Driver last name'];
+        const fullName = row['Driver Name'] || row['Name'] || row['Driver'];
+
+        if (firstName || lastName) {
+            name = `${firstName || ''} ${lastName || ''}`.trim();
+        } else if (fullName) {
+            name = String(fullName).trim();
+        }
+    }
+    
+    // 3. Clean and Normalize
+    if (name) {
+        // Fix known issue: "CAS" suffix on names (e.g. RATTRAYCAS -> RATTRAY)
+        // Only apply if name is uppercase (typical of raw Uber exports) to avoid false positives
+        if (name === name.toUpperCase() && name.endsWith('CAS') && name.length > 5) {
+             name = name.substring(0, name.length - 3).trim();
+        }
+        return name;
+    }
+    
+    return 'Unknown Driver';
+};
+
 export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[]): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
     const genericTrips: Trip[] = [];
@@ -276,11 +312,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     if (row[schema.driverId]) current.driverId = String(row[schema.driverId]);
                     
                     // Extract Driver Name
-                    if (schema.driverName) {
-                        const names = Array.isArray(schema.driverName) ? schema.driverName : [schema.driverName];
-                        const name = names.map(n => row[n]).filter(Boolean).join(' ').trim();
-                        if (name) current.driverName = name;
-                    }
+                    const name = extractDriverName(row, schema);
+                    if (name && name !== 'Unknown Driver') current.driverName = name;
 
                     if (row[schema.vehicleId]) current.vehicleId = String(row[schema.vehicleId]);
                     if (row[schema.distance]) current.distance = parseFloat(String(row[schema.distance]).replace(/[^0-9.]/g, '')) || 0;
@@ -463,11 +496,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     }
                     if (!current.driverId && row[schema.driverId]) current.driverId = String(row[schema.driverId]);
                     
-                    if (schema.driverName && !current.driverName) {
-                        const names = Array.isArray(schema.driverName) ? schema.driverName : [schema.driverName];
-                        const name = names.map(n => row[n]).filter(Boolean).join(' ').trim();
-                        if (name) current.driverName = name;
-                    }
+                    const name = extractDriverName(row, schema);
+                    if (name && name !== 'Unknown Driver' && !current.driverName) current.driverName = name;
                 }
                 tripMap.set(tripId, current);
              }
@@ -483,17 +513,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      const refundsAndExpenses = parseFloat(String(row['Refunds and Expenses'] || row['Refunds'] || '0').replace(/[^0-9.-]/g, '')) || 0;
                      const cashCollected = parseFloat(String(row['Cash Collected'] || '0').replace(/[^0-9.-]/g, '')) || 0;
                      
-                     // Extract Driver Name - Robust Logic
-                     let driverName = 'Unknown Driver';
-                     const firstName = row['Driver First Name'] || row['First Name'] || row['Driver first name'];
-                     const lastName = row['Driver Surname'] || row['Driver Last Name'] || row['Last Name'] || row['Driver last name'];
-                     const fullName = row['Driver Name'] || row['Name'] || row['Driver'];
-
-                     if (firstName || lastName) {
-                         driverName = `${firstName || ''} ${lastName || ''}`.trim();
-                     } else if (fullName) {
-                         driverName = String(fullName).trim();
-                     }
+                     // Extract Driver Name
+                     const driverName = extractDriverName(row);
 
                      driverMetrics.push({
                          id: `dm-pay-${dId}-${Math.random()}`,
@@ -585,17 +606,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      else if (cr > 0.05) recommendation = 'Warning: Cancellations are rising';
                      else if (ar < 0.70) recommendation = 'Try to accept more trips to reach Gold';
 
-                     // Extract Driver Name - Robust Logic
-                     let driverName = 'Unknown Driver';
-                     const firstName = row['Driver First Name'] || row['First Name'] || row['Driver first name'];
-                     const lastName = row['Driver Surname'] || row['Driver Last Name'] || row['Last Name'] || row['Driver last name'];
-                     const fullName = row['Driver Name'] || row['Name'] || row['Driver'];
-
-                     if (firstName || lastName) {
-                         driverName = `${firstName || ''} ${lastName || ''}`.trim();
-                     } else if (fullName) {
-                         driverName = String(fullName).trim();
-                     }
+                     // Extract Driver Name
+                     const driverName = extractDriverName(row);
 
                      driverMetrics.push({
                         id: `dm-${driverId}-${Math.random()}`,

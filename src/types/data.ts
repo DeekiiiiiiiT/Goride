@@ -405,6 +405,10 @@ export interface FinancialTransaction {
   laborCost?: number;
 
   notes?: string;
+
+  // Import/Source Tracking
+  batchId?: string;
+  batchName?: string;
 }
 
 export interface BankReconciliationRecord {

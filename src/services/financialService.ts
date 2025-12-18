@@ -6,8 +6,22 @@ import { subDays, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay
 export const generateMockTransactions = (trips: Trip[]): FinancialTransaction[] => {
   const transactions: FinancialTransaction[] = [];
   
+  // Define mock batches to match the user's import scenario
+  const mockBatches = [
+    { id: 'batch_001', name: 'driver_activity.csv', type: 'Activity' },
+    { id: 'batch_002', name: 'driver_quality.csv', type: 'Quality' },
+    { id: 'batch_003', name: 'Payment_organisation.csv', type: 'Payment' },
+    { id: 'batch_004', name: 'payments_driver.csv', type: 'Payout' },
+    { id: 'batch_005', name: 'Payments_Transaction.csv', type: 'Transaction' },
+    { id: 'batch_006', name: 'trip_activity.csv', type: 'Trip' },
+    { id: 'batch_007', name: 'vehicle_performance.csv', type: 'Performance' }
+  ];
+
   // 1. Convert Trips to Revenue Transactions
-  trips.forEach(trip => {
+  trips.forEach((trip, index) => {
+    // Assign ALL trips to trip_activity.csv to match user expectation of ~50 transactions
+    const batch = mockBatches[5]; // trip_activity.csv
+    
     if (trip.status === 'Completed' && trip.amount) {
       transactions.push({
         id: `txn_trip_${trip.id}`,
@@ -26,6 +40,8 @@ export const generateMockTransactions = (trips: Trip[]): FinancialTransaction[] 
         isReconciled: Math.random() > 0.2, // 80% reconciled
         netAmount: trip.amount, // Simplified
         balanceAfter: 0, // Calculated later
+        batchId: batch.id,
+        batchName: batch.name
       });
 
       // Tips
@@ -44,7 +60,9 @@ export const generateMockTransactions = (trips: Trip[]): FinancialTransaction[] 
           status: 'Completed',
           isReconciled: true,
           netAmount: trip.fareBreakdown.tips,
-          balanceAfter: 0
+          balanceAfter: 0,
+          batchId: batch.id,
+          batchName: batch.name
         });
       }
     }
@@ -58,6 +76,9 @@ export const generateMockTransactions = (trips: Trip[]): FinancialTransaction[] 
     const date = subDays(today, Math.floor(Math.random() * 60));
     const cat = expenseCategories[Math.floor(Math.random() * expenseCategories.length)];
     let amount = 0;
+    
+    // Assign expenses to vehicle_performance or Payment_organisation
+    const batch = i % 3 === 0 ? mockBatches[6] : mockBatches[2];
     
     switch(cat) {
         case 'Fuel': amount = -50 - Math.random() * 50; break;
@@ -79,10 +100,11 @@ export const generateMockTransactions = (trips: Trip[]): FinancialTransaction[] 
         amount: Number(amount.toFixed(2)),
         paymentMethod: 'Bank Transfer',
         status: 'Completed',
-        isReconciled: true,
         isReconciled: Math.random() > 0.1,
         netAmount: amount,
-        balanceAfter: 0
+        balanceAfter: 0,
+        batchId: batch.id,
+        batchName: batch.name
     });
   }
 
@@ -90,6 +112,9 @@ export const generateMockTransactions = (trips: Trip[]): FinancialTransaction[] 
   // Weekly payouts
   for (let i = 0; i < 8; i++) { // Last 8 weeks
       const date = subDays(today, i * 7);
+      // Assign to payments_driver.csv
+      const batch = mockBatches[3];
+      
       transactions.push({
           id: `txn_payout_${i}`,
           date: format(date, 'yyyy-MM-dd'),
@@ -102,8 +127,105 @@ export const generateMockTransactions = (trips: Trip[]): FinancialTransaction[] 
           status: 'Completed',
           isReconciled: true,
           netAmount: -5000,
-          balanceAfter: 0
+          balanceAfter: 0,
+          batchId: batch.id,
+          batchName: batch.name
       });
+  }
+
+  // 4. Generate Payments_Transaction.csv (Batch 4) - Generic payment records
+  for (let i = 0; i < 12; i++) {
+    const date = subDays(today, Math.floor(Math.random() * 45));
+    const batch = mockBatches[4]; // Payments_Transaction.csv
+    
+    transactions.push({
+        id: `txn_pay_${i}`,
+        date: format(date, 'yyyy-MM-dd'),
+        time: '11:15:00',
+        type: 'Expense',
+        category: 'Bank Fees',
+        description: 'Transaction Processing Fee',
+        amount: -2.50,
+        paymentMethod: 'Bank Transfer',
+        status: 'Completed',
+        isReconciled: true,
+        netAmount: -2.50,
+        balanceAfter: 0,
+        batchId: batch.id,
+        batchName: batch.name
+    });
+  }
+
+  // 5. Generate Misc Adjustments for Remaining Files (Activity & Quality)
+  // Ensure driver_activity.csv and driver_quality.csv have data
+  for (let i = 0; i < 30; i++) {
+    const isQuality = i % 2 === 0;
+    const batch = isQuality ? mockBatches[1] : mockBatches[0]; // driver_quality.csv or driver_activity.csv
+    const date = subDays(today, Math.floor(Math.random() * 30));
+    
+    // Add some "zero" amount transactions to simulate non-financial logs that user wants to see
+    const isLog = Math.random() > 0.6; 
+    
+    if (isLog) {
+         transactions.push({
+            id: `txn_log_${i}`,
+            date: format(date, 'yyyy-MM-dd'),
+            time: '09:00:00',
+            type: 'Adjustment', 
+            category: isQuality ? 'System Log' : 'Status Change',
+            description: isQuality ? 'Driver Rating Updated' : 'Driver Status: Active',
+            amount: 0,
+            paymentMethod: 'Cash', // Placeholder
+            status: 'Completed',
+            isReconciled: true,
+            netAmount: 0,
+            balanceAfter: 0,
+            batchId: batch.id,
+            batchName: batch.name
+        });
+        continue;
+    }
+
+    if (isQuality) {
+        // Quality incentives/penalties
+        const isBonus = Math.random() > 0.3;
+        const amount = isBonus ? 50 + Math.random() * 50 : -20 - Math.random() * 30;
+        
+        transactions.push({
+            id: `txn_qual_${i}`,
+            date: format(date, 'yyyy-MM-dd'),
+            time: '10:00:00',
+            type: isBonus ? 'Revenue' : 'Expense',
+            category: isBonus ? 'Incentive' : 'Fine',
+            description: isBonus ? 'Weekly Quality Bonus' : 'Quality Infraction Penalty',
+            amount: Number(amount.toFixed(2)),
+            paymentMethod: 'Internal Transfer',
+            status: 'Completed',
+            isReconciled: true,
+            netAmount: amount,
+            balanceAfter: 0,
+            batchId: batch.id,
+            batchName: batch.name
+        });
+    } else {
+        // Activity fees/subscriptions
+        transactions.push({
+            id: `txn_act_${i}`,
+            date: format(date, 'yyyy-MM-dd'),
+            time: '08:30:00',
+            type: 'Expense',
+            category: 'Platform Fee',
+            description: 'Weekly Platform Access Fee',
+            amount: -15.00,
+            paymentMethod: 'Account Deduction',
+            status: 'Completed',
+            isReconciled: true,
+            netAmount: -15.00,
+            balanceAfter: 0,
+            batchId: batch.id,
+            batchName: batch.name
+        });
+    }
   }
 
   // Sort by date

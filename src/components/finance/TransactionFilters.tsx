@@ -21,6 +21,7 @@ export interface TransactionFilterState {
   maxAmount: string;
   category: string;
   reconciled: 'all' | 'yes' | 'no';
+  batchId: string;
 }
 
 interface TransactionFiltersProps {
@@ -28,9 +29,10 @@ interface TransactionFiltersProps {
   onFilterChange: (filters: TransactionFilterState) => void;
   drivers: { id: string; name: string }[];
   categories: string[];
+  batches: { id: string; name: string }[];
 }
 
-export function TransactionFilters({ filters, onFilterChange, drivers, categories }: TransactionFiltersProps) {
+export function TransactionFilters({ filters, onFilterChange, drivers, categories, batches }: TransactionFiltersProps) {
   
   const handleDateSelect = (range: TransactionFilterState['dateRange']) => {
     onFilterChange({ ...filters, dateRange: range });
@@ -47,7 +49,8 @@ export function TransactionFilters({ filters, onFilterChange, drivers, categorie
       minAmount: '',
       maxAmount: '',
       category: 'all',
-      reconciled: 'all'
+      reconciled: 'all',
+      batchId: 'all'
     });
   };
 
@@ -59,7 +62,8 @@ export function TransactionFilters({ filters, onFilterChange, drivers, categorie
     filters.maxAmount !== '',
     filters.category !== 'all',
     filters.reconciled !== 'all',
-    filters.dateRange !== 'all'
+    filters.dateRange !== 'all',
+    filters.batchId !== 'all'
   ].filter(Boolean).length;
 
   return (
@@ -124,6 +128,22 @@ export function TransactionFilters({ filters, onFilterChange, drivers, categorie
         </div>
 
         <div className="h-6 w-px bg-slate-200 mx-1" />
+
+        {/* Batch/File Filter */}
+        <Select 
+            value={filters.batchId} 
+            onValueChange={(val) => onFilterChange({...filters, batchId: val})}
+        >
+            <SelectTrigger className="w-[160px] h-9 text-xs font-medium text-indigo-700 bg-indigo-50 border-indigo-200">
+                <SelectValue placeholder="Select Import File" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">All Import Files</SelectItem>
+                {batches.map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
 
         {/* Type Filter */}
         <Select 

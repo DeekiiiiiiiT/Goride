@@ -14,10 +14,21 @@ import {
   Search, 
   Plus,
   LayoutGrid,
-  List
+  List,
+  ArrowRight,
+  MoreVertical,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "../ui/table";
 import {
   Select,
   SelectContent,
@@ -49,7 +60,7 @@ export function VehiclesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [serviceFilter, setServiceFilter] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Toggle view (Future proofing)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Toggle view (Future proofing)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -325,21 +336,80 @@ export function VehiclesPage() {
               </div>
           </div>
 
-          {/* --- GRID --- */}
+          {/* --- CONTENT --- */}
           {filteredVehicles.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {filteredVehicles.map(vehicle => (
-                      <VehicleCard 
-                          key={vehicle.id} 
-                          vehicle={vehicle} 
-                          onViewAnalytics={(id) => setSelectedVehicleId(id)}
-                          onAssignDriver={(id) => handleOpenAssignModal(id)}
-                          onLogService={handleLogService}
-                          onAddFuel={handleAddFuel}
-                          onSendAlert={handleSendAlert}
-                      />
-                  ))}
-              </div>
+              viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredVehicles.map(vehicle => (
+                        <VehicleCard 
+                            key={vehicle.id} 
+                            vehicle={vehicle} 
+                            onViewAnalytics={(id) => setSelectedVehicleId(id)}
+                            onAssignDriver={(id) => handleOpenAssignModal(id)}
+                            onLogService={handleLogService}
+                            onAddFuel={handleAddFuel}
+                            onSendAlert={handleSendAlert}
+                        />
+                    ))}
+                </div>
+              ) : (
+                <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+                    <Table>
+                        <TableHeader className="bg-slate-50">
+                            <TableRow>
+                                <TableHead className="w-[300px] pl-6">Vehicle / ID</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>VIN & License plate</TableHead>
+                                <TableHead>Assignment</TableHead>
+                                <TableHead>Vehicle docs</TableHead>
+                                <TableHead className="w-[50px]"><SettingsIcon className="h-4 w-4 text-slate-500" /></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredVehicles.map(vehicle => (
+                                <TableRow key={vehicle.id} className="hover:bg-slate-50/50">
+                                    <TableCell className="pl-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-12 w-20 relative rounded-md overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
+                                                <img src={vehicle.image} alt={vehicle.model} className="h-full w-full object-cover" />
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-slate-900">{vehicle.year} {vehicle.make} {vehicle.model}</div>
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <div className={`h-2.5 w-2.5 rounded-full ${vehicle.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                            <span className="text-slate-700">{vehicle.status}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-slate-500">{vehicle.licensePlate}</span>
+                                    </TableCell>
+                                    <TableCell>
+                                        {vehicle.currentDriverName ? (
+                                            <span className="font-medium text-slate-700 uppercase">{vehicle.currentDriverName}</span>
+                                        ) : (
+                                            <span className="text-slate-400">Unassigned</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200" onClick={() => setSelectedVehicleId(vehicle.id)}>
+                                            <ArrowRight className="h-4 w-4 text-slate-600" />
+                                        </Button>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedVehicleId(vehicle.id)}>
+                                            <MoreVertical className="h-4 w-4 text-slate-400" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+              )
           ) : (
               <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-slate-50 rounded-xl border border-dashed">
                  <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-4">

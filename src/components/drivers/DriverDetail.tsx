@@ -64,26 +64,30 @@ import { DateRange } from "react-day-picker";
 import { cn } from "../ui/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
+import { toast } from "sonner@2.0.3";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 
 interface DriverDocument {
   id: string;
   name: string;
-  type: 'License' | 'Insurance' | 'Registration' | 'Background Check';
+  type: string;
   status: 'Verified' | 'Pending' | 'Expired' | 'Rejected';
   expiryDate: string;
   uploadDate: string;
+  url?: string;
 }
 
 const MOCK_DOCUMENTS: DriverDocument[] = [
-  { id: '1', name: 'Driver License (Front)', type: 'License', status: 'Verified', expiryDate: '2025-10-15', uploadDate: '2023-10-12' },
-  { id: '2', name: 'Vehicle Insurance Policy', type: 'Insurance', status: 'Verified', expiryDate: '2024-12-31', uploadDate: '2023-10-12' },
-  { id: '3', name: 'Vehicle Registration', type: 'Registration', status: 'Expired', expiryDate: '2023-11-30', uploadDate: '2022-11-01' },
-  { id: '4', name: 'Background Check Certificate', type: 'Background Check', status: 'Pending', expiryDate: '2024-06-15', uploadDate: '2023-12-01' },
+  { id: '1', name: 'Driver License (Front)', type: 'License', status: 'Verified', expiryDate: '2025-10-15', uploadDate: '2023-10-12', url: 'https://images.unsplash.com/photo-1633535928821-6556e974659b?auto=format&fit=crop&q=80&w=1000' },
+  { id: '6', name: 'Driver License (Back)', type: 'License Back', status: 'Verified', expiryDate: '2025-10-15', uploadDate: '2023-10-12', url: 'https://images.unsplash.com/photo-1633535928821-6556e974659b?auto=format&fit=crop&q=80&w=1000' },
+  { id: '5', name: 'Proof of Address (Water Bill)', type: 'Address Proof', status: 'Verified', expiryDate: '2024-03-20', uploadDate: '2023-12-05', url: 'https://images.unsplash.com/photo-1628191011893-6c6e93821033?auto=format&fit=crop&q=80&w=1000' },
+  { id: '4', name: 'Background Check Certificate', type: 'Background Check', status: 'Pending', expiryDate: '2024-06-15', uploadDate: '2023-12-01', url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&q=80&w=1000' },
 ];
 
 interface DriverDetailProps {
   driverId: string;
   driverName: string;
+  driver?: any;
   trips: Trip[];
   onBack: () => void;
   fleetStats?: {
@@ -94,11 +98,65 @@ interface DriverDetailProps {
   };
 }
 
-export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }: DriverDetailProps) {
+export function DriverDetail({ driverId, driverName, driver, trips, onBack, fleetStats }: DriverDetailProps) {
   const [activeTab, setActiveTab] = useState("overview");
   const [tripSearch, setTripSearch] = useState("");
   const [tripPage, setTripPage] = useState(1);
+  const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
   const tripsPerPage = 10;
+  
+  // Merge Real Documents with Mock Documents
+  const documents = useMemo(() => {
+     // Clone mocks
+     const docs = MOCK_DOCUMENTS.map(d => ({ ...d }));
+
+     if (driver) {
+         // 1. License Front
+         if (driver.licenseFrontUrl) {
+             const idx = docs.findIndex(d => d.type === 'License');
+             if (idx >= 0) {
+                 docs[idx].url = driver.licenseFrontUrl;
+                 docs[idx].status = 'Verified';
+                 docs[idx].uploadDate = new Date().toISOString().split('T')[0];
+             }
+         }
+
+         // 2. License Back
+         if (driver.licenseBackUrl) {
+             const idx = docs.findIndex(d => d.type === 'License Back');
+             if (idx >= 0) {
+                 docs[idx].url = driver.licenseBackUrl;
+                 docs[idx].status = 'Verified';
+                 docs[idx].uploadDate = new Date().toISOString().split('T')[0];
+             }
+         }
+
+         // 3. Proof of Address
+         if (driver.proofOfAddressUrl) {
+             const idx = docs.findIndex(d => d.type === 'Address Proof');
+             const docName = `Proof of Address (${driver.proofOfAddressType || 'Document'})`;
+             
+             if (idx >= 0) {
+                 docs[idx].url = driver.proofOfAddressUrl;
+                 docs[idx].name = docName;
+                 docs[idx].status = 'Verified';
+                 docs[idx].uploadDate = new Date().toISOString().split('T')[0];
+             } else {
+                 // If for some reason it wasn't in mocks (e.g. if we removed it), add it back
+                 docs.push({
+                     id: 'real-proof-addr',
+                     name: docName,
+                     type: 'Address Proof',
+                     status: 'Verified',
+                     expiryDate: '2024-12-31',
+                     uploadDate: new Date().toISOString().split('T')[0],
+                     url: driver.proofOfAddressUrl
+                 });
+             }
+         }
+     }
+     return docs;
+  }, [driver]);
   
   // Date Range State (Default: Last 7 Days)
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -137,13 +195,20 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
      let totalBaseFare = 0;
      let totalTips = 0;
 
+     // Platform Stats
+     const platformStats = {
+        Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0 },
+        InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0 },
+        Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0 }
+     };
+
      // Chart Data Map
-     const chartDataMap = new Map<string, number>();
+     const chartDataMap = new Map<string, { Uber: number, InDrive: number, Other: number }>();
      
      try {
          const days = eachDayOfInterval({ start, end });
          days.forEach(d => {
-             chartDataMap.set(format(d, 'yyyy-MM-dd'), 0);
+             chartDataMap.set(format(d, 'yyyy-MM-dd'), { Uber: 0, InDrive: 0, Other: 0 });
          });
      } catch (e) { }
 
@@ -158,11 +223,24 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
         if (isWithinInterval(tripDateObj, { start, end })) {
             periodEarnings += trip.amount;
             
-            if (trip.status === 'Completed') periodCompletedTrips++;
+            const platform = (trip.platform === 'Uber' || trip.platform === 'InDrive') ? trip.platform : 'Other';
+            const pStats = platformStats[platform];
+
+            // Platform Stats
+            pStats.earnings += trip.amount;
+            pStats.trips += 1;
+            
+            if (trip.status === 'Completed') {
+                periodCompletedTrips++;
+                pStats.completed++;
+            }
             if (trip.status === 'Cancelled') periodCancelledTrips++;
             if (trip.cashCollected) cashCollected += trip.cashCollected;
             
-            if (trip.distance) totalDistance += trip.distance;
+            if (trip.distance) {
+                totalDistance += trip.distance;
+                pStats.distance += trip.distance;
+            }
             if (trip.duration) totalDuration += trip.duration;
 
             // Hourly Distribution
@@ -172,7 +250,8 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
             // Chart Data
             const dateKey = format(tripDateObj, 'yyyy-MM-dd');
             if (chartDataMap.has(dateKey)) {
-                chartDataMap.set(dateKey, (chartDataMap.get(dateKey) || 0) + trip.amount);
+                const dayData = chartDataMap.get(dateKey)!;
+                dayData[platform] = (dayData[platform] || 0) + trip.amount;
             }
 
             // Breakdown
@@ -191,12 +270,14 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
      });
 
      // Prepare Charts Data
-     const weeklyEarningsData = Array.from(chartDataMap.entries()).map(([date, amount]) => {
+     const weeklyEarningsData = Array.from(chartDataMap.entries()).map(([date, amounts]) => {
          const d = new Date(date);
          return {
              day: format(d, 'MMM d'),
-             amount: amount,
-             fullDate: date
+             fullDate: date,
+             Uber: amounts.Uber,
+             InDrive: amounts.InDrive,
+             Other: amounts.Other
          };
      });
 
@@ -247,7 +328,8 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
         avgDuration,
         earningsPerKm,
         tripsPerHour,
-        completionRate
+        completionRate,
+        platformStats
      };
   }, [trips, dateRange]);
 
@@ -329,6 +411,12 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
              </div>
              <div className="text-sm text-slate-500 flex flex-col gap-1">
                 <span className="flex items-center gap-2"><CreditCardIcon className="h-3 w-3" /> ID: {driverId}</span>
+                {driver?.uberDriverId && (
+                   <span className="text-xs text-slate-400 ml-5 block">Uber UUID: {driver.uberDriverId}</span>
+                )}
+                {driver?.inDriveDriverId && (
+                   <span className="text-xs text-slate-400 ml-5 block">InDrive UUID: {driver.inDriveDriverId}</span>
+                )}
                 <span className="flex items-center gap-2"><CarIcon className="h-3 w-3" /> Vehicle: 2019 Toyota Sienta (5179KZ)</span>
                 <span className="flex items-center gap-2"><CalendarIcon className="h-3 w-3" /> Member Since: Oct 12, 2023</span>
              </div>
@@ -374,6 +462,10 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                   trend={`${metrics.trendPercent}% vs prev`} 
                   trendUp={metrics.trendUp}
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
+                   breakdown={[
+                       { label: 'Uber', value: `$${metrics.platformStats.Uber.earnings.toFixed(2)}`, color: '#3b82f6' },
+                       { label: 'InDrive', value: `$${metrics.platformStats.InDrive.earnings.toFixed(2)}`, color: '#10b981' }
+                   ]}
                />
                <MetricCard 
                   title="Completion Rate" 
@@ -382,18 +474,30 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                   progress={metrics.completionRate}
                   progressColor={metrics.completionRate >= 95 ? "bg-emerald-500" : "bg-rose-500"}
                   icon={<CheckCircle2 className="h-4 w-4 text-slate-500" />}
+                   breakdown={[
+                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
+                   ]}
                />
                <MetricCard 
                   title="Avg Trip Distance" 
                   value={`${metrics.avgDistance.toFixed(1)} km`}
                   subtext="Based on activity"
                   icon={<Navigation className="h-4 w-4 text-slate-500" />}
+                   breakdown={[
+                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(metrics.platformStats.Uber.distance / metrics.platformStats.Uber.trips).toFixed(1)} km` : '-', color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${(metrics.platformStats.InDrive.distance / metrics.platformStats.InDrive.trips).toFixed(1)} km` : '-', color: '#10b981' }
+                   ]}
                />
                <MetricCard 
                   title="Customer Rating" 
                   value="5.0" 
                   subtext="Perfect Score!"
                   icon={<Star className="h-4 w-4 text-slate-500" />}
+                   breakdown={[
+                       { label: 'Uber', value: metrics.platformStats.Uber.ratingCount > 0 ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1) : '5.0', color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.ratingCount > 0 ? (metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount).toFixed(1) : '5.0', color: '#10b981' }
+                   ]}
                />
             </div>
 
@@ -496,7 +600,9 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                               cursor={{fill: '#f1f5f9'}}
                               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
                            />
-                           <Bar dataKey="amount" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                           <Bar dataKey="Uber" stackId="a" fill="#3b82f6" />
+                           <Bar dataKey="InDrive" stackId="a" fill="#10b981" />
+                           <Bar dataKey="Other" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} />
                         </BarChart>
                      </ResponsiveContainer>
                   </CardContent>
@@ -696,6 +802,7 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Date & Time</TableHead>
+                                <TableHead>Platform</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Distance</TableHead>
                                 <TableHead>Duration</TableHead>
@@ -708,7 +815,8 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                                 .filter(t => 
                                     t.id.includes(tripSearch) || 
                                     t.date.includes(tripSearch) ||
-                                    (t.status || '').toLowerCase().includes(tripSearch.toLowerCase())
+                                    (t.status || '').toLowerCase().includes(tripSearch.toLowerCase()) ||
+                                    (t.platform || '').toLowerCase().includes(tripSearch.toLowerCase())
                                 )
                                 .slice((tripPage - 1) * tripsPerPage, tripPage * tripsPerPage)
                                 .map((trip) => (
@@ -716,6 +824,15 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                                     <TableCell>
                                         <div className="font-medium">{format(new Date(trip.date), 'MMM d, yyyy')}</div>
                                         <div className="text-xs text-slate-500">{format(new Date(trip.date), 'h:mm a')}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={
+                                            trip.platform === 'Uber' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                            trip.platform === 'InDrive' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            'bg-slate-50 text-slate-700'
+                                        }>
+                                            {trip.platform || 'Other'}
+                                        </Badge>
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className={
@@ -738,7 +855,7 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                             ))}
                             {trips.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                    <TableCell colSpan={7} className="h-24 text-center text-slate-500">
                                         No trips found.
                                     </TableCell>
                                 </TableRow>
@@ -790,7 +907,7 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {MOCK_DOCUMENTS.map((doc) => (
+                            {documents.map((doc) => (
                                 <TableRow key={doc.id}>
                                     <TableCell className="font-medium">
                                         <div className="flex items-center gap-2">
@@ -815,8 +932,13 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
                                         {format(new Date(doc.expiryDate), 'MMM d, yyyy')}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                            <Eye className="h-4 w-4 text-slate-400" />
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8 hover:bg-slate-100"
+                                            onClick={() => setSelectedDocument(doc)}
+                                        >
+                                            <Eye className="h-4 w-4 text-slate-500 hover:text-indigo-600" />
                                         </Button>
                                     </TableCell>
                                 </TableRow>
@@ -827,11 +949,45 @@ export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }
             </Card>
          </TabsContent>
       </Tabs>
+
+      {/* Document Viewer Modal */}
+      <Dialog open={!!selectedDocument} onOpenChange={(open) => !open && setSelectedDocument(null)}>
+        <DialogContent className="max-w-3xl w-full h-auto max-h-[90vh] overflow-hidden flex flex-col p-0">
+            <DialogHeader className="p-4 pb-2">
+                <DialogTitle>{selectedDocument?.name}</DialogTitle>
+                <DialogDescription>
+                    {selectedDocument?.type} • Uploaded on {selectedDocument?.uploadDate && format(new Date(selectedDocument.uploadDate), 'MMM d, yyyy')}
+                </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 bg-slate-900 flex items-center justify-center p-4 overflow-auto min-h-[400px]">
+                {selectedDocument?.url ? (
+                    <img 
+                        src={selectedDocument.url} 
+                        alt={selectedDocument.name} 
+                        className="max-w-full max-h-[70vh] object-contain rounded-md"
+                    />
+                ) : (
+                    <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
+                        <FileText className="h-12 w-12 opacity-50" />
+                        <p>No preview available</p>
+                    </div>
+                )}
+            </div>
+            <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
+                 <Button variant="outline" onClick={() => setSelectedDocument(null)}>Close</Button>
+                 {selectedDocument?.url && (
+                    <Button onClick={() => window.open(selectedDocument.url, '_blank')}>
+                        <Download className="h-4 w-4 mr-2" /> Download
+                    </Button>
+                 )}
+            </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon }: any) {
+function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown }: any) {
    return (
       <Card>
          <CardContent className="p-6">
@@ -856,6 +1012,20 @@ function MetricCard({ title, value, trend, trendUp, target, progress, progressCo
                </div>
             )}
             {subtext && <p className="text-xs text-slate-500 mt-1">{subtext}</p>}
+            
+            {breakdown && breakdown.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                    {breakdown.map((item: any, index: number) => (
+                        <div key={index} className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500 flex items-center gap-1.5">
+                                <span className={`w-2 h-2 rounded-full`} style={{ backgroundColor: item.color }}></span>
+                                {item.label}
+                            </span>
+                            <span className="font-medium text-slate-700">{item.value}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
          </CardContent>
       </Card>
    )

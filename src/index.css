@@ -192,6 +192,7 @@
     --container-md: 28rem;
     --container-lg: 32rem;
     --container-2xl: 42rem;
+    --container-3xl: 48rem;
     --container-5xl: 64rem;
     --container-7xl: 80rem;
     --text-xs: .75rem;
@@ -929,6 +930,10 @@
     margin-left: calc(var(--spacing) * 4);
   }
 
+  .ml-5 {
+    margin-left: calc(var(--spacing) * 5);
+  }
+
   .ml-auto {
     margin-left: auto;
   }
@@ -1216,6 +1221,10 @@
     max-height: var(--radix-select-content-available-height);
   }
 
+  .max-h-\[70vh\] {
+    max-height: 70vh;
+  }
+
   .max-h-\[90vh\] {
     max-height: 90vh;
   }
@@ -1246,6 +1255,10 @@
 
   .min-h-\[200px\] {
     min-height: 200px;
+  }
+
+  .min-h-\[400px\] {
+    min-height: 400px;
   }
 
   .min-h-\[500px\] {
@@ -1440,6 +1453,10 @@
     max-width: var(--container-2xl);
   }
 
+  .max-w-3xl {
+    max-width: var(--container-3xl);
+  }
+
   .max-w-5xl {
     max-width: var(--container-5xl);
   }
@@ -1476,6 +1493,10 @@
     max-width: calc(100% - 2rem);
   }
 
+  .max-w-full {
+    max-width: 100%;
+  }
+
   .max-w-md {
     max-width: var(--container-md);
   }
@@ -1502,10 +1523,6 @@
 
   .min-w-\[140px\] {
     min-width: 140px;
-  }
-
-  .min-w-\[250px\] {
-    min-width: 250px;
   }
 
   .min-w-\[600px\] {
@@ -1570,6 +1587,11 @@
 
   .-translate-y-1\/2 {
     --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+
+  .translate-y-0\.5 {
+    --tw-translate-y: calc(var(--spacing) * .5);
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -2359,16 +2381,6 @@
     background-color: var(--color-rose-50);
   }
 
-  .bg-rose-50\/30 {
-    background-color: color-mix(in srgb, oklch(.969 .015 12.422) 30%, transparent);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-rose-50\/30 {
-      background-color: color-mix(in oklab, var(--color-rose-50) 30%, transparent);
-    }
-  }
-
   .bg-rose-50\/50 {
     background-color: color-mix(in srgb, oklch(.969 .015 12.422) 50%, transparent);
   }
@@ -2577,6 +2589,10 @@
     fill: var(--color-rose-500);
   }
 
+  .object-contain {
+    object-fit: contain;
+  }
+
   .object-cover {
     object-fit: cover;
   }
@@ -2659,6 +2675,10 @@
 
   .px-6 {
     padding-inline: calc(var(--spacing) * 6);
+  }
+
+  .py-0 {
+    padding-block: calc(var(--spacing) * 0);
   }
 
   .py-0\.5 {
@@ -2747,6 +2767,10 @@
 
   .pr-8 {
     padding-right: calc(var(--spacing) * 8);
+  }
+
+  .pb-0 {
+    padding-bottom: calc(var(--spacing) * 0);
   }
 
   .pb-1 {
@@ -3195,10 +3219,6 @@
 
   .text-slate-100 {
     color: var(--color-slate-100);
-  }
-
-  .text-slate-200 {
-    color: var(--color-slate-200);
   }
 
   .text-slate-300 {
@@ -3832,6 +3852,11 @@
     border-width: 0;
   }
 
+  .last\:border-b-0:last-child {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 0;
+  }
+
   .last\:pb-0:last-child {
     padding-bottom: calc(var(--spacing) * 0);
   }
@@ -4283,6 +4308,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:no-underline:hover {
+      text-decoration-line: none;
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:underline:hover {
       text-decoration-line: underline;
     }
@@ -4663,6 +4694,10 @@
     color: var(--primary-foreground);
   }
 
+  .data-\[state\=closed\]\:animate-accordion-up[data-state="closed"] {
+    animation: accordion-up var(--tw-duration, .2s) ease-out;
+  }
+
   .data-\[state\=closed\]\:animate-out[data-state="closed"] {
     animation: exit var(--tw-duration, .15s) var(--tw-ease, ease);
   }
@@ -4694,6 +4729,10 @@
 
   .data-\[state\=closed\]\:zoom-out-95[data-state="closed"] {
     --tw-exit-scale: .95;
+  }
+
+  .data-\[state\=open\]\:animate-accordion-down[data-state="open"] {
+    animation: accordion-down var(--tw-duration, .2s) ease-out;
   }
 
   .data-\[state\=open\]\:animate-in[data-state="open"] {
@@ -5611,6 +5650,10 @@
     border-bottom-width: 0;
   }
 
+  .\[\&\[data-state\=open\]\>svg\]\:rotate-180[data-state="open"] > svg {
+    rotate: 180deg;
+  }
+
   [data-side="left"][data-collapsible="offcanvas"] .\[\[data-side\=left\]\[data-collapsible\=offcanvas\]_\&\]\:-right-2 {
     right: calc(var(--spacing) * -2);
   }
@@ -6174,5 +6217,25 @@ html {
   to {
     opacity: var(--tw-exit-opacity, 1);
     transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0));
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: var(--radix-accordion-content-height, var(--bits-accordion-content-height));
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height, var(--bits-accordion-content-height));
+  }
+
+  to {
+    height: 0;
   }
 }

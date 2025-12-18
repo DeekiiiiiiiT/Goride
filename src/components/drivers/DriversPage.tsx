@@ -67,6 +67,19 @@ interface DriverProfile {
   todaysTrips: number;
   acceptanceRate: number;
   tier: 'Platinum' | 'Gold' | 'Silver' | 'Bronze';
+  
+  // Document URLs (Optional)
+  licenseFrontUrl?: string;
+  licenseBackUrl?: string;
+  proofOfAddressUrl?: string;
+  proofOfAddressType?: string;
+
+  // External Platform IDs (For Matching)
+  uberDriverId?: string;
+  inDriveDriverId?: string;
+
+  // Linked Trips (To ensure detail view matches list view aggregation)
+  linkedTrips?: Trip[];
 }
 
 export function DriversPage() {
@@ -106,10 +119,17 @@ export function DriversPage() {
 
   // Transform Trips into Unique Drivers List with Real Metrics
   const drivers: DriverProfile[] = useMemo(() => {
-    // 1. Index Manual Drivers by Name (Lowercase)
-    const manualDriverMap = new Map<string, DriverProfile>();
+    // 1. Index Manual Drivers by Name AND External IDs
+    const manualDriverMap = new Map<string, DriverProfile>(); // Name -> Driver
+    const externalIdMap = new Map<string, DriverProfile>();   // External ID -> Driver
+
     manualDrivers.forEach(d => {
+        // Index by Name
         if (d.name) manualDriverMap.set(d.name.toLowerCase().trim(), d);
+        
+        // Index by External IDs (Prioritized)
+        if (d.uberDriverId) externalIdMap.set(d.uberDriverId, d);
+        if (d.inDriveDriverId) externalIdMap.set(d.inDriveDriverId, d);
     });
 
     const driverMap = new Map<string, DriverProfile>();
@@ -127,12 +147,21 @@ export function DriversPage() {
         let driverId = trip.driverId;
         let matchedManualDriver = null;
 
-        if (trip.driverName) {
+        // STRATEGY 1: Match by External ID (Exact Match)
+        if (externalIdMap.has(trip.driverId)) {
+            matchedManualDriver = externalIdMap.get(trip.driverId)!;
+        }
+        
+        // STRATEGY 2: Match by Name (Fallback)
+        if (!matchedManualDriver && trip.driverName) {
             const normalizedName = trip.driverName.toLowerCase().trim();
             if (manualDriverMap.has(normalizedName)) {
                 matchedManualDriver = manualDriverMap.get(normalizedName)!;
-                driverId = matchedManualDriver.id; // Use Manual ID to aggregate stats
             }
+        }
+
+        if (matchedManualDriver) {
+             driverId = matchedManualDriver.id; // Use Manual ID to aggregate stats
         }
 
         // Initialize driver profile if not exists
@@ -146,6 +175,7 @@ export function DriversPage() {
                     totalEarnings: 0,
                     todaysEarnings: 0,
                     todaysTrips: 0,
+                    linkedTrips: [], // Initialize list
                     // Keep status from manual unless logic overrides? 
                     // We'll keep manual status but update acceptanceRate
                  });
@@ -166,13 +196,26 @@ export function DriversPage() {
                     todaysEarnings: 0,
                     todaysTrips: 0,
                     acceptanceRate: 100, 
-                    tier: 'Bronze'
+                    tier: 'Bronze',
+                    linkedTrips: [], // Initialize list
+                    // Store the external ID found on this trip so we can potentially match it later
+                    [trip.platform === 'Uber' ? 'uberDriverId' : 'inDriveDriverId']: trip.driverId
                 });
             }
             driverStats.set(driverId, { completed: 0, cancelled: 0 });
         }
 
         const driver = driverMap.get(driverId)!;
+        
+        // Capture Platform IDs if missing from profile
+        // This ensures that even if we matched a manual driver or started with another platform,
+        // we collect all associated UUIDs.
+        if (trip.platform === 'Uber' && !driver.uberDriverId) {
+            driver.uberDriverId = trip.driverId;
+        } else if (trip.platform === 'InDrive' && !driver.inDriveDriverId) {
+            driver.inDriveDriverId = trip.driverId;
+        }
+
         let stats = driverStats.get(driverId);
         
         // Safety check if stats missing (shouldn't happen)
@@ -186,6 +229,11 @@ export function DriversPage() {
         // Update Totals
         driver.totalTrips += 1;
         driver.totalEarnings += trip.amount || 0;
+        
+        // Link Trip
+        if (driver.linkedTrips) {
+            driver.linkedTrips.push(trip);
+        }
 
         // Update Today's Metrics
         if (tripDate === today) {
@@ -345,12 +393,14 @@ export function DriversPage() {
   // If a driver is selected, show the detail view with filtered trips
   if (selectedDriverId) {
     const selectedDriver = drivers.find(d => d.id === selectedDriverId);
-    const driverTrips = trips.filter(t => t.driverId === selectedDriverId);
+    // Use trips that were explicitly linked to this driver during aggregation
+    const driverTrips = selectedDriver?.linkedTrips || [];
     
     return (
       <DriverDetail 
         driverId={selectedDriverId} 
         driverName={selectedDriver?.name || 'Unknown'} 
+        driver={selectedDriver}
         trips={driverTrips}
         onBack={() => setSelectedDriverId(null)}
         fleetStats={fleetStats}

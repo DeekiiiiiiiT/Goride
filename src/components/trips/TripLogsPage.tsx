@@ -34,7 +34,6 @@ import { TripStatsCard } from './TripStatsCard';
 import { TripFilters, TripFilterState } from './TripFilters';
 import { CancellationAnalysis } from './CancellationAnalysis';
 import { RouteAnalysis } from './RouteAnalysis';
-import { DriverPerformance } from './DriverPerformance';
 import { ReportGenerator } from './ReportGenerator';
 import { startOfDay, subDays, isSameDay, isAfter, isBefore, endOfDay } from 'date-fns';
 
@@ -303,11 +302,10 @@ ${selectedTrip.fareBreakdown ? Object.entries(selectedTrip.fareBreakdown).map(([
       <TripStatsCard trips={filteredTrips} />
 
       <Tabs defaultValue="manifest" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-[700px]">
+        <TabsList className="grid w-full grid-cols-3 max-w-[700px]">
           <TabsTrigger value="manifest">Trip Manifest</TabsTrigger>
           <TabsTrigger value="analysis">Cancellation Analysis</TabsTrigger>
           <TabsTrigger value="routes">Route Analytics</TabsTrigger>
-          <TabsTrigger value="drivers">Driver Performance</TabsTrigger>
         </TabsList>
         
         <TabsContent value="manifest" className="mt-4">
@@ -525,10 +523,6 @@ ${selectedTrip.fareBreakdown ? Object.entries(selectedTrip.fareBreakdown).map(([
 
         <TabsContent value="routes" className="mt-4">
              <RouteAnalysis trips={filteredTrips} />
-        </TabsContent>
-
-        <TabsContent value="drivers" className="mt-4">
-             <DriverPerformance trips={filteredTrips} />
         </TabsContent>
       </Tabs>
 

@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
-import { Search, MoreHorizontal, Download, CheckCircle2, FileText, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Search, MoreHorizontal, Download, CheckCircle2, FileText, ArrowUpRight, ArrowDownLeft, Trash2, Layers, List } from "lucide-react";
 import { Trip, FinancialTransaction, TransactionCategory } from "../../types/data";
 import { generateMockTransactions } from "../../services/financialService";
 import { TransactionFilters, TransactionFilterState } from "./TransactionFilters";
@@ -24,6 +24,13 @@ import { ReportCenter } from "./reports/ReportCenter";
 import { format, isSameDay, subDays, startOfMonth, isBefore, isAfter, startOfDay, endOfDay } from "date-fns";
 import { cn } from "../ui/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../ui/accordion";
+import { toast } from "sonner@2.0.3";
 
 interface TransactionsTabProps {
   trips: Trip[];
@@ -44,10 +51,12 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
     minAmount: '',
     maxAmount: '',
     category: 'all',
-    reconciled: 'all'
+    reconciled: 'all',
+    batchId: 'all'
   });
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [listGrouping, setListGrouping] = useState<'flat' | 'grouped'>('flat');
 
   // Initial Data Generation
   useEffect(() => {
@@ -94,6 +103,16 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
     return Array.from(set).sort();
   }, [transactions]);
 
+  const batches = useMemo(() => {
+    const map = new Map();
+    transactions.forEach(t => {
+      if (t.batchId && !map.has(t.batchId)) {
+        map.set(t.batchId, t.batchName || `Batch #${t.batchId.substring(0,8)}`);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [transactions]);
+
   // Filter Logic
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -121,6 +140,9 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
         if (filters.reconciled === 'yes' && !isRec) return false;
         if (filters.reconciled === 'no' && isRec) return false;
       }
+
+      // Batch
+      if (filters.batchId && filters.batchId !== 'all' && t.batchId !== filters.batchId) return false;
 
       // Amount
       if (filters.minAmount && Math.abs(t.amount) < parseFloat(filters.minAmount)) return false;
@@ -191,8 +213,55 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
+  const handleDeleteBatch = () => {
+    if (filters.batchId === 'all' || !filters.batchId) return;
+    
+    const batchName = batches.find(b => b.id === filters.batchId)?.name;
+    
+    // In a real app, API call to delete batch
+    setTransactions(prev => prev.filter(t => t.batchId !== filters.batchId));
+    
+    // Reset filter
+    setFilters(prev => ({ ...prev, batchId: 'all' }));
+    
+    toast.success("File Removed", {
+      description: `Transactions from "${batchName}" have been deleted.`
+    });
+  };
+
+  const handleDeleteBatchById = (batchId: string, batchName: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setTransactions(prev => prev.filter(t => t.batchId !== batchId));
+    toast.success("File Removed", {
+      description: `Transactions from "${batchName}" have been deleted.`
+    });
+  };
+
   const listViewContent = (
      <div className="space-y-4">
+            <div className="flex justify-between items-center">
+                 <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <Button 
+                        variant={listGrouping === 'flat' ? 'secondary' : 'ghost'} 
+                        size="sm" 
+                        className={cn("h-7 text-xs px-3 shadow-none", listGrouping === 'flat' && "bg-white shadow-sm text-indigo-600")}
+                        onClick={() => setListGrouping('flat')}
+                    >
+                        <List className="h-3.5 w-3.5 mr-2" />
+                        List View
+                    </Button>
+                    <Button 
+                        variant={listGrouping === 'grouped' ? 'secondary' : 'ghost'} 
+                        size="sm" 
+                        className={cn("h-7 text-xs px-3 shadow-none", listGrouping === 'grouped' && "bg-white shadow-sm text-indigo-600")}
+                        onClick={() => setListGrouping('grouped')}
+                    >
+                        <Layers className="h-3.5 w-3.5 mr-2" />
+                        Group by File
+                    </Button>
+                </div>
+            </div>
+
             {/* Quick Analysis Views */}
             <div className="flex gap-2 overflow-x-auto pb-2">
                 <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={() => applyQuickView('today')}>
@@ -209,12 +278,41 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                 </Button>
             </div>
 
+            {/* Batch Context Banner */}
+            {filters.batchId && filters.batchId !== 'all' && (
+                <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 bg-white rounded-md border flex items-center justify-center">
+                            <FileText className="h-5 w-5 text-indigo-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">
+                                {batches.find(b => b.id === filters.batchId)?.name || 'Unknown File'}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                                Contains {filteredTransactions.length} transactions
+                            </p>
+                        </div>
+                    </div>
+                    <Button 
+                        size="sm" 
+                        variant="destructive" 
+                        onClick={handleDeleteBatch}
+                        className="gap-2"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        Delete File
+                    </Button>
+                </div>
+            )}
+
             <div className="flex flex-col gap-4 md:flex-row md:items-start justify-between bg-slate-50/50 p-4 rounded-lg border border-slate-100">
                 <TransactionFilters 
                 filters={filters} 
                 onFilterChange={setFilters} 
                 drivers={drivers}
                 categories={categories}
+                batches={batches}
                 />
                 
                 <div className="relative w-full md:w-[300px]">
@@ -245,6 +343,81 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                 </div>
             )}
 
+            {listGrouping === 'grouped' ? (
+                <div className="space-y-4">
+                    {Array.from(new Set(filteredTransactions.map(t => t.batchId || 'manual'))).map(batchId => {
+                        const batchTxns = filteredTransactions.filter(t => (t.batchId || 'manual') === batchId);
+                        const batchName = batches.find(b => b.id === batchId)?.name || (batchId === 'manual' ? 'Manual Entries' : 'Unknown Import');
+                        const totalAmount = batchTxns.reduce((sum, t) => sum + t.amount, 0);
+                        
+                        return (
+                            <Accordion type="single" collapsible key={batchId} className="bg-white rounded-lg border shadow-sm">
+                                <AccordionItem value={batchId} className="border-none">
+                                    <div className="flex items-center p-4">
+                                        <AccordionTrigger className="hover:no-underline py-0 flex-1 pr-4">
+                                            <div className="flex items-center gap-4 text-left">
+                                                <div className="h-10 w-10 bg-indigo-50 rounded-md border border-indigo-100 flex items-center justify-center text-indigo-600">
+                                                    <FileText className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium text-slate-900">{batchName}</h4>
+                                                    <p className="text-sm text-slate-500">{batchTxns.length} transactions • {formatCurrency(totalAmount)}</p>
+                                                </div>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <Button 
+                                            size="sm" 
+                                            variant="outline" 
+                                            className="ml-2 text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 h-8"
+                                            onClick={(e) => handleDeleteBatchById(batchId, batchName, e)}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                                            Delete File
+                                        </Button>
+                                    </div>
+                                    <AccordionContent className="px-0 pb-0 border-t">
+                                        <div className="overflow-x-auto">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-slate-50/50">
+                                                        <TableHead>Date</TableHead>
+                                                        <TableHead>Description</TableHead>
+                                                        <TableHead className="text-right">Amount</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {batchTxns.slice(0, 50).map(txn => (
+                                                        <TableRow key={txn.id}>
+                                                            <TableCell className="w-[120px]">{format(new Date(txn.date), 'MMM d, yyyy')}</TableCell>
+                                                            <TableCell>{txn.description}</TableCell>
+                                                            <TableCell className={cn("text-right font-mono font-medium", txn.amount >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                                                                {formatCurrency(txn.amount)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                    {batchTxns.length > 50 && (
+                                                        <TableRow>
+                                                            <TableCell colSpan={3} className="text-center text-xs text-slate-500 py-2">
+                                                                + {batchTxns.length - 50} more transactions
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        );
+                    })}
+                    
+                    {filteredTransactions.length === 0 && (
+                        <div className="text-center p-8 border border-dashed rounded-lg text-slate-500">
+                            No files found matching your filters.
+                        </div>
+                    )}
+                </div>
+            ) : (
             <Card>
                 <CardHeader className="pb-3 border-b">
                 <div className="flex items-center justify-between">
@@ -377,6 +550,7 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                 </Table>
                 </CardContent>
             </Card>
+            )}
       </div>
   );
 
