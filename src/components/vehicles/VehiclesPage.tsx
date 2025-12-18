@@ -7,6 +7,7 @@ import { VehicleDetail } from './VehicleDetail'; // New Component
 import { DriverAssignmentModal } from './DriverAssignmentModal';
 import { FuelLogForm } from '../driver-portal/FuelLogForm';
 import { ServiceRequestForm } from '../driver-portal/ServiceRequestForm';
+import { AddVehicleModal } from './AddVehicleModal';
 import { Toaster, toast } from 'sonner@2.0.3';
 import { 
   Loader2, 
@@ -28,6 +29,8 @@ import { isSameDay, subDays } from "date-fns";
 
 export function VehiclesPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [manualVehicles, setManualVehicles] = useState<Vehicle[]>([]);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
   // Navigation State
@@ -51,10 +54,14 @@ export function VehiclesPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const tripsData = await api.getTrips();
+        const [tripsData, vehiclesData] = await Promise.all([
+            api.getTrips(),
+            api.getVehicles().catch(() => [])
+        ]);
         setTrips(tripsData);
+        setManualVehicles(vehiclesData);
       } catch (err) {
-        console.error("Failed to fetch trips for vehicles page", err);
+        console.error("Failed to fetch data for vehicles page", err);
       } finally {
         setLoading(false);
       }
@@ -144,8 +151,12 @@ export function VehiclesPage() {
         });
     });
 
-    return Array.from(vehicleMap.values());
-  }, [trips]);
+    const tripVehicles = Array.from(vehicleMap.values());
+    const tripVehicleIds = new Set(tripVehicles.map(v => v.id));
+    const newVehicles = manualVehicles.filter(v => !tripVehicleIds.has(v.id));
+    
+    return [...tripVehicles, ...newVehicles];
+  }, [trips, manualVehicles]);
 
   // Apply Filters
   const filteredVehicles = useMemo(() => {
@@ -217,6 +228,10 @@ export function VehiclesPage() {
       setIsFuelModalOpen(false);
   };
 
+  const handleVehicleAdded = (vehicle: Vehicle) => {
+    setManualVehicles(prev => [...prev, vehicle]);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -244,7 +259,7 @@ export function VehiclesPage() {
                       <h1 className="text-2xl font-bold text-slate-900">Fleet Vehicles</h1>
                       <p className="text-slate-500">Manage and monitor your vehicle assets</p>
                   </div>
-                  <Button className="bg-indigo-600 hover:bg-indigo-700">
+                  <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Vehicle
                   </Button>
@@ -355,6 +370,12 @@ export function VehiclesPage() {
         open={isServiceModalOpen} 
         onOpenChange={setIsServiceModalOpen}
         onSubmit={onServiceSubmit}
+      />
+
+      <AddVehicleModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onVehicleAdded={handleVehicleAdded}
       />
       
       <Toaster />

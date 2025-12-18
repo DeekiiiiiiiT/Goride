@@ -1,9 +1,17 @@
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import OpenAI from "npm:openai";
 import * as kv from "./kv_store.tsx";
 
 const app = new Hono();
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
+
 
 // Enable logger
 app.use('*', logger(console.log));
@@ -140,6 +148,209 @@ app.get("/make-server-37f42386/vehicle-metrics", async (c) => {
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
+});
+
+// Vehicles Endpoints
+app.get("/make-server-37f42386/vehicles", async (c) => {
+  try {
+    const vehicles = await kv.getByPrefix("vehicle:");
+    return c.json(vehicles || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/vehicles", async (c) => {
+  try {
+    const vehicle = await c.req.json();
+    if (!vehicle.id) {
+        return c.json({ error: "Vehicle ID (License Plate) is required" }, 400);
+    }
+    // Use plate as ID
+    await kv.set(`vehicle:${vehicle.id}`, vehicle);
+    return c.json({ success: true, data: vehicle });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Drivers Endpoints
+app.get("/make-server-37f42386/drivers", async (c) => {
+  try {
+    const drivers = await kv.getByPrefix("driver:");
+    return c.json(drivers || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/drivers", async (c) => {
+  try {
+    const driver = await c.req.json();
+    if (!driver.id) {
+         driver.id = crypto.randomUUID();
+    }
+    await kv.set(`driver:${driver.id}`, driver);
+    return c.json({ success: true, data: driver });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Storage Upload Endpoint
+app.post("/make-server-37f42386/upload", async (c) => {
+  try {
+    const body = await c.req.parseBody();
+    const file = body['file'];
+    
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: "No file uploaded" }, 400);
+    }
+
+    const bucketName = "make-37f42386-docs";
+    
+    // Ensure bucket exists
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (!buckets?.find(b => b.name === bucketName)) {
+        await supabase.storage.createBucket(bucketName, {
+            public: false,
+            fileSizeLimit: 5242880, // 5MB
+        });
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
+    const filePath = `driver-docs/${fileName}`;
+
+    const { data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(filePath, file, {
+            contentType: file.type,
+            upsert: false
+        });
+
+    if (error) throw error;
+
+    const { data: signedData } = await supabase.storage
+        .from(bucketName)
+        .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 year
+
+    return c.json({ url: signedData?.signedUrl });
+  } catch (e: any) {
+    console.error("Upload error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// AI Document Parsing Endpoint
+app.post("/make-server-37f42386/parse-document", async (c) => {
+  try {
+    const body = await c.req.parseBody();
+    const file = body['file'];
+    const backFile = body['backFile'];
+    const type = body['type'] as string; // 'license' | 'address'
+
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: "No file provided" }, 400);
+    }
+
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) {
+      return c.json({ error: "AI Service not configured" }, 503);
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    // Helper to convert file to base64
+    const fileToBase64 = async (f: File) => {
+        const arrayBuffer = await f.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = "";
+        const len = bytes.byteLength;
+        const chunkSize = 1024;
+        for (let i = 0; i < len; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
+        }
+        return `data:${f.type};base64,${btoa(binary)}`;
+    };
+
+    const dataUrl = await fileToBase64(file);
+    let backDataUrl = null;
+    if (backFile && backFile instanceof File) {
+        backDataUrl = await fileToBase64(backFile);
+    }
+
+    let prompt = "";
+    if (type === 'license') {
+      prompt = `
+        Extract the following details from this Driver's License (checking both Front and Back images) in JSON format.
+        
+        For Names:
+        - distinct "Surname" or "Last Name" field -> lastName
+        - "Christian Names", "Given Names", or "First Name" field often contains First + Middle.
+        - Split "Christian Names" into firstName (the first word) and middleName (all subsequent words).
+        - If there are multiple middle names, combine them into the middleName field.
+
+        For Phone/Country:
+        - nationality (e.g. "JAMAICAN", "USA").
+        - countryCode: Infer strictly from the Nationality or Address country.
+          - "JAMAICAN" or "JAMAICA" -> "+1" (specifically +1 876 but +1 is the code)
+          - "USA" -> "+1"
+          - "UK" or "BRITISH" -> "+44"
+          - Default to "+1" if unsure but try to match nationality.
+
+        Other Fields:
+        - licenseNumber (alphanumeric)
+        - expirationDate (YYYY-MM-DD)
+        - dateOfBirth (YYYY-MM-DD)
+        - address (full string)
+        - class (e.g. "Private", "General", "C", "D" - check Back of card)
+        - licenseToDrive (e.g. "Motor Cars", "Motorcycles" - check Back of card)
+        - controlNumber (alphanumeric - check Back or Front)
+      `;
+    } else if (type === 'address') {
+       prompt = `
+        Extract the address from this utility bill or document in JSON format:
+        - address (full address string)
+       `;
+    } else {
+      return c.json({ error: "Invalid document type" }, 400);
+    }
+
+    const userContent: any[] = [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: dataUrl } }
+    ];
+
+    if (backDataUrl) {
+        userContent.push({ type: "image_url", image_url: { url: backDataUrl } });
+    }
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: "You are a helpful assistant that extracts data from documents into valid JSON. Do not include markdown formatting."
+        },
+        {
+          role: "user",
+          content: userContent
+        }
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 500,
+    });
+
+    const content = response.choices[0].message.content;
+    const json = JSON.parse(content || "{}");
+
+    return c.json({ success: true, data: json });
+
+  } catch (e: any) {
+    console.error("AI Parse Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 // Notifications endpoints

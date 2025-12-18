@@ -4,6 +4,7 @@ import { Trip } from '../../types/data';
 import { 
   Loader2, 
   Search, 
+  Plus,
   MoreVertical, 
   CheckCircle2, 
   ChevronLeft, 
@@ -48,6 +49,7 @@ import {
 } from "../ui/select";
 import { Card, CardContent } from "../ui/card";
 import { DriverDetail } from './DriverDetail';
+import { AddDriverModal } from './AddDriverModal';
 
 // Interface for our View Model
 interface DriverProfile {
@@ -69,6 +71,8 @@ interface DriverProfile {
 
 export function DriversPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [manualDrivers, setManualDrivers] = useState<DriverProfile[]>([]);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
   // Navigation State
@@ -85,10 +89,14 @@ export function DriversPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const tripsData = await api.getTrips();
+        const [tripsData, driversData] = await Promise.all([
+             api.getTrips(),
+             api.getDrivers().catch(() => [])
+        ]);
         setTrips(tripsData);
+        setManualDrivers(driversData);
       } catch (err) {
-        console.error("Failed to fetch trips for drivers page", err);
+        console.error("Failed to fetch data for drivers page", err);
       } finally {
         setLoading(false);
       }
@@ -98,43 +106,81 @@ export function DriversPage() {
 
   // Transform Trips into Unique Drivers List with Real Metrics
   const drivers: DriverProfile[] = useMemo(() => {
+    // 1. Index Manual Drivers by Name (Lowercase)
+    const manualDriverMap = new Map<string, DriverProfile>();
+    manualDrivers.forEach(d => {
+        if (d.name) manualDriverMap.set(d.name.toLowerCase().trim(), d);
+    });
+
     const driverMap = new Map<string, DriverProfile>();
+    const driverStats = new Map<string, { completed: number, cancelled: number }>();
     const today = new Date().toISOString().split('T')[0];
 
     // Process trips to extract unique drivers and aggregate data
     // Sort by date desc so we get latest vehicle/info
     const sortedTrips = [...trips].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    // Temporary storage for calculating acceptance rate
-    const driverStats = new Map<string, { completed: number, cancelled: number }>();
-
     sortedTrips.forEach(trip => {
         if (!trip.driverId || trip.driverId === 'unknown') return;
 
-        // Initialize driver profile if not exists
-        if (!driverMap.has(trip.driverId)) {
-            const mockPhone = `+1 876${trip.driverId.replace(/\D/g, '').substring(0, 7).padEnd(7, '0')}`;
-            const mockEmail = `${(trip.driverName || 'driver').split(' ')[0].toLowerCase()}${trip.driverId.substring(0, 4)}@gmail.com`;
-            
-            driverMap.set(trip.driverId, {
-                id: trip.driverId,
-                name: trip.driverName || 'Unknown Driver',
-                status: 'Active',
-                vehicle: trip.vehicleId || 'Unassigned',
-                phone: mockPhone,
-                email: mockEmail,
-                totalTrips: 0,
-                totalEarnings: 0,
-                todaysEarnings: 0,
-                todaysTrips: 0,
-                acceptanceRate: 100, // Default to 100 if no cancellations found
-                tier: 'Bronze'
-            });
-            driverStats.set(trip.driverId, { completed: 0, cancelled: 0 });
+        // Try to match with a Manual Driver Profile
+        let driverId = trip.driverId;
+        let matchedManualDriver = null;
+
+        if (trip.driverName) {
+            const normalizedName = trip.driverName.toLowerCase().trim();
+            if (manualDriverMap.has(normalizedName)) {
+                matchedManualDriver = manualDriverMap.get(normalizedName)!;
+                driverId = matchedManualDriver.id; // Use Manual ID to aggregate stats
+            }
         }
 
-        const driver = driverMap.get(trip.driverId)!;
-        const stats = driverStats.get(trip.driverId)!;
+        // Initialize driver profile if not exists
+        if (!driverMap.has(driverId)) {
+            if (matchedManualDriver) {
+                 // Use Manual Profile Data
+                 driverMap.set(driverId, {
+                    ...matchedManualDriver,
+                    // Reset calculated metrics (will be summed up below)
+                    totalTrips: 0,
+                    totalEarnings: 0,
+                    todaysEarnings: 0,
+                    todaysTrips: 0,
+                    // Keep status from manual unless logic overrides? 
+                    // We'll keep manual status but update acceptanceRate
+                 });
+            } else {
+                // Use Trip Data (Default/CSV)
+                const mockPhone = `+1 876${trip.driverId.replace(/\D/g, '').substring(0, 7).padEnd(7, '0')}`;
+                const mockEmail = `${(trip.driverName || 'driver').split(' ')[0].toLowerCase()}${trip.driverId.substring(0, 4)}@gmail.com`;
+                
+                driverMap.set(driverId, {
+                    id: driverId,
+                    name: trip.driverName || 'Unknown Driver',
+                    status: 'Active',
+                    vehicle: trip.vehicleId || 'Unassigned',
+                    phone: mockPhone,
+                    email: mockEmail,
+                    totalTrips: 0,
+                    totalEarnings: 0,
+                    todaysEarnings: 0,
+                    todaysTrips: 0,
+                    acceptanceRate: 100, 
+                    tier: 'Bronze'
+                });
+            }
+            driverStats.set(driverId, { completed: 0, cancelled: 0 });
+        }
+
+        const driver = driverMap.get(driverId)!;
+        let stats = driverStats.get(driverId);
+        
+        // Safety check if stats missing (shouldn't happen)
+        if (!stats) {
+            stats = { completed: 0, cancelled: 0 };
+            driverStats.set(driverId, stats);
+        }
+
         const tripDate = trip.date.split('T')[0];
 
         // Update Totals
@@ -152,18 +198,17 @@ export function DriversPage() {
         else if (trip.status === 'Cancelled') stats.cancelled++;
 
         // Update Vehicle (use the most recent one since we sorted desc)
-        if (trip.vehicleId && driver.vehicle === 'Unassigned') {
+        if (trip.vehicleId && (driver.vehicle === 'Unassigned' || !driver.vehicle)) {
             driver.vehicle = trip.vehicleId;
         }
     });
 
     // Finalize Metrics (Rate, Tier, Status)
-    return Array.from(driverMap.values()).map(driver => {
+    const processedDrivers = Array.from(driverMap.values()).map(driver => {
         const stats = driverStats.get(driver.id)!;
         const total = stats.completed + stats.cancelled;
         
-        // Acceptance Rate (approximated by completion rate if acceptance data missing)
-        // If we have cancellation data, we use it.
+        // Acceptance Rate
         driver.acceptanceRate = total > 0 ? Math.round((stats.completed / total) * 100) : 100;
 
         // Tier Logic
@@ -172,13 +217,31 @@ export function DriversPage() {
         else if (driver.totalEarnings > 1000) driver.tier = 'Silver';
         else driver.tier = 'Bronze';
 
-        // Status Logic
-        if (driver.acceptanceRate < 70) driver.status = 'Needs Attention';
-        // If no trips in last 30 days? (Could implement inactive logic here)
+        // Status Logic (Only override if Active)
+        if (driver.status === 'Active' && driver.acceptanceRate < 70) {
+            driver.status = 'Needs Attention';
+        }
         
         return driver;
     });
-  }, [trips]);
+
+    // Add Orphaned Manual Drivers (No trips found)
+    const processedIds = new Set(processedDrivers.map(d => d.id));
+    // @ts-ignore
+    const orphanedDrivers = manualDrivers.filter(d => !processedIds.has(d.id)).map(d => ({
+        ...d,
+        totalEarnings: d.totalEarnings || 0,
+        totalTrips: d.totalTrips || 0,
+        todaysEarnings: 0,
+        todaysTrips: 0,
+        acceptanceRate: 100,
+        tier: d.tier || 'Bronze',
+        status: d.status || 'Active'
+    }));
+
+    // @ts-ignore
+    return [...processedDrivers, ...orphanedDrivers];
+  }, [trips, manualDrivers]);
 
   // Apply Filters
   const filteredDrivers = useMemo(() => {
@@ -266,6 +329,11 @@ export function DriversPage() {
       if (currentPage > 1) setCurrentPage(prev => prev - 1);
   };
 
+  const handleDriverAdded = (driver: any) => {
+    // @ts-ignore
+    setManualDrivers(prev => [...prev, driver]);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -295,9 +363,15 @@ export function DriversPage() {
       
       {/* --- HEADER --- */}
       <div className="flex flex-col gap-4">
-        <div>
-           <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Drivers</h2>
-           <p className="text-slate-500">Manage fleet drivers, track performance, and monitor earnings.</p>
+        <div className="flex justify-between items-center">
+           <div>
+               <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Drivers</h2>
+               <p className="text-slate-500">Manage fleet drivers, track performance, and monitor earnings.</p>
+           </div>
+           <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
+               <Plus className="h-4 w-4 mr-2" />
+               Add Driver
+           </Button>
         </div>
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -511,6 +585,12 @@ export function DriversPage() {
               </Button>
           </div>
       </div>
+
+      <AddDriverModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onDriverAdded={handleDriverAdded}
+      />
 
     </div>
   );

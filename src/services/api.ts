@@ -261,6 +261,87 @@ export const api = {
       return response.json();
   },
 
+  async getVehicles() {
+    const response = await fetchWithRetry(`${BASE_URL}/vehicles`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch vehicles");
+    return response.json();
+  },
+
+  async saveVehicle(vehicle: any) {
+    const response = await fetchWithRetry(`${BASE_URL}/vehicles`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(vehicle)
+    });
+    if (!response.ok) throw new Error("Failed to save vehicle");
+    return response.json();
+  },
+
+  async getDrivers() {
+    const response = await fetchWithRetry(`${BASE_URL}/drivers`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch drivers");
+    return response.json();
+  },
+
+  async saveDriver(driver: any) {
+    const response = await fetchWithRetry(`${BASE_URL}/drivers`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(driver)
+    });
+    if (!response.ok) throw new Error("Failed to save driver");
+    return response.json();
+  },
+
+  async uploadFile(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetchWithRetry(`${BASE_URL}/upload`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: formData
+    });
+    if (!response.ok) throw new Error("Failed to upload file");
+    return response.json();
+  },
+
+  async parseDocument(file: File, type: 'license' | 'address', backFile?: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (backFile) {
+      formData.append('backFile', backFile);
+    }
+    formData.append('type', type);
+    
+    const response = await fetchWithRetry(`${BASE_URL}/parse-document`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: formData
+    });
+    // Handle 503 specifically? Or just let it throw?
+    // If it throws, frontend catches and allows manual entry.
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to parse document");
+    }
+    return response.json();
+  },
+
   async getPreferences() {
     const response = await fetchWithRetry(`${BASE_URL}/settings/preferences`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
