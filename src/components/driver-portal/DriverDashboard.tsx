@@ -10,12 +10,47 @@ import {
   Navigation, 
   Star, 
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Fuel, // Added
+  Wrench, // Added
+  AlertTriangle // Added
 } from "lucide-react";
-import { Trip } from '../../types/data';
+import { Trip, FuelLog, ServiceRequest } from '../../types/data';
+import { toast } from 'sonner@2.0.3';
+import { FuelLogForm } from './FuelLogForm';
+import { ServiceRequestForm } from './ServiceRequestForm';
 
 export function DriverDashboard() {
   const [isOnline, setIsOnline] = React.useState(false);
+  const [fuelFormOpen, setFuelFormOpen] = React.useState(false);
+  const [serviceFormOpen, setServiceFormOpen] = React.useState(false);
+  const [activeAction, setActiveAction] = React.useState<string | null>(null);
+
+  const handleAction = (action: string) => {
+    if (action === 'Fuel Log') {
+        setFuelFormOpen(true);
+    } else if (action === 'Service Request' || action === 'Issue Report') {
+        setServiceFormOpen(true);
+    } else {
+        toast.success(`${action} flow started`, {
+            description: "This feature is coming soon in the production version."
+        });
+    }
+  };
+
+  const handleFuelSubmit = (data: Partial<FuelLog>) => {
+      console.log("Saving Fuel Log:", data);
+      toast.success("Fuel log saved successfully!", {
+          description: `Logged ${data.liters}L at ${data.odometer}km.`
+      });
+  };
+
+  const handleServiceSubmit = (data: Partial<ServiceRequest>) => {
+      console.log("Submitting Service Request:", data);
+      toast.success("Request submitted!", {
+          description: "A fleet manager will review your request shortly."
+      });
+  };
 
   return (
     <div className="space-y-6">
@@ -85,6 +120,37 @@ export function DriverDashboard() {
          </div>
       </div>
 
+      {/* Quick Actions (Step 8.4) */}
+      <div className="grid grid-cols-3 gap-3">
+         <button 
+           onClick={() => handleAction('Fuel Log')}
+           className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
+         >
+            <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center mb-2">
+               <Fuel className="h-5 w-5 text-orange-600" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Fuel</span>
+         </button>
+         <button 
+           onClick={() => handleAction('Service Request')}
+           className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
+         >
+            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center mb-2">
+               <Wrench className="h-5 w-5 text-blue-600" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Service</span>
+         </button>
+         <button 
+           onClick={() => handleAction('Issue Report')}
+           className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
+         >
+            <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center mb-2">
+               <AlertTriangle className="h-5 w-5 text-rose-600" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Report</span>
+         </button>
+      </div>
+
       {/* Recent Trip */}
       <div className="space-y-3">
         <h3 className="font-semibold text-slate-900 dark:text-slate-100">Last Trip</h3>
@@ -126,8 +192,20 @@ export function DriverDashboard() {
             <h4 className="font-semibold text-indigo-900 dark:text-indigo-100 text-sm">Vehicle Inspection Due</h4>
             <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">Your annual vehicle inspection is due in 5 days. Schedule now to avoid suspension.</p>
          </div>
-         <Button size="sm" variant="outline" className="text-xs bg-white h-8">View</Button>
+         <Button size="sm" variant="outline" className="text-xs bg-white h-8" onClick={() => setServiceFormOpen(true)}>View</Button>
       </div>
+
+      <FuelLogForm 
+        open={fuelFormOpen} 
+        onOpenChange={setFuelFormOpen} 
+        onSubmit={handleFuelSubmit} 
+      />
+
+      <ServiceRequestForm 
+        open={serviceFormOpen} 
+        onOpenChange={setServiceFormOpen} 
+        onSubmit={handleServiceSubmit} 
+      />
     </div>
   );
 }

@@ -27,6 +27,16 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps) {
+  React.useEffect(() => {
+     // Check dark mode preference on app load/layout mount
+     const isDark = localStorage.getItem('preference_dark_mode') === 'true';
+     if (isDark) {
+         document.documentElement.classList.add('dark');
+     } else {
+         document.documentElement.classList.remove('dark');
+     }
+  }, []);
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-900">
@@ -58,7 +68,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
         <SidebarMenu>
           <NavItem 
             icon={<LayoutDashboard className="h-4 w-4" />} 
-            label="Dashboard" 
+            label="FLEET ANALYTICS DASHBOARD" 
             active={currentPage === 'dashboard'} 
             onClick={() => onNavigate?.('dashboard')}
           />
@@ -82,7 +92,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
           />
           <NavItem 
             icon={<FileText className="h-4 w-4" />} 
-            label="Trip Logs" 
+            label="Trip Analytics" 
             active={currentPage === 'trips'}
             onClick={() => onNavigate?.('trips')}
           />

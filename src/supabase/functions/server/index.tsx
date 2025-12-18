@@ -67,8 +67,16 @@ app.delete("/make-server-37f42386/trips", async (c) => {
     const batches = await kv.getByPrefix("batch:");
     const batchKeys = (batches || []).map((b: any) => `batch:${b.id}`);
     
-    // 3. Delete everything
-    const allKeys = [...tripKeys, ...batchKeys];
+    // 3. Get driver metric keys
+    const driverMetrics = await kv.getByPrefix("driver_metric:");
+    const driverMetricKeys = (driverMetrics || []).map((m: any) => `driver_metric:${m.id}`);
+
+    // 4. Get vehicle metric keys
+    const vehicleMetrics = await kv.getByPrefix("vehicle_metric:");
+    const vehicleMetricKeys = (vehicleMetrics || []).map((m: any) => `vehicle_metric:${m.id}`);
+    
+    // 5. Delete everything
+    const allKeys = [...tripKeys, ...batchKeys, ...driverMetricKeys, ...vehicleMetricKeys];
     if (allKeys.length > 0) {
         await kv.mdel(allKeys);
     }
@@ -76,12 +84,62 @@ app.delete("/make-server-37f42386/trips", async (c) => {
     return c.json({ 
         success: true, 
         deletedTrips: tripKeys.length,
-        deletedBatches: batchKeys.length 
+        deletedBatches: batchKeys.length,
+        deletedDriverMetrics: driverMetricKeys.length,
+        deletedVehicleMetrics: vehicleMetricKeys.length
     });
   } catch (e: any) {
     console.error("Error clearing data:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);
   }
+});
+
+// Driver Metrics Endpoints
+app.post("/make-server-37f42386/driver-metrics", async (c) => {
+  try {
+    const metrics = await c.req.json();
+    if (!Array.isArray(metrics)) {
+      return c.json({ error: "Expected array of metrics" }, 400);
+    }
+    const keys = metrics.map((m: any) => `driver_metric:${m.id}`);
+    await kv.mset(keys, metrics);
+    return c.json({ success: true, count: metrics.length });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get("/make-server-37f42386/driver-metrics", async (c) => {
+    try {
+        const metrics = await kv.getByPrefix("driver_metric:");
+        return c.json(metrics || []);
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Vehicle Metrics Endpoints
+app.post("/make-server-37f42386/vehicle-metrics", async (c) => {
+  try {
+    const metrics = await c.req.json();
+    if (!Array.isArray(metrics)) {
+      return c.json({ error: "Expected array of metrics" }, 400);
+    }
+    const keys = metrics.map((m: any) => `vehicle_metric:${m.id}`);
+    await kv.mset(keys, metrics);
+    return c.json({ success: true, count: metrics.length });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get("/make-server-37f42386/vehicle-metrics", async (c) => {
+    try {
+        const metrics = await kv.getByPrefix("vehicle_metric:");
+        return c.json(metrics || []);
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 // Notifications endpoints
@@ -505,6 +563,29 @@ app.post("/make-server-37f42386/uber/sync", async (c) => {
 
   } catch (e: any) {
     console.error("Uber Sync Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Budget Management Endpoints
+app.get("/make-server-37f42386/budgets", async (c) => {
+  try {
+    const budgets = await kv.getByPrefix("budget:");
+    return c.json(budgets || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/budgets", async (c) => {
+  try {
+    const budget = await c.req.json();
+    if (!budget.id) {
+        budget.id = crypto.randomUUID();
+    }
+    await kv.set(`budget:${budget.id}`, budget);
+    return c.json({ success: true, data: budget });
+  } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });

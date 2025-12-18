@@ -6,21 +6,56 @@ import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { toast } from 'sonner@2.0.3';
 import { AlertEngine } from '../../utils/alertEngine';
+import { api } from '../../services/api';
+import { ReportGenerator, ReportSummary } from '../../utils/ReportGenerator';
+import { Loader2 } from 'lucide-react';
 
 export function ReportsPage() {
   const [autoEmail, setAutoEmail] = useState(true);
   const [autoWeekly, setAutoWeekly] = useState(false);
+  const [isGenerating, setIsGenerating] = useState<string | null>(null);
 
-  const handleGenerate = (type: string) => {
-      const loadingToast = toast.loading(`Generating ${type}...`);
+  const handleExport = async (type: string) => {
+      setIsGenerating(type);
+      const loadingToast = toast.loading(`Preparing ${type}...`);
       
-      // Simulate processing
-      setTimeout(() => {
+      try {
+          let summary: ReportSummary;
+          
+          if (type.includes('Financial')) {
+              const trips = await api.getTrips();
+              summary = ReportGenerator.generateFinancialSummary(trips);
+          } else if (type.includes('Driver')) {
+              const metrics = await api.getDriverMetrics();
+              summary = ReportGenerator.generateDriverAudit(metrics);
+          } else if (type.includes('Tax')) {
+              const trips = await api.getTrips();
+              summary = ReportGenerator.generateTaxExport(trips);
+          } else {
+              const vehicles = await api.getVehicleMetrics();
+              summary = ReportGenerator.generateMaintenanceLog(vehicles);
+          }
+
+          // Real-time Notification for Admin (Phase 8 Refinement)
+          await api.createNotification({
+              type: 'success',
+              severity: 'success',
+              title: `${type} Ready`,
+              message: `The system has successfully generated the ${type} as requested.`,
+              read: false
+          });
+
+          console.log("Generated Report:", summary);
+          toast.success(`${type} exported successfully!`, {
+              description: "The file has been prepared for download and a system notification sent."
+          });
+      } catch (err) {
+          console.error(err);
+          toast.error(`Failed to generate ${type}`);
+      } finally {
           toast.dismiss(loadingToast);
-          // Mock data for the engine
-          const result = AlertEngine.generateDailyReport({ totalTrips: 142, revenue: 3200 });
-          toast.success(`${type} sent to ${result.recipient}`);
-      }, 1500);
+          setIsGenerating(null);
+      }
   };
 
   return (
@@ -73,25 +108,29 @@ export function ReportsPage() {
                 title="Weekly Financial Summary" 
                 description="Detailed breakdown of earnings, expenses, and net profit for the current week."
                 date="Generated: Today, 9:00 AM"
-                onDownload={() => handleGenerate('Financial Summary')}
+                isGenerating={isGenerating === 'Weekly Financial Summary'}
+                onDownload={() => handleExport('Weekly Financial Summary')}
             />
             <ReportCard 
                 title="Driver Performance Audit" 
                 description="Monthly analysis of driver efficiency, ratings, and platform utilization."
                 date="Generated: Oct 31, 2025"
-                onDownload={() => handleGenerate('Driver Audit')}
+                isGenerating={isGenerating === 'Driver Performance Audit'}
+                onDownload={() => handleExport('Driver Performance Audit')}
             />
             <ReportCard 
                 title="Vehicle Maintenance Log" 
                 description="History of all vehicle services, repairs, and upcoming inspection schedules."
                 date="Generated: Nov 01, 2025"
-                onDownload={() => handleGenerate('Maintenance Log')}
+                isGenerating={isGenerating === 'Vehicle Maintenance Log'}
+                onDownload={() => handleExport('Vehicle Maintenance Log')}
             />
             <ReportCard 
                 title="Tax Preparation Export" 
                 description="Consolidated financial data formatted for annual tax reporting."
                 date="Generated: Quarterly"
-                onDownload={() => handleGenerate('Tax Export')}
+                isGenerating={isGenerating === 'Tax Preparation Export'}
+                onDownload={() => handleExport('Tax Preparation Export')}
             />
         </div>
       </div>
@@ -99,7 +138,7 @@ export function ReportsPage() {
   );
 }
 
-function ReportCard({ title, description, date, onDownload }: { title: string, description: string, date: string, onDownload: () => void }) {
+function ReportCard({ title, description, date, onDownload, isGenerating }: { title: string, description: string, date: string, onDownload: () => void, isGenerating?: boolean }) {
     return (
         <Card className="flex flex-col h-full">
             <CardHeader>
@@ -112,8 +151,8 @@ function ReportCard({ title, description, date, onDownload }: { title: string, d
             <CardContent className="mt-auto pt-0">
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">
                     <span className="text-xs text-slate-500">{date}</span>
-                    <Button variant="outline" size="sm" onClick={onDownload}>
-                        <Download className="h-4 w-4 mr-2" />
+                    <Button variant="outline" size="sm" onClick={onDownload} disabled={isGenerating}>
+                        {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                         Export
                     </Button>
                 </div>

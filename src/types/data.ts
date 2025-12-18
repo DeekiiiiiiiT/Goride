@@ -2,6 +2,9 @@ export interface Trip {
   id: string;
   platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Other';
   date: string; // ISO date string
+  requestTime?: string; // ISO date string
+  dropoffTime?: string; // ISO date string
+  serviceType?: string; // e.g. UberX
   driverId: string;
   driverName?: string;
   amount: number;
@@ -18,6 +21,20 @@ export interface Trip {
   cashCollected?: number; // The amount of physical cash the driver collected
   netPayout?: number;     // Calculated: amount - cashCollected
   
+  // Detailed Financials (Phase 2 Extension)
+  grossEarnings?: number; // "Paid to you"
+  fareBreakdown?: {
+    baseFare: number;
+    tips: number;
+    waitTime: number;
+    surge: number;
+    airportFees: number;
+    timeAtStop: number;
+    taxes: number;
+  };
+  tollCharges?: number;
+  netToDriver?: number; // "Your earnings" - adjustments
+
   // Phase 4: Trip Analysis
   speed?: number;       // Distance / Duration
   timeOfDay?: number;   // 0-23 hour
@@ -25,7 +42,52 @@ export interface Trip {
   dropoffArea?: string; // Extracted from address
   efficiency?: number;  // Amount / Distance
   
+  // Phase 1 (Trip Logs Enhancement): Enhanced Data Fields
+  requestTime?: string; // ISO date string
+  dropoffTime?: string; // ISO date string
+  productType?: string; // UberX, Comfort, etc.
+  earningsPerKm?: number;
+  earningsPerMin?: number;
+  efficiencyScore?: number; // 0-100
+  routeId?: string; // pickupZone_dropoffZone
+  tripRating?: number; // 1-5
+  dayOfWeek?: string; // Mon-Sun
+  
+  cancellationReason?: string;
+  cancelledBy?: 'rider' | 'driver' | 'admin';
+  estimatedLoss?: number; // For cancelled trips
+  
   [key: string]: any; // Allow dynamic properties
+}
+
+export interface CancellationMetrics {
+  totalCancelled: number;
+  cancellationRate: number; // 0-1
+  byReason: { reason: string; count: number }[];
+  byTimeOfDay: { hour: number; count: number }[];
+  estimatedRevenueLost: number;
+  topCancellationAreas: { area: string; count: number }[];
+}
+
+export interface RouteMetrics {
+  routeId: string; // pickupZone_dropoffZone
+  pickupZone: string;
+  dropoffZone: string;
+  totalTrips: number;
+  avgEarnings: number;
+  avgDistance: number;
+  avgDuration: number; // minutes
+  profitabilityScore: number; // 0-100
+  surgeFrequency: number; // 0-1
+}
+
+export interface TimePatternMetrics {
+  hour: number; // 0-23
+  dayOfWeek: string; // Mon-Sun
+  avgDemand: number; // relative score or trip count
+  avgEarnings: number;
+  cancellationRate: number;
+  isPeak: boolean;
 }
 
 export interface TripAnalytics {
@@ -258,4 +320,210 @@ export interface OrganizationMetrics {
     totalTrips?: number;
     fleetUtilization?: number; // Average of all vehicle utilizations
     totalCashExposure?: number; // Sum of all cash collected
+}
+
+// Phase 8.4: Driver Portal & Maintenance Reporting
+export interface FuelLog {
+  id: string;
+  driverId: string;
+  vehicleId: string;
+  date: string;
+  odometer: number;
+  liters: number;
+  totalCost: number;
+  receiptUrl?: string;
+  notes?: string;
+}
+
+export interface ServiceRequest {
+  id: string;
+  driverId: string;
+  vehicleId: string;
+  date: string;
+  type: 'Maintenance' | 'Repair' | 'Inspection' | 'Emergency';
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  description: string;
+  odometer?: number;
+  status: 'Pending' | 'Scheduled' | 'In-Progress' | 'Completed' | 'Cancelled';
+}
+
+// --- Phase 1: Enhanced Transaction Data Structure (Transactions Tab Enhancement) ---
+
+export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment';
+
+export type TransactionCategory = 
+  // Revenue
+  | 'Fare Earnings' | 'Tips' | 'Surge Pricing' | 'Bonuses' | 'Other Income' 
+  // Expenses
+  | 'Fuel' | 'Maintenance' | 'Insurance' | 'Registration' | 'Tolls' | 'Driver Payouts' | 'Cash Collection Fees' | 'Bank Charges' | 'Office Expenses' | 'Software/Subscription' | 'Marketing' | 'Other Expenses'
+  // Payouts
+  | 'Vehicle Payment' | 'Supplier Payment' | 'Tax Payment';
+
+export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card';
+
+export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled' | 'Void';
+
+export interface FinancialTransaction {
+  id: string; // Transaction UUID
+  date: string; // ISO Date YYYY-MM-DD
+  time: string; // HH:mm:ss
+  driverId?: string; 
+  driverName?: string;
+  vehicleId?: string;
+  vehiclePlate?: string;
+  tripId?: string;
+  
+  type: TransactionType;
+  category: TransactionCategory | string; 
+  description: string;
+  
+  amount: number; // Signed value: + for inflow, - for outflow
+  
+  paymentMethod: PaymentMethod;
+  status: TransactionStatus;
+  
+  referenceNumber?: string;
+  receiptUrl?: string;
+  
+  taxAmount?: number;
+  netAmount?: number;
+  
+  balanceAfter?: number;
+  bankAccount?: string;
+  processedDate?: string;
+  isReconciled: boolean;
+  
+  // Expense Specific Fields
+  odometer?: number;
+  quantity?: number; // Liters/Gallons
+  unitPrice?: number;
+  subType?: string; // Fuel Type (Regular/Diesel) or Service Type (Oil Change)
+  vendor?: string; // Service Provider or Station
+  
+  // Maintenance Specific
+  partsCost?: number;
+  laborCost?: number;
+
+  notes?: string;
+}
+
+export interface BankReconciliationRecord {
+  id: string;
+  statementDate: string;
+  transactionDate: string;
+  description: string;
+  bankAmount: number;
+  systemAmount?: number;
+  matchStatus: 'Matched' | 'Unmatched' | 'Partial';
+  difference: number;
+  reconciledBy?: string;
+  reconciledDate?: string;
+  notes?: string;
+}
+
+export interface CashFlowRecord {
+  date: string; // YYYY-MM-DD
+  openingBalance: number;
+  cashIn: number;
+  cashOut: number;
+  closingBalance: number;
+  
+  breakdown: {
+    cashOnHand: number;
+    bankBalance: number;
+  };
+  
+  dailyVariance?: number;
+  weekAverage?: number;
+  notes?: string;
+}
+
+// --- Phase 1: Fleet Analytics Dashboard Data Architecture ---
+
+// 1.1 Dashboard Live Metrics
+export interface DashboardMetrics {
+  timestamp: string; // ISO String
+  date: string; // YYYY-MM-DD
+  hour: number; // 0-23
+  
+  // Real-time Counts
+  activeDrivers: number;
+  vehiclesOnline: number;
+  tripsInProgress: number;
+  tripsCompletedToday: number;
+  
+  // Financials
+  earningsToday: number;
+  
+  // Performance Rates
+  avgAcceptanceRate: number; // 0-1
+  avgCancellationRate: number; // 0-1
+  fleetUtilization: number; // 0-100
+  
+  // Leaderboard Highlights
+  topDriverName: string;
+  topDriverEarnings: number;
+  bottomDriverName: string;
+  
+  // Alerts Summary
+  criticalAlertsCount: number;
+  alertDetails: string; // JSON string or summary
+  
+  lastUpdateTime: string;
+}
+
+// 1.3 Historical Dashboard Archive
+export interface DashboardHistory {
+  date: string;
+  hour: number;
+  metricName: string;
+  metricValue: number;
+  changeVsLastHour: number; // Percentage
+  changeVsYesterday: number; // Percentage
+  changeVsLastWeek: number; // Percentage
+  notes?: string;
+}
+
+// 1.4 Alert Definitions (Enhanced)
+export interface DashboardAlertDefinition {
+  id: string;
+  name: string;
+  condition: string; // e.g., "acceptance_rate < 0.5"
+  threshold: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  notificationType: 'dashboard' | 'email' | 'sms' | 'call';
+  actionRequired: string;
+  autoResolve: boolean;
+  checkFrequency: '15min' | 'hourly' | 'daily';
+  lastTriggered?: string;
+  active: boolean;
+}
+
+export interface DashboardAlert {
+  id: string;
+  definitionId: string;
+  timestamp: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  description: string;
+  status: 'new' | 'viewed' | 'acknowledged' | 'resolved';
+  driverId?: string;
+  vehicleId?: string;
+  routeId?: string;
+}
+
+// --- Phase 1: Budget Data Structure ---
+
+export interface Budget {
+  id: string;
+  month: string; // YYYY-MM
+  category: string; // e.g., 'Fuel', 'Maintenance', 'Insurance', 'Cleaning'
+  limit: number; // Target budget amount
+}
+
+export interface ExpenseSummary {
+  category: string;
+  actual: number;
+  budget: number;
+  variance: number;
 }

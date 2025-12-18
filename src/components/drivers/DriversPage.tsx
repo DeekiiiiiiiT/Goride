@@ -12,7 +12,12 @@ import {
   Download,
   Phone,
   Mail,
-  Car
+  Car,
+  Eye,
+  MessageSquare,
+  AlertCircle,
+  TrendingUp,
+  DollarSign
 } from 'lucide-react';
 import { 
   Table, 
@@ -42,26 +47,37 @@ import {
   SelectValue,
 } from "../ui/select";
 import { Card, CardContent } from "../ui/card";
+import { DriverDetail } from './DriverDetail';
 
 // Interface for our View Model
 interface DriverProfile {
   id: string;
   name: string;
   avatarUrl?: string;
-  status: 'Active' | 'Inactive' | 'On Leave';
+  status: 'Active' | 'Inactive' | 'Needs Attention';
   vehicle: string;
   phone: string;
   email: string;
   totalTrips: number;
+  totalEarnings: number; // Added
+  // New metrics for Phase 2
+  todaysEarnings: number;
+  todaysTrips: number;
+  acceptanceRate: number;
+  tier: 'Platinum' | 'Gold' | 'Silver' | 'Bronze';
 }
 
 export function DriversPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Navigation State
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+
   // Filtering & Pagination State
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [tierFilter, setTierFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
 
@@ -79,43 +95,88 @@ export function DriversPage() {
     fetchData();
   }, []);
 
-  // Transform Trips into Unique Drivers List
+  // Transform Trips into Unique Drivers List with Real Metrics
   const drivers: DriverProfile[] = useMemo(() => {
     const driverMap = new Map<string, DriverProfile>();
+    const today = new Date().toISOString().split('T')[0];
 
-    // Process trips to extract unique drivers
-    // We traverse in reverse chronological order (assuming API returns roughly sorted, 
-    // or we sort here to be safe) so we get the latest vehicle/name info.
+    // Process trips to extract unique drivers and aggregate data
+    // Sort by date desc so we get latest vehicle/info
     const sortedTrips = [...trips].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Temporary storage for calculating acceptance rate
+    const driverStats = new Map<string, { completed: number, cancelled: number }>();
 
     sortedTrips.forEach(trip => {
         if (!trip.driverId || trip.driverId === 'unknown') return;
 
+        // Initialize driver profile if not exists
         if (!driverMap.has(trip.driverId)) {
-            // Generate consistent mock data based on ID for demo purposes
             const mockPhone = `+1 876${trip.driverId.replace(/\D/g, '').substring(0, 7).padEnd(7, '0')}`;
             const mockEmail = `${(trip.driverName || 'driver').split(' ')[0].toLowerCase()}${trip.driverId.substring(0, 4)}@gmail.com`;
             
             driverMap.set(trip.driverId, {
                 id: trip.driverId,
                 name: trip.driverName || 'Unknown Driver',
-                status: 'Active', // Default to active if they have trips
+                status: 'Active',
                 vehicle: trip.vehicleId || 'Unassigned',
                 phone: mockPhone,
                 email: mockEmail,
-                totalTrips: 0
+                totalTrips: 0,
+                totalEarnings: 0,
+                todaysEarnings: 0,
+                todaysTrips: 0,
+                acceptanceRate: 100, // Default to 100 if no cancellations found
+                tier: 'Bronze'
             });
+            driverStats.set(trip.driverId, { completed: 0, cancelled: 0 });
         }
 
         const driver = driverMap.get(trip.driverId)!;
+        const stats = driverStats.get(trip.driverId)!;
+        const tripDate = trip.date.split('T')[0];
+
+        // Update Totals
         driver.totalTrips += 1;
-        // Keep the most recent vehicle
+        driver.totalEarnings += trip.amount || 0;
+
+        // Update Today's Metrics
+        if (tripDate === today) {
+            driver.todaysEarnings += trip.amount || 0;
+            driver.todaysTrips += 1;
+        }
+
+        // Update Status Stats
+        if (trip.status === 'Completed') stats.completed++;
+        else if (trip.status === 'Cancelled') stats.cancelled++;
+
+        // Update Vehicle (use the most recent one since we sorted desc)
         if (trip.vehicleId && driver.vehicle === 'Unassigned') {
             driver.vehicle = trip.vehicleId;
         }
     });
 
-    return Array.from(driverMap.values());
+    // Finalize Metrics (Rate, Tier, Status)
+    return Array.from(driverMap.values()).map(driver => {
+        const stats = driverStats.get(driver.id)!;
+        const total = stats.completed + stats.cancelled;
+        
+        // Acceptance Rate (approximated by completion rate if acceptance data missing)
+        // If we have cancellation data, we use it.
+        driver.acceptanceRate = total > 0 ? Math.round((stats.completed / total) * 100) : 100;
+
+        // Tier Logic
+        if (driver.totalEarnings > 5000) driver.tier = 'Platinum';
+        else if (driver.totalEarnings > 3000) driver.tier = 'Gold';
+        else if (driver.totalEarnings > 1000) driver.tier = 'Silver';
+        else driver.tier = 'Bronze';
+
+        // Status Logic
+        if (driver.acceptanceRate < 70) driver.status = 'Needs Attention';
+        // If no trips in last 30 days? (Could implement inactive logic here)
+        
+        return driver;
+    });
   }, [trips]);
 
   // Apply Filters
@@ -126,11 +187,12 @@ export function DriversPage() {
             driver.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
             driver.email.toLowerCase().includes(searchQuery.toLowerCase());
           
-          const matchesStatus = statusFilter === 'all' || driver.status.toLowerCase() === statusFilter;
+          const matchesStatus = statusFilter === 'all' || driver.status.toLowerCase() === statusFilter.toLowerCase();
+          const matchesTier = tierFilter === 'all' || driver.tier.toLowerCase() === tierFilter.toLowerCase();
 
-          return matchesSearch && matchesStatus;
+          return matchesSearch && matchesStatus && matchesTier;
       });
-  }, [drivers, searchQuery, statusFilter]);
+  }, [drivers, searchQuery, statusFilter, tierFilter]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredDrivers.length / rowsPerPage);
@@ -155,67 +217,80 @@ export function DriversPage() {
     );
   }
 
+  // If a driver is selected, show the detail view with filtered trips
+  if (selectedDriverId) {
+    const selectedDriver = drivers.find(d => d.id === selectedDriverId);
+    const driverTrips = trips.filter(t => t.driverId === selectedDriverId);
+    
+    return (
+      <DriverDetail 
+        driverId={selectedDriverId} 
+        driverName={selectedDriver?.name || 'Unknown'} 
+        trips={driverTrips}
+        onBack={() => setSelectedDriverId(null)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       
       {/* --- HEADER --- */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          
-          {/* Filters (Left) */}
-          <div className="flex flex-wrap items-center gap-2">
-              <Button 
-                variant={statusFilter === 'all' ? "default" : "outline"} 
-                className="rounded-full px-4"
-                onClick={() => setStatusFilter('all')}
-              >
-                  All
-              </Button>
-              
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[110px] rounded-full border-dashed">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
+      <div className="flex flex-col gap-4">
+        <div>
+           <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Drivers</h2>
+           <p className="text-slate-500">Manage fleet drivers, track performance, and monitor earnings.</p>
+        </div>
 
-              <Select>
-                <SelectTrigger className="w-[140px] rounded-full border-dashed">
-                  <SelectValue placeholder="Assignment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Assignment</SelectItem>
-                  <SelectItem value="assigned">Assigned</SelectItem>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                </SelectContent>
-              </Select>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            
+            {/* Filters (Left) */}
+            <div className="flex flex-wrap items-center gap-2">
+                <Button 
+                  variant={statusFilter === 'all' ? "default" : "outline"} 
+                  className="rounded-full px-4"
+                  onClick={() => setStatusFilter('all')}
+                >
+                    All
+                </Button>
+                
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[110px] rounded-full border-dashed">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="needs attention">Needs Attention</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
 
-              <Select>
-                <SelectTrigger className="w-[140px] rounded-full border-dashed">
-                  <SelectValue placeholder="Documents" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Documents</SelectItem>
-                  <SelectItem value="verified">Verified</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="expired">Expired</SelectItem>
-                </SelectContent>
-              </Select>
-          </div>
+                <Select value={tierFilter} onValueChange={setTierFilter}>
+                  <SelectTrigger className="w-[110px] rounded-full border-dashed">
+                    <SelectValue placeholder="Tier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tier</SelectItem>
+                    <SelectItem value="platinum">Platinum</SelectItem>
+                    <SelectItem value="gold">Gold</SelectItem>
+                    <SelectItem value="silver">Silver</SelectItem>
+                    <SelectItem value="bronze">Bronze</SelectItem>
+                  </SelectContent>
+                </Select>
+            </div>
 
-          {/* Search (Right) */}
-          <div className="relative w-full md:w-[300px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input 
-                placeholder="Search Drivers" 
-                className="pl-9 bg-slate-50 border-slate-200"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-          </div>
+            {/* Search (Right) */}
+            <div className="relative w-full md:w-[300px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input 
+                  placeholder="Search Drivers" 
+                  className="pl-9 bg-slate-50 border-slate-200"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
+        </div>
       </div>
 
       {/* --- TABLE --- */}
@@ -224,17 +299,19 @@ export function DriversPage() {
             <Table>
                 <TableHeader className="bg-slate-50">
                     <TableRow>
-                        <TableHead className="w-[300px] font-semibold text-slate-700">Driver name & ID</TableHead>
-                        <TableHead className="w-[150px] font-semibold text-slate-700">Status</TableHead>
-                        <TableHead className="w-[250px] font-semibold text-slate-700">Assignment</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Contact</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
+                        <TableHead className="w-[250px] font-semibold text-slate-700">Driver</TableHead>
+                        <TableHead className="w-[100px] font-semibold text-slate-700">Status</TableHead>
+                        <TableHead className="font-semibold text-slate-700">Earnings (Today)</TableHead>
+                        <TableHead className="font-semibold text-slate-700">Trips (Today)</TableHead>
+                        <TableHead className="font-semibold text-slate-700">Acceptance</TableHead>
+                        <TableHead className="font-semibold text-slate-700">Tier</TableHead>
+                        <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {paginatedDrivers.length > 0 ? (
                         paginatedDrivers.map((driver) => (
-                            <TableRow key={driver.id} className="hover:bg-slate-50/50">
+                            <TableRow key={driver.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => setSelectedDriverId(driver.id)}>
                                 <TableCell>
                                     <div className="flex items-center gap-3">
                                         <Avatar className="h-10 w-10 border border-slate-200">
@@ -244,64 +321,69 @@ export function DriversPage() {
                                             </AvatarFallback>
                                         </Avatar>
                                         <div>
-                                            <p className="font-medium text-slate-900">{driver.name}</p>
-                                            <p className="text-xs text-slate-500 truncate max-w-[180px] font-mono" title={driver.id}>
-                                                ID: {driver.id.slice(0, 8)}...
+                                            <p className="font-medium text-slate-900 group-hover:text-indigo-600 transition-colors">{driver.name}</p>
+                                            <p className="text-xs text-slate-500 truncate max-w-[120px] font-mono">
+                                                {driver.phone}
                                             </p>
                                         </div>
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-100 font-normal">
-                                        <CheckCircle2 className="h-3 w-3 mr-1.5 fill-emerald-500 text-white" />
-                                        Active
-                                    </Badge>
+                                    <StatusBadge status={driver.status} />
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex items-center gap-2 text-slate-700">
-                                        {driver.vehicle !== 'Unassigned' ? (
-                                            <>
-                                                <Car className="h-4 w-4 text-slate-400" />
-                                                <span className="text-sm">{driver.vehicle}</span>
-                                            </>
-                                        ) : (
-                                            <span className="text-sm text-slate-400 italic">Unassigned</span>
-                                        )}
+                                    <div className="font-medium text-slate-900">${driver.todaysEarnings.toFixed(2)}</div>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="text-slate-600">{driver.todaysTrips}</div>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-2">
+                                       <span className={`font-medium ${driver.acceptanceRate < 70 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                          {driver.acceptanceRate}%
+                                       </span>
+                                       {driver.acceptanceRate < 70 && <AlertCircle className="h-3 w-3 text-rose-500" />}
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <div className="space-y-0.5">
-                                        <div className="flex items-center gap-2 text-sm text-slate-900">
-                                            <Phone className="h-3 w-3 text-slate-400" />
-                                            {driver.phone}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                                            <Mail className="h-3 w-3 text-slate-400" />
-                                            {driver.email}
-                                        </div>
-                                    </div>
+                                    <TierBadge tier={driver.tier} />
                                 </TableCell>
-                                <TableCell>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
-                                                <MoreVertical className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                            <DropdownMenuItem>View Profile</DropdownMenuItem>
-                                            <DropdownMenuItem>Edit Details</DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem className="text-rose-600">Deactivate Driver</DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-end gap-1">
+                                        <Button 
+                                           variant="ghost" 
+                                           size="icon" 
+                                           className="h-8 w-8 text-slate-400 hover:text-indigo-600"
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             setSelectedDriverId(driver.id);
+                                           }}
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600">
+                                            <MessageSquare className="h-4 w-4" />
+                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => setSelectedDriverId(driver.id)}>View Analysis</DropdownMenuItem>
+                                                <DropdownMenuItem>View History</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem className="text-rose-600">Deactivate Driver</DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-24 text-center text-slate-500">
+                            <TableCell colSpan={7} className="h-24 text-center text-slate-500">
                                 No drivers found matching your criteria.
                             </TableCell>
                         </TableRow>
@@ -353,4 +435,43 @@ export function DriversPage() {
 
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+   if (status === 'Active') {
+      return (
+        <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-100 font-normal">
+            <CheckCircle2 className="h-3 w-3 mr-1.5 fill-emerald-500 text-white" />
+            Active
+        </Badge>
+      );
+   } else if (status === 'Needs Attention') {
+      return (
+        <Badge variant="secondary" className="bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-100 font-normal">
+            <AlertCircle className="h-3 w-3 mr-1.5 fill-rose-500 text-white" />
+            Needs Attention
+        </Badge>
+      );
+   }
+   return (
+      <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200 font-normal">
+        Inactive
+      </Badge>
+   );
+}
+
+function TierBadge({ tier }: { tier: string }) {
+    const colors = {
+        Platinum: "bg-slate-800 text-slate-100 border-slate-700",
+        Gold: "bg-amber-100 text-amber-800 border-amber-200",
+        Silver: "bg-slate-100 text-slate-700 border-slate-200",
+        Bronze: "bg-orange-50 text-orange-800 border-orange-200"
+    };
+    const colorClass = colors[tier as keyof typeof colors] || colors.Bronze;
+
+    return (
+        <Badge variant="outline" className={`${colorClass} font-medium`}>
+            {tier}
+        </Badge>
+    )
 }

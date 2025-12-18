@@ -95,6 +95,26 @@ export const api = {
       return response.json();
   },
 
+  async getVehicleMetrics(): Promise<VehicleMetrics[]> {
+    const response = await fetchWithRetry(`${BASE_URL}/vehicle-metrics`, {
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        }
+    });
+    if (!response.ok) throw new Error("Failed to fetch vehicle metrics");
+    return response.json();
+  },
+
+  async getDriverMetrics(): Promise<DriverMetrics[]> {
+    const response = await fetchWithRetry(`${BASE_URL}/driver-metrics`, {
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        }
+    });
+    if (!response.ok) throw new Error("Failed to fetch driver metrics");
+    return response.json();
+  },
+
   async getTrips(): Promise<Trip[]> {
     const response = await fetchWithRetry(`${BASE_URL}/trips`, {
         headers: {
@@ -218,5 +238,26 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to save integration");
     return response.json();
+  },
+
+  async getBudgets() {
+      const response = await fetchWithRetry(`${BASE_URL}/budgets`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      });
+      if (!response.ok) throw new Error("Failed to fetch budgets");
+      return response.json();
+  },
+
+  async saveBudget(budget: any) {
+      const response = await fetchWithRetry(`${BASE_URL}/budgets`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify(budget)
+      });
+      if (!response.ok) throw new Error("Failed to save budget");
+      return response.json();
   }
 };

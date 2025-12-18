@@ -1,6 +1,136 @@
-import { DriverMetrics, Trip, AlertRule, Notification } from '../types/data';
+import { DriverMetrics, Trip, AlertRule, Notification, VehicleMetrics, DashboardAlert } from '../types/data';
 
 export const AlertEngine = {
+    /**
+     * Phase 4: Enhanced Alert Detection Engine
+     * Generates structured DashboardAlerts based on specific business rules.
+     */
+    generateDashboardAlerts: (
+        driverMetrics: DriverMetrics[], 
+        vehicleMetrics: VehicleMetrics[],
+        trips: Trip[]
+    ): DashboardAlert[] => {
+        const alerts: DashboardAlert[] = [];
+        const now = new Date();
+
+        // --- 1. Driver Checks (Every 15 min in real system) ---
+        driverMetrics.forEach(driver => {
+            // Condition 1: Acceptance Rate < 50%
+            // Ensure we have a valid acceptance rate (0-1)
+            const acceptance = driver.acceptanceRate !== undefined ? driver.acceptanceRate : 1; 
+            if (acceptance < 0.5) {
+                alerts.push({
+                    id: `drv-acc-${driver.driverId}-${crypto.randomUUID()}`,
+                    definitionId: 'def-low-acceptance',
+                    timestamp: now.toISOString(),
+                    severity: 'critical',
+                    title: `Driver ${driver.driverName} has low acceptance (${(acceptance * 100).toFixed(0)}%)`,
+                    description: `Acceptance rate is below the 50% threshold. Target: 85%`,
+                    status: 'new',
+                    driverId: driver.driverId
+                });
+            }
+
+            // Condition 2: Cancellation Rate > 10%
+            const cancellation = driver.cancellationRate !== undefined ? driver.cancellationRate : 0;
+            if (cancellation > 0.1) {
+                alerts.push({
+                    id: `drv-can-${driver.driverId}-${crypto.randomUUID()}`,
+                    definitionId: 'def-high-cancellation',
+                    timestamp: now.toISOString(),
+                    severity: 'critical',
+                    title: `Driver ${driver.driverName} has high cancellations (${(cancellation * 100).toFixed(0)}%)`,
+                    description: `Cancellation rate exceeds 10% limit.`,
+                    status: 'new',
+                    driverId: driver.driverId
+                });
+            }
+
+            // Condition 3: Rating < 4.5
+            const rating = driver.ratingLast500 !== undefined ? driver.ratingLast500 : 5;
+            if (rating < 4.5) {
+                alerts.push({
+                    id: `drv-rat-${driver.driverId}-${crypto.randomUUID()}`,
+                    definitionId: 'def-low-rating',
+                    timestamp: now.toISOString(),
+                    severity: 'medium', // Mapped 'Warning' to 'medium' or 'high'
+                    title: `Driver ${driver.driverName} rating dropped to ${rating.toFixed(2)}`,
+                    description: `Driver rating is below 4.5 quality standard.`,
+                    status: 'new',
+                    driverId: driver.driverId
+                });
+            }
+        });
+
+        // --- 2. Vehicle Checks (Hourly) ---
+        vehicleMetrics.forEach(vehicle => {
+            // Condition: Utilization < 40%
+            // Utilization might be pre-calculated or needs calc
+            let utilization = vehicle.utilizationRate;
+            if (utilization === undefined && vehicle.onlineHours > 0) {
+                utilization = (vehicle.onTripHours / vehicle.onlineHours) * 100;
+            } else if (utilization === undefined) {
+                utilization = 0;
+            }
+
+            if (utilization < 40 && vehicle.onlineHours > 1) { // Only alert if vehicle was actually online for a bit
+                alerts.push({
+                    id: `veh-util-${vehicle.vehicleId}-${crypto.randomUUID()}`,
+                    definitionId: 'def-low-utilization',
+                    timestamp: now.toISOString(),
+                    severity: 'medium',
+                    title: `Vehicle ${vehicle.plateNumber} underutilized (${utilization.toFixed(0)}%)`,
+                    description: `Utilization is below 40% target. Check assignments.`,
+                    status: 'new',
+                    vehicleId: vehicle.vehicleId
+                });
+            }
+        });
+
+        // --- 3. Route Checks (Daily) ---
+        // Need to aggregate trips by route (pickup -> dropoff approx)
+        // This is expensive, so we do a simplified version
+        const routeStats: Record<string, { total: number, cancelled: number }> = {};
+        
+        trips.forEach(trip => {
+            if (!trip.pickupLocation || !trip.dropoffLocation) return;
+            // Simple clustering by first 10 chars of location for demo purposes
+            // In real app, we'd use zones
+            const routeKey = `${trip.pickupLocation.substring(0, 10)}... -> ${trip.dropoffLocation.substring(0, 10)}...`;
+            
+            if (!routeStats[routeKey]) routeStats[routeKey] = { total: 0, cancelled: 0 };
+            routeStats[routeKey].total++;
+            if (trip.status === 'Cancelled') routeStats[routeKey].cancelled++;
+        });
+
+        Object.entries(routeStats).forEach(([route, stats]) => {
+            if (stats.total >= 5) { // Minimum sample size
+                const rate = stats.cancelled / stats.total;
+                if (rate > 0.2) {
+                     alerts.push({
+                        id: `rte-can-${route.substring(0,5)}-${crypto.randomUUID()}`,
+                        definitionId: 'def-route-risk',
+                        timestamp: now.toISOString(),
+                        severity: 'critical',
+                        title: `High cancellations on route: ${route}`,
+                        description: `Cancellation rate is ${(rate * 100).toFixed(0)}% (${stats.cancelled}/${stats.total} trips).`,
+                        status: 'new',
+                        routeId: route
+                    });
+                }
+            }
+        });
+
+        return alerts.sort((a,b) => {
+             // Sort by Severity (Critical first) then Time
+             const severityScore = { critical: 3, high: 2, medium: 1, low: 0 };
+             const scoreA = severityScore[a.severity];
+             const scoreB = severityScore[b.severity];
+             if (scoreA !== scoreB) return scoreB - scoreA;
+             return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        });
+    },
+
     /**
      * Evaluates current data against active alert rules and generates notifications.
      */

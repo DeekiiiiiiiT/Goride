@@ -12,7 +12,8 @@ import {
   Award,
   Clock,
   MapPin,
-  XCircle
+  XCircle,
+  Navigation
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -262,10 +263,10 @@ export function ExecutiveDashboard({
       </div>
 
       {/* --- BOTTOM ROW: ALERTS & LISTS --- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           
           {/* 1. Alerts List */}
-          <Card>
+          <Card className="lg:col-span-1">
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -290,7 +291,7 @@ export function ExecutiveDashboard({
           </Card>
 
           {/* 2. Cancellations (or Trip Analysis) */}
-          <Card>
+          <Card className="lg:col-span-1">
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                       <XCircle className="h-4 w-4 text-rose-500" />
@@ -320,8 +321,26 @@ export function ExecutiveDashboard({
               </CardContent>
           </Card>
 
-           {/* 3. Low Performers */}
-           <Card>
+          {/* 3. Most Efficient Routes (Phase 4.4) */}
+          <Card className="lg:col-span-1">
+              <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                      <Navigation className="h-4 w-4 text-indigo-500" />
+                      Efficient Routes
+                  </CardTitle>
+              </CardHeader>
+              <CardContent>
+                  <div className="space-y-3">
+                      <RouteItem label="Kingston → Spanish Town" efficiency="$2.80/km" />
+                      <RouteItem label="Spanish Town → Portmore" efficiency="$2.45/km" />
+                      <RouteItem label="Within Kingston" efficiency="$1.85/km" />
+                      <RouteItem label="Airport Run" efficiency="$3.10/km" />
+                  </div>
+              </CardContent>
+          </Card>
+
+           {/* 4. Low Performers */}
+           <Card className="lg:col-span-1">
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                       <Activity className="h-4 w-4 text-slate-500" />
@@ -356,6 +375,15 @@ export function ExecutiveDashboard({
       </div>
     </div>
   );
+}
+
+function RouteItem({ label, efficiency }: { label: string, efficiency: string }) {
+    return (
+        <div className="flex items-center justify-between py-1 border-b last:border-0 border-slate-100">
+            <span className="text-xs font-medium text-slate-700">{label}</span>
+            <Badge variant="secondary" className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-100">{efficiency}</Badge>
+        </div>
+    )
 }
 
 function KpiCard({ title, value, icon, subtitle, trend, trendUp }: any) {

@@ -80,7 +80,6 @@ export function SettingsPage() {
             <TabsTrigger value="team">Team</TabsTrigger>
             <TabsTrigger value="alerts">Alert Rules</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
             <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
             <TabsTrigger value="help">Help & Training</TabsTrigger>
           </TabsList>
@@ -102,10 +101,6 @@ export function SettingsPage() {
           <IntegrationsPanel />
         </TabsContent>
 
-        <TabsContent value="billing">
-          <BillingPanel />
-        </TabsContent>
-
         <TabsContent value="maintenance">
           <MaintenancePanel />
         </TabsContent>
@@ -120,6 +115,49 @@ export function SettingsPage() {
 
 function GeneralPanel() {
   const [isResetting, setIsResetting] = useState(false);
+  const [currency, setCurrency] = useState('usd');
+  const [timezone, setTimezone] = useState('pst');
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    // Load saved preferences
+    const savedCurrency = localStorage.getItem('preference_currency') || 'usd';
+    const savedTimezone = localStorage.getItem('preference_timezone') || 'pst';
+    const savedDarkMode = localStorage.getItem('preference_dark_mode') === 'true';
+
+    setCurrency(savedCurrency);
+    setTimezone(savedTimezone);
+    setDarkMode(savedDarkMode);
+    
+    // Sync dark mode class
+    if (savedDarkMode) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const handleCurrencyChange = (value: string) => {
+    setCurrency(value);
+    localStorage.setItem('preference_currency', value);
+    toast.success('Currency preference saved');
+  };
+
+  const handleTimezoneChange = (value: string) => {
+    setTimezone(value);
+    localStorage.setItem('preference_timezone', value);
+    toast.success('Timezone preference saved');
+  };
+
+  const handleDarkModeChange = (checked: boolean) => {
+    setDarkMode(checked);
+    localStorage.setItem('preference_dark_mode', String(checked));
+    if (checked) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   const handleResetData = async () => {
     setIsResetting(true);
@@ -138,50 +176,6 @@ function GeneralPanel() {
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Fleet Profile</CardTitle>
-          <CardDescription>
-            Configure your fleet's identity and operational parameters.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="fleet-name">Fleet Name</Label>
-              <Input id="fleet-name" defaultValue="GoRide Fleet A" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="service-area">Service Area</Label>
-              <Select defaultValue="sf">
-                <SelectTrigger>
-                  <SelectValue placeholder="Select area" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sf">San Francisco Bay Area</SelectItem>
-                  <SelectItem value="la">Los Angeles</SelectItem>
-                  <SelectItem value="nyc">New York City</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Supported Vehicle Types</Label>
-            <div className="flex flex-wrap gap-2">
-              {['Standard', 'XL', 'Lux', 'Black', 'WAV'].map((type) => (
-                <div key={type} className="flex items-center space-x-2 border rounded-md p-2 bg-slate-50 dark:bg-slate-900">
-                  <Switch id={`veh-${type}`} defaultChecked={['Standard', 'XL'].includes(type)} />
-                  <Label htmlFor={`veh-${type}`} className="cursor-pointer">{type}</Label>
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter className="border-t px-6 py-4">
-          <Button>Save Changes</Button>
-        </CardFooter>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Preferences</CardTitle>
           <CardDescription>
             System-wide display and localization settings.
@@ -191,9 +185,9 @@ function GeneralPanel() {
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="space-y-2">
                 <Label>Currency</Label>
-                <Select defaultValue="usd">
+                <Select value={currency} onValueChange={handleCurrencyChange}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select currency" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="usd">USD ($)</SelectItem>
@@ -205,9 +199,9 @@ function GeneralPanel() {
              </div>
              <div className="space-y-2">
                 <Label>Timezone</Label>
-                <Select defaultValue="pst">
+                <Select value={timezone} onValueChange={handleTimezoneChange}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select timezone" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pst">Pacific Time (PT)</SelectItem>
@@ -223,7 +217,7 @@ function GeneralPanel() {
                 <Label>Dark Mode</Label>
                 <p className="text-sm text-slate-500">Toggle system dark theme.</p>
               </div>
-              <Switch />
+              <Switch checked={darkMode} onCheckedChange={handleDarkModeChange} />
            </div>
         </CardContent>
       </Card>
@@ -625,102 +619,7 @@ function IntegrationsPanel() {
   );
 }
 
-function BillingPanel() {
-  return (
-    <div className="grid gap-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Current Plan</CardTitle>
-            <CardDescription>You are currently on the <span className="font-semibold text-indigo-600">Professional Plan</span>.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="flex justify-between items-center p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-900 rounded-lg">
-                <div className="space-y-1">
-                   <p className="font-medium text-indigo-900 dark:text-indigo-100">Pro Fleet Management</p>
-                   <p className="text-sm text-indigo-700 dark:text-indigo-300">$49.00 / month</p>
-                </div>
-                <Badge className="bg-indigo-600">Active</Badge>
-             </div>
-             <div className="text-sm text-slate-500">
-                <p>Next billing date: <span className="font-medium text-slate-900 dark:text-slate-100">November 1, 2025</span></p>
-                <p>Payment method: <span className="font-medium text-slate-900 dark:text-slate-100">Visa ending in 4242</span></p>
-             </div>
-          </CardContent>
-          <CardFooter className="flex gap-2">
-            <Button variant="outline">Change Plan</Button>
-            <Button variant="ghost" className="text-rose-600 hover:text-rose-700 hover:bg-rose-50">Cancel Subscription</Button>
-          </CardFooter>
-        </Card>
 
-        <Card>
-           <CardHeader>
-             <CardTitle>Payment Method</CardTitle>
-             <CardDescription>Manage your payment details.</CardDescription>
-           </CardHeader>
-           <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 p-3 border rounded-md">
-                 <div className="h-8 w-12 bg-slate-100 rounded flex items-center justify-center">
-                    <span className="font-bold text-xs">VISA</span>
-                 </div>
-                 <div className="flex-1">
-                    <p className="text-sm font-medium">Visa ending in 4242</p>
-                    <p className="text-xs text-slate-500">Expires 12/28</p>
-                 </div>
-              </div>
-              <Button variant="outline" className="w-full">
-                 <Plus className="h-4 w-4 mr-2" />
-                 Add Payment Method
-              </Button>
-           </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Billing History</CardTitle>
-          <CardDescription>View your recent invoices and receipts.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice ID</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Download</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[
-                { id: 'INV-001', date: 'Oct 1, 2025', amount: '$49.00', status: 'Paid' },
-                { id: 'INV-002', date: 'Sep 1, 2025', amount: '$49.00', status: 'Paid' },
-                { id: 'INV-003', date: 'Aug 1, 2025', amount: '$49.00', status: 'Paid' },
-              ].map((inv) => (
-                <TableRow key={inv.id}>
-                  <TableCell className="font-medium">{inv.id}</TableCell>
-                  <TableCell>{inv.date}</TableCell>
-                  <TableCell>{inv.amount}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                      {inv.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 function AlertRulesPanel() {
   const [rules, setRules] = useState<AlertRule[]>([]);

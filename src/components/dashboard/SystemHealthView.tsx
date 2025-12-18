@@ -5,26 +5,33 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { Badge } from "../ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { CheckCircle2, AlertTriangle, Clock, Database, FileText, Server } from "lucide-react";
-import { Trip, DriverMetrics, VehicleMetrics, Notification } from '../../types/data';
+import { Trip, DriverMetrics, VehicleMetrics, Notification, ImportBatch } from '../../types/data';
 
 interface SystemHealthViewProps {
   trips: Trip[];
   driverMetrics: DriverMetrics[];
   vehicleMetrics: VehicleMetrics[];
   notifications: Notification[];
+  batches?: ImportBatch[];
 }
 
-export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notifications }: SystemHealthViewProps) {
+export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notifications, batches = [] }: SystemHealthViewProps) {
   
   const healthStatus = useMemo(() => {
     const now = new Date();
     const oneDayMs = 24 * 60 * 60 * 1000;
     
-    // 1. Data Freshness
-    const sortedTrips = [...trips].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const lastTripDate = sortedTrips.length > 0 ? new Date(sortedTrips[0].date) : null;
+    // 1. Data Freshness (Use Batches if available, fallback to trips)
+    let lastImportDate: Date | null = null;
+    if (batches.length > 0) {
+        const sortedBatches = [...batches].sort((a,b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+        lastImportDate = new Date(sortedBatches[0].uploadDate);
+    } else {
+         const sortedTrips = [...trips].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+         lastImportDate = sortedTrips.length > 0 ? new Date(sortedTrips[0].date) : null;
+    }
     
-    const isDataStale = lastTripDate ? (now.getTime() - lastTripDate.getTime() > oneDayMs * 2) : true; // Warning if > 2 days old
+    const isDataStale = lastImportDate ? (now.getTime() - lastImportDate.getTime() > oneDayMs * 2) : true;
     
     // 2. Data Integrity
     const hasDrivers = driverMetrics.length > 0;
@@ -34,7 +41,7 @@ export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notific
     const criticalAlerts = notifications.filter(n => n.type === 'alert' && n.title.toLowerCase().includes('critical')).length;
     
     return {
-      lastTripDate,
+      lastImportDate,
       isDataStale,
       hasDrivers,
       hasVehicles,
@@ -81,7 +88,7 @@ export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notific
                         <span className="text-sm text-slate-500">Trip Data</span>
                         <div className="flex items-center gap-2">
                              <span className="text-xs font-mono text-slate-600">
-                                {healthStatus.lastTripDate ? healthStatus.lastTripDate.toLocaleDateString() : 'No Data'}
+                                {healthStatus.lastImportDate ? healthStatus.lastImportDate.toLocaleDateString() : 'No Data'}
                              </span>
                              <StatusDot active={!healthStatus.isDataStale} />
                         </div>
@@ -167,13 +174,21 @@ export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notific
                     <div className="flex-1">Message</div>
                     <div className="w-24">Status</div>
                  </div>
-                 {/* Mock Logs - In real app, fetch from Supabase Logs */}
-                 <LogEntry time="Today, 06:00 AM" type="Scheduled Job" message="Daily Report Generation" status="Success" />
-                 <LogEntry time="Today, 05:45 AM" type="Data Import" message="Processed Payment_Order.csv (45 records)" status="Success" />
-                 <LogEntry time="Yesterday, 06:00 AM" type="Scheduled Job" message="Daily Report Generation" status="Success" />
-                 <LogEntry time="Yesterday, 05:30 AM" type="Data Import" message="Processed Driver_Quality.csv" status="Success" />
                  {healthStatus.isDataStale && (
                      <LogEntry time="Yesterday, 10:00 PM" type="Warning" message="Data import delayed > 24h" status="Warning" />
+                 )}
+                 {batches.length > 0 ? batches.slice(0, 5).map(batch => (
+                     <LogEntry 
+                        key={batch.id}
+                        time={new Date(batch.uploadDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        type={batch.type || 'Import'}
+                        message={`Processed ${batch.fileName} (${batch.recordCount} records)`}
+                        status={batch.status === 'completed' ? 'Success' : 'Error'}
+                     />
+                 )) : (
+                    <div className="p-4 text-center text-sm text-slate-500">
+                        No recent system events found.
+                    </div>
                  )}
             </div>
         </CardContent>

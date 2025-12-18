@@ -276,27 +276,70 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                         else current.status = 'Processing';
                     }
 
-                    // Phase 4: Per-Trip Analytics Logic
-                    // 1. Duration & Time of Day
-                    const requestTime = new Date(current.date || Date.now());
-                    current.timeOfDay = requestTime.getHours();
-                    
-                    let durationMinutes = 0;
-                    if (row['Trip duration']) {
-                        // "15" or "15 min" or "00:15:00"? Usually minutes in CSV or HH:MM:SS
-                        // Assuming minutes for simplicity if number, else try parse
-                        const rawDur = String(row['Trip duration']);
-                        if (rawDur.includes(':')) {
-                            const parts = rawDur.split(':').map(Number);
-                            if (parts.length === 3) durationMinutes = parts[0]*60 + parts[1] + parts[2]/60;
-                        } else {
-                            durationMinutes = parseFloat(rawDur) || 0;
-                        }
-                    } else if (row['Drop off time']) {
-                         const dropOff = new Date(String(row['Drop off time']));
-                         durationMinutes = (dropOff.getTime() - requestTime.getTime()) / 60000;
+                    // Extract Service Type
+                    if (row['Product Type']) current.serviceType = String(row['Product Type']);
+                    else current.serviceType = 'UberX'; 
+
+                    // Robust Time Extraction (Dynamic Column Search)
+                    // 1. Request Time
+                    let reqVal = row['Trip request time'] || row['Request Time'] || row['Request time'];
+                    if (!reqVal) {
+                        const key = Object.keys(row).find(k => k.toLowerCase().includes('request') && k.toLowerCase().includes('time'));
+                        if (key) reqVal = row[key];
                     }
+                    if (reqVal) {
+                        try { current.requestTime = new Date(String(reqVal)).toISOString(); } catch(e) {}
+                    }
+
+                    // 2. Dropoff Time
+                    let dropVal = row['Drop off time'] || row['Drop-off time'] || row['Dropoff Time'];
+                    if (!dropVal) {
+                        const key = Object.keys(row).find(k => {
+                            const l = k.toLowerCase();
+                            return l.includes('drop') && l.includes('time') && !l.includes('wait');
+                        });
+                        if (key) dropVal = row[key];
+                    }
+                    if (dropVal) {
+                        try { current.dropoffTime = new Date(String(dropVal)).toISOString(); } catch(e) {}
+                    }
+
+                    // Phase 4: Per-Trip Analytics Logic
+                    // 1. Duration Calculation
+                    let durationMinutes = 0;
+                    
+                    // Priority 1: Calculate from timestamps (Most accurate)
+                    if (current.requestTime && current.dropoffTime) {
+                         const start = new Date(current.requestTime).getTime();
+                         const end = new Date(current.dropoffTime).getTime();
+                         const diff = (end - start) / 60000;
+                         // Sanity check: positive duration (0 to 24 hours)
+                         if (diff >= 0 && diff < 1440) { 
+                             durationMinutes = diff;
+                         }
+                    }
+
+                    // Fallback to 'Trip duration' column if calculation failed or unavailable
+                    if (durationMinutes === 0) {
+                        const rawDur = String(row['Trip duration'] || row['Duration (min)'] || '');
+                        if (rawDur) {
+                            if (rawDur.includes(':')) {
+                                const parts = rawDur.split(':').map(Number);
+                                if (parts.length === 3) durationMinutes = parts[0]*60 + parts[1] + parts[2]/60;
+                            } else {
+                                durationMinutes = parseFloat(rawDur) || 0;
+                            }
+                        }
+                    }
+                    
                     current.duration = durationMinutes > 0 ? durationMinutes : 0;
+                    
+                    // Time of Day
+                    if (current.requestTime) {
+                        current.timeOfDay = new Date(current.requestTime).getHours();
+                    } else {
+                        current.timeOfDay = new Date(current.date || Date.now()).getHours();
+                    }
 
                     // 2. Speed (km/h or mph depending on distance unit, usually miles or km. We just handle raw units)
                     if (current.distance && current.duration) {
@@ -313,25 +356,85 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     current.pickupArea = extractArea(current.pickupLocation);
                     current.dropoffArea = extractArea(current.dropoffLocation);
                     
+                    // Phase 1 (Enhanced Metrics):
+                    // Route ID
+                    if (current.pickupArea && current.dropoffArea) {
+                        current.routeId = `${current.pickupArea}_${current.dropoffArea}`.replace(/\s+/g, '-').toLowerCase();
+                    }
+                    
+                    // Day of Week
+                    if (current.date) {
+                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                        current.dayOfWeek = days[new Date(current.date).getDay()];
+                    }
+
+                    // Earnings Efficiency
+                    if (current.amount && current.distance && current.distance > 0) {
+                        current.earningsPerKm = current.amount / current.distance;
+                    }
+                    
+                    if (current.amount && current.duration && current.duration > 0) {
+                        current.earningsPerMin = current.amount / current.duration;
+                    }
+                    
+                    // Efficiency Score (0-100)
+                    // Simple model: Base 50 + (Earn/km * 10) + (Earn/min * 20) - Penalty for deadhead (not tracked yet)
+                    // Cap at 100
+                    if (current.earningsPerKm && current.earningsPerMin) {
+                        let score = 50 + (current.earningsPerKm * 5) + (current.earningsPerMin * 10);
+                        current.efficiencyScore = Math.min(100, Math.max(0, Math.round(score)));
+                    } else {
+                        current.efficiencyScore = 50; // Neutral default
+                    }
+
                 } else if (file.type === 'uber_payment') {
                     const schema = UBER_SCHEMAS.PAYMENTS_ORDER.mapping;
                     
+                    // Helper for currency parsing
+                    const parseCurrency = (val: any) => parseFloat(String(val || '0').replace(/[^0-9.-]/g, '')) || 0;
+
                     // 1. Earnings ("Paid to you" or "Fare")
                     // Phase 2 Step 2.1: Extract Earnings, Payouts, Cash Collected
                     let earningsVal = row['Paid to you'] || row['Paid to you : Your earnings'] || row['Fare'];
                     let payoutsVal = row['Payouts'] || row['Your Earnings'] || '0';
                     let cashVal = row['Cash Collected'] || row['Cash collected'] || '0';
                     
-                    const earnings = parseFloat(String(earningsVal || '0').replace(/[^0-9.-]/g, '')) || 0;
-                    const payouts = parseFloat(String(payoutsVal).replace(/[^0-9.-]/g, '')) || 0;
-                    const cash = parseFloat(String(cashVal).replace(/[^0-9.-]/g, '')) || 0;
+                    const earnings = parseCurrency(earningsVal);
+                    const payouts = parseCurrency(payoutsVal);
+                    const cash = parseCurrency(cashVal);
 
                     // Step 2.1 Calculations
                     current.amount = earnings;
+                    current.grossEarnings = earnings;
                     current.cashCollected = cash;
                     current.payouts = payouts;
                     current.netTransaction = earnings - payouts; // Net Transaction
                     current.cashPercentage = earnings !== 0 ? (cash / earnings) * 100 : 0;
+
+                    // Detailed Financial Breakdown (New Requirement)
+                    current.fareBreakdown = {
+                        baseFare: parseCurrency(row['Paid to you:Your earnings:Fare:Fare']),
+                        tips: parseCurrency(row['Paid to you:Your earnings:Tip']),
+                        waitTime: parseCurrency(row['Paid to you:Your earnings:Fare:Wait Time at Pickup']),
+                        surge: parseCurrency(row['Paid to you:Your earnings:Fare:Surge']),
+                        airportFees: parseCurrency(row['Paid to you:Your earnings:Fare:Airport Surcharge']),
+                        timeAtStop: parseCurrency(row['Paid to you:Your earnings:Fare:Time at Stop']),
+                        taxes: parseCurrency(row['Paid to you : Your earnings : Taxes'] || row['Paid to you:Your earnings:Taxes'])
+                    };
+                    
+                    current.tollCharges = parseCurrency(row['Paid to you:Trip balance:Refunds:Toll']);
+                    
+                    // Net to Driver: "Your earnings" minus any adjustments
+                    // We check both short and long forms for "Your earnings"
+                    let netBase = parseCurrency(row['Your Earnings'] || row['Your earnings'] || row['Paid to you:Your earnings'] || row['Paid to you : Your earnings']);
+                    
+                    // If specific "Your earnings" column is missing/zero, fallback to Gross Earnings
+                    if (netBase === 0 && earnings !== 0) {
+                        netBase = earnings;
+                    }
+
+                    const adjustments = parseCurrency(row['Paid to you:Your earnings:Fare:Fare Adjustment'] || row['Fare Adjustment'] || row['Adjustment']);
+                    current.netToDriver = netBase - adjustments;
                     
                     // Determine Transaction Type
                     const desc = String(row['Description'] || '').toLowerCase();

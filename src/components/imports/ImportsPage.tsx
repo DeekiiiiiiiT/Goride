@@ -56,7 +56,7 @@ import {
     validateFile,
     extractReportDate
 } from '../../utils/csvHelpers';
-import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics } from '../../types/data';
+import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics } from '../../types/data';
 import { api } from '../../services/api';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
@@ -74,6 +74,7 @@ export function ImportsPage() {
   const [processedData, setProcessedData] = useState<Trip[]>([]);
   const [processedDriverMetrics, setProcessedDriverMetrics] = useState<DriverMetrics[]>([]);
   const [processedVehicleMetrics, setProcessedVehicleMetrics] = useState<VehicleMetrics[]>([]);
+  const [processedOrganizationMetrics, setProcessedOrganizationMetrics] = useState<OrganizationMetrics[]>([]);
   const [processedRentalContracts, setProcessedRentalContracts] = useState<any[]>([]);
   
   // UI States
@@ -167,7 +168,7 @@ export function ImportsPage() {
 
   const handleMerge = () => {
       // 1. Merge
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts } = mergeAndProcessData(uploadedFiles, availableFields);
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics } = mergeAndProcessData(uploadedFiles, availableFields);
 
       // 2. Apply Platform Override
       const finalTrips = trips.map(t => ({
@@ -178,6 +179,7 @@ export function ImportsPage() {
       setProcessedData(finalTrips);
       setProcessedDriverMetrics(driverMetrics);
       setProcessedVehicleMetrics(vehicleMetrics);
+      setProcessedOrganizationMetrics(organizationMetrics);
       setProcessedRentalContracts(rentalContracts);
       setStep('preview_merged');
   };
@@ -730,9 +732,11 @@ export function ImportsPage() {
                           </AlertDescription>
                       </Alert>
                   )}
-                  <Tabs defaultValue="trips" className="w-full">
+                  <Tabs defaultValue="fleet" className="w-full">
                       <TabsList className="mb-4">
-                          <TabsTrigger value="trips">Trips & Financials ({processedData.length})</TabsTrigger>
+                          <TabsTrigger value="fleet">Performance Metric</TabsTrigger>
+                          <TabsTrigger value="trips">BASIC TRIP INFORMATION ({processedData.length})</TabsTrigger>
+                          <TabsTrigger value="financials">Financial Details</TabsTrigger>
                           <TabsTrigger value="drivers" disabled={processedDriverMetrics.length === 0}>
                               Driver Performance {processedDriverMetrics.length > 0 && `(${processedDriverMetrics.length})`}
                           </TabsTrigger>
@@ -740,6 +744,88 @@ export function ImportsPage() {
                                Vehicle Health {processedVehicleMetrics.length > 0 && `(${processedVehicleMetrics.length})`}
                           </TabsTrigger>
                       </TabsList>
+
+                      <TabsContent value="fleet" className="space-y-4">
+                          <Card>
+                              <CardHeader>
+                                  <CardTitle>Performance Metrics</CardTitle>
+                                  <CardDescription>
+                                      Analyzed performance metrics for {processedData.length} trips.
+                                  </CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                  {processedData.length === 0 ? (
+                                      <div className="flex flex-col items-center justify-center p-12 bg-slate-50 border border-dashed rounded-lg text-slate-500">
+                                          <Layers className="h-12 w-12 text-slate-300 mb-2" />
+                                          <p>No trip data found to analyze.</p>
+                                          <p className="text-xs mt-1">Upload Trip Activity or Payment files.</p>
+                                      </div>
+                                  ) : (
+                                      <div className="rounded-md border h-[500px] overflow-auto">
+                                          <Table>
+                                              <TableHeader className="bg-slate-50 sticky top-0">
+                                                  <TableRow>
+                                                      <TableHead>Date</TableHead>
+                                                      <TableHead>Day</TableHead>
+                                                      <TableHead>Time of Day</TableHead>
+                                                      <TableHead className="text-right">Speed</TableHead>
+                                                      <TableHead className="text-right">Earn/Km</TableHead>
+                                                      <TableHead className="text-right">Earn/Min</TableHead>
+                                                      <TableHead className="text-right">Efficiency</TableHead>
+                                                  </TableRow>
+                                              </TableHeader>
+                                              <TableBody>
+                                                  {(() => {
+                                                      const avgDist = processedData.reduce((sum, t) => sum + (t.distance || 0), 0) / (processedData.length || 1);
+                                                      
+                                                      return processedData.map((trip) => {
+                                                          const date = new Date(trip.date || trip.requestTime || Date.now());
+                                                          const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'long' });
+                                                          const hour = date.getHours();
+                                                          
+                                                          let timeOfDay = 'Night';
+                                                          if (hour >= 6 && hour < 12) timeOfDay = 'Morning';
+                                                          else if (hour >= 12 && hour < 18) timeOfDay = 'Afternoon';
+                                                          else if (hour >= 18 && hour < 24) timeOfDay = 'Evening';
+
+                                                          const dist = trip.distance || 0;
+                                                          const dur = trip.duration || 0; // minutes
+                                                          const earn = trip.grossEarnings || 0;
+                                                          
+                                                          // Speed: km/h (assuming dist is km)
+                                                          const speed = dur > 0 ? (dist / (dur / 60)) : 0;
+                                                          
+                                                          // Earn per km
+                                                          const earnPerKm = dist > 0 ? (earn / dist) : 0;
+                                                          
+                                                          // Earn per min
+                                                          const earnPerMin = dur > 0 ? (earn / dur) : 0;
+                                                          
+                                                          // Efficiency
+                                                          const eff = avgDist > 0 ? (dist / avgDist) : 0;
+                                                          
+                                                          return (
+                                                              <TableRow key={trip.id}>
+                                                                  <TableCell className="whitespace-nowrap">{date.toLocaleDateString()}</TableCell>
+                                                                  <TableCell>{dayOfWeek}</TableCell>
+                                                                  <TableCell>
+                                                                    <Badge variant="outline" className="font-normal">{timeOfDay}</Badge>
+                                                                  </TableCell>
+                                                                  <TableCell className="text-right">{speed.toFixed(1)} km/h</TableCell>
+                                                                  <TableCell className="text-right">{earnPerKm === 0 ? '-' : `$${earnPerKm.toFixed(2)}`}</TableCell>
+                                                                  <TableCell className="text-right">{earnPerMin === 0 ? '-' : `$${earnPerMin.toFixed(2)}`}</TableCell>
+                                                                  <TableCell className="text-right">{eff.toFixed(2)}x</TableCell>
+                                                              </TableRow>
+                                                          );
+                                                      });
+                                                  })()}
+                                              </TableBody>
+                                          </Table>
+                                      </div>
+                                  )}
+                              </CardContent>
+                          </Card>
+                      </TabsContent>
                       
                       <TabsContent value="trips" className="space-y-4">
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
@@ -759,43 +845,33 @@ export function ImportsPage() {
                         <Table>
                             <TableHeader className="bg-slate-50 sticky top-0">
                                 <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Platform</TableHead>
-                                    <TableHead>Driver</TableHead>
-                                    <TableHead>From</TableHead>
-                                    <TableHead>Earnings</TableHead>
-                                    <TableHead>Cash</TableHead>
-                                    <TableHead>Net</TableHead>
+                                    <TableHead>Trip ID</TableHead>
+                                    <TableHead>Date & Time</TableHead>
+                                    <TableHead>Duration</TableHead>
+                                    <TableHead>Distance</TableHead>
                                     <TableHead>Status</TableHead>
+                                    <TableHead>Pickup</TableHead>
+                                    <TableHead>Dropoff</TableHead>
+                                    <TableHead>Service</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {processedData.slice(0, 100).map(trip => (
                                     <TableRow key={trip.id}>
-                                        <TableCell className="whitespace-nowrap text-xs">
-                                            {new Date(trip.date).toLocaleDateString()}
+                                        <TableCell className="font-mono text-xs text-slate-500">
+                                            {trip.id.substring(0, 8)}...
                                         </TableCell>
-                                        <TableCell>{trip.platform}</TableCell>
-                                        <TableCell className="text-xs truncate max-w-[100px]" title={trip.driverName || trip.driverId}>
-                                            {trip.driverName || trip.driverId}
-                                        </TableCell>
-                                        <TableCell className="text-xs truncate max-w-[150px]" title={trip.pickupLocation}>{trip.pickupLocation || '-'}</TableCell>
-                                        
-                                        {/* Phase 3: Financial Columns */}
-                                        <TableCell className="font-medium text-emerald-600">
-                                            {trip.amount !== undefined ? `$${trip.amount.toFixed(2)}` : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-slate-500">
-                                            {trip.cashCollected && trip.cashCollected > 0 ? `$${trip.cashCollected.toFixed(2)}` : '-'}
-                                        </TableCell>
-                                        <TableCell className="font-bold">
-                                            {trip.netPayout !== undefined ? (
-                                                <span className={trip.netPayout < 0 ? 'text-red-600' : 'text-slate-900'}>
-                                                    ${trip.netPayout.toFixed(2)}
+                                        <TableCell className="text-xs">
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">{new Date(trip.requestTime || trip.date).toLocaleDateString()}</span>
+                                                <span className="text-slate-500">
+                                                    {new Date(trip.requestTime || trip.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                    {trip.dropoffTime && ` - ${new Date(trip.dropoffTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
                                                 </span>
-                                            ) : '-'}
+                                            </div>
                                         </TableCell>
-
+                                        <TableCell className="text-xs">{trip.duration ? `${Math.round(trip.duration)} min` : '-'}</TableCell>
+                                        <TableCell className="text-xs">{trip.distance ? `${trip.distance.toFixed(1)} km` : '-'}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className={
                                                 trip.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
@@ -803,6 +879,90 @@ export function ImportsPage() {
                                             }>
                                                 {trip.status}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-xs truncate max-w-[150px]" title={trip.pickupLocation}>
+                                            {trip.pickupArea || trip.pickupLocation || '-'}
+                                        </TableCell>
+                                        <TableCell className="text-xs truncate max-w-[150px]" title={trip.dropoffLocation}>
+                                            {trip.dropoffArea || trip.dropoffLocation || '-'}
+                                        </TableCell>
+                                        <TableCell className="text-xs">{trip.serviceType || 'UberX'}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="financials" className="space-y-4">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {uploadedFiles.filter(f => f.type === 'uber_payment').map(f => (
+                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                            {f.name}
+                                        </Badge>
+                                    ))}
+                                    {uploadedFiles.filter(f => f.type === 'uber_payment').length === 0 && (
+                                        <span className="text-xs text-slate-400 italic">No payment files linked</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-[500px] overflow-auto border rounded-md">
+                        <Table>
+                            <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                                <TableRow>
+                                    <TableHead>Trip ID</TableHead>
+                                    <TableHead className="text-right">Gross Earnings</TableHead>
+                                    <TableHead className="text-right">Base Fare</TableHead>
+                                    <TableHead className="text-right">Tips</TableHead>
+                                    <TableHead className="text-right">Wait Time</TableHead>
+                                    <TableHead className="text-right">Surge</TableHead>
+                                    <TableHead className="text-right">Airport Fees</TableHead>
+                                    <TableHead className="text-right">Time at Stop</TableHead>
+                                    <TableHead className="text-right">Taxes</TableHead>
+                                    <TableHead className="text-right">Toll Charges</TableHead>
+                                    <TableHead className="text-right font-bold">Net to Driver</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {processedData.slice(0, 100).map(trip => (
+                                    <TableRow key={trip.id}>
+                                        <TableCell className="font-mono text-xs text-slate-500">
+                                            {trip.id.substring(0, 8)}...
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium text-xs">
+                                            {trip.grossEarnings !== undefined ? trip.grossEarnings.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.fareBreakdown?.baseFare ? trip.fareBreakdown.baseFare.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.fareBreakdown?.tips ? trip.fareBreakdown.tips.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.fareBreakdown?.waitTime ? trip.fareBreakdown.waitTime.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.fareBreakdown?.surge ? trip.fareBreakdown.surge.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.fareBreakdown?.airportFees ? trip.fareBreakdown.airportFees.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.fareBreakdown?.timeAtStop ? trip.fareBreakdown.timeAtStop.toFixed(2) : '-'}
+                                        </TableCell>
+                                         <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.fareBreakdown?.taxes ? trip.fareBreakdown.taxes.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-500 text-xs">
+                                            {trip.tollCharges ? trip.tollCharges.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right font-bold text-emerald-600 text-xs">
+                                            {trip.netToDriver !== undefined ? trip.netToDriver.toFixed(2) : '-'}
                                         </TableCell>
                                     </TableRow>
                                 ))}
