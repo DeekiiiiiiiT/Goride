@@ -19,9 +19,23 @@ import {
   Zap,
   ThumbsUp,
   ThumbsDown,
-  Navigation
+  Navigation,
+  FileText,
+  Upload,
+  Search,
+  Eye,
+  Filter
 } from 'lucide-react';
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "../ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Progress } from "../ui/progress";
@@ -51,15 +65,40 @@ import { cn } from "../ui/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 
+interface DriverDocument {
+  id: string;
+  name: string;
+  type: 'License' | 'Insurance' | 'Registration' | 'Background Check';
+  status: 'Verified' | 'Pending' | 'Expired' | 'Rejected';
+  expiryDate: string;
+  uploadDate: string;
+}
+
+const MOCK_DOCUMENTS: DriverDocument[] = [
+  { id: '1', name: 'Driver License (Front)', type: 'License', status: 'Verified', expiryDate: '2025-10-15', uploadDate: '2023-10-12' },
+  { id: '2', name: 'Vehicle Insurance Policy', type: 'Insurance', status: 'Verified', expiryDate: '2024-12-31', uploadDate: '2023-10-12' },
+  { id: '3', name: 'Vehicle Registration', type: 'Registration', status: 'Expired', expiryDate: '2023-11-30', uploadDate: '2022-11-01' },
+  { id: '4', name: 'Background Check Certificate', type: 'Background Check', status: 'Pending', expiryDate: '2024-06-15', uploadDate: '2023-12-01' },
+];
+
 interface DriverDetailProps {
   driverId: string;
   driverName: string;
   trips: Trip[];
   onBack: () => void;
+  fleetStats?: {
+    avgEarningsPerTrip: number;
+    avgAcceptanceRate: number;
+    avgRating: number;
+    avgWeeklyEarnings: number;
+  };
 }
 
-export function DriverDetail({ driverId, driverName, trips, onBack }: DriverDetailProps) {
+export function DriverDetail({ driverId, driverName, trips, onBack, fleetStats }: DriverDetailProps) {
   const [activeTab, setActiveTab] = useState("overview");
+  const [tripSearch, setTripSearch] = useState("");
+  const [tripPage, setTripPage] = useState(1);
+  const tripsPerPage = 10;
   
   // Date Range State (Default: Last 7 Days)
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -323,6 +362,8 @@ export function DriverDetail({ driverId, driverName, trips, onBack }: DriverDeta
             <TabsTrigger value="financial">Financials</TabsTrigger>
             <TabsTrigger value="operations">Efficiency</TabsTrigger>
             <TabsTrigger value="quality">Service Quality</TabsTrigger>
+            <TabsTrigger value="trips">Trip History</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
          </TabsList>
 
          <TabsContent value="overview" className="space-y-6">
@@ -355,6 +396,83 @@ export function DriverDetail({ driverId, driverName, trips, onBack }: DriverDeta
                   icon={<Star className="h-4 w-4 text-slate-500" />}
                />
             </div>
+
+            {/* Benchmarking Section */}
+            {fleetStats && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-indigo-600" />
+                            Performance Benchmarks
+                        </CardTitle>
+                        <CardDescription>Comparing {driverName} against the fleet average.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Earnings Comparison */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-end">
+                                    <span className="text-sm font-medium text-slate-700">Earnings per Trip</span>
+                                    <div className="text-right">
+                                        <span className="text-lg font-bold">${(metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)).toFixed(2)}</span>
+                                        <span className="text-xs text-slate-500 ml-2">vs ${fleetStats.avgEarningsPerTrip.toFixed(2)} avg</span>
+                                    </div>
+                                </div>
+                                <div className="relative h-4 bg-slate-100 rounded-full overflow-hidden">
+                                    {/* Fleet Avg Marker */}
+                                    <div 
+                                        className="absolute top-0 bottom-0 w-1 bg-slate-400 z-10" 
+                                        style={{ left: '60%' }} 
+                                    />
+                                    {/* Driver Bar */}
+                                    <div 
+                                        className={cn("h-full rounded-full", 
+                                            (metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)) >= fleetStats.avgEarningsPerTrip 
+                                                ? "bg-emerald-500" 
+                                                : "bg-amber-500"
+                                        )}
+                                        style={{ width: `${Math.min(100, ((metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)) / (fleetStats.avgEarningsPerTrip * 1.5)) * 100)}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                    {(metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)) >= fleetStats.avgEarningsPerTrip 
+                                        ? "Performing above fleet average." 
+                                        : "Performing below fleet average."}
+                                </p>
+                            </div>
+
+                            {/* Acceptance Rate Comparison */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-end">
+                                    <span className="text-sm font-medium text-slate-700">Acceptance Rate</span>
+                                    <div className="text-right">
+                                        <span className="text-lg font-bold">{metrics.completionRate.toFixed(0)}%</span>
+                                        <span className="text-xs text-slate-500 ml-2">vs {fleetStats.avgAcceptanceRate}% avg</span>
+                                    </div>
+                                </div>
+                                <div className="relative h-4 bg-slate-100 rounded-full overflow-hidden">
+                                     {/* Fleet Avg Marker */}
+                                     <div 
+                                        className="absolute top-0 bottom-0 w-1 bg-slate-400 z-10" 
+                                        style={{ left: `${fleetStats.avgAcceptanceRate}%` }} 
+                                    />
+                                    <div 
+                                        className={cn("h-full rounded-full", 
+                                            metrics.completionRate >= fleetStats.avgAcceptanceRate ? "bg-emerald-500" : "bg-rose-500"
+                                        )}
+                                        style={{ width: `${metrics.completionRate}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                     {metrics.completionRate >= fleetStats.avgAcceptanceRate 
+                                        ? "Excellent reliability." 
+                                        : "Acceptance rate is critical."}
+                                </p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                <Card className="lg:col-span-2">
@@ -550,6 +668,163 @@ export function DriverDetail({ driverId, driverName, trips, onBack }: DriverDeta
                    )}
                 </CardContent>
              </Card>
+         </TabsContent>
+
+         <TabsContent value="trips" className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Trip History</CardTitle>
+                    <CardDescription>View and manage full trip logs.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                        <div className="relative flex-1 max-w-sm">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Input 
+                                placeholder="Search trip ID, date..." 
+                                className="pl-9" 
+                                value={tripSearch}
+                                onChange={(e) => setTripSearch(e.target.value)}
+                            />
+                        </div>
+                        <Button variant="outline" size="sm">
+                            <Filter className="h-4 w-4 mr-2" /> Filter
+                        </Button>
+                    </div>
+
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Date & Time</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Distance</TableHead>
+                                <TableHead>Duration</TableHead>
+                                <TableHead>Earnings</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {trips
+                                .filter(t => 
+                                    t.id.includes(tripSearch) || 
+                                    t.date.includes(tripSearch) ||
+                                    (t.status || '').toLowerCase().includes(tripSearch.toLowerCase())
+                                )
+                                .slice((tripPage - 1) * tripsPerPage, tripPage * tripsPerPage)
+                                .map((trip) => (
+                                <TableRow key={trip.id}>
+                                    <TableCell>
+                                        <div className="font-medium">{format(new Date(trip.date), 'MMM d, yyyy')}</div>
+                                        <div className="text-xs text-slate-500">{format(new Date(trip.date), 'h:mm a')}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={
+                                            trip.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            trip.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                            'bg-slate-50 text-slate-700'
+                                        }>
+                                            {trip.status}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>{trip.distance ? `${trip.distance.toFixed(1)} km` : '-'}</TableCell>
+                                    <TableCell>{trip.duration ? `${trip.duration.toFixed(0)} min` : '-'}</TableCell>
+                                    <TableCell className="font-medium">${trip.amount.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                            <Eye className="h-4 w-4 text-slate-400" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {trips.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                        No trips found.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                    
+                    {/* Simple Pagination */}
+                    <div className="flex items-center justify-end space-x-2 py-4">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTripPage(p => Math.max(1, p - 1))}
+                            disabled={tripPage === 1}
+                        >
+                            Previous
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTripPage(p => p + 1)}
+                            disabled={tripPage * tripsPerPage >= trips.length}
+                        >
+                            Next
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+         </TabsContent>
+
+         <TabsContent value="documents" className="space-y-6">
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                        <CardTitle>Driver Documents</CardTitle>
+                        <CardDescription>Manage licenses, insurance, and permits.</CardDescription>
+                    </div>
+                    <Button size="sm"><Upload className="h-4 w-4 mr-2" /> Upload Document</Button>
+                </CardHeader>
+                <CardContent>
+                     <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Document Name</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Expiry Date</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {MOCK_DOCUMENTS.map((doc) => (
+                                <TableRow key={doc.id}>
+                                    <TableCell className="font-medium">
+                                        <div className="flex items-center gap-2">
+                                            <FileText className="h-4 w-4 text-slate-400" />
+                                            {doc.name}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>{doc.type}</TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={
+                                            doc.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            doc.status === 'Expired' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                            doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                            'bg-slate-50 text-slate-700'
+                                        }>
+                                            {doc.status}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className={
+                                        new Date(doc.expiryDate) < new Date() ? 'text-rose-600 font-medium' : ''
+                                    }>
+                                        {format(new Date(doc.expiryDate), 'MMM d, yyyy')}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                            <Eye className="h-4 w-4 text-slate-400" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                     </Table>
+                </CardContent>
+            </Card>
          </TabsContent>
       </Tabs>
     </div>

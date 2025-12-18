@@ -78,6 +78,7 @@ export function DriversPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [tierFilter, setTierFilter] = useState<string>('all');
+  const [performanceFilter, setPerformanceFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
 
@@ -189,10 +190,66 @@ export function DriversPage() {
           
           const matchesStatus = statusFilter === 'all' || driver.status.toLowerCase() === statusFilter.toLowerCase();
           const matchesTier = tierFilter === 'all' || driver.tier.toLowerCase() === tierFilter.toLowerCase();
+          
+          let matchesPerformance = true;
+          if (performanceFilter === 'high') {
+             matchesPerformance = driver.acceptanceRate >= 90 && (driver.tier === 'Gold' || driver.tier === 'Platinum');
+          } else if (performanceFilter === 'risk') {
+             matchesPerformance = driver.acceptanceRate < 80;
+          }
 
-          return matchesSearch && matchesStatus && matchesTier;
+          return matchesSearch && matchesStatus && matchesTier && matchesPerformance;
       });
-  }, [drivers, searchQuery, statusFilter, tierFilter]);
+  }, [drivers, searchQuery, statusFilter, tierFilter, performanceFilter]);
+
+  // Export Function
+  const handleExport = () => {
+    const headers = ['ID', 'Name', 'Status', 'Vehicle', 'Phone', 'Email', 'Total Trips', 'Total Earnings', 'Acceptance Rate', 'Tier'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredDrivers.map(d => [
+        d.id,
+        `"${d.name}"`,
+        d.status,
+        d.vehicle,
+        d.phone,
+        d.email,
+        d.totalTrips,
+        d.totalEarnings.toFixed(2),
+        `${d.acceptanceRate}%`,
+        d.tier
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'drivers_export.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // Calculate Fleet Averages
+  const fleetStats = useMemo(() => {
+    if (drivers.length === 0) return undefined;
+    
+    const totalEarnings = drivers.reduce((sum, d) => sum + d.totalEarnings, 0);
+    const totalTrips = drivers.reduce((sum, d) => sum + d.totalTrips, 0);
+    const avgAcceptance = drivers.reduce((sum, d) => sum + d.acceptanceRate, 0) / drivers.length;
+    
+    // Simplistic calculation for demo purposes
+    return {
+        avgEarningsPerTrip: totalTrips > 0 ? totalEarnings / totalTrips : 0,
+        avgAcceptanceRate: Math.round(avgAcceptance),
+        avgRating: 4.8, // Hardcoded for now as we don't have rating in DriverProfile yet
+        avgWeeklyEarnings: totalEarnings / drivers.length // Assuming totalEarnings is lifetime, this is a rough proxy for "average driver earnings"
+    };
+  }, [drivers]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredDrivers.length / rowsPerPage);
@@ -228,6 +285,7 @@ export function DriversPage() {
         driverName={selectedDriver?.name || 'Unknown'} 
         trips={driverTrips}
         onBack={() => setSelectedDriverId(null)}
+        fleetStats={fleetStats}
       />
     );
   }
@@ -278,6 +336,27 @@ export function DriversPage() {
                     <SelectItem value="bronze">Bronze</SelectItem>
                   </SelectContent>
                 </Select>
+
+                <Select value={performanceFilter} onValueChange={setPerformanceFilter}>
+                  <SelectTrigger className="w-[140px] rounded-full border-dashed">
+                    <SelectValue placeholder="Performance" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Performance</SelectItem>
+                    <SelectItem value="high">High Performers</SelectItem>
+                    <SelectItem value="risk">At Risk</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="ml-auto md:ml-2 rounded-full"
+                    onClick={handleExport}
+                >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                </Button>
             </div>
 
             {/* Search (Right) */}
