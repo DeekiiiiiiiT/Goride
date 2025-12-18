@@ -131,12 +131,21 @@ export function validateFile(file: FileData): string[] {
     return errors;
 }
 
+// Helper for safe date parsing
+const safeDateISO = (input: any): string | undefined => {
+    if (!input) return undefined;
+    const d = new Date(input);
+    if (isNaN(d.getTime())) return undefined;
+    return d.toISOString();
+};
+
 // --- PHASE 1: DATE PROCESSING (Step 1.4) ---
 export function extractReportDate(file: FileData): string | undefined {
     // 1. Try Filename (e.g. "report-2023-10-01.csv")
     const filenameDateMatch = file.name.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
     if (filenameDateMatch) {
-        return new Date(`${filenameDateMatch[1]}-${filenameDateMatch[2]}-${filenameDateMatch[3]}`).toISOString();
+        const d = safeDateISO(`${filenameDateMatch[1]}-${filenameDateMatch[2]}-${filenameDateMatch[3]}`);
+        if (d) return d;
     }
 
     // 2. Try Headers (e.g. "Start Date: 2023-10-01" often in meta lines before header, but here we only have headers/rows)
@@ -152,8 +161,14 @@ export function extractReportDate(file: FileData): string | undefined {
         }
         
         // Specific strategies per file type
-        if (file.type === 'uber_trip' && firstRow['Trip request time']) return new Date(firstRow['Trip request time']).toISOString();
-        if (file.type === 'uber_payment_org' && firstRow['Period Start']) return new Date(firstRow['Period Start']).toISOString();
+        if (file.type === 'uber_trip' && firstRow['Trip request time']) {
+            const d = safeDateISO(firstRow['Trip request time']);
+            if (d) return d;
+        }
+        if (file.type === 'uber_payment_org' && firstRow['Period Start']) {
+            const d = safeDateISO(firstRow['Period Start']);
+            if (d) return d;
+        }
     }
 
     return undefined; // Default to "Upload Date" later if undefined

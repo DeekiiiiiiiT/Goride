@@ -590,4 +590,24 @@ app.post("/make-server-37f42386/budgets", async (c) => {
   }
 });
 
+// General Preferences Endpoints
+app.get("/make-server-37f42386/settings/preferences", async (c) => {
+  try {
+    const preferences = await kv.get("preferences:general");
+    return c.json(preferences || {});
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/settings/preferences", async (c) => {
+  try {
+    const preferences = await c.req.json();
+    await kv.set("preferences:general", preferences);
+    return c.json({ success: true, data: preferences });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

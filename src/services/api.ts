@@ -259,5 +259,26 @@ export const api = {
       });
       if (!response.ok) throw new Error("Failed to save budget");
       return response.json();
+  },
+
+  async getPreferences() {
+    const response = await fetchWithRetry(`${BASE_URL}/settings/preferences`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch preferences");
+    return response.json();
+  },
+
+  async savePreferences(preferences: any) {
+    const response = await fetchWithRetry(`${BASE_URL}/settings/preferences`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(preferences)
+    });
+    if (!response.ok) throw new Error("Failed to save preferences");
+    return response.json();
   }
 };

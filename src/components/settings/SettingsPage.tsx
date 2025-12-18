@@ -115,43 +115,73 @@ export function SettingsPage() {
 
 function GeneralPanel() {
   const [isResetting, setIsResetting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [currency, setCurrency] = useState('usd');
   const [timezone, setTimezone] = useState('pst');
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
-    // Load saved preferences
-    const savedCurrency = localStorage.getItem('preference_currency') || 'usd';
-    const savedTimezone = localStorage.getItem('preference_timezone') || 'pst';
-    const savedDarkMode = localStorage.getItem('preference_dark_mode') === 'true';
-
-    setCurrency(savedCurrency);
-    setTimezone(savedTimezone);
-    setDarkMode(savedDarkMode);
-    
-    // Sync dark mode class
-    if (savedDarkMode) {
-        document.documentElement.classList.add('dark');
-    } else {
-        document.documentElement.classList.remove('dark');
-    }
+    loadPreferences();
   }, []);
 
-  const handleCurrencyChange = (value: string) => {
-    setCurrency(value);
-    localStorage.setItem('preference_currency', value);
-    toast.success('Currency preference saved');
+  const loadPreferences = async () => {
+      try {
+          const prefs = await api.getPreferences();
+          if (prefs && Object.keys(prefs).length > 0) {
+              if (prefs.currency) setCurrency(prefs.currency);
+              if (prefs.timezone) setTimezone(prefs.timezone);
+              if (prefs.darkMode !== undefined) {
+                  setDarkMode(prefs.darkMode);
+                  if (prefs.darkMode) {
+                      document.documentElement.classList.add('dark');
+                  } else {
+                      document.documentElement.classList.remove('dark');
+                  }
+              }
+          } else {
+              // Fallback to localStorage if no backend prefs
+              const savedCurrency = localStorage.getItem('preference_currency');
+              const savedTimezone = localStorage.getItem('preference_timezone');
+              const savedDarkMode = localStorage.getItem('preference_dark_mode') === 'true';
+
+              if (savedCurrency) setCurrency(savedCurrency);
+              if (savedTimezone) setTimezone(savedTimezone);
+              setDarkMode(savedDarkMode);
+              
+              if (savedDarkMode) {
+                  document.documentElement.classList.add('dark');
+              }
+          }
+      } catch (err) {
+          console.error("Failed to load preferences", err);
+      }
   };
 
-  const handleTimezoneChange = (value: string) => {
-    setTimezone(value);
-    localStorage.setItem('preference_timezone', value);
-    toast.success('Timezone preference saved');
+  const handleSavePreferences = async () => {
+    setIsSaving(true);
+    try {
+        await api.savePreferences({
+            currency,
+            timezone,
+            darkMode
+        });
+        
+        // Also update local storage for redundancy/speed
+        localStorage.setItem('preference_currency', currency);
+        localStorage.setItem('preference_timezone', timezone);
+        localStorage.setItem('preference_dark_mode', String(darkMode));
+
+        toast.success("Preferences saved successfully");
+    } catch (err) {
+        console.error(err);
+        toast.error("Failed to save preferences");
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const handleDarkModeChange = (checked: boolean) => {
     setDarkMode(checked);
-    localStorage.setItem('preference_dark_mode', String(checked));
     if (checked) {
       document.documentElement.classList.add('dark');
     } else {
@@ -185,7 +215,7 @@ function GeneralPanel() {
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="space-y-2">
                 <Label>Currency</Label>
-                <Select value={currency} onValueChange={handleCurrencyChange}>
+                <Select value={currency} onValueChange={setCurrency}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select currency" />
                   </SelectTrigger>
@@ -199,7 +229,7 @@ function GeneralPanel() {
              </div>
              <div className="space-y-2">
                 <Label>Timezone</Label>
-                <Select value={timezone} onValueChange={handleTimezoneChange}>
+                <Select value={timezone} onValueChange={setTimezone}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select timezone" />
                   </SelectTrigger>
@@ -220,6 +250,12 @@ function GeneralPanel() {
               <Switch checked={darkMode} onCheckedChange={handleDarkModeChange} />
            </div>
         </CardContent>
+        <CardFooter className="bg-slate-50 dark:bg-slate-900 border-t px-6 py-4 flex justify-end">
+            <Button onClick={handleSavePreferences} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Save Changes
+            </Button>
+        </CardFooter>
       </Card>
 
       <Card className="border-rose-200 shadow-sm">
