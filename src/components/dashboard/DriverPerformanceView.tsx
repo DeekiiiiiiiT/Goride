@@ -35,6 +35,7 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
     const stats: Record<string, { 
       id: string, 
       revenue: number, 
+      cashCollected: number,
       trips: number, 
       platforms: Set<string>,
       lastActive: Date,
@@ -47,6 +48,7 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
         stats[dm.driverId] = {
             id: dm.driverId,
             revenue: dm.totalEarnings || 0,
+            cashCollected: dm.cashCollected || 0,
             trips: dm.tripsCompleted || 0,
             platforms: new Set(),
             lastActive: new Date(dm.periodEnd || 0),
@@ -63,6 +65,7 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
         stats[t.driverId] = { 
           id: t.driverId, 
           revenue: 0, 
+          cashCollected: 0,
           trips: 0, 
           platforms: new Set(),
           lastActive: new Date(0),
@@ -81,6 +84,7 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
       // Override revenue calc from trips to be safe
       if (driverMetrics.length === 0) {
           driver.revenue += t.amount;
+          driver.cashCollected += (t.cashCollected || 0);
           driver.trips += 1;
       }
       
@@ -142,6 +146,7 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
 
       // Fallback calculations if metrics missing
       const earnings = metrics?.totalEarnings ?? driverTrips.reduce((acc, t) => acc + (t.status === 'Completed' ? t.amount : 0), 0);
+      const cashCollected = metrics?.cashCollected ?? driverTrips.reduce((acc, t) => acc + (t.status === 'Completed' ? (t.cashCollected || 0) : 0), 0);
       const tripsCount = metrics?.tripsCompleted ?? driverTrips.length;
       
       return {
@@ -150,6 +155,7 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
           tier: metrics?.tier || 'Bronze',
           score: metrics?.score || 0,
           earnings,
+          cashCollected,
           tripsCount,
           historyChart,
           acceptance: (metrics?.acceptanceRate || 0) * 100,
@@ -189,7 +195,8 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
                   <MetricCard title="Cancellation" value={`${selectedDriverData.cancellation.toFixed(1)}%`} icon={<Users className="h-4 w-4" />} subtext="Target: <5%" />
                   <MetricCard title="Completion" value={`${selectedDriverData.completion.toFixed(0)}%`} icon={<Award className="h-4 w-4" />} subtext="Target: 95%" />
                   <MetricCard title="Rating" value={selectedDriverData.rating.toFixed(2)} icon={<Award className="h-4 w-4" />} subtext="Target: 4.8" />
-                  <MetricCard title="Earnings Today" value={`$${selectedDriverData.earnings.toFixed(0)}`} icon={<TrendingUp className="h-4 w-4" />} subtext="Daily Avg" />
+                  <MetricCard title="Total Earnings" value={`$${selectedDriverData.earnings.toFixed(0)}`} icon={<TrendingUp className="h-4 w-4" />} subtext="Gross Revenue" />
+                  <MetricCard title="Cash Exposure" value={`$${selectedDriverData.cashCollected.toFixed(0)}`} icon={<Zap className="h-4 w-4 text-orange-500" />} subtext="Needs Deposit" />
                   <MetricCard title="Utilization" value={`${selectedDriverData.utilization.toFixed(0)}%`} icon={<Zap className="h-4 w-4" />} subtext="Target: 60%" />
               </div>
 
@@ -390,6 +397,7 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
                 <TableRow>
                   <TableHead className="w-[100px]">Driver</TableHead>
                   <TableHead>Total Revenue</TableHead>
+                  <TableHead>Cash Held</TableHead>
                   <TableHead>Trips</TableHead>
                   <TableHead>Avg / Trip</TableHead>
                   <TableHead>Tier</TableHead>
@@ -408,6 +416,9 @@ export function DriverPerformanceView({ trips, driverMetrics = [] }: DriverPerfo
                         <span className="truncate max-w-[120px]" title={driver.id}>{driver.id}</span>
                     </TableCell>
                     <TableCell>${driver.revenue.toFixed(2)}</TableCell>
+                    <TableCell className={driver.cashCollected > 100 ? "text-orange-600 font-medium" : ""}>
+                        ${driver.cashCollected.toFixed(2)}
+                    </TableCell>
                     <TableCell>{driver.trips}</TableCell>
                     <TableCell>${driver.avgPerTrip.toFixed(2)}</TableCell>
                     <TableCell>

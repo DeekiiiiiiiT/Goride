@@ -113,16 +113,8 @@ export function Dashboard() {
 
       // 3. Generate Real-time Alerts (Phase 4 Engine)
       const realAlerts = AlertEngine.generateDashboardAlerts(fetchedDriverMetrics, fetchedVehicleMetrics, fetchedTrips);
-      setFleetAlerts(realAlerts);
-
-      // Fetch Metrics & Rules (for Phase 8 Alerts)
-      let rules = [];
       
-      try {
-          rules = await api.getAlertRules();
-      } catch (e) { console.error("Failed to load rules"); }
-
-      // Fetch Notifications (API)
+      // Fetch Notifications (API) - Phase 8 Integration
       let apiNotifications: Notification[] = [];
       try {
           apiNotifications = await api.getNotifications();
@@ -130,8 +122,30 @@ export function Dashboard() {
            console.error("Failed to load notifications", notifErr);
       }
       
-      // --- PHASE 8.2: GENERATE REAL-TIME ALERTS ---
-      // Run local engine to supplement API notifications
+      // Merge AI Insights (Notifications) into Dashboard Alerts
+      const aiAlerts: DashboardAlert[] = apiNotifications.map(n => ({
+          id: n.id,
+          definitionId: 'ai_insight',
+          timestamp: n.timestamp,
+          severity: n.severity === 'critical' ? 'critical' : n.severity === 'warning' ? 'high' : 'low',
+          title: n.title,
+          description: n.message,
+          status: 'new',
+          active: true
+      }));
+      
+      const combinedAlerts = [...realAlerts, ...aiAlerts].sort((a,b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      setFleetAlerts(combinedAlerts);
+
+      // Fetch Rules (for Phase 8 Alerts)
+      let rules = [];
+      try {
+          rules = await api.getAlertRules();
+      } catch (e) { console.error("Failed to load rules"); }
+
+      // Update Notifications State (Executive View)
       if (fetchedTrips.length > 0) {
           const localAlerts = AlertEngine.checkRules(rules, fetchedDriverMetrics, fetchedTrips);
           const allNotifications = [...localAlerts, ...apiNotifications].sort((a,b) => 

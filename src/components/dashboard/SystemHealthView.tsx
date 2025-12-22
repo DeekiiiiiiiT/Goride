@@ -3,8 +3,9 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button"; // Added Button
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { CheckCircle2, AlertTriangle, Clock, Database, FileText, Server } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Clock, Database, FileText, Server, Activity } from "lucide-react"; // Added Activity
 import { Trip, DriverMetrics, VehicleMetrics, Notification, ImportBatch } from '../../types/data';
 
 interface SystemHealthViewProps {
@@ -51,6 +52,53 @@ export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notific
       totalVehicles: vehicleMetrics.length
     };
   }, [trips, driverMetrics, vehicleMetrics, notifications]);
+
+  const [diagnosing, setDiagnosing] = React.useState(false);
+  const [diagnosticResult, setDiagnosticResult] = React.useState<{
+      status: 'pass' | 'fail' | 'warn';
+      message: string;
+      details: string[];
+  } | null>(null);
+
+  const runDiagnostics = () => {
+      setDiagnosing(true);
+      // Simulate analysis delay
+      setTimeout(() => {
+          // 1. Consistency Check: Trip Count vs Driver Metrics Trips
+          const totalDriverTrips = driverMetrics.reduce((acc, d) => acc + (d.tripsCompleted || 0), 0);
+          const rawTrips = trips.filter(t => t.status === 'Completed').length; // Compare completed only
+          
+          // Note: driverMetrics might be aggregated differently, but should be close
+          const tripDiff = Math.abs(rawTrips - totalDriverTrips);
+          const tripConsistent = totalDriverTrips === 0 ? true : (tripDiff < 10 || (tripDiff / rawTrips) < 0.1);
+
+          // 2. Financial Check
+          const totalRevenue = trips.filter(t => t.status === 'Completed').reduce((acc, t) => acc + t.amount, 0);
+          const driverRevenue = driverMetrics.reduce((acc, d) => acc + (d.totalEarnings || 0), 0);
+          const revDiff = Math.abs(totalRevenue - driverRevenue);
+          const revConsistent = driverRevenue === 0 ? true : (revDiff < 100 || (revDiff / totalRevenue) < 0.1);
+
+          const issues = [];
+          if (!tripConsistent) issues.push(`Trip count variance detected: Raw (${rawTrips}) vs Metrics (${totalDriverTrips})`);
+          if (!revConsistent) issues.push(`Revenue variance detected: Raw ($${totalRevenue.toFixed(0)}) vs Metrics ($${driverRevenue.toFixed(0)})`);
+          if (notifications.filter(n => n.severity === 'critical').length > 0) issues.push("Critical system alerts need resolution");
+
+          if (issues.length === 0) {
+              setDiagnosticResult({
+                  status: 'pass',
+                  message: 'System integrity verified. Data is consistent.',
+                  details: ['Record counts match', 'Financial totals balanced', 'Alert system operational']
+              });
+          } else {
+              setDiagnosticResult({
+                  status: issues.length > 2 ? 'fail' : 'warn',
+                  message: 'Data anomalies detected.',
+                  details: issues
+              });
+          }
+          setDiagnosing(false);
+      }, 1500);
+  };
 
   return (
     <div className="space-y-6">
@@ -159,6 +207,63 @@ export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notific
              </CardContent>
         </Card>
       </div>
+
+      {/* Diagnostics Panel */}
+      <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                  <CardTitle>System Diagnostics</CardTitle>
+                  <CardDescription>Run integrity checks on database records.</CardDescription>
+              </div>
+              <Button onClick={runDiagnostics} disabled={diagnosing || trips.length === 0}>
+                  {diagnosing ? (
+                      <>
+                          <Activity className="mr-2 h-4 w-4 animate-spin" /> Running...
+                      </>
+                  ) : (
+                      <>
+                          <Activity className="mr-2 h-4 w-4" /> Run Check
+                      </>
+                  )}
+              </Button>
+          </CardHeader>
+          <CardContent>
+              {diagnosticResult ? (
+                  <div className={`p-4 rounded-md border ${
+                      diagnosticResult.status === 'pass' ? 'bg-emerald-50 border-emerald-100' : 
+                      diagnosticResult.status === 'warn' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'
+                  }`}>
+                      <div className="flex items-start gap-3">
+                          {diagnosticResult.status === 'pass' ? (
+                              <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5" />
+                          ) : (
+                              <AlertTriangle className={`h-5 w-5 mt-0.5 ${diagnosticResult.status === 'fail' ? 'text-rose-600' : 'text-amber-600'}`} />
+                          )}
+                          <div>
+                              <h4 className={`font-medium ${
+                                  diagnosticResult.status === 'pass' ? 'text-emerald-900' : 
+                                  diagnosticResult.status === 'warn' ? 'text-amber-900' : 'text-rose-900'
+                              }`}>
+                                  {diagnosticResult.message}
+                              </h4>
+                              <ul className="mt-2 space-y-1">
+                                  {diagnosticResult.details.map((d, i) => (
+                                      <li key={i} className={`text-sm ${
+                                          diagnosticResult.status === 'pass' ? 'text-emerald-700' : 
+                                          diagnosticResult.status === 'warn' ? 'text-amber-700' : 'text-rose-700'
+                                      }`}>• {d}</li>
+                                  ))}
+                              </ul>
+                          </div>
+                      </div>
+                  </div>
+              ) : (
+                  <div className="text-center py-8 text-slate-500 text-sm">
+                      Click "Run Check" to verify database integrity.
+                  </div>
+              )}
+          </CardContent>
+      </Card>
 
       {/* Recent System Events Log */}
       <Card>

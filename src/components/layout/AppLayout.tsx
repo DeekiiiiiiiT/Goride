@@ -163,14 +163,37 @@ function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNo
 }
 
 function AppHeader() {
+  const [fleetName, setFleetName] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    // Initial Load
+    const stored = localStorage.getItem('goride_fleet_name');
+    if (stored) setFleetName(stored);
+
+    // Listener
+    const handleUpdate = () => {
+        const updated = localStorage.getItem('goride_fleet_name');
+        if (updated) setFleetName(updated);
+    };
+
+    window.addEventListener('fleetNameUpdated', handleUpdate);
+    return () => window.removeEventListener('fleetNameUpdated', handleUpdate);
+  }, []);
+
   return (
     <header className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
-      <div className="md:hidden">
-        <SidebarTrigger />
-      </div>
-      
-      <div className="flex-1 md:flex-none">
-        {/* Placeholder for global search */}
+      <div className="flex items-center gap-4">
+        <div className="md:hidden">
+            <SidebarTrigger />
+        </div>
+        
+        {/* Phase 4: Fleet Identity Display */}
+        {fleetName && (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded-full border border-indigo-100 dark:border-indigo-800 animate-in fade-in slide-in-from-left-4 duration-500">
+                <Car className="h-3.5 w-3.5" />
+                <span className="text-sm font-medium uppercase tracking-wide">{fleetName}</span>
+            </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">

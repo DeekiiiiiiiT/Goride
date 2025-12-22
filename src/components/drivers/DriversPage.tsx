@@ -85,6 +85,7 @@ interface DriverProfile {
 export function DriversPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [manualDrivers, setManualDrivers] = useState<DriverProfile[]>([]);
+  const [importedMetrics, setImportedMetrics] = useState<import('../../types/data').DriverMetrics[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -102,12 +103,14 @@ export function DriversPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tripsData, driversData] = await Promise.all([
+        const [tripsData, driversData, metricsData] = await Promise.all([
              api.getTrips(),
-             api.getDrivers().catch(() => [])
+             api.getDrivers().catch(() => []),
+             api.getDriverMetrics().catch(() => [])
         ]);
         setTrips(tripsData);
         setManualDrivers(driversData);
+        setImportedMetrics(metricsData);
       } catch (err) {
         console.error("Failed to fetch data for drivers page", err);
       } finally {
@@ -122,6 +125,12 @@ export function DriversPage() {
     // 1. Index Manual Drivers by Name AND External IDs
     const manualDriverMap = new Map<string, DriverProfile>(); // Name -> Driver
     const externalIdMap = new Map<string, DriverProfile>();   // External ID -> Driver
+    
+    // Index Metrics for fast lookup
+    const metricsMap = new Map<string, import('../../types/data').DriverMetrics>();
+    importedMetrics.forEach(m => {
+        if (m.driverId) metricsMap.set(m.driverId, m);
+    });
 
     manualDrivers.forEach(d => {
         // Index by Name
@@ -256,14 +265,30 @@ export function DriversPage() {
         const stats = driverStats.get(driver.id)!;
         const total = stats.completed + stats.cancelled;
         
-        // Acceptance Rate
-        driver.acceptanceRate = total > 0 ? Math.round((stats.completed / total) * 100) : 100;
+        // Find matched metric from CSV
+        let metric = metricsMap.get(driver.id);
+        if (!metric && driver.uberDriverId) metric = metricsMap.get(driver.uberDriverId);
+        if (!metric && driver.inDriveDriverId) metric = metricsMap.get(driver.inDriveDriverId);
+
+        // Acceptance Rate Strategy:
+        // 1. Prefer CSV Metric (True Acceptance Rate)
+        // 2. Fallback to Calculated Completion Rate (Trip Logs)
+        if (metric && metric.acceptanceRate !== undefined) {
+             // metric.acceptanceRate is 0.0-1.0
+             driver.acceptanceRate = Math.round(metric.acceptanceRate * 100);
+        } else {
+             driver.acceptanceRate = total > 0 ? Math.round((stats.completed / total) * 100) : 100;
+        }
 
         // Tier Logic
-        if (driver.totalEarnings > 5000) driver.tier = 'Platinum';
-        else if (driver.totalEarnings > 3000) driver.tier = 'Gold';
-        else if (driver.totalEarnings > 1000) driver.tier = 'Silver';
-        else driver.tier = 'Bronze';
+        if (metric && metric.tier) {
+            driver.tier = metric.tier;
+        } else {
+            if (driver.totalEarnings > 5000) driver.tier = 'Platinum';
+            else if (driver.totalEarnings > 3000) driver.tier = 'Gold';
+            else if (driver.totalEarnings > 1000) driver.tier = 'Silver';
+            else driver.tier = 'Bronze';
+        }
 
         // Status Logic (Only override if Active)
         if (driver.status === 'Active' && driver.acceptanceRate < 70) {
@@ -276,20 +301,26 @@ export function DriversPage() {
     // Add Orphaned Manual Drivers (No trips found)
     const processedIds = new Set(processedDrivers.map(d => d.id));
     // @ts-ignore
-    const orphanedDrivers = manualDrivers.filter(d => !processedIds.has(d.id)).map(d => ({
-        ...d,
-        totalEarnings: d.totalEarnings || 0,
-        totalTrips: d.totalTrips || 0,
-        todaysEarnings: 0,
-        todaysTrips: 0,
-        acceptanceRate: 100,
-        tier: d.tier || 'Bronze',
-        status: d.status || 'Active'
-    }));
+    const orphanedDrivers = manualDrivers.filter(d => !processedIds.has(d.id)).map(d => {
+        // Try to find imported metrics for orphan
+        let metric = metricsMap.get(d.id);
+        if (!metric && d.uberDriverId) metric = metricsMap.get(d.uberDriverId);
+        
+        return {
+            ...d,
+            totalEarnings: d.totalEarnings || 0,
+            totalTrips: d.totalTrips || 0,
+            todaysEarnings: 0,
+            todaysTrips: 0,
+            acceptanceRate: metric ? Math.round(metric.acceptanceRate * 100) : 100,
+            tier: metric?.tier || d.tier || 'Bronze',
+            status: d.status || 'Active'
+        };
+    });
 
     // @ts-ignore
     return [...processedDrivers, ...orphanedDrivers];
-  }, [trips, manualDrivers]);
+  }, [trips, manualDrivers, importedMetrics]);
 
   // Apply Filters
   const filteredDrivers = useMemo(() => {
@@ -396,12 +427,20 @@ export function DriversPage() {
     // Use trips that were explicitly linked to this driver during aggregation
     const driverTrips = selectedDriver?.linkedTrips || [];
     
+    // Find relevant metrics for this driver
+    const driverMetrics = importedMetrics.filter(m => 
+        m.driverId === selectedDriver?.id || 
+        (selectedDriver?.uberDriverId && m.driverId === selectedDriver.uberDriverId) ||
+        (selectedDriver?.inDriveDriverId && m.driverId === selectedDriver.inDriveDriverId)
+    );
+
     return (
       <DriverDetail 
         driverId={selectedDriverId} 
         driverName={selectedDriver?.name || 'Unknown'} 
         driver={selectedDriver}
         trips={driverTrips}
+        metrics={driverMetrics}
         onBack={() => setSelectedDriverId(null)}
         fleetStats={fleetStats}
       />

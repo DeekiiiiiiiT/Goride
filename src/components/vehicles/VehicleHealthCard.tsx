@@ -20,8 +20,8 @@ export function VehicleHealthCard({ metrics }: VehicleHealthCardProps) {
   }
 
   // Calculate Fleet Averages
-  const avgEarningsPerHour = metrics.reduce((acc, m) => acc + m.earningsPerHour, 0) / metrics.length;
-  const totalFleetEarnings = metrics.reduce((acc, m) => acc + m.totalEarnings, 0);
+  const avgEarningsPerHour = metrics.reduce((acc, m) => acc + (m.earningsPerHour || 0), 0) / metrics.length;
+  const totalFleetEarnings = metrics.reduce((acc, m) => acc + (m.totalEarnings || 0), 0);
 
   // Identify Underperformers (e.g., 20% below average)
   const underperformers = StatsService.identifyUnderperformingVehicles(metrics, avgEarningsPerHour * 0.8);
@@ -35,7 +35,7 @@ export function VehicleHealthCard({ metrics }: VehicleHealthCardProps) {
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-sm font-medium text-emerald-600">Avg Earnings / Hr</p>
-                        <h3 className="text-2xl font-bold text-emerald-900">${avgEarningsPerHour.toFixed(2)}</h3>
+                        <h3 className="text-2xl font-bold text-emerald-900">${(avgEarningsPerHour || 0).toFixed(2)}</h3>
                     </div>
                     <TrendingUp className="h-8 w-8 text-emerald-300" />
                 </div>
@@ -46,7 +46,7 @@ export function VehicleHealthCard({ metrics }: VehicleHealthCardProps) {
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-sm font-medium text-slate-600">Total Fleet Revenue</p>
-                        <h3 className="text-2xl font-bold text-slate-900">${totalFleetEarnings.toLocaleString()}</h3>
+                        <h3 className="text-2xl font-bold text-slate-900">${(totalFleetEarnings || 0).toLocaleString()}</h3>
                     </div>
                     <DollarSign className="h-8 w-8 text-slate-300" />
                 </div>
@@ -92,30 +92,35 @@ export function VehicleHealthCard({ metrics }: VehicleHealthCardProps) {
                 </TableHeader>
                 <TableBody>
                     {metrics.map((m, idx) => {
-                        const isUnderperforming = m.earningsPerHour < (avgEarningsPerHour * 0.8);
-                        const isHighPerformer = m.earningsPerHour > (avgEarningsPerHour * 1.2);
+                        const earningsPerHour = m.earningsPerHour || 0;
+                        const totalEarnings = m.totalEarnings || 0;
+                        const onlineHours = m.onlineHours || 0;
+                        const onTripHours = m.onTripHours || 0;
+
+                        const isUnderperforming = earningsPerHour < (avgEarningsPerHour * 0.8);
+                        const isHighPerformer = earningsPerHour > (avgEarningsPerHour * 1.2);
                         
                         return (
                         <TableRow key={idx}>
                             <TableCell className="font-medium">
                                 <div className="flex items-center gap-2">
                                     <Car className="h-4 w-4 text-slate-400" />
-                                    {m.plateNumber || m.vehicleId}
+                                    {m.plateNumber || m.vehicleId || "Unknown"}
                                 </div>
                             </TableCell>
-                            <TableCell>${m.totalEarnings.toLocaleString()}</TableCell>
+                            <TableCell>${totalEarnings.toLocaleString()}</TableCell>
                             <TableCell>
                                 <div className="flex items-center gap-1 text-slate-500">
                                     <Clock className="h-3 w-3" />
-                                    {m.onlineHours.toFixed(1)}h
+                                    {onlineHours.toFixed(1)}h
                                 </div>
                             </TableCell>
                             <TableCell className={`font-bold ${isHighPerformer ? 'text-emerald-600' : isUnderperforming ? 'text-red-600' : ''}`}>
-                                ${m.earningsPerHour.toFixed(2)}
+                                ${earningsPerHour.toFixed(2)}
                             </TableCell>
                             <TableCell>
                                 <span className="text-xs text-slate-500">
-                                    {m.onlineHours > 0 ? ((m.onTripHours / m.onlineHours) * 100).toFixed(0) : 0}% On Trip
+                                    {onlineHours > 0 ? ((onTripHours / onlineHours) * 100).toFixed(0) : 0}% On Trip
                                 </span>
                             </TableCell>
                             <TableCell>

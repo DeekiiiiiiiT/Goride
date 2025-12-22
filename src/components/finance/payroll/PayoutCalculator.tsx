@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
+import { Badge } from "../../ui/badge";
 import { FinancialTransaction } from "../../types/data";
 import { Calculator, Calendar, DollarSign } from "lucide-react";
 import { format, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";

@@ -193,6 +193,11 @@ function GeneralPanel() {
     setIsResetting(true);
     try {
       const result = await api.clearAllData();
+      
+      // Phase 3: Also clear the locally stored fleet name to ensure a clean slate
+      localStorage.removeItem('fleet_name');
+      window.dispatchEvent(new Event('storage'));
+
       toast.success(`System reset complete. Cleared ${result.deletedTrips} trips.`);
     } catch (error) {
       console.error(error);

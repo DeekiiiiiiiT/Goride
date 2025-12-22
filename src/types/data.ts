@@ -227,6 +227,13 @@ export interface DriverMetrics {
   score?: number; // 0 to 100
   tier?: 'Platinum' | 'Gold' | 'Silver' | 'Bronze';
   recommendation?: string;
+
+  // Phase 6: Source Tracking ("Source of Truth" Logic)
+  // Tracks where this driver record was sourced from: 'activity', 'payment', 'quality', 'org_file'
+  dataSources?: string[];
+  
+  // Phase 3: Identity Flags
+  isFleetOwner?: boolean;
 }
 
 // 2. Vehicle ROI & Health
@@ -530,4 +537,85 @@ export interface ExpenseSummary {
   actual: number;
   budget: number;
   variance: number;
+}
+
+// --- Phase 1: AI Analysis Types ---
+
+export interface FleetAnalysisResult {
+  metadata: {
+    analysisDate: string;
+    periodStart: string;
+    periodEnd: string;
+    filesProcessed: number;
+    fleetName?: string; // Phase 1: Fleet Identity
+  };
+  
+  // Detailed Section Data
+  drivers: DriverMetrics[];
+  vehicles: VehicleMetrics[];
+  financials: OrganizationMetrics;
+  
+  // Qualitative Insights
+  insights: {
+    alerts: string[]; // "Ghost Trip detected for ID X"
+    trends: string[]; // "Earnings up 10% vs last week"
+    recommendations: string[]; // "Driver Y needs coaching on cancellations"
+    phantomTrips?: any[]; 
+  };
+}
+
+// --- Phase 1: AI Auditor & Data Validation Types ---
+
+export type AuditStatus = 'healthy' | 'warning' | 'critical';
+
+export interface AuditIssue {
+  id: string; // Unique ID for the issue
+  field?: string; // The specific field (e.g. "amount", "driverName")
+  message: string; // Human readable error
+  severity: AuditStatus;
+  rowId?: string; // Link to the specific row ID (driverId, tripId)
+}
+
+// Wrapper for any data row to include audit metadata
+export interface AuditRecord<T> {
+  data: T;
+  originalData?: T; // For diffing
+  status: AuditStatus;
+  issues: AuditIssue[];
+  isFlagged: boolean; // If true, requires manual approval
+}
+
+// The High-Level Health Report
+export interface AuditReport {
+  score: number; // 0-100 Health Score
+  status: AuditStatus;
+  summary: string; // "Data looks good, 2 warnings."
+  
+  // Counts
+  totalRecords: number;
+  healthyCount: number;
+  warningCount: number;
+  criticalCount: number;
+  
+  // Categorized Issues
+  issues: AuditIssue[]; 
+  
+  // Projections (Before vs After)
+  impact: {
+    revenueChange: number; // Percentage
+    activeDriversChange: number; // Count
+    newAnomalies: number;
+  };
+}
+
+// The "Smart State" for the Imports Page
+export interface ImportAuditState {
+  raw: FleetAnalysisResult | null; // The original AI output
+  sanitized: {
+    drivers: AuditRecord<DriverMetrics>[];
+    vehicles: AuditRecord<VehicleMetrics>[];
+    financials: AuditRecord<OrganizationMetrics>; // Single record
+    trips?: AuditRecord<Trip>[]; // Optional for now, added in Phase 3
+  };
+  report: AuditReport;
 }

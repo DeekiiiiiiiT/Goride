@@ -3,7 +3,12 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import OpenAI from "npm:openai";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
+import { Buffer } from "node:buffer";
+import PDFParser from "npm:pdf2json";
+import { PDFDocument } from "npm:pdf-lib";
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@3.11.174";
 
 const app = new Hono();
 
@@ -67,34 +72,30 @@ app.get("/make-server-37f42386/trips", async (c) => {
 
 app.delete("/make-server-37f42386/trips", async (c) => {
   try {
-    // 1. Get all trip keys
-    const trips = await kv.getByPrefix("trip:");
-    const tripKeys = trips.map((t: any) => `trip:${t.id}`);
-    
-    // 2. Get all batch keys
-    const batches = await kv.getByPrefix("batch:");
-    const batchKeys = (batches || []).map((b: any) => `batch:${b.id}`);
-    
-    // 3. Get driver metric keys
-    const driverMetrics = await kv.getByPrefix("driver_metric:");
-    const driverMetricKeys = (driverMetrics || []).map((m: any) => `driver_metric:${m.id}`);
+    // Direct delete using Supabase client to avoid pagination limits and round-trips
+    // This fixes the issue where only the first 1000 records were being deleted
+    const prefixes = ["trip:", "batch:", "driver_metric:", "vehicle_metric:"];
+    const counts: Record<string, number> = {};
 
-    // 4. Get vehicle metric keys
-    const vehicleMetrics = await kv.getByPrefix("vehicle_metric:");
-    const vehicleMetricKeys = (vehicleMetrics || []).map((m: any) => `vehicle_metric:${m.id}`);
-    
-    // 5. Delete everything
-    const allKeys = [...tripKeys, ...batchKeys, ...driverMetricKeys, ...vehicleMetricKeys];
-    if (allKeys.length > 0) {
-        await kv.mdel(allKeys);
+    for (const prefix of prefixes) {
+        const { count, error } = await supabase
+            .from("kv_store_37f42386")
+            .delete({ count: 'exact' })
+            .like("key", `${prefix}%`);
+            
+        if (error) {
+            console.error(`Error deleting prefix ${prefix}:`, error);
+            throw error;
+        }
+        counts[prefix] = count || 0;
     }
     
     return c.json({ 
         success: true, 
-        deletedTrips: tripKeys.length,
-        deletedBatches: batchKeys.length,
-        deletedDriverMetrics: driverMetricKeys.length,
-        deletedVehicleMetrics: vehicleMetricKeys.length
+        deletedTrips: counts["trip:"] || 0,
+        deletedBatches: counts["batch:"] || 0,
+        deletedDriverMetrics: counts["driver_metric:"] || 0,
+        deletedVehicleMetrics: counts["vehicle_metric:"] || 0
     });
   } catch (e: any) {
     console.error("Error clearing data:", e);
@@ -174,6 +175,16 @@ app.post("/make-server-37f42386/vehicles", async (c) => {
   }
 });
 
+app.delete("/make-server-37f42386/vehicles/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`vehicle:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Drivers Endpoints
 app.get("/make-server-37f42386/drivers", async (c) => {
   try {
@@ -192,6 +203,41 @@ app.post("/make-server-37f42386/drivers", async (c) => {
     }
     await kv.set(`driver:${driver.id}`, driver);
     return c.json({ success: true, data: driver });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Transactions Endpoints
+app.get("/make-server-37f42386/transactions", async (c) => {
+  try {
+    const transactions = await kv.getByPrefix("transaction:");
+    if (Array.isArray(transactions)) {
+        // Sort by date desc
+        transactions.sort((a: any, b: any) => {
+            const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+        });
+        return c.json(transactions);
+    }
+    return c.json([]);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/transactions", async (c) => {
+  try {
+    const transaction = await c.req.json();
+    if (!transaction.id) {
+        transaction.id = crypto.randomUUID();
+    }
+    if (!transaction.timestamp) {
+        transaction.timestamp = new Date().toISOString();
+    }
+    await kv.set(`transaction:${transaction.id}`, transaction);
+    return c.json({ success: true, data: transaction });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -254,31 +300,17 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
       return c.json({ error: "No file provided" }, 400);
     }
 
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+         return c.json({ error: "Only image files (JPEG, PNG, WEBP, GIF) and PDFs are supported." }, 400);
+    }
+
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) {
       return c.json({ error: "AI Service not configured" }, 503);
     }
 
     const openai = new OpenAI({ apiKey });
-
-    // Helper to convert file to base64
-    const fileToBase64 = async (f: File) => {
-        const arrayBuffer = await f.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = "";
-        const len = bytes.byteLength;
-        const chunkSize = 1024;
-        for (let i = 0; i < len; i += chunkSize) {
-          binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
-        }
-        return `data:${f.type};base64,${btoa(binary)}`;
-    };
-
-    const dataUrl = await fileToBase64(file);
-    let backDataUrl = null;
-    if (backFile && backFile instanceof File) {
-        backDataUrl = await fileToBase64(backFile);
-    }
 
     let prompt = "";
     if (type === 'license') {
@@ -313,17 +345,155 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
         Extract the address from this utility bill or document in JSON format:
         - address (full address string)
        `;
+    } else if (type === 'fitness_certificate') {
+       prompt = `
+        Extract the following details from this Certificate of Fitness in JSON format.
+        Look for specific Jamaican vehicle document fields:
+
+        - make (Vehicle Make)
+        - model (Vehicle Model)
+        - year (Year of Manufacture)
+        - color (Colour)
+        - bodyType (Body Type)
+        - engineNumber (Motor or Engine No.)
+        - ccRating (CC Rating)
+        - issueDate (Issue Date, format: YYYY-MM-DD)
+        - expirationDate (Expiry Date, format: YYYY-MM-DD)
+       `;
+    } else if (type === 'vehicle_registration') {
+       prompt = `
+        Extract the following details from this Motor Vehicle Registration Certificate in JSON format.
+        Look for specific Jamaican vehicle document fields:
+        
+        - laNumber (L.A. Number / Licence Authority No.)
+        - plate (Reg. Plate No.)
+        - mvid (MVID / Motor Vehicle ID)
+        - vin (VIN / Vehicle Chassis No.)
+        - controlNumber (Control Number)
+        - issueDate (Date Issued, format: YYYY-MM-DD)
+        - expirationDate (Expiry date, format: YYYY-MM-DD)
+       `;
+    } else if (type === 'valuation_report') {
+       prompt = `
+        Extract the following details from this Motor Vehicle Valuation Report in JSON format.
+        
+        - valuationDate (Date of Valuation, format: YYYY-MM-DD)
+        - marketValue (Market Value amount, remove currency symbols, e.g. "2,100,000")
+        - forcedSaleValue (Forced Sale Value amount, remove currency symbols)
+        - chassisNumber (Chassis No.)
+        - engineNumber (Engine No.)
+        - color (Colour)
+        - odometer (Odometer Reading)
+        - modelYear (Year of Manufacture)
+       `;
+    } else if (type === 'insurance_policy') {
+       prompt = `
+        Extract the following details from this Motor Vehicle Insurance Certificate / Policy in JSON format.
+        
+        - idv (Insured Declared Value or Sum Insured, remove currency symbols)
+        - policyPremium (Policy Premium, remove currency symbols)
+        - excessDeductible (Excess or Deductible amount)
+        - depreciationRate (Depreciation Rate percentage)
+        - policyExpiryDate (Policy Expiry Date, format: YYYY-MM-DD)
+        - authorizedDrivers (Authorized Drivers - list or description)
+        - limitationsUse (Limitations as to Use)
+        - policyNumber (Certificate or Policy Number)
+       `;
     } else {
       return c.json({ error: "Invalid document type" }, 400);
     }
 
     const userContent: any[] = [
-        { type: "text", text: prompt },
-        { type: "image_url", image_url: { url: dataUrl } }
+        { type: "text", text: prompt }
     ];
 
-    if (backDataUrl) {
-        userContent.push({ type: "image_url", image_url: { url: backDataUrl } });
+    if (file.type === 'application/pdf') {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            let buffer = Buffer.from(arrayBuffer);
+            
+            // Helper to parse buffer with pdf2json
+            const parsePdfBuffer = (b: Buffer) => new Promise<string>((resolve, reject) => {
+                const parser = new PDFParser(null, 1);
+                parser.on("pdfParser_dataError", (errData: any) => reject(new Error(errData.parserError)));
+                parser.on("pdfParser_dataReady", () => {
+                   resolve(parser.getRawTextContent());
+                });
+                parser.parseBuffer(b);
+            });
+
+            let pdfText = "";
+            try {
+                pdfText = await parsePdfBuffer(buffer);
+            } catch (e: any) {
+                 console.log("Initial PDF parse failed. Attempting repair/fallback...", e.message);
+                 try {
+                    // Try pdf-lib repair
+                    const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                    const savedBytes = await pdfDoc.save();
+                    buffer = Buffer.from(savedBytes);
+                    pdfText = await parsePdfBuffer(buffer);
+                 } catch (repairError: any) {
+                    console.error("PDF Repair failed:", repairError);
+                    
+                    // Try PDF.js fallback
+                    console.log("Attempting fallback to PDF.js...");
+                    try {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+                        const loadingTask = pdfjsLib.getDocument({ 
+                            data: new Uint8Array(arrayBuffer),
+                            useSystemFonts: true,
+                            disableFontFace: true
+                        });
+                        const pdf = await loadingTask.promise;
+                        let fullText = "";
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const content = await page.getTextContent();
+                            const strings = content.items.map((item: any) => item.str);
+                            fullText += strings.join(" ") + "\n";
+                        }
+                        pdfText = fullText;
+                    } catch (pdfJsError) {
+                         console.error("PDF.js fallback failed:", pdfJsError);
+                         
+                         if (repairError.message && repairError.message.toLowerCase().includes("encrypted")) {
+                            throw new Error("PDF is encrypted or password protected. Please upload an unlocked PDF or an image.");
+                         }
+                         throw repairError;
+                    }
+                 }
+            }
+
+            if (!pdfText || pdfText.trim().length < 10) {
+                 return c.json({ error: "Could not extract text from this PDF. It appears to be a scanned image (no text layer found). Please upload a JPEG/PNG image of the document so the AI can read it." }, 400);
+            }
+            userContent.push({ type: "text", text: `Document Content:\n${pdfText}` });
+        } catch (e: any) {
+            console.error("PDF Parse Error:", e);
+            return c.json({ error: `Failed to read PDF file: ${e.message}. Please try uploading an image.` }, 400);
+        }
+    } else {
+        // Helper to convert file to base64
+        const fileToBase64 = async (f: File) => {
+            const arrayBuffer = await f.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            let binary = "";
+            const len = bytes.byteLength;
+            const chunkSize = 1024;
+            for (let i = 0; i < len; i += chunkSize) {
+              binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
+            }
+            return `data:${f.type};base64,${btoa(binary)}`;
+        };
+
+        const dataUrl = await fileToBase64(file);
+        userContent.push({ type: "image_url", image_url: { url: dataUrl } });
+
+        if (backFile && backFile instanceof File) {
+            const backDataUrl = await fileToBase64(backFile);
+            userContent.push({ type: "image_url", image_url: { url: backDataUrl } });
+        }
     }
 
     const response = await openai.chat.completions.create({
@@ -349,6 +519,136 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
 
   } catch (e: any) {
     console.error("AI Parse Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
+  try {
+    const { make, model, year, color, bodyType, licensePlate } = await c.req.json();
+    
+    // Switch to Gemini API Key as requested
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) {
+        return c.json({ error: "Gemini API Key not configured" }, 503);
+    }
+
+    // Using Google's Imagen 3/4 models via Generative Language API
+    // We prioritize the new Imagen 4.0 Ultra models found in your account, then fall back to standard 4.0, then Flash.
+    const modelCandidates = [
+        "imagen-4.0-ultra-generate-001",
+        "imagen-4.0-generate-001",
+        "gemini-2.0-flash-exp-image-generation"
+    ];
+
+    const prompt = `A hyper-realistic, professional automotive studio photo of a ${year} ${color} ${make} ${model} ${bodyType}. The vehicle is parked on a pristine, high-gloss white showroom floor with distinct reflections beneath the car. The background is a clean, seamless white studio environment. Use a front 3/4 view angle, zoomed in to fill the frame. 8k resolution, soft studio lighting, sharp focus. The vehicle should have no front license plate.`;
+
+    let imageB64 = null;
+    let lastError = null;
+
+    // Try candidates in order
+    for (const modelName of modelCandidates) {
+        try {
+            console.log(`Attempting image generation with model: ${modelName}`);
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict?key=${apiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    instances: [
+                        { prompt: prompt }
+                    ],
+                    parameters: {
+                        sampleCount: 1,
+                        aspectRatio: "4:3"
+                    }
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                imageB64 = data.predictions?.[0]?.bytesBase64Encoded;
+                if (imageB64) break; // Success!
+            } else {
+                const errText = await response.text();
+                console.warn(`Model ${modelName} failed with status ${response.status}: ${errText}`);
+                lastError = `${response.status} - ${errText}`;
+            }
+        } catch (e) {
+            console.error(`Error calling model ${modelName}:`, e);
+            lastError = e.toString();
+        }
+    }
+
+    if (!imageB64) {
+         console.warn("All Gemini Image models failed. Reason:", lastError);
+
+         console.log("Attempting Fallback to OpenAI DALL-E 3...");
+         
+         // FALLBACK: Try OpenAI DALL-E 3
+         try {
+             const openaiKey = Deno.env.get("OPENAI_API_KEY");
+             if (openaiKey) {
+                const openai = new OpenAI({ apiKey: openaiKey });
+                const dalleResponse = await openai.images.generate({
+                  model: "dall-e-3",
+                  prompt: prompt,
+                  n: 1,
+                  size: "1024x1024",
+                  quality: "standard",
+                  response_format: "b64_json"
+                });
+                imageB64 = dalleResponse.data[0].b64_json;
+                console.log("Fallback to DALL-E 3 Successful");
+             } else {
+                 console.error("No OpenAI Key for fallback.");
+             }
+         } catch (openaiError) {
+             console.error("OpenAI Fallback Failed:", openaiError);
+         }
+
+         if (!imageB64) {
+            return c.json({ 
+                error: `All Image Generation attempts (Google & OpenAI) failed. Google Error: ${lastError}` 
+            }, 500);
+         }
+    }
+    
+    // Convert Base64 to Buffer for Upload
+    const buffer = Buffer.from(imageB64, 'base64');
+    
+    // Use the global supabase client
+    const bucketName = `make-37f42386-vehicles`;
+    
+    // Ensure bucket exists (idempotent)
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (!buckets?.some((b: any) => b.name === bucketName)) {
+        await supabase.storage.createBucket(bucketName, { public: false });
+    }
+
+    const fileName = `${licensePlate || crypto.randomUUID()}.png`;
+
+    const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, buffer, { 
+            contentType: 'image/png', 
+            upsert: true 
+        });
+
+    if (uploadError) throw uploadError;
+
+    // Generate Signed URL (valid for 1 year)
+    const { data: signedUrlData, error: signError } = await supabase.storage
+        .from(bucketName)
+        .createSignedUrl(fileName, 31536000); 
+
+    if (signError) throw signError;
+
+    return c.json({ url: signedUrlData.signedUrl });
+
+  } catch (e: any) {
+    console.error("Image Generation Error:", e);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -493,6 +793,67 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     });
   } catch (e: any) {
     console.error("Delete batch error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// AI CSV Mapping Endpoint
+app.post("/make-server-37f42386/ai/map-csv", async (c) => {
+  try {
+    const { headers, sample, targetFields } = await c.req.json();
+    
+    if (!headers || !sample) {
+      return c.json({ error: "Headers and sample data required" }, 400);
+    }
+
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) {
+      return c.json({ error: "AI Service not configured" }, 503);
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    const prompt = `
+      You are an expert data analyst. 
+      I have a CSV file with the following headers: ${JSON.stringify(headers)}.
+      Here is a sample of the first 3 rows: ${JSON.stringify(sample.slice(0, 3))}.
+      
+      Please map the CSV headers to the following target system fields:
+      ${JSON.stringify(targetFields)}
+
+      Rules:
+      1. Analyze the sample data to understand the content of each column (e.g. identify dates, currency, IDs).
+      2. Return a JSON object where keys are the CSV Header Name and values are the Target Field Key.
+      3. Only include mappings you are confident about.
+      4. If a column doesn't match any target field, omit it.
+      5. For "driverName", if it's split into "First Name" and "Last Name", map BOTH to "driverName".
+      6. For "date", map columns that look like dates or timestamps.
+      
+      Example Output:
+      {
+        "Ride Date": "date",
+        "Total Fare": "amount",
+        "Driver First Name": "driverName", 
+        "Driver Last Name": "driverName"
+      }
+    `;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a JSON mapping assistant." },
+        { role: "user", content: prompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0
+    });
+
+    const content = response.choices[0].message.content;
+    const mapping = JSON.parse(content || "{}");
+
+    return c.json({ success: true, mapping });
+  } catch (e: any) {
+    console.error("AI Mapping Error:", e);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -819,6 +1180,281 @@ app.post("/make-server-37f42386/settings/preferences", async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
+});
+
+app.post("/make-server-37f42386/analyze-fleet", async (c) => {
+  try {
+    const { payload } = await c.req.json();
+    if (!payload) return c.json({ error: "No payload provided" }, 400);
+
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 503);
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // Model selection moved to execution block for fallback support
+
+    const prompt = `
+      You are an expert Fleet Management Data Analyst AI.
+      I have uploaded multiple CSV files representing my fleet's activity (Trips, Payments, Driver Performance, Vehicle Stats).
+      
+      Your goal is to cross-reference these files and output a SINGLE JSON object that populates my database.
+      
+      ### RULES & LOGIC
+      
+      1. **Driver Identification**:
+         - Group data by Driver Name or UUID. 
+         - A driver might appear in multiple files (e.g., "Trip Logs" and "Payment Logs"). Merge them.
+      
+      2. **Financial Logic (CRITICAL)**:
+         - **Cash Collected**: This is money the driver holds physically. Sum the "Cash Collected" column from Payment files.
+         - **Phantom Trip Detection**: If a trip has Status="Cancelled" BUT Cash Collected > 0, this is a FRAUD INDICATOR. Add to 'insights.phantomTrips'.
+         - **Net Outstanding**: Cash Collected minus any "Cash Deposit" entries found.
+      
+      3. **Vehicle Logic**:
+         - Group earnings by "Vehicle Plate" or "License Plate".
+         - If a vehicle appears in "Fuel Logs", subtract that cost from its earnings to estimate ROI.
+      
+      4. **Performance Targets**:
+         - High Performance: Acceptance > 85%, Cancellation < 5%.
+         - Critical Warning: Cancellation > 10% or Acceptance < 60%.
+      
+      ### OUTPUT SCHEMA (Strict JSON)
+      
+      {
+        "metadata": {
+          "periodStart": "ISO Date (earliest found)",
+          "periodEnd": "ISO Date (latest found)",
+          "filesProcessed": Number
+        },
+        "drivers": [
+          {
+            "driverId": "String (UUID or Name Hash)",
+            "driverName": "String",
+            "periodStart": "ISO Date",
+            "periodEnd": "ISO Date",
+            "totalEarnings": Number,
+            "cashCollected": Number,
+            "netEarnings": Number,
+            "acceptanceRate": Number (0.0-1.0),
+            "cancellationRate": Number (0.0-1.0),
+            "completionRate": Number (0.0-1.0),
+            "onlineHours": Number,
+            "tripsCompleted": Number,
+            "ratingLast500": Number,
+            "score": Number (0-100),
+            "tier": "String (Bronze/Silver/Gold/Platinum)",
+            "recommendation": "String (Advice for manager)"
+          }
+        ],
+        "vehicles": [
+          {
+            "plateNumber": "String",
+            "totalEarnings": Number,
+            "onlineHours": Number,
+            "totalTrips": Number,
+            "utilizationRate": Number (0-100),
+            "roiScore": Number (0-100),
+            "maintenanceStatus": "String (Good/Due Soon/Critical)"
+          }
+        ],
+        "financials": {
+          "totalEarnings": Number,
+          "netFare": Number,
+          "totalCashExposure": Number,
+          "fleetProfitMargin": Number
+        },
+        "insights": {
+          "alerts": ["String"],
+          "trends": ["String"],
+          "recommendations": ["String"],
+          "phantomTrips": [ { "tripId": "String", "driver": "String", "amount": Number } ]
+        }
+      }
+
+      ### DATA INPUT
+      ${payload}
+    `;
+
+    // Robust fallback strategy for model selection
+    // Added 'gemini-1.5-flash-latest' and 'gemini-1.5-pro-latest' and explicit fallback to OpenAI
+    const modelCandidates = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest"];
+    let result = null;
+    let lastError = null;
+
+    for (const modelName of modelCandidates) {
+        try {
+            console.log(`Attempting analysis with model: ${modelName}`);
+            const model = genAI.getGenerativeModel({ model: modelName });
+            result = await model.generateContent(prompt);
+            if (result) break; 
+        } catch (e: any) {
+            console.warn(`Model ${modelName} failed:`, e.message);
+            lastError = e;
+        }
+    }
+
+    let text = "";
+    if (!result) {
+        console.warn("All Gemini models failed. Attempting fallback to OpenAI GPT-4o...");
+        const openaiKey = Deno.env.get("OPENAI_API_KEY");
+        if (openaiKey) {
+            try {
+                const openai = new OpenAI({ apiKey: openaiKey });
+                const completion = await openai.chat.completions.create({
+                    model: "gpt-4o",
+                    messages: [
+                        { role: "system", content: "You are an expert Fleet Management Data Analyst AI." },
+                        { role: "user", content: prompt }
+                    ],
+                    response_format: { type: "json_object" }
+                });
+                text = completion.choices[0].message.content || "{}";
+                console.log("OpenAI Fallback Successful");
+            } catch (openaiError: any) {
+                 console.error("OpenAI Fallback Failed:", openaiError);
+                 throw new Error(`Both Gemini and OpenAI failed. Gemini Error: ${lastError?.message}`);
+            }
+        } else {
+             throw new Error(`All Gemini models failed and OPENAI_API_KEY is missing. Last Gemini Error: ${lastError?.message}`);
+        }
+    } else {
+        const response = await result.response;
+        text = response.text();
+    }
+    
+    // Enhanced JSON Extraction and Cleaning
+    let jsonStr = text.trim();
+    
+    // 1. Try to extract from Markdown code blocks first
+    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1].trim();
+    } else {
+        // 2. Fallback: Find the first '{' and last '}'
+        const firstOpen = text.indexOf('{');
+        const lastClose = text.lastIndexOf('}');
+        if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+            jsonStr = text.substring(firstOpen, lastClose + 1);
+        }
+    }
+    
+    let data;
+    try {
+        data = JSON.parse(jsonStr);
+    } catch(parseError) {
+        console.warn("Initial JSON parse failed. Attempting to repair common errors...");
+        try {
+            // 3. Simple Repair: Remove trailing commas in arrays/objects
+            // Note: This is a basic regex and won't catch everything, but fixes the most common AI error
+            const fixedJson = jsonStr.replace(/,\s*([\]}])/g, '$1');
+            data = JSON.parse(fixedJson);
+            console.log("JSON successfully repaired.");
+        } catch (repairError) {
+             console.error("JSON Parse Error:", parseError);
+             console.log("Raw Text:", text);
+             
+             // 4. Ultimate Fallback: Return raw text wrapped in a simple structure so the user sees something
+             // This prevents the "500 Internal Server Error" crash and allows the frontend to show the raw analysis
+             console.warn("Returning raw text as fallback due to parse failure.");
+             return c.json({ 
+                 success: true, 
+                 warning: "AI output was not valid JSON. Showing raw analysis.",
+                 data: {
+                     metadata: { filesProcessed: 1 },
+                     drivers: [],
+                     vehicles: [],
+                     financials: { totalEarnings: 0, netFare: 0, totalCashExposure: 0, fleetProfitMargin: 0 },
+                     insights: { 
+                         alerts: ["Analysis generated but format was invalid."], 
+                         recommendations: [text], // Put the raw text here so the user can read it
+                         phantomTrips: [] 
+                     }
+                 }
+             });
+        }
+    }
+
+    return c.json({ success: true, data });
+  } catch (e: any) {
+    console.error("Analysis Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Fleet Sync Endpoint (Mega-JSON Persistence)
+app.post("/make-server-37f42386/fleet/sync", async (c) => {
+  try {
+    const { drivers, vehicles, financials, trips, metadata, insights } = await c.req.json();
+    
+    const operations = [];
+
+    // 1. Driver Metrics
+    if (Array.isArray(drivers) && drivers.length > 0) {
+        const driverKeys = drivers.map((d: any) => `driver_metric:${d.driverId}`);
+        operations.push(kv.mset(driverKeys, drivers));
+    }
+
+    // 2. Vehicle Metrics
+    if (Array.isArray(vehicles) && vehicles.length > 0) {
+        // Use plateNumber as ID if vehicleId is missing or generated
+        const vehicleKeys = vehicles.map((v: any) => `vehicle_metric:${v.plateNumber || v.vehicleId}`);
+        operations.push(kv.mset(vehicleKeys, vehicles));
+    }
+
+    // 3. Trips
+    if (Array.isArray(trips) && trips.length > 0) {
+        const tripKeys = trips.map((t: any) => `trip:${t.id}`);
+        operations.push(kv.mset(tripKeys, trips));
+    }
+
+    // 4. Financials (Singleton)
+    if (financials) {
+        operations.push(kv.set("organization_metrics:current", financials));
+    }
+
+    // 5. Metadata & Insights
+    if (metadata) {
+        operations.push(kv.set("import_metadata:current", metadata));
+    }
+    if (insights) {
+        operations.push(kv.set("import_insights:current", insights));
+    }
+
+    await Promise.all(operations);
+
+    return c.json({ 
+        success: true, 
+        stats: {
+            drivers: drivers?.length || 0,
+            vehicles: vehicles?.length || 0,
+            trips: trips?.length || 0
+        }
+    });
+
+  } catch (e: any) {
+      console.error("Fleet Sync Error:", e);
+      return c.json({ error: e.message }, 500);
+  }
+});
+
+// Financials Endpoint
+app.get("/make-server-37f42386/financials", async (c) => {
+    try {
+        const data = await kv.get("organization_metrics:current");
+        return c.json(data || {});
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/financials", async (c) => {
+    try {
+        const data = await c.req.json();
+        await kv.set("organization_metrics:current", data);
+        return c.json({ success: true, data });
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 Deno.serve(app.fetch);

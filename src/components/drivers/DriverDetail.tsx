@@ -58,7 +58,7 @@ import {
   Area
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { Trip } from '../../types/data';
+import { Trip, DriverMetrics, FinancialTransaction } from '../../types/data';
 import { format, subDays, isWithinInterval, startOfDay, endOfDay, eachDayOfInterval, differenceInDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { cn } from "../ui/utils";
@@ -66,6 +66,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
+import { LogCashPaymentModal } from './LogCashPaymentModal';
+import { api } from '../../services/api';
 
 interface DriverDocument {
   id: string;
@@ -89,6 +91,7 @@ interface DriverDetailProps {
   driverName: string;
   driver?: any;
   trips: Trip[];
+  metrics?: DriverMetrics[];
   onBack: () => void;
   fleetStats?: {
     avgEarningsPerTrip: number;
@@ -98,12 +101,51 @@ interface DriverDetailProps {
   };
 }
 
-export function DriverDetail({ driverId, driverName, driver, trips, onBack, fleetStats }: DriverDetailProps) {
+export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, onBack, fleetStats }: DriverDetailProps) {
   const [activeTab, setActiveTab] = useState("overview");
   const [tripSearch, setTripSearch] = useState("");
   const [tripPage, setTripPage] = useState(1);
   const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const tripsPerPage = 10;
+
+  // Fetch Transactions
+  React.useEffect(() => {
+      const loadTransactions = async () => {
+          try {
+              const allTx = await api.getTransactions();
+              // Filter for this driver
+              const driverTx = allTx.filter((t: any) => 
+                  t.driverId === driverId || 
+                  (driver?.uberDriverId && t.driverId === driver.uberDriverId) ||
+                  (driver?.inDriveDriverId && t.driverId === driver.inDriveDriverId)
+              );
+              setTransactions(driverTx);
+          } catch (e) {
+              console.error("Failed to load transactions", e);
+          }
+      };
+      loadTransactions();
+  }, [driverId, driver]);
+
+  const handleSavePayment = async (payment: { amount: number; date: string; notes: string }) => {
+      const newTx: Partial<FinancialTransaction> = {
+          driverId,
+          amount: payment.amount, // Positive for inflow
+          date: payment.date,
+          description: payment.notes || "Cash Payment from Driver",
+          category: "Cash Collection",
+          type: "Revenue",
+          paymentMethod: "Cash",
+          status: "Completed",
+          isReconciled: true,
+          time: new Date().toLocaleTimeString()
+      };
+      
+      const saved = await api.saveTransaction(newTx);
+      setTransactions(prev => [saved.data, ...prev]);
+  };
   
   // Merge Real Documents with Mock Documents
   const documents = useMemo(() => {
@@ -305,8 +347,27 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
      const earningsPerKm = totalDistance > 0 ? periodEarnings / totalDistance : 0;
      const tripsPerHour = totalDuration > 0 ? (totalTrips / (totalDuration / 60)) : 0;
 
-     // Completion Rate
+     // Completion Rate (Calculated from Logs)
      const completionRate = totalTrips > 0 ? (periodCompletedTrips / totalTrips) * 100 : 0;
+     
+     // Cancellation Rate (Calculated from Logs)
+     const cancellationRate = totalTrips > 0 ? (periodCancelledTrips / totalTrips) * 100 : 0;
+
+     // --- PHASE 2 FIX: USE IMPORTED METRICS IF AVAILABLE ---
+     // Find relevant CSV metric (e.g. latest one)
+     const latestCsvMetric = csvMetrics && csvMetrics.length > 0 
+        ? [...csvMetrics].sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())[0]
+        : null;
+
+     const acceptanceRate = latestCsvMetric?.acceptanceRate !== undefined
+        ? Math.round(latestCsvMetric.acceptanceRate * 100)
+        : completionRate; // Fallback to completion rate (incorrect but better than 0)
+
+     const currentRating = latestCsvMetric?.ratingLast4Weeks || latestCsvMetric?.ratingLast500 || 5.0;
+
+     // Phase 4: Cash Logic
+     const cashReceived = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+     const netOutstanding = cashCollected - cashReceived;
 
      return {
         periodEarnings,
@@ -318,6 +379,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
         periodCompletedTrips,
         periodCancelledTrips,
         cashCollected,
+        cashReceived, // New
+        netOutstanding, // New
         weeklyEarningsData,
         earningsBreakdownData,
         hourlyActivityData,
@@ -329,9 +392,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
         earningsPerKm,
         tripsPerHour,
         completionRate,
-        platformStats
+        cancellationRate,
+        platformStats,
+        // Phase 2 New Params
+        acceptanceRate,
+        currentRating
      };
-  }, [trips, dateRange]);
+  }, [trips, dateRange, csvMetrics, transactions]);
 
   if (!metrics) return <div>Loading metrics...</div>;
 
@@ -455,7 +522,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
          </TabsList>
 
          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                <MetricCard 
                   title={isToday ? "Today's Earnings" : "Period Earnings"} 
                   value={`$${metrics.periodEarnings.toFixed(2)}`} 
@@ -466,6 +533,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
                        { label: 'Uber', value: `$${metrics.platformStats.Uber.earnings.toFixed(2)}`, color: '#3b82f6' },
                        { label: 'InDrive', value: `$${metrics.platformStats.InDrive.earnings.toFixed(2)}`, color: '#10b981' }
                    ]}
+               />
+               <MetricCard 
+                  title="Cash Balance" 
+                  value={`$${metrics.netOutstanding.toFixed(2)}`} 
+                  subtext="Outstanding Balance"
+                  icon={<DollarSign className="h-4 w-4 text-slate-500" />}
+                  breakdown={[
+                      { label: 'Total Owed', value: `$${metrics.cashCollected.toFixed(2)}`, color: '#f43f5e' },
+                      { label: 'Received', value: `$${metrics.cashReceived.toFixed(2)}`, color: '#10b981' }
+                  ]}
+                  action={
+                      <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setIsPaymentModalOpen(true)}>
+                          Log Cash Payment
+                      </Button>
+                  }
                />
                <MetricCard 
                   title="Completion Rate" 
@@ -480,23 +562,37 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
                    ]}
                />
                <MetricCard 
-                  title="Avg Trip Distance" 
-                  value={`${metrics.avgDistance.toFixed(1)} km`}
-                  subtext="Based on activity"
-                  icon={<Navigation className="h-4 w-4 text-slate-500" />}
+                  title="Customer Rating" 
+                  value={metrics.currentRating.toFixed(1)} 
+                  subtext="Last 4 weeks"
+                  icon={<Star className="h-4 w-4 text-slate-500" />}
                    breakdown={[
-                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(metrics.platformStats.Uber.distance / metrics.platformStats.Uber.trips).toFixed(1)} km` : '-', color: '#3b82f6' },
-                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${(metrics.platformStats.InDrive.distance / metrics.platformStats.InDrive.trips).toFixed(1)} km` : '-', color: '#10b981' }
+                       { label: 'Uber', value: metrics.platformStats.Uber.ratingCount > 0 ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.ratingCount > 0 ? (metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#10b981' }
                    ]}
                />
                <MetricCard 
-                  title="Customer Rating" 
-                  value="5.0" 
-                  subtext="Perfect Score!"
-                  icon={<Star className="h-4 w-4 text-slate-500" />}
+                  title="Acceptance Rate" 
+                  value={`${metrics.acceptanceRate}%`} 
+                  target="Target: >85%"
+                  progress={metrics.acceptanceRate}
+                  progressColor={metrics.acceptanceRate >= 80 ? "bg-emerald-500" : metrics.acceptanceRate < 40 ? "bg-rose-600" : "bg-amber-500"}
+                  icon={metrics.acceptanceRate < 40 ? <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" /> : <ThumbsUp className="h-4 w-4 text-slate-500" />}
                    breakdown={[
-                       { label: 'Uber', value: metrics.platformStats.Uber.ratingCount > 0 ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1) : '5.0', color: '#3b82f6' },
-                       { label: 'InDrive', value: metrics.platformStats.InDrive.ratingCount > 0 ? (metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount).toFixed(1) : '5.0', color: '#10b981' }
+                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
+                   ]}
+               />
+               <MetricCard 
+                  title="Cancellation Rate" 
+                  value={`${metrics.cancellationRate.toFixed(1)}%`} 
+                  target="Target: <5%"
+                  progress={metrics.cancellationRate}
+                  progressColor={metrics.cancellationRate < 5 ? "bg-emerald-500" : "bg-rose-500"}
+                  icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
+                   breakdown={[
+                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(( (metrics.platformStats.Uber.trips - metrics.platformStats.Uber.completed) / metrics.platformStats.Uber.trips) * 100).toFixed(1)}%` : '-', color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${(( (metrics.platformStats.InDrive.trips - metrics.platformStats.InDrive.completed) / metrics.platformStats.InDrive.trips) * 100).toFixed(1)}%` : '-', color: '#10b981' }
                    ]}
                />
             </div>
@@ -550,7 +646,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
                                 <div className="flex justify-between items-end">
                                     <span className="text-sm font-medium text-slate-700">Acceptance Rate</span>
                                     <div className="text-right">
-                                        <span className="text-lg font-bold">{metrics.completionRate.toFixed(0)}%</span>
+                                        <span className="text-lg font-bold">{metrics.acceptanceRate}%</span>
                                         <span className="text-xs text-slate-500 ml-2">vs {fleetStats.avgAcceptanceRate}% avg</span>
                                     </div>
                                 </div>
@@ -562,13 +658,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
                                     />
                                     <div 
                                         className={cn("h-full rounded-full", 
-                                            metrics.completionRate >= fleetStats.avgAcceptanceRate ? "bg-emerald-500" : "bg-rose-500"
+                                            metrics.acceptanceRate >= fleetStats.avgAcceptanceRate ? "bg-emerald-500" : "bg-rose-500"
                                         )}
-                                        style={{ width: `${metrics.completionRate}%` }}
+                                        style={{ width: `${metrics.acceptanceRate}%` }}
                                     />
                                 </div>
                                 <p className="text-xs text-slate-500">
-                                     {metrics.completionRate >= fleetStats.avgAcceptanceRate 
+                                     {metrics.acceptanceRate >= fleetStats.avgAcceptanceRate 
                                         ? "Excellent reliability." 
                                         : "Acceptance rate is critical."}
                                 </p>
@@ -691,6 +787,46 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
                   </CardContent>
                </Card>
             </div>
+
+            {/* Transaction Ledger */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Transaction Ledger</CardTitle>
+                    <CardDescription>History of cash payments and adjustments.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {transactions.length > 0 ? (
+                                transactions.map((tx) => (
+                                    <TableRow key={tx.id}>
+                                        <TableCell>{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
+                                        <TableCell>{tx.description}</TableCell>
+                                        <TableCell><Badge variant="outline">{tx.category}</Badge></TableCell>
+                                        <TableCell className="text-right font-medium text-emerald-600">
+                                            +${tx.amount.toFixed(2)}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="h-24 text-center text-slate-500">
+                                        No transactions recorded.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
          </TabsContent>
 
          <TabsContent value="operations" className="space-y-6">
@@ -819,11 +955,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
                                     (t.platform || '').toLowerCase().includes(tripSearch.toLowerCase())
                                 )
                                 .slice((tripPage - 1) * tripsPerPage, tripPage * tripsPerPage)
-                                .map((trip) => (
-                                <TableRow key={trip.id}>
+                                .map((trip) => {
+                                    const isPhantom = trip.status === 'Cancelled' && (trip.distance || 0) > 0.1;
+                                    return (
+                                    <TableRow key={trip.id} className={isPhantom ? "bg-rose-50 hover:bg-rose-100 border-l-2 border-l-rose-500" : ""}>
                                     <TableCell>
                                         <div className="font-medium">{format(new Date(trip.date), 'MMM d, yyyy')}</div>
                                         <div className="text-xs text-slate-500">{format(new Date(trip.date), 'h:mm a')}</div>
+                                        {isPhantom && <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Phantom Trip Detected</span>}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className={
@@ -852,7 +991,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
                                         </Button>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                                ); })}
                             {trips.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={7} className="h-24 text-center text-slate-500">
@@ -983,11 +1122,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, onBack, flee
             </div>
         </DialogContent>
       </Dialog>
+
+      <LogCashPaymentModal 
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        onSave={handleSavePayment}
+        driverName={driverName}
+        cashOwed={metrics.netOutstanding} // Use calculated net outstanding
+      />
     </div>
   );
 }
 
-function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown }: any) {
+function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action }: any) {
    return (
       <Card>
          <CardContent className="p-6">
@@ -1024,6 +1171,12 @@ function MetricCard({ title, value, trend, trendUp, target, progress, progressCo
                             <span className="font-medium text-slate-700">{item.value}</span>
                         </div>
                     ))}
+                </div>
+            )}
+            
+            {action && (
+                <div className="mt-4 pt-2 border-t border-slate-100">
+                    {action}
                 </div>
             )}
          </CardContent>

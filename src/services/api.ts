@@ -282,6 +282,15 @@ export const api = {
     return response.json();
   },
 
+  async deleteVehicle(id: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/vehicles/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete vehicle");
+    return response.json();
+  },
+
   async getDrivers() {
     const response = await fetchWithRetry(`${BASE_URL}/drivers`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -303,6 +312,27 @@ export const api = {
     return response.json();
   },
 
+  async getTransactions() {
+    const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch transactions");
+    return response.json();
+  },
+
+  async saveTransaction(transaction: any) {
+    const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(transaction)
+    });
+    if (!response.ok) throw new Error("Failed to save transaction");
+    return response.json();
+  },
+
   async uploadFile(file: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -318,7 +348,7 @@ export const api = {
     return response.json();
   },
 
-  async parseDocument(file: File, type: 'license' | 'address', backFile?: File) {
+  async parseDocument(file: File, type: 'license' | 'address' | 'vehicle_registration', backFile?: File) {
     const formData = new FormData();
     formData.append('file', file);
     if (backFile) {
@@ -342,6 +372,23 @@ export const api = {
     return response.json();
   },
 
+  async generateVehicleImage(vehicleData: { make: string, model: string, year: string, color: string, bodyType: string, licensePlate?: string }) {
+    const response = await fetchWithRetry(`${BASE_URL}/generate-vehicle-image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(vehicleData)
+    });
+    
+    if (!response.ok) {
+        throw new Error("Failed to generate vehicle image");
+    }
+    
+    return response.json();
+  },
+
   async getPreferences() {
     const response = await fetchWithRetry(`${BASE_URL}/settings/preferences`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -361,5 +408,50 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to save preferences");
     return response.json();
+  },
+
+  async saveFleetState(state: { 
+      drivers: DriverMetrics[], 
+      vehicles: VehicleMetrics[], 
+      trips: Trip[], 
+      financials: any,
+      metadata?: any,
+      insights?: any 
+  }) {
+      const response = await fetchWithRetry(`${BASE_URL}/fleet/sync`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify(state)
+      });
+      
+      if (!response.ok) {
+          throw new Error(`Failed to save fleet state: ${response.statusText}`);
+      }
+      
+      return response.json();
+  },
+
+  async getFinancials() {
+      const response = await fetchWithRetry(`${BASE_URL}/financials`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      });
+      if (!response.ok) throw new Error("Failed to fetch financials");
+      return response.json();
+  },
+
+  async saveFinancials(financials: any) {
+      const response = await fetchWithRetry(`${BASE_URL}/financials`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify(financials)
+      });
+      if (!response.ok) throw new Error("Failed to save financials");
+      return response.json();
   }
 };

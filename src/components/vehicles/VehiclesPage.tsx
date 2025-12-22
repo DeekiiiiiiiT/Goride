@@ -17,8 +17,22 @@ import {
   List,
   ArrowRight,
   MoreVertical,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Fuel,
+  Wrench,
+  AlertTriangle,
+  UserPlus,
+  FileText,
+  Trash2
 } from 'lucide-react';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { 
@@ -36,11 +50,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { isSameDay, subDays } from "date-fns";
 
 export function VehiclesPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [manualVehicles, setManualVehicles] = useState<Vehicle[]>([]);
+  const [vehicleMetrics, setVehicleMetrics] = useState<import('../../types/data').VehicleMetrics[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -55,6 +80,7 @@ export function VehiclesPage() {
   const [isFuelModalOpen, setIsFuelModalOpen] = useState(false);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [actionVehicleId, setActionVehicleId] = useState<string | null>(null);
+  const [vehicleToDelete, setVehicleToDelete] = useState<string | null>(null); // Delete State
 
   // Filtering & View State
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,12 +91,14 @@ export function VehiclesPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tripsData, vehiclesData] = await Promise.all([
+        const [tripsData, vehiclesData, metricsData] = await Promise.all([
             api.getTrips(),
-            api.getVehicles().catch(() => [])
+            api.getVehicles().catch(() => []),
+            api.getVehicleMetrics().catch(() => [])
         ]);
         setTrips(tripsData);
         setManualVehicles(vehiclesData);
+        setVehicleMetrics(metricsData);
       } catch (err) {
         console.error("Failed to fetch data for vehicles page", err);
       } finally {
@@ -82,10 +110,7 @@ export function VehiclesPage() {
 
   // Transform Trips into Rich Vehicle Objects
   const vehicles: Vehicle[] = useMemo(() => {
-    const vehicleMap = new Map<string, Vehicle>();
-    const today = new Date();
-
-    // 1. Group trips by Vehicle
+    // 1. Group trips by Vehicle to calculate metrics
     const tripsByVehicle = new Map<string, Trip[]>();
     trips.forEach(t => {
         if (!t.vehicleId || t.vehicleId === 'unknown') return;
@@ -93,27 +118,28 @@ export function VehiclesPage() {
         tripsByVehicle.get(t.vehicleId)?.push(t);
     });
 
-    // 2. Build Vehicle Objects
-    tripsByVehicle.forEach((vTrips, plate) => {
+    // 2. Index Metrics by Vehicle ID / Plate
+    const metricsMap = new Map<string, import('../../types/data').VehicleMetrics>();
+    vehicleMetrics.forEach(m => {
+        if (m.vehicleId) metricsMap.set(m.vehicleId, m);
+        if (m.plateNumber) metricsMap.set(m.plateNumber, m);
+    });
+
+    return manualVehicles.map(vehicle => {
+        const vTrips = tripsByVehicle.get(vehicle.id) || [];
         // Sort trips desc
         vTrips.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const lastTrip = vTrips[0];
         
-        // Mock Static Data (Model/Year/Image) consistent by plate
-        const models = [
-            { model: 'Toyota C-HR Hybrid', year: '2018', img: 'figma:asset/6426d17c3b251d9c214959cf1b6b0705de44c168.png' },
-            { model: 'Honda Fit', year: '2018', img: 'https://images.unsplash.com/photo-1590362891991-f776e747a588?auto=format&fit=crop&q=80&w=600' },
-            { model: 'Toyota Sienta', year: '2019', img: 'https://images.unsplash.com/photo-1626847037657-fd3622613ce3?auto=format&fit=crop&q=80&w=600' },
-            { model: 'Nissan Note', year: '2020', img: 'https://images.unsplash.com/photo-1621007947382-bb3c3968e3bb?auto=format&fit=crop&q=80&w=600' },
-            { model: 'Mazda Demio', year: '2017', img: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&q=80&w=600' }
-        ];
-        const hash = plate.split('').reduce((a,b)=>a+b.charCodeAt(0),0);
-        const selected = models[hash % models.length];
+        // Find matching metric
+        let metric = metricsMap.get(vehicle.id);
+        if (!metric && vehicle.licensePlate) metric = metricsMap.get(vehicle.licensePlate);
 
         // Metrics Calculation
         let todayEarnings = 0;
         let totalEarnings = 0;
         let activeMinutesToday = 0;
+        const today = new Date();
 
         vTrips.forEach(t => {
             totalEarnings += t.amount;
@@ -121,53 +147,41 @@ export function VehiclesPage() {
             
             if (isSameDay(tDate, today)) {
                 todayEarnings += t.amount;
-                // Estimate duration if missing (avg 20 mins)
-                activeMinutesToday += t.duration || 20;
+                activeMinutesToday += t.duration || 0;
             }
         });
 
-        const utilizationRate = Math.min((activeMinutesToday / (24 * 60)) * 100 * 2, 100); // *2 scaling for demo realism
-        const isInactive = new Date(lastTrip.date) < subDays(today, 7);
+        // Phase 5: Utilization from CSV (Preferred) or Trip Logs (Fallback)
+        let utilizationRate = 0;
+        if (metric && metric.onlineHours > 0) {
+            utilizationRate = (metric.onTripHours / metric.onlineHours) * 100;
+        } else {
+            // Fallback: Active minutes today / 24h
+            utilizationRate = Math.min((activeMinutesToday / (24 * 60)) * 100, 100);
+        }
         
-        // Mock Service Status based on hash
-        const serviceStates: any[] = ['OK', 'OK', 'OK', 'Due Soon', 'Overdue'];
-        const serviceStatus = serviceStates[hash % serviceStates.length];
+        const isInactive = lastTrip ? new Date(lastTrip.date) < subDays(today, 7) : true;
         
-        vehicleMap.set(plate, {
-            id: plate,
-            licensePlate: plate,
-            vin: `${plate.substring(0, 2)}7${plate.substring(2)}99`,
-            make: selected.model.split(' ')[0],
-            model: selected.model.split(' ').slice(1).join(' '),
-            year: selected.year,
-            image: selected.img,
-            
+        // Preserve existing metrics or override with calculated ones if available
+        return {
+            ...vehicle,
             status: isInactive ? 'Inactive' : 'Active',
-            currentDriverId: lastTrip.driverId,
-            currentDriverName: lastTrip.driverName,
-            
+            currentDriverId: lastTrip?.driverId || vehicle.currentDriverId,
+            currentDriverName: lastTrip?.driverName || vehicle.currentDriverName,
             metrics: {
-                todayEarnings,
-                utilizationRate,
-                totalLifetimeEarnings: totalEarnings,
-                odometer: 45000 + (totalEarnings / 2), // Mock odometer based on usage
-                fuelLevel: 40 + (hash % 60),
-                healthScore: 100 - (serviceStatus === 'Overdue' ? 30 : serviceStatus === 'Due Soon' ? 10 : 0) - (hash % 10)
-            },
-
-            serviceStatus,
-            nextServiceDate: '2025-12-20',
-            nextServiceType: 'Oil Change',
-            daysToService: serviceStatus === 'Overdue' ? -2 : serviceStatus === 'Due Soon' ? 3 : 45
-        });
+                ...vehicle.metrics,
+                todayEarnings: todayEarnings || vehicle.metrics?.todayEarnings || 0,
+                utilizationRate: utilizationRate || vehicle.metrics?.utilizationRate || 0,
+                totalLifetimeEarnings: totalEarnings || vehicle.metrics?.totalLifetimeEarnings || 0,
+                // Add extended metrics for details view
+                onlineHours: metric?.onlineHours,
+                onTripHours: metric?.onTripHours,
+                roiScore: metric?.roiScore,
+                maintenanceStatus: metric?.maintenanceStatus
+            }
+        };
     });
-
-    const tripVehicles = Array.from(vehicleMap.values());
-    const tripVehicleIds = new Set(tripVehicles.map(v => v.id));
-    const newVehicles = manualVehicles.filter(v => !tripVehicleIds.has(v.id));
-    
-    return [...tripVehicles, ...newVehicles];
-  }, [trips, manualVehicles]);
+  }, [trips, manualVehicles, vehicleMetrics]);
 
   // Apply Filters
   const filteredVehicles = useMemo(() => {
@@ -237,6 +251,20 @@ export function VehiclesPage() {
         description: "Fuel consumption metrics updated."
       });
       setIsFuelModalOpen(false);
+  };
+
+  const confirmDelete = async () => {
+    if (!vehicleToDelete) return;
+    try {
+        await api.deleteVehicle(vehicleToDelete);
+        setManualVehicles(prev => prev.filter(v => v.id !== vehicleToDelete));
+        toast.success("Vehicle deleted successfully");
+    } catch (error) {
+        console.error("Failed to delete vehicle", error);
+        toast.error("Failed to delete vehicle");
+    } finally {
+        setVehicleToDelete(null);
+    }
   };
 
   const handleVehicleAdded = (vehicle: Vehicle) => {
@@ -359,10 +387,29 @@ export function VehiclesPage() {
                             <TableRow>
                                 <TableHead className="w-[300px] pl-6">Vehicle / ID</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead>VIN & License plate</TableHead>
+                                <TableHead>Utilization</TableHead>
+                                <TableHead>License plate</TableHead>
                                 <TableHead>Assignment</TableHead>
                                 <TableHead>Vehicle docs</TableHead>
-                                <TableHead className="w-[50px]"><SettingsIcon className="h-4 w-4 text-slate-500" /></TableHead>
+                                <TableHead className="w-[50px]">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-200">
+                                                <SettingsIcon className="h-4 w-4 text-slate-500" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuLabel>Table Settings</DropdownMenuLabel>
+                                            <DropdownMenuItem onClick={() => toast.info("Column management coming soon")}>
+                                                Configure Columns
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onClick={() => window.location.reload()}>
+                                                Refresh Data
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -385,6 +432,22 @@ export function VehiclesPage() {
                                         </div>
                                     </TableCell>
                                     <TableCell>
+                                        <div className="flex flex-col gap-1 w-24">
+                                            <div className="flex justify-between text-xs">
+                                                <span className="font-medium">{vehicle.metrics?.utilizationRate.toFixed(0)}%</span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                <div 
+                                                    className={`h-full ${
+                                                        (vehicle.metrics?.utilizationRate || 0) > 70 ? 'bg-emerald-500' : 
+                                                        (vehicle.metrics?.utilizationRate || 0) > 40 ? 'bg-amber-500' : 'bg-slate-400'
+                                                    }`}
+                                                    style={{ width: `${vehicle.metrics?.utilizationRate}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
                                         <span className="text-slate-500">{vehicle.licensePlate}</span>
                                     </TableCell>
                                     <TableCell>
@@ -400,9 +463,39 @@ export function VehiclesPage() {
                                         </Button>
                                     </TableCell>
                                     <TableCell>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedVehicleId(vehicle.id)}>
-                                            <MoreVertical className="h-4 w-4 text-slate-400" />
-                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                    <MoreVertical className="h-4 w-4 text-slate-400" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                <DropdownMenuItem onClick={() => setSelectedVehicleId(vehicle.id)}>
+                                                    <FileText className="mr-2 h-4 w-4" /> View Details
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleOpenAssignModal(vehicle.id)}>
+                                                    <UserPlus className="mr-2 h-4 w-4" /> Assign Driver
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onClick={() => handleLogService(vehicle.id)}>
+                                                    <Wrench className="mr-2 h-4 w-4" /> Log Service
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleAddFuel(vehicle.id)}>
+                                                    <Fuel className="mr-2 h-4 w-4" /> Log Fuel
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleSendAlert(vehicle.id)}>
+                                                    <AlertTriangle className="mr-2 h-4 w-4" /> Send Alert
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem 
+                                                    onClick={() => setVehicleToDelete(vehicle.id)}
+                                                    className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                                >
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete Vehicle
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -446,7 +539,26 @@ export function VehiclesPage() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onVehicleAdded={handleVehicleAdded}
+        existingVehicles={manualVehicles}
       />
+
+      <AlertDialog open={!!vehicleToDelete} onOpenChange={(open) => !open && setVehicleToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the vehicle
+              and remove its data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Delete Vehicle
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       <Toaster />
     </>

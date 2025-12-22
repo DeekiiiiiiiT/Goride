@@ -21,9 +21,12 @@ import { CashFlowDashboard } from "./CashFlowDashboard";
 import { ExpensesTab } from "./ExpensesTab";
 import { PayrollTab } from "./PayrollTab";
 import { ReportCenter } from "./reports/ReportCenter";
+import { FleetFinancialReport } from "./reports/FleetFinancialReport"; // Imported
 import { format, isSameDay, subDays, startOfMonth, isBefore, isAfter, startOfDay, endOfDay } from "date-fns";
 import { cn } from "../ui/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { api } from "../../services/api"; // Need API to fetch driver metrics for report
+import { DriverMetrics } from "../../types/data";
 import {
   Accordion,
   AccordionContent,
@@ -39,6 +42,7 @@ interface TransactionsTabProps {
 
 export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabProps) {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [driverMetrics, setDriverMetrics] = useState<DriverMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTxns, setSelectedTxns] = useState<Set<string>>(new Set());
 
@@ -62,12 +66,32 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
   useEffect(() => {
     if (trips.length > 0) {
       setLoading(true);
-      // Simulate async loading
-      setTimeout(() => {
-        const txns = generateMockTransactions(trips);
-        setTransactions(txns);
-        setLoading(false);
-      }, 500);
+      
+      const loadData = async () => {
+         try {
+             const metrics = await api.getDriverMetrics();
+             setDriverMetrics(metrics);
+             
+             // Fetch real transactions if available, else mock
+             try {
+                const realTx = await api.getTransactions();
+                if (realTx && realTx.length > 0) {
+                    setTransactions(realTx);
+                } else {
+                    setTransactions(generateMockTransactions(trips));
+                }
+             } catch {
+                setTransactions(generateMockTransactions(trips));
+             }
+
+         } catch (e) {
+             console.error("Failed to load finance data", e);
+         } finally {
+             setLoading(false);
+         }
+      };
+      
+      loadData();
     }
   }, [trips]);
 
@@ -566,6 +590,7 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                 <TabsTrigger value="dashboard">Cash Flow Analysis</TabsTrigger>
                 <TabsTrigger value="expenses">Expense Management</TabsTrigger>
                 <TabsTrigger value="payroll">Payroll System</TabsTrigger>
+                <TabsTrigger value="reconciliation">Reconciliation Report</TabsTrigger>
                 <TabsTrigger value="reports">Report Center</TabsTrigger>
              </TabsList>
              
@@ -582,6 +607,10 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
 
         <TabsContent value="payroll">
             <PayrollTab transactions={transactions} onAddTransaction={handleAddTransaction} drivers={drivers} />
+        </TabsContent>
+
+        <TabsContent value="reconciliation">
+            <FleetFinancialReport transactions={transactions} driverMetrics={driverMetrics} />
         </TabsContent>
 
         <TabsContent value="reports">

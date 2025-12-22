@@ -57,6 +57,7 @@ export function VehiclePerformanceView({ trips, vehicleMetrics }: VehiclePerform
                   onTripHours: 0,
                   totalTrips: 0,
                   utilizationRate: 0,
+                  roiScore: 0,
                   maintenanceStatus: 'Good'
               });
           }
@@ -171,6 +172,7 @@ export function VehiclePerformanceView({ trips, vehicleMetrics }: VehiclePerform
                           <TableHead>Total Earnings</TableHead>
                           <TableHead>Earnings / Hr</TableHead>
                           <TableHead>Utilization</TableHead>
+                          <TableHead>ROI Score</TableHead>
                           <TableHead>Total Trips</TableHead>
                           <TableHead>Status</TableHead>
                       </TableRow>
@@ -191,6 +193,15 @@ export function VehiclePerformanceView({ trips, vehicleMetrics }: VehiclePerform
                                       </div>
                                       <span className="text-xs">{v.utilizationRate?.toFixed(0)}%</span>
                                   </div>
+                              </TableCell>
+                              <TableCell>
+                                  <Badge variant="outline" className={
+                                      (v.roiScore || 0) > 75 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
+                                      (v.roiScore || 0) > 40 ? 'text-blue-700 bg-blue-50 border-blue-200' :
+                                      'text-slate-600 bg-slate-50'
+                                  }>
+                                      {v.roiScore ? `${v.roiScore}` : '-'}
+                                  </Badge>
                               </TableCell>
                               <TableCell>{v.totalTrips}</TableCell>
                               <TableCell>

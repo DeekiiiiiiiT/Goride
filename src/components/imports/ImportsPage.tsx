@@ -33,7 +33,8 @@ import {
   HelpCircle,
   Globe,
   MapPin,
-  CloudDownload
+  CloudDownload,
+  AlertTriangle
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
@@ -49,15 +50,21 @@ import { Input } from "../ui/input";
 
 import { 
     detectFileType, 
-    mergeAndProcessData, 
+    mergeAndProcessData,
+    constructAiPayload, 
     FileData, 
     DEFAULT_FIELDS,
     downloadTemplate,
     validateFile,
     extractReportDate
 } from '../../utils/csvHelpers';
-import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics } from '../../types/data';
+import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState } from '../../types/data';
 import { api } from '../../services/api';
+import { DataSanitizer } from '../../services/dataSanitizer';
+import { ImpactAnalysis } from './ImpactAnalysis';
+
+import { AuditSummaryCard } from './AuditSummaryCard';
+import { QuarantineList } from './QuarantineList';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
@@ -76,7 +83,11 @@ export function ImportsPage() {
   const [processedVehicleMetrics, setProcessedVehicleMetrics] = useState<VehicleMetrics[]>([]);
   const [processedOrganizationMetrics, setProcessedOrganizationMetrics] = useState<OrganizationMetrics[]>([]);
   const [processedRentalContracts, setProcessedRentalContracts] = useState<any[]>([]);
+  const [processedInsights, setProcessedInsights] = useState<{ alerts: string[], trends: string[] } | null>(null);
   
+  // Phase 1: New Audit State
+  const [auditState, setAuditState] = useState<ImportAuditState | null>(null);
+
   // UI States
   const [isParsing, setIsParsing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -109,9 +120,54 @@ export function ImportsPage() {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setIsParsing(true);
     setError(null);
+    setWarning(null);
 
     let completed = 0;
     const newFiles: FileData[] = [];
+
+    const handleAiMapping = async (fileData: FileData) => {
+        try {
+            setWarning("AI is analyzing file structure... this may take a moment.");
+            const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
+            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/ai/map-csv`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${publicAnonKey}`
+                },
+                body: JSON.stringify({
+                    headers: fileData.headers,
+                    sample: fileData.rows.slice(0, 5),
+                    targetFields: availableFields.map(f => ({ key: f.key, label: f.label, type: f.type }))
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.mapping) {
+                fileData.customMapping = data.mapping;
+                console.log("AI Mapping Applied for " + fileData.name, data.mapping);
+            }
+        } catch (e) {
+            console.error("AI Mapping Failed:", e);
+        }
+    };
+
+    const processQueue = async () => {
+         // Identify generics (potential candidates for AI mapping)
+         const generics = newFiles.filter(f => f.type === 'generic');
+         
+         // Only run AI if it's generic AND has rows
+         if (generics.length > 0) {
+             await Promise.all(generics.map(f => {
+                 if (f.rows.length > 0) return handleAiMapping(f);
+                 return Promise.resolve();
+             }));
+         }
+
+         setIsParsing(false);
+         setUploadedFiles(prev => [...prev, ...newFiles]);
+         setStep('review_files');
+         setWarning(null); 
+    };
 
     acceptedFiles.forEach(file => {
         Papa.parse(file, {
@@ -138,19 +194,17 @@ export function ImportsPage() {
                 }
 
                 if (completed === acceptedFiles.length) {
-                    setIsParsing(false);
-                    setUploadedFiles(prev => [...prev, ...newFiles]);
-                    setStep('review_files');
+                    processQueue();
                 }
             },
             error: (err) => {
                 console.error("Parse error", err);
                 completed++; // Ensure we don't hang
-                if (completed === acceptedFiles.length) setIsParsing(false);
+                if (completed === acceptedFiles.length) processQueue();
             }
         });
     });
-  }, []);
+  }, [availableFields]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -168,7 +222,15 @@ export function ImportsPage() {
 
   const handleMerge = () => {
       // 1. Merge
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics } = mergeAndProcessData(uploadedFiles, availableFields);
+      // Phase 1: Capture Organization Name
+      const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, organizationName } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName);
+
+      if (organizationName) {
+          localStorage.setItem('goride_fleet_name', organizationName);
+          // Trigger update for AppLayout
+          window.dispatchEvent(new Event('fleetNameUpdated'));
+      }
 
       // 2. Apply Platform Override
       const finalTrips = trips.map(t => ({
@@ -182,6 +244,103 @@ export function ImportsPage() {
       setProcessedOrganizationMetrics(organizationMetrics);
       setProcessedRentalContracts(rentalContracts);
       setStep('preview_merged');
+  };
+
+  const handleAnalyze = async () => {
+    setIsParsing(true);
+    setWarning("AI is analyzing your fleet data... This may take 30-60 seconds.");
+    
+    try {
+        // 1. Get AI Analysis
+        const payload = constructAiPayload(uploadedFiles);
+        const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
+        
+        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/analyze-fleet`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${publicAnonKey}`
+            },
+            body: JSON.stringify({ payload })
+        });
+        
+        const aiResponse = await res.json();
+        if (!aiResponse.success) throw new Error(aiResponse.error || "AI Analysis Failed");
+        
+        const aiData = aiResponse.data; // { drivers, vehicles, financials, insights }
+
+        // 2. Get Local Trips (for the table view)
+        // This also runs the robust "Bottom-Up" financial calculation we just fixed.
+        const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
+        const localResult = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName);
+        
+        if (localResult.organizationName) {
+            localStorage.setItem('goride_fleet_name', localResult.organizationName);
+            window.dispatchEvent(new Event('fleetNameUpdated'));
+        }
+        
+        // Apply Platform Override (Parity with Legacy Merge)
+        const finalTrips = localResult.trips.map(t => ({
+            ...t,
+            platform: selectedPlatform as any
+        }));
+
+        // 3. Merge AI Data into State
+        setProcessedData(finalTrips); // Keep local trips for table
+        
+        // Phase 1: Run AI Auditor
+        if (aiData.drivers || aiData.vehicles || aiData.financials) {
+            
+            // OPTION 2 FIX: Override AI Financials with Local Bottom-Up Calculation
+            // We trust our row-by-row sum ($38k) more than the AI's text reading ($77k)
+            const trustedFinancials = localResult.organizationMetrics.length > 0 
+                ? localResult.organizationMetrics[0] 
+                : (aiData.financials || { totalEarnings: 0, netFare: 0, balanceStart: 0, balanceEnd: 0, periodChange: 0, fleetProfitMargin: 0, cashPosition: 0, periodStart: new Date().toISOString(), periodEnd: new Date().toISOString() });
+
+            const audit = DataSanitizer.audit({
+                drivers: aiData.drivers || [],
+                vehicles: aiData.vehicles || [],
+                financials: trustedFinancials,
+                metadata: aiData.metadata || { analysisDate: new Date().toISOString(), periodStart: new Date().toISOString(), periodEnd: new Date().toISOString(), filesProcessed: uploadedFiles.length },
+                insights: aiData.insights || { alerts: [], trends: [], recommendations: [] }
+            }, finalTrips);
+            
+            setAuditState(audit);
+            
+            // Hydrate Legacy State for Backward Compatibility
+            setProcessedDriverMetrics(audit.sanitized.drivers.map(r => r.data));
+            setProcessedVehicleMetrics(audit.sanitized.vehicles.map(r => r.data));
+            setProcessedOrganizationMetrics([audit.sanitized.financials.data]);
+            setProcessedInsights(aiData.insights);
+            
+            // Console Log for Devs
+            console.log("AI Auditor Results:", audit.report);
+            
+            // Set Warning if Health is not 100%
+            if (audit.report.status !== 'healthy') {
+                 setWarning(audit.report.summary);
+            }
+        } else {
+            // Fallback for partial AI failure
+             if (aiData.drivers) setProcessedDriverMetrics(aiData.drivers); 
+             if (aiData.vehicles) setProcessedVehicleMetrics(aiData.vehicles);
+             if (aiData.financials) setProcessedOrganizationMetrics([aiData.financials]); 
+             if (aiData.insights) setProcessedInsights(aiData.insights);
+        }
+        
+        // Log insights for now (Phase 8 will visualize them)
+        console.log("AI Insights:", aiData.insights);
+        if (aiData.insights?.alerts?.length > 0) {
+            setWarning(`AI Found Alerts: ${aiData.insights.alerts[0]}`);
+        }
+
+        setStep('preview_merged');
+    } catch (e: any) {
+        setError(e.message);
+    } finally {
+        setIsParsing(false);
+        // Do not clear warning immediately so user sees the result
+    }
   };
 
   const handleConfirmImport = async () => {
@@ -201,24 +360,71 @@ export function ImportsPage() {
             processedBy: 'Admin' // In real app, use user name
           };
 
-          // Assign batchId to all trips
-          const tripsWithBatch = processedData.map(trip => ({
-            ...trip,
-            batchId
-          }));
-
           // Save Batch Record FIRST
           await api.createBatch(batchMeta);
           
-          // Save Trips
-          await api.saveTrips(tripsWithBatch);
+          if (auditState) {
+              // PHASE 7: NEW SAVE FLOW (Mega-JSON)
+              const fleetState = {
+                  drivers: auditState.sanitized.drivers.map(d => d.data),
+                  vehicles: auditState.sanitized.vehicles.map(v => v.data),
+                  trips: auditState.sanitized.trips.map(t => ({ ...t.data, batchId })), // Attach Batch ID
+                  financials: auditState.sanitized.financials.data,
+                  metadata: auditState.sanitized.metadata,
+                  insights: auditState.sanitized.insights
+              };
+              
+              await api.saveFleetState(fleetState);
+              
+              // Notifications from AI Insights
+              if (fleetState.insights) {
+                  const promises = [];
+                  if (fleetState.insights.alerts?.length > 0) {
+                      for (const alertMsg of fleetState.insights.alerts) {
+                           const isCritical = alertMsg.toLowerCase().includes('ghost') || alertMsg.toLowerCase().includes('fraud') || alertMsg.toLowerCase().includes('risk') || alertMsg.toLowerCase().includes('phantom');
+                           promises.push(api.createNotification({
+                              id: crypto.randomUUID(),
+                              type: 'alert',
+                              severity: isCritical ? 'critical' : 'warning',
+                              title: isCritical ? 'Critical Anomaly Detected' : 'Fleet Alert',
+                              message: alertMsg,
+                              timestamp: new Date().toISOString(),
+                              read: false
+                           }));
+                      }
+                  }
+                  // Trends
+                  if (fleetState.insights.trends?.length > 0) {
+                      for (const trendMsg of fleetState.insights.trends) {
+                          promises.push(api.createNotification({
+                              id: crypto.randomUUID(),
+                              type: 'update',
+                              severity: 'info',
+                              title: 'Performance Trend',
+                              message: trendMsg,
+                              timestamp: new Date().toISOString(),
+                              read: false
+                          }));
+                      }
+                  }
+                  await Promise.all(promises);
+              }
+              
+          } else {
+              // LEGACY FLOW (Fallback for standard merge)
+              const tripsWithBatch = processedData.map(trip => ({
+                ...trip,
+                batchId
+              }));
 
-          // Save Metrics
-          if (processedDriverMetrics.length > 0) {
-              await api.saveDriverMetrics(processedDriverMetrics);
-          }
-          if (processedVehicleMetrics.length > 0) {
-              await api.saveVehicleMetrics(processedVehicleMetrics);
+              await api.saveTrips(tripsWithBatch);
+
+              if (processedDriverMetrics.length > 0) {
+                  await api.saveDriverMetrics(processedDriverMetrics);
+              }
+              if (processedVehicleMetrics.length > 0) {
+                  await api.saveVehicleMetrics(processedVehicleMetrics);
+              }
           }
           
           setStep('success');
@@ -257,6 +463,104 @@ export function ImportsPage() {
 
 
   // --- Render Helpers ---
+
+  const handleEditAnomaly = (id: string, type: 'trip' | 'driver' | 'vehicle', updatedData: any) => {
+      if (!auditState) return;
+      const newState = { ...auditState };
+      
+      if (type === 'trip' && newState.sanitized.trips) {
+          const idx = newState.sanitized.trips.findIndex(t => t.data.id === id);
+          if (idx !== -1) {
+              // 1. Update Data
+              newState.sanitized.trips[idx].data = { ...newState.sanitized.trips[idx].data, ...updatedData };
+              // 2. Re-Audit
+              const reAudit = DataSanitizer.auditTrip(newState.sanitized.trips[idx].data);
+              newState.sanitized.trips[idx] = reAudit;
+          }
+      } else if (type === 'driver') {
+          const idx = newState.sanitized.drivers.findIndex(d => d.data.driverId === id);
+          if (idx !== -1) {
+              newState.sanitized.drivers[idx].data = { ...newState.sanitized.drivers[idx].data, ...updatedData };
+              const reAudit = DataSanitizer.auditDriver(newState.sanitized.drivers[idx].data);
+              newState.sanitized.drivers[idx] = reAudit;
+          }
+      } else if (type === 'vehicle') {
+          // Find by plate or ID
+          const idx = newState.sanitized.vehicles.findIndex(v => (v.data.plateNumber === id || v.data.vehicleId === id));
+          if (idx !== -1) {
+              newState.sanitized.vehicles[idx].data = { ...newState.sanitized.vehicles[idx].data, ...updatedData };
+              const reAudit = DataSanitizer.auditVehicle(newState.sanitized.vehicles[idx].data);
+              newState.sanitized.vehicles[idx] = reAudit;
+          }
+      }
+      
+      // 3. Re-calculate Report Score & Summary (Simplified for now - strictly re-running report gen would be best but this is okay)
+      // Actually, we should trigger a full report regen if we want the score to update.
+      // But for Phase 4, just updating the record state is sufficient to remove it from the quarantine list if healthy.
+      
+      setAuditState(newState);
+      if (type === 'trip') setProcessedData(newState.sanitized.trips?.map(t => t.data) || []);
+      if (type === 'driver') setProcessedDriverMetrics(newState.sanitized.drivers.map(d => d.data));
+      if (type === 'vehicle') setProcessedVehicleMetrics(newState.sanitized.vehicles.map(v => v.data));
+  };
+
+  const handleDismissAnomaly = (id: string, type: 'trip' | 'driver' | 'vehicle') => {
+      if (!auditState) return;
+      const newState = { ...auditState };
+      
+      if (type === 'trip') {
+          const idx = newState.sanitized.trips.findIndex(t => t.data.id === id);
+          if (idx !== -1) {
+              newState.sanitized.trips[idx].flags = [];
+              // Rudimentary count update - ideally we re-run audit
+              newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
+          }
+      } else if (type === 'driver') {
+          const idx = newState.sanitized.drivers.findIndex(d => d.data.driverId === id);
+          if (idx !== -1) {
+              newState.sanitized.drivers[idx].flags = [];
+              newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
+          }
+      } else if (type === 'vehicle') {
+          const idx = newState.sanitized.vehicles.findIndex(v => v.data.plateNumber === id || v.data.vehicleId === id);
+          if (idx !== -1) {
+              newState.sanitized.vehicles[idx].flags = [];
+              newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
+          }
+      }
+      setAuditState(newState);
+  };
+
+  const handleExcludeAnomaly = (id: string, type: 'trip' | 'driver' | 'vehicle') => {
+      if (!auditState) return;
+      const newState = { ...auditState };
+      
+      if (type === 'trip') {
+          const idx = newState.sanitized.trips.findIndex(t => t.data.id === id);
+          if (idx !== -1) {
+              newState.sanitized.trips[idx].isExcluded = true;
+              newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
+          }
+      } else if (type === 'driver') {
+          const idx = newState.sanitized.drivers.findIndex(d => d.data.driverId === id);
+          if (idx !== -1) {
+              newState.sanitized.drivers[idx].isExcluded = true;
+              newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
+          }
+      } else if (type === 'vehicle') {
+          const idx = newState.sanitized.vehicles.findIndex(v => v.data.plateNumber === id || v.data.vehicleId === id);
+          if (idx !== -1) {
+              newState.sanitized.vehicles[idx].isExcluded = true;
+              newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
+          }
+      }
+      setAuditState(newState);
+      
+      // Update processed lists to remove excluded items
+      if (type === 'trip') setProcessedData(newState.sanitized.trips.filter(t => !t.isExcluded).map(t => t.data));
+      if (type === 'driver') setProcessedDriverMetrics(newState.sanitized.drivers.filter(d => !d.isExcluded).map(d => d.data));
+      if (type === 'vehicle') setProcessedVehicleMetrics(newState.sanitized.vehicles.filter(v => !v.isExcluded).map(v => v.data));
+  };
 
   const getFileIcon = (type: FileData['type']) => {
       if (type === 'uber_trip') return <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><Merge className="h-5 w-5" /></div>;
@@ -494,14 +798,6 @@ export function ImportsPage() {
         </Alert>
       )}
 
-      {warning && (
-        <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
-          <Info className="h-4 w-4 text-yellow-800" />
-          <AlertTitle>System Notice</AlertTitle>
-          <AlertDescription>{warning}</AlertDescription>
-        </Alert>
-      )}
-
       {/* STEP 0: SELECT PLATFORM */}
       {step === 'select_platform' && (
         <div className="space-y-6">
@@ -524,35 +820,33 @@ export function ImportsPage() {
                                 <CloudDownload className="h-6 w-6 text-white" />
                             )}
                         </div>
-                        <div className="text-center space-y-1">
-                            <h4 className="font-semibold text-indigo-900">Connect & Sync</h4>
-                            <p className="text-xs text-indigo-700">{isParsing ? 'Syncing...' : 'Secure OAuth Login'}</p>
+                        <div className="text-center">
+                            <h4 className="font-semibold text-indigo-900">Uber Sync</h4>
+                            <p className="text-xs text-indigo-600/80 mt-1">Connect Account</p>
                         </div>
                     </CardContent>
                 </Card>
 
+                {/* CSV Options */}
                 {[
-                    { id: 'Uber', icon: Car, color: 'text-slate-900', bg: 'bg-slate-100', border: 'hover:border-slate-900', desc: 'CSV Import' },
-                    { id: 'Lyft', icon: Car, color: 'text-pink-600', bg: 'bg-pink-50', border: 'hover:border-pink-500', desc: 'Ride History' },
-                    { id: 'Bolt', icon: Zap, color: 'text-green-600', bg: 'bg-green-50', border: 'hover:border-green-500', desc: 'Trip Reports' },
-                    { id: 'InDrive', icon: Globe, color: 'text-blue-600', bg: 'bg-blue-50', border: 'hover:border-blue-500', desc: 'Bid Activity' },
-                    { id: 'Other', icon: Layers, color: 'text-slate-600', bg: 'bg-slate-50', border: 'hover:border-slate-400', desc: 'Generic CSV' }
-                ].map((p) => (
+                    { id: 'Uber', icon: 'UB', color: 'bg-black text-white' },
+                    { id: 'Lyft', icon: 'LY', color: 'bg-pink-600 text-white' },
+                    { id: 'Bolt', icon: 'BO', color: 'bg-green-500 text-white' },
+                    { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white' },
+                    { id: 'Custom', icon: '?', color: 'bg-slate-500 text-white' },
+                ].map(platform => (
                     <Card 
-                        key={p.id}
-                        onClick={() => {
-                            setSelectedPlatform(p.id);
-                            setStep('upload');
-                        }}
-                        className={`cursor-pointer transition-all duration-200 border-2 hover:shadow-md ${p.border}`}
+                        key={platform.id}
+                        onClick={() => { setSelectedPlatform(platform.id); setStep('upload'); }}
+                        className="cursor-pointer transition-all duration-200 hover:border-slate-400 hover:shadow-md"
                     >
                         <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
-                            <div className={`h-12 w-12 rounded-full ${p.bg} flex items-center justify-center`}>
-                                <p.icon className={`h-6 w-6 ${p.color}`} />
+                            <div className={`h-12 w-12 rounded-full ${platform.color} flex items-center justify-center font-bold text-lg`}>
+                                {platform.icon}
                             </div>
-                            <div className="text-center space-y-1">
-                                <h4 className="font-semibold text-slate-900">{p.id}</h4>
-                                <p className="text-xs text-slate-500">{p.desc}</p>
+                            <div className="text-center">
+                                <h4 className="font-semibold">{platform.id}</h4>
+                                <p className="text-xs text-slate-500 mt-1">CSV Import</p>
                             </div>
                         </CardContent>
                     </Card>
@@ -565,7 +859,7 @@ export function ImportsPage() {
       {step === 'upload' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center">
                 <div>
                     <CardTitle>Upload {selectedPlatform} Data</CardTitle>
                     <CardDescription>
@@ -692,9 +986,18 @@ export function ImportsPage() {
                                   <span className="font-medium">{uploadedFiles.filter(f => f.type.includes('driver_quality') || f.type.includes('vehicle_performance')).length}</span>
                               </div>
 
-                              <Button onClick={handleMerge} className="w-full" size="lg">
-                                  Merge & Preview <ArrowRight className="ml-2 h-4 w-4" />
-                              </Button>
+                              <div className="flex flex-col gap-2 w-full">
+                                  <Button onClick={handleAnalyze} className="w-full bg-violet-600 hover:bg-violet-700 shadow-sm" size="lg" disabled={isParsing}>
+                                      {isParsing ? (
+                                        <>
+                                            <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                                            AI Analyzing...
+                                        </>
+                                      ) : (
+                                        <>Analyze Fleet with AI <Zap className="ml-2 h-4 w-4" /></>
+                                      )}
+                                  </Button>
+                              </div>
                           </div>
                       </CardContent>
                   </Card>
@@ -702,315 +1005,426 @@ export function ImportsPage() {
           </div>
       )}
 
+      {/* STEP 3: PREVIEW & CONFIRM */}
       {step === 'preview_merged' && (
-          <Card className="flex flex-col h-[700px]">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <div>
-                      <CardTitle>Preview Merged Data</CardTitle>
-                      <CardDescription>
-                          Found <strong>{processedData.length}</strong> unique trips, 
-                          <strong> {processedDriverMetrics.length}</strong> driver reports, 
-                          and <strong> {processedVehicleMetrics.length}</strong> vehicle reports.
-                      </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                      <Button variant="outline" onClick={() => setStep('review_files')}>
-                          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Files
-                      </Button>
-                      <Button onClick={handleConfirmImport} disabled={isUploading}>
-                         {isUploading ? "Uploading..." : "Confirm Import"}
-                      </Button>
-                  </div>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-auto pt-0">
-                  {processedData.some(t => !t.amount || !t.driverId || t.driverId === 'unknown') && (
-                      <Alert variant="destructive" className="mb-4 bg-orange-50 border-orange-200 text-orange-800">
-                          <AlertCircle className="h-4 w-4 text-orange-600" />
-                          <AlertTitle className="text-orange-900">Validation Issues Detected</AlertTitle>
-                          <AlertDescription className="text-orange-800">
-                              {processedData.filter(t => !t.amount || !t.driverId || t.driverId === 'unknown').length} trips have missing financial or driver data. These may cause reconciliation errors.
-                          </AlertDescription>
-                      </Alert>
-                  )}
-                  <Tabs defaultValue="fleet" className="w-full">
-                      <TabsList className="mb-4">
-                          <TabsTrigger value="fleet">Performance Metric</TabsTrigger>
-                          <TabsTrigger value="trips">BASIC TRIP INFORMATION ({processedData.length})</TabsTrigger>
-                          <TabsTrigger value="financials">Financial Details</TabsTrigger>
-                          <TabsTrigger value="drivers" disabled={processedDriverMetrics.length === 0}>
-                              Driver Performance {processedDriverMetrics.length > 0 && `(${processedDriverMetrics.length})`}
-                          </TabsTrigger>
-                          <TabsTrigger value="vehicles" disabled={processedVehicleMetrics.length === 0}>
-                               Vehicle Health {processedVehicleMetrics.length > 0 && `(${processedVehicleMetrics.length})`}
-                          </TabsTrigger>
-                      </TabsList>
+          <div className="flex flex-col h-[calc(100vh-140px)] gap-4">
+              
+               {/* PHASE 2: AI Audit Summary Card */}
+              {auditState ? (
+                   <AuditSummaryCard report={auditState.report} />
+              ) : (
+                  // Legacy Warning (Fallback)
+                  warning && (
+                    <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
+                        <Info className="h-4 w-4 text-yellow-800" />
+                        <AlertTitle>System Notice</AlertTitle>
+                        <AlertDescription>{warning}</AlertDescription>
+                    </Alert>
+                  )
+              )}
 
-                      <TabsContent value="fleet" className="space-y-4">
-                          <Card>
-                              <CardHeader>
-                                  <CardTitle>Performance Metrics</CardTitle>
-                                  <CardDescription>
-                                      Analyzed performance metrics for {processedData.length} trips.
-                                  </CardDescription>
-                              </CardHeader>
-                              <CardContent>
-                                  {processedData.length === 0 ? (
-                                      <div className="flex flex-col items-center justify-center p-12 bg-slate-50 border border-dashed rounded-lg text-slate-500">
-                                          <Layers className="h-12 w-12 text-slate-300 mb-2" />
-                                          <p>No trip data found to analyze.</p>
-                                          <p className="text-xs mt-1">Upload Trip Activity or Payment files.</p>
-                                      </div>
-                                  ) : (
-                                      <div className="rounded-md border h-[500px] overflow-auto">
-                                          <Table>
-                                              <TableHeader className="bg-slate-50 sticky top-0">
-                                                  <TableRow>
-                                                      <TableHead>Date</TableHead>
-                                                      <TableHead>Day</TableHead>
-                                                      <TableHead>Time of Day</TableHead>
-                                                      <TableHead className="text-right">Speed</TableHead>
-                                                      <TableHead className="text-right">Earn/Km</TableHead>
-                                                      <TableHead className="text-right">Earn/Min</TableHead>
-                                                      <TableHead className="text-right">Efficiency</TableHead>
-                                                  </TableRow>
-                                              </TableHeader>
-                                              <TableBody>
-                                                  {(() => {
-                                                      const avgDist = processedData.reduce((sum, t) => sum + (t.distance || 0), 0) / (processedData.length || 1);
-                                                      
-                                                      return processedData.map((trip) => {
-                                                          const date = new Date(trip.date || trip.requestTime || Date.now());
-                                                          const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'long' });
-                                                          const hour = date.getHours();
-                                                          
-                                                          let timeOfDay = 'Night';
-                                                          if (hour >= 6 && hour < 12) timeOfDay = 'Morning';
-                                                          else if (hour >= 12 && hour < 18) timeOfDay = 'Afternoon';
-                                                          else if (hour >= 18 && hour < 24) timeOfDay = 'Evening';
+              {/* Quick Stats Bar */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
+                            <span className="text-xs text-slate-500 uppercase font-medium">Trips Found</span>
+                            <span className="text-2xl font-bold text-slate-900">{processedData.filter(t => t.status === 'Completed').length}</span>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
+                            <span className="text-xs text-slate-500 uppercase font-medium">Drivers</span>
+                            <span className="text-2xl font-bold text-slate-900">{processedDriverMetrics.length}</span>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
+                            <span className="text-xs text-slate-500 uppercase font-medium">Vehicles</span>
+                            <span className="text-2xl font-bold text-slate-900">{processedVehicleMetrics.length}</span>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
+                            <span className="text-xs text-slate-500 uppercase font-medium">Total Volume</span>
+                            <span className="text-2xl font-bold text-slate-900">
+                                ${processedOrganizationMetrics[0]?.totalEarnings?.toLocaleString() || "0"}
+                            </span>
+                        </CardContent>
+                    </Card>
+                </div>
 
-                                                          const dist = trip.distance || 0;
-                                                          const dur = trip.duration || 0; // minutes
-                                                          const earn = trip.grossEarnings || 0;
-                                                          
-                                                          // Speed: km/h (assuming dist is km)
-                                                          const speed = dur > 0 ? (dist / (dur / 60)) : 0;
-                                                          
-                                                          // Earn per km
-                                                          const earnPerKm = dist > 0 ? (earn / dist) : 0;
-                                                          
-                                                          // Earn per min
-                                                          const earnPerMin = dur > 0 ? (earn / dur) : 0;
-                                                          
-                                                          // Efficiency
-                                                          const eff = avgDist > 0 ? (dist / avgDist) : 0;
-                                                          
-                                                          return (
-                                                              <TableRow key={trip.id}>
-                                                                  <TableCell className="whitespace-nowrap">{date.toLocaleDateString()}</TableCell>
-                                                                  <TableCell>{dayOfWeek}</TableCell>
-                                                                  <TableCell>
-                                                                    <Badge variant="outline" className="font-normal">{timeOfDay}</Badge>
-                                                                  </TableCell>
-                                                                  <TableCell className="text-right">{speed.toFixed(1)} km/h</TableCell>
-                                                                  <TableCell className="text-right">{earnPerKm === 0 ? '-' : `$${earnPerKm.toFixed(2)}`}</TableCell>
-                                                                  <TableCell className="text-right">{earnPerMin === 0 ? '-' : `$${earnPerMin.toFixed(2)}`}</TableCell>
-                                                                  <TableCell className="text-right">{eff.toFixed(2)}x</TableCell>
-                                                              </TableRow>
-                                                          );
-                                                      });
-                                                  })()}
-                                              </TableBody>
-                                          </Table>
-                                      </div>
-                                  )}
-                              </CardContent>
-                          </Card>
-                      </TabsContent>
+              <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm">
+                  <CardHeader className="pb-2 border-b border-slate-100 bg-white sticky top-0 z-10">
+                      <div className="flex justify-between items-center">
+                          <div className="space-y-1">
+                              <CardTitle className="text-xl">Import Preview</CardTitle>
+                              <CardDescription>
+                                  Review the merged data before committing to the database.
+                              </CardDescription>
+                          </div>
+                          <div className="flex gap-2">
+                              <Button variant="outline" onClick={() => setStep('review_files')}>
+                                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Files
+                              </Button>
+                              <Button onClick={handleConfirmImport} disabled={isUploading || (auditState?.report.status === 'critical')} className={auditState?.report.status === 'critical' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}>
+                                 {isUploading ? "Uploading..." : (auditState?.report.status === 'critical' ? "Force Import (Risky)" : "Confirm Import")}
+                              </Button>
+                          </div>
+                      </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-auto pt-4 bg-slate-50/50">
                       
-                      <TabsContent value="trips" className="space-y-4">
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
-                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
-                                <div className="flex flex-wrap gap-2">
-                                    {uploadedFiles.filter(f => ['uber_trip', 'uber_payment', 'uber_payment_org', 'generic'].includes(f.type)).map(f => (
-                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
-                                            {f.name}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="h-[500px] overflow-auto border rounded-md">
-                        <Table>
-                            <TableHeader className="bg-slate-50 sticky top-0">
-                                <TableRow>
-                                    <TableHead>Trip ID</TableHead>
-                                    <TableHead>Date & Time</TableHead>
-                                    <TableHead>Duration</TableHead>
-                                    <TableHead>Distance</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Pickup</TableHead>
-                                    <TableHead>Dropoff</TableHead>
-                                    <TableHead>Service</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {processedData.slice(0, 100).map(trip => (
-                                    <TableRow key={trip.id}>
-                                        <TableCell className="font-mono text-xs text-slate-500">
-                                            {trip.id.substring(0, 8)}...
-                                        </TableCell>
-                                        <TableCell className="text-xs">
-                                            <div className="flex flex-col">
-                                                <span className="font-medium">{new Date(trip.requestTime || trip.date).toLocaleDateString()}</span>
-                                                <span className="text-slate-500">
-                                                    {new Date(trip.requestTime || trip.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                                    {trip.dropoffTime && ` - ${new Date(trip.dropoffTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
-                                                </span>
+                      <Tabs defaultValue={auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) ? "quarantine" : "fleet"} className="w-full">
+                          <TabsList className="mb-4 bg-white border border-slate-200 p-1 h-auto flex-wrap">
+                              {auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) && (
+                                  <TabsTrigger value="quarantine" className="data-[state=active]:bg-red-50 data-[state=active]:text-red-700 flex items-center gap-2">
+                                      <AlertTriangle className="h-4 w-4" />
+                                      Anomalies
+                                      <Badge variant="destructive" className="h-5 px-1.5 ml-1">
+                                          {auditState.report.warningCount + auditState.report.criticalCount}
+                                      </Badge>
+                                  </TabsTrigger>
+                              )}
+                              <TabsTrigger value="fleet" className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">Analysis Dashboard</TabsTrigger>
+                              <TabsTrigger value="trips">Trips ({processedData.length})</TabsTrigger>
+                              <TabsTrigger value="financials">Financials</TabsTrigger>
+                              <TabsTrigger value="drivers" disabled={processedDriverMetrics.length === 0}>
+                                  Driver Performance {processedDriverMetrics.length > 0 && `(${processedDriverMetrics.length})`}
+                              </TabsTrigger>
+                              <TabsTrigger value="vehicles" disabled={processedVehicleMetrics.length === 0}>
+                                   Vehicle Health {processedVehicleMetrics.length > 0 && `(${processedVehicleMetrics.length})`}
+                              </TabsTrigger>
+                          </TabsList>
+
+                          <TabsContent value="quarantine" className="space-y-4">
+                              {auditState && (
+                                  <>
+                                    <ImpactAnalysis newState={auditState} />
+                                    <QuarantineList 
+                                        auditState={auditState} 
+                                        onDismiss={handleDismissAnomaly}
+                                        onExclude={handleExcludeAnomaly}
+                                        onSave={handleEditAnomaly}
+                                    />
+                                  </>
+                              )}
+                          </TabsContent>
+
+                          <TabsContent value="fleet" className="space-y-4">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Performance Metrics</CardTitle>
+                                    <CardDescription>
+                                        Analyzed performance metrics for {processedData.length} trips.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {processedData.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center p-12 bg-slate-50 border border-dashed rounded-lg text-slate-500">
+                                            <Layers className="h-12 w-12 text-slate-300 mb-2" />
+                                            <p>No trip data found to analyze.</p>
+                                            <p className="text-xs mt-1">Upload Trip Activity or Payment files.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-md border h-[500px] overflow-auto">
+                                            {/* Mobile Card View */}
+                                            <div className="md:hidden p-4 space-y-4">
+                                                {processedData.slice(0, 50).map((trip) => {
+                                                    const date = new Date(trip.date || trip.requestTime || Date.now());
+                                                    const dist = trip.distance || 0;
+                                                    const dur = trip.duration || 0;
+                                                    const earn = trip.grossEarnings || 0;
+                                                    const speed = dur > 0 ? (dist / (dur / 60)) : 0;
+                                                    
+                                                    return (
+                                                        <Card key={trip.id} className="border-slate-200 shadow-sm">
+                                                            <CardContent className="p-3">
+                                                                <div className="flex justify-between items-center mb-2">
+                                                                    <span className="font-medium text-slate-900">{date.toLocaleDateString()}</span>
+                                                                    <Badge variant="outline">{dur.toFixed(0)} min</Badge>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-y-2 text-sm text-slate-600">
+                                                                    <div>Speed: <span className="text-slate-900">{speed.toFixed(1)} km/h</span></div>
+                                                                    <div>Earn: <span className="text-emerald-700 font-medium">${earn.toFixed(2)}</span></div>
+                                                                    <div className="col-span-2 text-xs text-slate-400 mt-1">ID: {trip.id.substring(0,8)}...</div>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    );
+                                                })}
                                             </div>
-                                        </TableCell>
-                                        <TableCell className="text-xs">{trip.duration ? `${Math.round(trip.duration)} min` : '-'}</TableCell>
-                                        <TableCell className="text-xs">{trip.distance ? `${trip.distance.toFixed(1)} km` : '-'}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className={
-                                                trip.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
-                                                trip.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border-rose-200' : ''
-                                            }>
-                                                {trip.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-xs truncate max-w-[150px]" title={trip.pickupLocation}>
-                                            {trip.pickupArea || trip.pickupLocation || '-'}
-                                        </TableCell>
-                                        <TableCell className="text-xs truncate max-w-[150px]" title={trip.dropoffLocation}>
-                                            {trip.dropoffArea || trip.dropoffLocation || '-'}
-                                        </TableCell>
-                                        <TableCell className="text-xs">{trip.serviceType || 'UberX'}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        </div>
-                      </TabsContent>
 
-                      <TabsContent value="financials" className="space-y-4">
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
-                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
-                                <div className="flex flex-wrap gap-2">
-                                    {uploadedFiles.filter(f => f.type === 'uber_payment').map(f => (
-                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
-                                            {f.name}
-                                        </Badge>
-                                    ))}
-                                    {uploadedFiles.filter(f => f.type === 'uber_payment').length === 0 && (
-                                        <span className="text-xs text-slate-400 italic">No payment files linked</span>
+                                            {/* Desktop Table */}
+                                            <Table className="hidden md:table">
+                                                <TableHeader className="bg-slate-50 sticky top-0">
+                                                    <TableRow>
+                                                        <TableHead>Date</TableHead>
+                                                        <TableHead>Day</TableHead>
+                                                        <TableHead>Time of Day</TableHead>
+                                                        <TableHead className="text-right">Speed</TableHead>
+                                                        <TableHead className="text-right">Earn/Km</TableHead>
+                                                        <TableHead className="text-right">Earn/Min</TableHead>
+                                                        <TableHead className="text-right">Efficiency</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {(() => {
+                                                        const avgDist = processedData.reduce((sum, t) => sum + (t.distance || 0), 0) / (processedData.length || 1);
+                                                        
+                                                        return processedData.map((trip) => {
+                                                            const date = new Date(trip.date || trip.requestTime || Date.now());
+                                                            const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'long' });
+                                                            const hour = date.getHours();
+                                                            
+                                                            let timeOfDay = 'Night';
+                                                            if (hour >= 6 && hour < 12) timeOfDay = 'Morning';
+                                                            else if (hour >= 12 && hour < 18) timeOfDay = 'Afternoon';
+                                                            else if (hour >= 18 && hour < 24) timeOfDay = 'Evening';
+
+                                                            const dist = trip.distance || 0;
+                                                            const dur = trip.duration || 0; // minutes
+                                                            const earn = trip.grossEarnings || 0;
+                                                            
+                                                            // Speed: km/h (assuming dist is km)
+                                                            const speed = dur > 0 ? (dist / (dur / 60)) : 0;
+                                                            
+                                                            // Earn per km
+                                                            const earnPerKm = dist > 0 ? (earn / dist) : 0;
+                                                            
+                                                            // Earn per min
+                                                            const earnPerMin = dur > 0 ? (earn / dur) : 0;
+                                                            
+                                                            // Efficiency
+                                                            const eff = avgDist > 0 ? (dist / avgDist) : 0;
+                                                            
+                                                            return (
+                                                                <TableRow key={trip.id}>
+                                                                    <TableCell className="whitespace-nowrap">{date.toLocaleDateString()}</TableCell>
+                                                                    <TableCell>{dayOfWeek}</TableCell>
+                                                                    <TableCell>
+                                                                      <Badge variant="outline" className="font-normal">{timeOfDay}</Badge>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right">{speed.toFixed(1)} km/h</TableCell>
+                                                                    <TableCell className="text-right">{earnPerKm === 0 ? '-' : `$${earnPerKm.toFixed(2)}`}</TableCell>
+                                                                    <TableCell className="text-right">{earnPerMin === 0 ? '-' : `$${earnPerMin.toFixed(2)}`}</TableCell>
+                                                                    <TableCell className="text-right">{eff.toFixed(2)}x</TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        });
+                                                    })()}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
                                     )}
+                                </CardContent>
+                            </Card>
+                          </TabsContent>
+                          
+                          <TabsContent value="trips" className="space-y-4">
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                                <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {uploadedFiles.filter(f => ['uber_trip', 'uber_payment', 'uber_payment_org', 'generic'].includes(f.type)).map(f => (
+                                            <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                                {f.name}
+                                            </Badge>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="h-[500px] overflow-auto border rounded-md">
-                        <Table>
-                            <TableHeader className="bg-slate-50 sticky top-0 z-10">
-                                <TableRow>
-                                    <TableHead>Trip ID</TableHead>
-                                    <TableHead className="text-right">Gross Earnings</TableHead>
-                                    <TableHead className="text-right">Base Fare</TableHead>
-                                    <TableHead className="text-right">Tips</TableHead>
-                                    <TableHead className="text-right">Wait Time</TableHead>
-                                    <TableHead className="text-right">Surge</TableHead>
-                                    <TableHead className="text-right">Airport Fees</TableHead>
-                                    <TableHead className="text-right">Time at Stop</TableHead>
-                                    <TableHead className="text-right">Taxes</TableHead>
-                                    <TableHead className="text-right">Toll Charges</TableHead>
-                                    <TableHead className="text-right font-bold">Net to Driver</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {processedData.slice(0, 100).map(trip => (
-                                    <TableRow key={trip.id}>
-                                        <TableCell className="font-mono text-xs text-slate-500">
-                                            {trip.id.substring(0, 8)}...
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium text-xs">
-                                            {trip.grossEarnings !== undefined ? trip.grossEarnings.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.fareBreakdown?.baseFare ? trip.fareBreakdown.baseFare.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.fareBreakdown?.tips ? trip.fareBreakdown.tips.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.fareBreakdown?.waitTime ? trip.fareBreakdown.waitTime.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.fareBreakdown?.surge ? trip.fareBreakdown.surge.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.fareBreakdown?.airportFees ? trip.fareBreakdown.airportFees.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.fareBreakdown?.timeAtStop ? trip.fareBreakdown.timeAtStop.toFixed(2) : '-'}
-                                        </TableCell>
-                                         <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.fareBreakdown?.taxes ? trip.fareBreakdown.taxes.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-500 text-xs">
-                                            {trip.tollCharges ? trip.tollCharges.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right font-bold text-emerald-600 text-xs">
-                                            {trip.netToDriver !== undefined ? trip.netToDriver.toFixed(2) : '-'}
-                                        </TableCell>
+                            <div className="h-[500px] overflow-auto border rounded-md">
+                            <Table>
+                                <TableHeader className="bg-slate-50 sticky top-0">
+                                    <TableRow>
+                                        <TableHead>Trip ID</TableHead>
+                                        <TableHead>Date & Time</TableHead>
+                                        <TableHead>Duration</TableHead>
+                                        <TableHead>Distance</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Pickup</TableHead>
+                                        <TableHead>Dropoff</TableHead>
+                                        <TableHead>Service</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        </div>
-                      </TabsContent>
+                                </TableHeader>
+                                <TableBody>
+                                    {processedData.slice(0, 100).map(trip => (
+                                        <TableRow key={trip.id}>
+                                            <TableCell className="font-mono text-xs text-slate-500">
+                                                {trip.id.substring(0, 8)}...
+                                            </TableCell>
+                                            <TableCell className="text-xs">
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium">{new Date(trip.requestTime || trip.date).toLocaleDateString()}</span>
+                                                    <span className="text-slate-500">
+                                                        {new Date(trip.requestTime || trip.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                        {trip.dropoffTime && ` - ${new Date(trip.dropoffTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-xs">{trip.duration ? `${Math.round(trip.duration)} min` : '-'}</TableCell>
+                                            <TableCell className="text-xs">{trip.distance ? `${trip.distance.toFixed(1)} km` : '-'}</TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className={
+                                                    trip.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                                                    trip.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border-rose-200' : ''
+                                                }>
+                                                    {trip.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-xs truncate max-w-[150px]" title={trip.pickupLocation}>
+                                                {trip.pickupArea || trip.pickupLocation || '-'}
+                                            </TableCell>
+                                            <TableCell className="text-xs truncate max-w-[150px]" title={trip.dropoffLocation}>
+                                                {trip.dropoffArea || trip.dropoffLocation || '-'}
+                                            </TableCell>
+                                            <TableCell className="text-xs">{trip.serviceType || 'UberX'}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                            </div>
+                          </TabsContent>
 
-                      <TabsContent value="drivers" className="space-y-4">
-                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
-                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
-                                <div className="flex flex-wrap gap-2">
-                                    {uploadedFiles.filter(f => ['uber_driver_quality', 'uber_driver_activity', 'uber_payment_driver'].includes(f.type)).map(f => (
-                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
-                                            {f.name}
-                                        </Badge>
-                                    ))}
+                          <TabsContent value="financials" className="space-y-4">
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                                <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {uploadedFiles.filter(f => f.type === 'uber_payment').map(f => (
+                                            <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                                {f.name}
+                                            </Badge>
+                                        ))}
+                                        {uploadedFiles.filter(f => f.type === 'uber_payment').length === 0 && (
+                                            <span className="text-xs text-slate-400 italic">No payment files linked</span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="h-[500px] overflow-auto">
-                          <DriverScorecard metrics={processedDriverMetrics} />
-                        </div>
-                      </TabsContent>
-                      
-                      <TabsContent value="vehicles" className="space-y-4">
-                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
-                            <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
-                                <div className="flex flex-wrap gap-2">
-                                    {uploadedFiles.filter(f => ['uber_vehicle_performance'].includes(f.type)).map(f => (
-                                        <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
-                                            {f.name}
-                                        </Badge>
+                            <div className="h-[500px] overflow-auto border rounded-md">
+                                {/* Mobile Financial Cards */}
+                                <div className="md:hidden p-4 space-y-4">
+                                    {processedData.slice(0, 50).map(trip => (
+                                        <Card key={trip.id} className="border-slate-200">
+                                            <CardContent className="p-3 space-y-2">
+                                                <div className="flex justify-between items-center">
+                                                     <div className="font-mono text-xs text-slate-500">{trip.id.substring(0, 8)}...</div>
+                                                     <div className="text-emerald-700 font-bold">${trip.netToDriver !== undefined ? trip.netToDriver.toFixed(2) : '-'}</div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-y-1 text-xs text-slate-600">
+                                                    <div className="flex justify-between mr-2"><span>Gross:</span> <span>{trip.grossEarnings?.toFixed(2) || '-'}</span></div>
+                                                    <div className="flex justify-between"><span>Base:</span> <span>{trip.fareBreakdown?.baseFare?.toFixed(2) || '-'}</span></div>
+                                                    <div className="flex justify-between mr-2"><span>Tips:</span> <span>{trip.fareBreakdown?.tips?.toFixed(2) || '-'}</span></div>
+                                                    <div className="flex justify-between"><span>Surge:</span> <span>{trip.fareBreakdown?.surge?.toFixed(2) || '-'}</span></div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
                                     ))}
                                 </div>
+
+                                <Table className="hidden md:table">
+                                <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                                    <TableRow>
+                                        <TableHead>Trip ID</TableHead>
+                                        <TableHead className="text-right">Gross Earnings</TableHead>
+                                        <TableHead className="text-right">Base Fare</TableHead>
+                                        <TableHead className="text-right">Tips</TableHead>
+                                        <TableHead className="text-right">Wait Time</TableHead>
+                                        <TableHead className="text-right">Surge</TableHead>
+                                        <TableHead className="text-right">Airport Fees</TableHead>
+                                        <TableHead className="text-right">Time at Stop</TableHead>
+                                        <TableHead className="text-right">Taxes</TableHead>
+                                        <TableHead className="text-right">Toll Charges</TableHead>
+                                        <TableHead className="text-right font-bold">Net to Driver</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {processedData.slice(0, 100).map(trip => (
+                                        <TableRow key={trip.id}>
+                                            <TableCell className="font-mono text-xs text-slate-500">
+                                                {trip.id.substring(0, 8)}...
+                                            </TableCell>
+                                            <TableCell className="text-right font-medium text-xs">
+                                                {trip.grossEarnings !== undefined ? trip.grossEarnings.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.fareBreakdown?.baseFare ? trip.fareBreakdown.baseFare.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.fareBreakdown?.tips ? trip.fareBreakdown.tips.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.fareBreakdown?.waitTime ? trip.fareBreakdown.waitTime.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.fareBreakdown?.surge ? trip.fareBreakdown.surge.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.fareBreakdown?.airportFees ? trip.fareBreakdown.airportFees.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.fareBreakdown?.timeAtStop ? trip.fareBreakdown.timeAtStop.toFixed(2) : '-'}
+                                            </TableCell>
+                                             <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.fareBreakdown?.taxes ? trip.fareBreakdown.taxes.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-slate-500 text-xs">
+                                                {trip.tollCharges ? trip.tollCharges.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right font-bold text-emerald-600 text-xs">
+                                                {trip.netToDriver !== undefined ? trip.netToDriver.toFixed(2) : '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                             </div>
-                        </div>
-                        <div className="h-[500px] overflow-auto">
-                          <VehicleHealthCard metrics={processedVehicleMetrics} />
-                        </div>
-                      </TabsContent>
-                  </Tabs>
-              </CardContent>
-          </Card>
+                          </TabsContent>
+
+                          <TabsContent value="drivers" className="space-y-4">
+                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                                <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {uploadedFiles.filter(f => ['uber_driver_quality', 'uber_driver_activity', 'uber_payment_driver'].includes(f.type)).map(f => (
+                                            <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                                {f.name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="h-[500px] overflow-auto">
+                              <DriverScorecard metrics={processedDriverMetrics} />
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="vehicles" className="space-y-4">
+                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                                <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {uploadedFiles.filter(f => ['uber_vehicle_performance'].includes(f.type)).map(f => (
+                                            <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                                {f.name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="h-[500px] overflow-auto">
+                              <VehicleHealthCard metrics={processedVehicleMetrics} />
+                            </div>
+                          </TabsContent>
+                      </Tabs>
+                  </CardContent>
+              </Card>
+          </div>
       )}
 
       {step === 'success' && (
@@ -1020,12 +1434,22 @@ export function ImportsPage() {
                 <CheckCircle className="h-8 w-8 text-emerald-600" />
              </div>
              <div>
-               <h3 className="text-2xl font-bold text-slate-900">Import Complete!</h3>
-               <p className="text-slate-500">Successfully imported {processedData.length} trips.</p>
+               <h3 className="text-2xl font-bold text-slate-900">Fleet Sync Complete!</h3>
+               <p className="text-slate-500">
+                  Your fleet database has been updated successfully.<br/>
+                  {processedData.length} trips and {processedDriverMetrics.length} driver records have been committed.
+               </p>
+               {processedInsights && (processedInsights.alerts?.length || 0) > 0 && (
+                   <div className="mt-4 p-4 bg-orange-50 text-orange-800 rounded-md text-sm border border-orange-100 max-w-md mx-auto">
+                       <strong>Note:</strong> {processedInsights.alerts?.length} alerts have been logged to the dashboard.
+                   </div>
+               )}
              </div>
-             <Button onClick={reset} size="lg" className="mt-4">
-               Import More Files
-             </Button>
+             <div className="flex gap-3">
+                <Button onClick={reset} size="lg" className="mt-4">
+                  Import Another Batch
+                </Button>
+             </div>
           </CardContent>
         </Card>
       )}

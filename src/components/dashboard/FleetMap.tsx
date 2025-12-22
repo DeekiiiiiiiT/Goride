@@ -68,8 +68,8 @@ export function FleetMap({ vehicleMetrics = [], trips = [] }: FleetMapProps) {
                     <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{vehicleLocations.length} Active</span>
                 </div>
                 <div className="divide-y divide-slate-100">
-                    {vehicleLocations.map((v) => (
-                        <div key={v.id} className="p-3 hover:bg-slate-50 transition-colors">
+                    {vehicleLocations.map((v, index) => (
+                        <div key={`${v.id}-${index}`} className="p-3 hover:bg-slate-50 transition-colors">
                             <div className="flex items-center justify-between mb-1">
                                 <span className="font-medium text-sm text-slate-800">{v.plateNumber}</span>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${

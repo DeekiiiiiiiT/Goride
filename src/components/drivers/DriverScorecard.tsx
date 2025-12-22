@@ -19,8 +19,8 @@ export function DriverScorecard({ metrics }: DriverScorecardProps) {
   }
 
   // Calculate aggregates
-  const avgAcceptance = metrics.reduce((acc, m) => acc + m.acceptanceRate, 0) / metrics.length;
-  const avgRating = metrics.reduce((acc, m) => acc + m.ratingLast500, 0) / metrics.length;
+  const avgAcceptance = metrics.reduce((acc, m) => acc + (m.acceptanceRate || 0), 0) / (metrics.length || 1);
+  const avgRating = metrics.reduce((acc, m) => acc + (m.ratingLast500 || 0), 0) / (metrics.length || 1);
 
   return (
     <div className="space-y-6">
@@ -84,24 +84,24 @@ export function DriverScorecard({ metrics }: DriverScorecardProps) {
                             <TableCell>
                                 <div className="flex items-center gap-1">
                                     <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                                    {m.ratingLast500.toFixed(2)}
+                                    {(m.ratingLast500 || 0).toFixed(2)}
                                 </div>
                             </TableCell>
                             <TableCell>
-                                <span className={m.acceptanceRate < 0.85 ? "text-red-500 font-bold" : "text-slate-700"}>
-                                    {(m.acceptanceRate * 100).toFixed(0)}%
+                                <span className={(m.acceptanceRate || 0) < 0.85 ? "text-red-500 font-bold" : "text-slate-700"}>
+                                    {((m.acceptanceRate || 0) * 100).toFixed(0)}%
                                 </span>
                             </TableCell>
                             <TableCell>
-                                <span className={m.cancellationRate > 0.05 ? "text-red-500 font-bold" : "text-slate-700"}>
-                                    {(m.cancellationRate * 100).toFixed(0)}%
+                                <span className={(m.cancellationRate || 0) > 0.05 ? "text-red-500 font-bold" : "text-slate-700"}>
+                                    {((m.cancellationRate || 0) * 100).toFixed(0)}%
                                 </span>
                             </TableCell>
-                            <TableCell>{m.tripsCompleted}</TableCell>
+                            <TableCell>{m.tripsCompleted || 0}</TableCell>
                             <TableCell>
-                                {m.ratingLast500 > 4.85 && m.acceptanceRate > 0.9 ? (
+                                {(m.ratingLast500 || 0) > 4.85 && (m.acceptanceRate || 0) > 0.9 ? (
                                     <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-200">Elite</Badge>
-                                ) : m.acceptanceRate < 0.8 ? (
+                                ) : (m.acceptanceRate || 0) < 0.8 ? (
                                     <Badge className="bg-red-100 text-red-800 hover:bg-red-200 border-red-200">At Risk</Badge>
                                 ) : (
                                     <Badge variant="outline">Standard</Badge>
