@@ -50,7 +50,7 @@ export class DataSanitizer {
           // Check if it's just a tip or bonus
           const isFare = !trip.notes?.toLowerCase().includes('tip') && !trip.notes?.toLowerCase().includes('bonus');
           if (isFare) {
-              issues.push({ id: crypto.randomUUID(), field: 'distance', message: 'Phantom Trip: Earnings > 0 with 0 Distance', severity: 'warning' });
+              issues.push({ id: crypto.randomUUID(), field: 'distance', message: 'Financial Adjustment (Zero Distance Record)', severity: 'warning' });
               if (status !== 'critical') status = 'warning';
           }
       }
@@ -63,7 +63,7 @@ export class DataSanitizer {
       
       // 3. High Fare Anomaly
       if (trip.amount > 500) {
-           issues.push({ id: crypto.randomUUID(), field: 'amount', message: 'Abnormally High Fare (>$500)', severity: 'warning' });
+           issues.push({ id: crypto.randomUUID(), field: 'amount', message: 'High Value Transaction (>$500)', severity: 'warning' });
            if (status !== 'critical') status = 'warning';
       }
 
@@ -93,7 +93,7 @@ export class DataSanitizer {
 
     // Warnings
     if (driver.totalEarnings === undefined || driver.totalEarnings < 0) {
-      issues.push({ id: crypto.randomUUID(), field: 'totalEarnings', message: 'Negative or Missing Earnings', severity: 'warning' });
+      issues.push({ id: crypto.randomUUID(), field: 'totalEarnings', message: 'Negative Balance (Debt/Deduction)', severity: 'warning' });
       if (status !== 'critical') status = 'warning';
     }
     if (driver.ratingLast500 && driver.ratingLast500 < 4.5) {
@@ -189,7 +189,7 @@ export class DataSanitizer {
     // Summary Text
     let summary = "Data looks clean and ready for import.";
     if (status === 'critical') summary = `Found ${criticalCount} critical errors that prevent import.`;
-    else if (status === 'warning') summary = `Data is mostly good, but found ${warningCount} warnings to review.`;
+    else if (status === 'warning') summary = `Ready for import. ${warningCount} items flagged for review (adjustments, high value, etc).`;
 
     return {
       score,

@@ -1494,6 +1494,10 @@
     max-width: 150px;
   }
 
+  .max-w-\[200px\] {
+    max-width: 200px;
+  }
+
   .max-w-\[250px\] {
     max-width: 250px;
   }
@@ -3442,6 +3446,10 @@
     text-transform: capitalize;
   }
 
+  .lowercase {
+    text-transform: lowercase;
+  }
+
   .uppercase {
     text-transform: uppercase;
   }
@@ -4880,6 +4888,10 @@
     gap: calc(var(--spacing) * 2);
   }
 
+  .data-\[state\=active\]\:bg-amber-50[data-state="active"] {
+    background-color: var(--color-amber-50);
+  }
+
   .data-\[state\=active\]\:bg-card[data-state="active"] {
     background-color: var(--card);
   }
@@ -4888,16 +4900,12 @@
     background-color: var(--color-indigo-50);
   }
 
-  .data-\[state\=active\]\:bg-red-50[data-state="active"] {
-    background-color: var(--color-red-50);
+  .data-\[state\=active\]\:text-amber-700[data-state="active"] {
+    color: var(--color-amber-700);
   }
 
   .data-\[state\=active\]\:text-indigo-700[data-state="active"] {
     color: var(--color-indigo-700);
-  }
-
-  .data-\[state\=active\]\:text-red-700[data-state="active"] {
-    color: var(--color-red-700);
   }
 
   .data-\[state\=checked\]\:translate-x-\[calc\(100\%-2px\)\][data-state="checked"] {

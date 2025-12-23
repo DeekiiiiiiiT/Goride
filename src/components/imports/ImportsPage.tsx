@@ -47,6 +47,7 @@ import { VehicleHealthCard } from '../vehicles/VehicleHealthCard';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 import { 
     detectFileType, 
@@ -511,20 +512,20 @@ export function ImportsPage() {
       if (type === 'trip') {
           const idx = newState.sanitized.trips.findIndex(t => t.data.id === id);
           if (idx !== -1) {
-              newState.sanitized.trips[idx].flags = [];
+              newState.sanitized.trips[idx].issues = [];
               // Rudimentary count update - ideally we re-run audit
               newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
           }
       } else if (type === 'driver') {
           const idx = newState.sanitized.drivers.findIndex(d => d.data.driverId === id);
           if (idx !== -1) {
-              newState.sanitized.drivers[idx].flags = [];
+              newState.sanitized.drivers[idx].issues = [];
               newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
           }
       } else if (type === 'vehicle') {
           const idx = newState.sanitized.vehicles.findIndex(v => v.data.plateNumber === id || v.data.vehicleId === id);
           if (idx !== -1) {
-              newState.sanitized.vehicles[idx].flags = [];
+              newState.sanitized.vehicles[idx].issues = [];
               newState.report.warningCount = Math.max(0, newState.report.warningCount - 1);
           }
       }
@@ -1053,6 +1054,36 @@ export function ImportsPage() {
                     </Card>
                 </div>
 
+                {/* Financial Health Checks (New Tiles) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
+                            <span className="text-xs text-slate-500 uppercase font-medium">Pending Balance</span>
+                            <span className="text-2xl font-bold text-slate-900">
+                                ${processedOrganizationMetrics[0]?.balanceEnd?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
+                            </span>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
+                            <span className="text-xs text-slate-500 uppercase font-medium">Transferred To Bank Account</span>
+                            <span className="text-2xl font-bold text-slate-900">
+                                {processedOrganizationMetrics[0]?.bankTransfer ? `$${processedOrganizationMetrics[0].bankTransfer.toLocaleString(undefined, {minimumFractionDigits: 2})}` : '-'}
+                            </span>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
+                            <span className="text-xs text-slate-500 uppercase font-medium">Cash Collected in Hand</span>
+                            <span className="text-2xl font-bold text-red-600">
+                                ${processedOrganizationMetrics[0]?.totalCashExposure?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
+                            </span>
+                        </CardContent>
+                    </Card>
+                </div>
+
               <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm">
                   <CardHeader className="pb-2 border-b border-slate-100 bg-white sticky top-0 z-10">
                       <div className="flex justify-between items-center">
@@ -1077,10 +1108,10 @@ export function ImportsPage() {
                       <Tabs defaultValue={auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) ? "quarantine" : "fleet"} className="w-full">
                           <TabsList className="mb-4 bg-white border border-slate-200 p-1 h-auto flex-wrap">
                               {auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) && (
-                                  <TabsTrigger value="quarantine" className="data-[state=active]:bg-red-50 data-[state=active]:text-red-700 flex items-center gap-2">
+                                  <TabsTrigger value="quarantine" className="data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 flex items-center gap-2">
                                       <AlertTriangle className="h-4 w-4" />
-                                      Anomalies
-                                      <Badge variant="destructive" className="h-5 px-1.5 ml-1">
+                                      Flagged Records
+                                      <Badge variant="outline" className="h-5 px-1.5 ml-1 bg-amber-100 text-amber-800 border-amber-200">
                                           {auditState.report.warningCount + auditState.report.criticalCount}
                                       </Badge>
                                   </TabsTrigger>
@@ -1130,7 +1161,8 @@ export function ImportsPage() {
                                             {/* Mobile Card View */}
                                             <div className="md:hidden p-4 space-y-4">
                                                 {processedData.slice(0, 50).map((trip) => {
-                                                    const date = new Date(trip.date || trip.requestTime || Date.now());
+                                                    const dateStr = trip.date || trip.requestTime;
+                                                    const date = dateStr ? new Date(dateStr) : null;
                                                     const dist = trip.distance || 0;
                                                     const dur = trip.duration || 0;
                                                     const earn = trip.grossEarnings || 0;
@@ -1140,7 +1172,7 @@ export function ImportsPage() {
                                                         <Card key={trip.id} className="border-slate-200 shadow-sm">
                                                             <CardContent className="p-3">
                                                                 <div className="flex justify-between items-center mb-2">
-                                                                    <span className="font-medium text-slate-900">{date.toLocaleDateString()}</span>
+                                                                    <span className="font-medium text-slate-900">{date ? date.toLocaleDateString() : 'No Date'}</span>
                                                                     <Badge variant="outline">{dur.toFixed(0)} min</Badge>
                                                                 </div>
                                                                 <div className="grid grid-cols-2 gap-y-2 text-sm text-slate-600">
@@ -1172,14 +1204,19 @@ export function ImportsPage() {
                                                         const avgDist = processedData.reduce((sum, t) => sum + (t.distance || 0), 0) / (processedData.length || 1);
                                                         
                                                         return processedData.map((trip) => {
-                                                            const date = new Date(trip.date || trip.requestTime || Date.now());
-                                                            const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'long' });
-                                                            const hour = date.getHours();
+                                                            const dateStr = trip.date || trip.requestTime;
+                                                            const date = dateStr ? new Date(dateStr) : null;
                                                             
-                                                            let timeOfDay = 'Night';
-                                                            if (hour >= 6 && hour < 12) timeOfDay = 'Morning';
-                                                            else if (hour >= 12 && hour < 18) timeOfDay = 'Afternoon';
-                                                            else if (hour >= 18 && hour < 24) timeOfDay = 'Evening';
+                                                            const dayOfWeek = date ? date.toLocaleDateString('en-US', { weekday: 'long' }) : '-';
+                                                            const hour = date ? date.getHours() : 0;
+                                                            
+                                                            let timeOfDay = '-';
+                                                            if (date) {
+                                                                timeOfDay = 'Night';
+                                                                if (hour >= 6 && hour < 12) timeOfDay = 'Morning';
+                                                                else if (hour >= 12 && hour < 18) timeOfDay = 'Afternoon';
+                                                                else if (hour >= 18 && hour < 24) timeOfDay = 'Evening';
+                                                            }
 
                                                             const dist = trip.distance || 0;
                                                             const dur = trip.duration || 0; // minutes
@@ -1199,7 +1236,7 @@ export function ImportsPage() {
                                                             
                                                             return (
                                                                 <TableRow key={trip.id}>
-                                                                    <TableCell className="whitespace-nowrap">{date.toLocaleDateString()}</TableCell>
+                                                                    <TableCell className="whitespace-nowrap">{date ? date.toLocaleDateString() : 'No Date'}</TableCell>
                                                                     <TableCell>{dayOfWeek}</TableCell>
                                                                     <TableCell>
                                                                       <Badge variant="outline" className="font-normal">{timeOfDay}</Badge>
@@ -1326,21 +1363,132 @@ export function ImportsPage() {
                                 </div>
 
                                 <Table className="hidden md:table">
+                                <TooltipProvider>
                                 <TableHeader className="bg-slate-50 sticky top-0 z-10">
                                     <TableRow>
-                                        <TableHead>Trip ID</TableHead>
-                                        <TableHead className="text-right">Gross Earnings</TableHead>
-                                        <TableHead className="text-right">Base Fare</TableHead>
-                                        <TableHead className="text-right">Tips</TableHead>
-                                        <TableHead className="text-right">Wait Time</TableHead>
-                                        <TableHead className="text-right">Surge</TableHead>
-                                        <TableHead className="text-right">Airport Fees</TableHead>
-                                        <TableHead className="text-right">Time at Stop</TableHead>
-                                        <TableHead className="text-right">Taxes</TableHead>
-                                        <TableHead className="text-right">Toll Charges</TableHead>
-                                        <TableHead className="text-right font-bold">Net to Driver</TableHead>
+                                        <TableHead>
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center gap-1 cursor-help">
+                                                    Trip ID <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Unique identifier for the trip</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Gross Earnings <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Total amount charged to the rider (before deductions)</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Base Fare <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>The core fare based on trip time and distance</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Tips <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Gratuity paid by the rider</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Wait Time <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Earnings for waiting at the pickup location</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Surge <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Extra earnings due to high demand (surge pricing)</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Airport Fees <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Surcharges for airport pickups or drop-offs</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Time at Stop <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Earnings for time spent at intermediate stops</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Taxes <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Tax amount collected or deducted</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Toll Charges <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Tolls paid during the trip (reimbursed)</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right text-amber-600">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Cash Collected <Info className="h-3 w-3 text-amber-500" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Cash payment collected directly from the rider</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
+                                        <TableHead className="text-right font-bold">
+                                            <Tooltip>
+                                                <TooltipTrigger className="flex items-center justify-end gap-1 cursor-help w-full">
+                                                    Net to Driver <Info className="h-3 w-3 text-slate-400" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>This is the final amount added to your bank payout after all deductions and cash adjustments</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableHead>
                                     </TableRow>
                                 </TableHeader>
+                                </TooltipProvider>
                                 <TableBody>
                                     {processedData.slice(0, 100).map(trip => (
                                         <TableRow key={trip.id}>
@@ -1373,6 +1521,9 @@ export function ImportsPage() {
                                             </TableCell>
                                             <TableCell className="text-right text-slate-500 text-xs">
                                                 {trip.tollCharges ? trip.tollCharges.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-amber-600 font-medium text-xs">
+                                                {trip.cashCollected ? trip.cashCollected.toFixed(2) : '-'}
                                             </TableCell>
                                             <TableCell className="text-right font-bold text-emerald-600 text-xs">
                                                 {trip.netToDriver !== undefined ? trip.netToDriver.toFixed(2) : '-'}

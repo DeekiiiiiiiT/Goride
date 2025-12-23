@@ -121,6 +121,17 @@ app.post("/make-server-37f42386/driver-metrics", async (c) => {
 app.get("/make-server-37f42386/driver-metrics", async (c) => {
     try {
         const metrics = await kv.getByPrefix("driver_metric:");
+
+        // ACTION 2: The "Exorcism" (Auto-Cleanup)
+        const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
+        const ghostIndex = metrics ? metrics.findIndex((m: any) => (m.driverId === BANNED_UUID || m.id === BANNED_UUID)) : -1;
+
+        if (ghostIndex !== -1) {
+            console.log(`[Exorcism] Deleting Ghost Driver Metric: ${BANNED_UUID}`);
+            await kv.del(`driver_metric:${BANNED_UUID}`);
+            metrics.splice(ghostIndex, 1);
+        }
+
         return c.json(metrics || []);
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
@@ -189,6 +200,19 @@ app.delete("/make-server-37f42386/vehicles/:id", async (c) => {
 app.get("/make-server-37f42386/drivers", async (c) => {
   try {
     const drivers = await kv.getByPrefix("driver:");
+
+    // ACTION 2: The "Exorcism" (Auto-Cleanup)
+    // Automatically detect and delete the Fleet Owner if they are mistakenly stored as a driver.
+    const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
+    const ghostIndex = drivers ? drivers.findIndex((d: any) => d.id === BANNED_UUID) : -1;
+
+    if (ghostIndex !== -1) {
+        console.log(`[Exorcism] Deleting Ghost Driver: ${BANNED_UUID}`);
+        await kv.del(`driver:${BANNED_UUID}`);
+        // Remove from response so the UI updates immediately
+        drivers.splice(ghostIndex, 1);
+    }
+
     return c.json(drivers || []);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

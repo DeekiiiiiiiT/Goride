@@ -24,7 +24,8 @@ import {
   Upload,
   Search,
   Eye,
-  Filter
+  Filter,
+  Info
 } from 'lucide-react';
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -68,6 +69,9 @@ import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { api } from '../../services/api';
+import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { Checkbox } from "../ui/checkbox";
+import { Label } from "../ui/label";
 
 interface DriverDocument {
   id: string;
@@ -108,6 +112,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterCashOnly, setFilterCashOnly] = useState<boolean>(false);
   const tripsPerPage = 10;
 
   // Fetch Transactions
@@ -208,10 +215,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   // Calculate Metrics based on Date Range
   const metrics = useMemo(() => {
-     if (!dateRange?.from || !dateRange?.to) return null;
+     if (!dateRange?.from) return null;
 
      const start = startOfDay(dateRange.from);
-     const end = endOfDay(dateRange.to);
+     const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
      const daysDiff = differenceInDays(end, start) + 1;
      
      // Previous Period for Trend
@@ -223,6 +230,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      let totalEarnings = 0; // Lifetime
      let lifetimeTrips = 0; // Lifetime
+     let totalCashCollected = 0; // Lifetime
 
      let periodCompletedTrips = 0;
      let periodCancelledTrips = 0;
@@ -256,10 +264,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
      trips.forEach(trip => {
         const tripDateObj = new Date(trip.date);
+        if (isNaN(tripDateObj.getTime())) return;
         
         // Lifetime stats
         totalEarnings += trip.amount;
         lifetimeTrips += 1;
+        if (trip.cashCollected) totalCashCollected += Math.abs(trip.cashCollected);
 
         // Filter Check
         if (isWithinInterval(tripDateObj, { start, end })) {
@@ -277,7 +287,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 pStats.completed++;
             }
             if (trip.status === 'Cancelled') periodCancelledTrips++;
-            if (trip.cashCollected) cashCollected += trip.cashCollected;
+            if (trip.cashCollected) cashCollected += Math.abs(trip.cashCollected);
             
             if (trip.distance) {
                 totalDistance += trip.distance;
@@ -354,20 +364,77 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      const cancellationRate = totalTrips > 0 ? (periodCancelledTrips / totalTrips) * 100 : 0;
 
      // --- PHASE 2 FIX: USE IMPORTED METRICS IF AVAILABLE ---
-     // Find relevant CSV metric (e.g. latest one)
-     const latestCsvMetric = csvMetrics && csvMetrics.length > 0 
-        ? [...csvMetrics].sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())[0]
+     // Only use metrics that overlap with the selected date range
+     const relevantCsvMetrics = csvMetrics?.filter(m => {
+        const mStart = new Date(m.periodStart);
+        const mEnd = new Date(m.periodEnd);
+        // Check overlap: start <= rangeEnd AND end >= rangeStart
+        return mStart <= end && mEnd >= start;
+     }) || [];
+
+     const latestCsvMetric = relevantCsvMetrics.length > 0 
+        ? [...relevantCsvMetrics].sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())[0]
         : null;
 
-     const acceptanceRate = latestCsvMetric?.acceptanceRate !== undefined
-        ? Math.round(latestCsvMetric.acceptanceRate * 100)
-        : completionRate; // Fallback to completion rate (incorrect but better than 0)
-
+     let acceptanceRate: number | null = null;
+     if (latestCsvMetric?.acceptanceRate !== undefined) {
+        acceptanceRate = Math.round(latestCsvMetric.acceptanceRate * 100);
+     } else if (totalTrips > 0) {
+        // Fallback to completion rate if we have trips but no CSV metric
+        acceptanceRate = Math.round(completionRate);
+     }
+     
      const currentRating = latestCsvMetric?.ratingLast4Weeks || latestCsvMetric?.ratingLast500 || 5.0;
 
+     // Use CSV metric for Cash Collected if available (it is more accurate)
+     if (latestCsvMetric?.cashCollected) {
+         totalCashCollected = Math.max(totalCashCollected, latestCsvMetric.cashCollected);
+     }
+
      // Phase 4: Cash Logic
+
+     // FIX: Prioritize Source of Truth (CSV) for Period Cash Collected
+     // Calculate cash from CSV only if the selected range covers the CSV period
+     const csvPeriodCash = relevantCsvMetrics.reduce((sum, m) => {
+        const mStart = new Date(m.periodStart);
+        const mEnd = new Date(m.periodEnd);
+        
+        // Calculate effective overlap duration
+        const overlapStart = mStart > start ? mStart : start;
+        const overlapEnd = mEnd < end ? mEnd : end;
+        
+        // Ensure valid overlap
+        if (overlapStart > overlapEnd) return sum;
+
+        const reportDays = differenceInDays(mEnd, mStart) + 1;
+        const overlapDays = differenceInDays(overlapEnd, overlapStart) + 1;
+
+        // Use CSV if overlap covers almost the entire report (allow 1 day margin)
+        // This includes "Dec 8-14" (7 days) for a 7-day report
+        // But excludes "Dec 8" (1 day) for a 7-day report
+        if (overlapDays >= reportDays - 1) {
+            return sum + (m.cashCollected || 0);
+        }
+        return sum;
+     }, 0);
+     
+     // If CSV data exists, use it to override or floor the trip-calculated cash
+     // This handles cases where trips might include adjustments (negative) but CSV reports actual collection
+     if (csvPeriodCash > 0) {
+         cashCollected = Math.max(cashCollected, csvPeriodCash);
+     }
+
      const cashReceived = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-     const netOutstanding = cashCollected - cashReceived;
+     const netOutstanding = totalCashCollected - cashReceived;
+
+     const periodCashReceived = transactions
+        .filter(t => {
+            const d = new Date(t.date);
+            return isWithinInterval(d, { start, end });
+        })
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+     
+     const periodNetChange = cashCollected - periodCashReceived;
 
      return {
         periodEarnings,
@@ -378,9 +445,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         lifetimeTrips,
         periodCompletedTrips,
         periodCancelledTrips,
+        totalTrips,
         cashCollected,
-        cashReceived, // New
-        netOutstanding, // New
+        totalCashCollected,
+        cashReceived, 
+        netOutstanding,
+        periodCashReceived, // New
+        periodNetChange,    // New
         weeklyEarningsData,
         earningsBreakdownData,
         hourlyActivityData,
@@ -400,7 +471,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      };
   }, [trips, dateRange, csvMetrics, transactions]);
 
-  if (!metrics) return <div>Loading metrics...</div>;
+  const handleDateSelect = (newRange: DateRange | undefined) => {
+    if (newRange?.from) {
+      setDateRange(newRange);
+    }
+  };
+
+  if (!metrics) return <div className="flex h-[50vh] items-center justify-center text-muted-foreground">Please select a date range to view driver metrics.</div>;
 
   const isToday = dateRange?.to && format(dateRange.to, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') && metrics.daysDiff === 1;
 
@@ -446,8 +523,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   mode="range"
                   defaultMonth={dateRange?.from}
                   selected={dateRange}
-                  onSelect={setDateRange}
+                  onSelect={handleDateSelect}
                   numberOfMonths={2}
+                  showOutsideDays={false}
+                  required
                 />
               </PopoverContent>
             </Popover>
@@ -535,13 +614,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                    ]}
                />
                <MetricCard 
-                  title="Cash Balance" 
-                  value={`$${metrics.netOutstanding.toFixed(2)}`} 
-                  subtext="Outstanding Balance"
+                  title="Period Cash Activity" 
+                  value={`$${metrics.periodNetChange.toFixed(2)}`} 
+                  subtext="Net Change in Period"
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
+                  tooltip={`Lifetime Outstanding Balance: $${metrics.netOutstanding.toFixed(2)}`}
                   breakdown={[
-                      { label: 'Total Owed', value: `$${metrics.cashCollected.toFixed(2)}`, color: '#f43f5e' },
-                      { label: 'Received', value: `$${metrics.cashReceived.toFixed(2)}`, color: '#10b981' }
+                      { label: 'Collected', value: `$${metrics.cashCollected.toFixed(2)}`, color: '#f43f5e' },
+                      { label: 'Paid', value: `$${metrics.periodCashReceived.toFixed(2)}`, color: '#10b981' }
                   ]}
                   action={
                       <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setIsPaymentModalOpen(true)}>
@@ -573,11 +653,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                />
                <MetricCard 
                   title="Acceptance Rate" 
-                  value={`${metrics.acceptanceRate}%`} 
+                  value={metrics.acceptanceRate !== null ? `${metrics.acceptanceRate}%` : '-'} 
                   target="Target: >85%"
-                  progress={metrics.acceptanceRate}
-                  progressColor={metrics.acceptanceRate >= 80 ? "bg-emerald-500" : metrics.acceptanceRate < 40 ? "bg-rose-600" : "bg-amber-500"}
-                  icon={metrics.acceptanceRate < 40 ? <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" /> : <ThumbsUp className="h-4 w-4 text-slate-500" />}
+                  progress={metrics.acceptanceRate || 0}
+                  progressColor={!metrics.acceptanceRate ? "bg-slate-200" : metrics.acceptanceRate >= 80 ? "bg-emerald-500" : metrics.acceptanceRate < 40 ? "bg-rose-600" : "bg-amber-500"}
+                  icon={(metrics.acceptanceRate !== null && metrics.acceptanceRate < 40) ? <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" /> : <ThumbsUp className="h-4 w-4 text-slate-500" />}
                    breakdown={[
                        { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
                        { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
@@ -585,10 +665,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                />
                <MetricCard 
                   title="Cancellation Rate" 
-                  value={`${metrics.cancellationRate.toFixed(1)}%`} 
+                  value={metrics.totalTrips > 0 ? `${metrics.cancellationRate.toFixed(1)}%` : '-'} 
                   target="Target: <5%"
                   progress={metrics.cancellationRate}
                   progressColor={metrics.cancellationRate < 5 ? "bg-emerald-500" : "bg-rose-500"}
+                  tooltip={`Calculated from ${metrics.periodCancelledTrips} cancelled trips out of ${metrics.totalTrips} total trips in the selected period.`}
                   icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
                    breakdown={[
                        { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(( (metrics.platformStats.Uber.trips - metrics.platformStats.Uber.completed) / metrics.platformStats.Uber.trips) * 100).toFixed(1)}%` : '-', color: '#3b82f6' },
@@ -646,7 +727,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 <div className="flex justify-between items-end">
                                     <span className="text-sm font-medium text-slate-700">Acceptance Rate</span>
                                     <div className="text-right">
-                                        <span className="text-lg font-bold">{metrics.acceptanceRate}%</span>
+                                        <span className="text-lg font-bold">{metrics.acceptanceRate !== null ? `${metrics.acceptanceRate}%` : '-'}</span>
                                         <span className="text-xs text-slate-500 ml-2">vs {fleetStats.avgAcceptanceRate}% avg</span>
                                     </div>
                                 </div>
@@ -658,15 +739,17 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     />
                                     <div 
                                         className={cn("h-full rounded-full", 
-                                            metrics.acceptanceRate >= fleetStats.avgAcceptanceRate ? "bg-emerald-500" : "bg-rose-500"
+                                            !metrics.acceptanceRate ? "bg-slate-300" : metrics.acceptanceRate >= fleetStats.avgAcceptanceRate ? "bg-emerald-500" : "bg-rose-500"
                                         )}
-                                        style={{ width: `${metrics.acceptanceRate}%` }}
+                                        style={{ width: `${metrics.acceptanceRate || 0}%` }}
                                     />
                                 </div>
                                 <p className="text-xs text-slate-500">
-                                     {metrics.acceptanceRate >= fleetStats.avgAcceptanceRate 
-                                        ? "Excellent reliability." 
-                                        : "Acceptance rate is critical."}
+                                     {!metrics.acceptanceRate 
+                                        ? "No data for this period." 
+                                        : metrics.acceptanceRate >= fleetStats.avgAcceptanceRate 
+                                            ? "Excellent reliability." 
+                                            : "Acceptance rate is critical."}
                                 </p>
                             </div>
                         </div>
@@ -929,9 +1012,88 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 onChange={(e) => setTripSearch(e.target.value)}
                             />
                         </div>
-                        <Button variant="outline" size="sm">
-                            <Filter className="h-4 w-4 mr-2" /> Filter
-                        </Button>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant={filterPlatform.length > 0 || filterStatus.length > 0 || filterCashOnly ? "secondary" : "outline"} size="sm" className="gap-2">
+                                    <Filter className="h-4 w-4" /> 
+                                    Filter
+                                    {(filterPlatform.length > 0 || filterStatus.length > 0 || filterCashOnly) && (
+                                        <Badge variant="secondary" className="h-5 px-1.5 rounded-full ml-1 text-[10px]">
+                                            {filterPlatform.length + filterStatus.length + (filterCashOnly ? 1 : 0)}
+                                        </Badge>
+                                    )}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-4" align="end">
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <h4 className="font-medium leading-none text-sm">Platform</h4>
+                                        <div className="flex flex-col gap-2">
+                                            {['Uber', 'InDrive', 'Other'].map(p => (
+                                                <div key={p} className="flex items-center space-x-2">
+                                                    <Checkbox 
+                                                        id={`filter-${p}`} 
+                                                        checked={filterPlatform.includes(p)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) setFilterPlatform([...filterPlatform, p]);
+                                                            else setFilterPlatform(filterPlatform.filter(x => x !== p));
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`filter-${p}`} className="text-sm font-normal cursor-pointer">{p}</Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Separator />
+                                    <div className="space-y-2">
+                                        <h4 className="font-medium leading-none text-sm">Status</h4>
+                                        <div className="flex flex-col gap-2">
+                                            {['Completed', 'Cancelled'].map(s => (
+                                                <div key={s} className="flex items-center space-x-2">
+                                                    <Checkbox 
+                                                        id={`filter-${s}`} 
+                                                        checked={filterStatus.includes(s)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) setFilterStatus([...filterStatus, s]);
+                                                            else setFilterStatus(filterStatus.filter(x => x !== s));
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`filter-${s}`} className="text-sm font-normal cursor-pointer">{s}</Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Separator />
+                                    <div className="space-y-2">
+                                        <h4 className="font-medium leading-none text-sm">Payment</h4>
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox 
+                                                    id="filter-cash" 
+                                                    checked={filterCashOnly}
+                                                    onCheckedChange={(checked) => setFilterCashOnly(!!checked)}
+                                                />
+                                                <Label htmlFor="filter-cash" className="text-sm font-normal cursor-pointer">Cash Trips Only</Label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {(filterPlatform.length > 0 || filterStatus.length > 0 || filterCashOnly) && (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="w-full mt-2 h-8 text-xs text-muted-foreground"
+                                            onClick={() => {
+                                                setFilterPlatform([]);
+                                                setFilterStatus([]);
+                                                setFilterCashOnly(false);
+                                            }}
+                                        >
+                                            Clear Filters
+                                        </Button>
+                                    )}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
                     </div>
 
                     <Table>
@@ -942,18 +1104,34 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 <TableHead>Status</TableHead>
                                 <TableHead>Distance</TableHead>
                                 <TableHead>Duration</TableHead>
+                                <TableHead>Cash Collected</TableHead>
                                 <TableHead>Earnings</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {trips
-                                .filter(t => 
-                                    t.id.includes(tripSearch) || 
-                                    t.date.includes(tripSearch) ||
-                                    (t.status || '').toLowerCase().includes(tripSearch.toLowerCase()) ||
-                                    (t.platform || '').toLowerCase().includes(tripSearch.toLowerCase())
-                                )
+                                .filter(t => {
+                                    // Search Filter
+                                    const matchesSearch = t.id.includes(tripSearch) || 
+                                        t.date.includes(tripSearch) ||
+                                        (t.status || '').toLowerCase().includes(tripSearch.toLowerCase()) ||
+                                        (t.platform || '').toLowerCase().includes(tripSearch.toLowerCase());
+                                    
+                                    // Platform Filter
+                                    const matchesPlatform = filterPlatform.length === 0 || filterPlatform.includes(t.platform || 'Other');
+                                    
+                                    // Status Filter
+                                    const matchesStatus = filterStatus.length === 0 || filterStatus.includes(t.status);
+
+                                    // Cash Filter
+                                    const matchesCash = !filterCashOnly || 
+                                        (Math.abs(Number(t.cashCollected || 0)) > 0) || 
+                                        (t.platform && ['indrive', 'bolt'].includes(t.platform.toLowerCase())) ||
+                                        (t as any).paymentMethod === 'Cash';
+
+                                    return matchesSearch && matchesPlatform && matchesStatus && matchesCash;
+                                })
                                 .slice((tripPage - 1) * tripsPerPage, tripPage * tripsPerPage)
                                 .map((trip) => {
                                     const isPhantom = trip.status === 'Cancelled' && (trip.distance || 0) > 0.1;
@@ -984,6 +1162,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     </TableCell>
                                     <TableCell>{trip.distance ? `${trip.distance.toFixed(1)} km` : '-'}</TableCell>
                                     <TableCell>{trip.duration ? `${trip.duration.toFixed(0)} min` : '-'}</TableCell>
+                                    <TableCell className="font-medium text-amber-600">
+                                        {Math.abs(Number(trip.cashCollected || 0)) > 0 ? `$${Math.abs(Number(trip.cashCollected)).toFixed(2)}` : 
+                                        (trip.platform && ['indrive', 'bolt'].includes(trip.platform.toLowerCase()) ? `$${trip.amount.toFixed(2)}` : '-')}
+                                    </TableCell>
                                     <TableCell className="font-medium">${trip.amount.toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -994,7 +1176,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 ); })}
                             {trips.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                                    <TableCell colSpan={8} className="h-24 text-center text-slate-500">
                                         No trips found.
                                     </TableCell>
                                 </TableRow>
@@ -1134,12 +1316,26 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   );
 }
 
-function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action }: any) {
+function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action, tooltip }: any) {
    return (
       <Card>
          <CardContent className="p-6">
             <div className="flex items-center justify-between space-y-0 pb-2">
-               <p className="text-sm font-medium text-slate-500">{title}</p>
+               <div className="flex items-center gap-2">
+                   <p className="text-sm font-medium text-slate-500">{title}</p>
+                   {tooltip && (
+                       <TooltipProvider>
+                           <UiTooltip>
+                               <TooltipTrigger>
+                                   <Info className="h-3 w-3 text-slate-400" />
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                   <p className="max-w-[200px] text-xs">{tooltip}</p>
+                               </TooltipContent>
+                           </UiTooltip>
+                       </TooltipProvider>
+                   )}
+               </div>
                {icon}
             </div>
             <div className="flex items-baseline gap-2 mt-2">

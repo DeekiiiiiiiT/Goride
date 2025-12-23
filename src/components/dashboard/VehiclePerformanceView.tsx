@@ -178,11 +178,11 @@ export function VehiclePerformanceView({ trips, vehicleMetrics }: VehiclePerform
                       </TableRow>
                   </TableHeader>
                   <TableBody>
-                      {tableData.map(v => (
-                          <TableRow key={v.id}>
+                      {tableData.map((v, index) => (
+                          <TableRow key={`${v.id}-${index}`}>
                               <TableCell className="font-medium">{v.plateNumber}</TableCell>
-                              <TableCell>${v.totalEarnings.toFixed(2)}</TableCell>
-                              <TableCell>${v.earningsPerHour.toFixed(2)}</TableCell>
+                              <TableCell>${(v.totalEarnings || 0).toFixed(2)}</TableCell>
+                              <TableCell>${(v.earningsPerHour || 0).toFixed(2)}</TableCell>
                               <TableCell>
                                   <div className="flex items-center gap-2">
                                       <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">

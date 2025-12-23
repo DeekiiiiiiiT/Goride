@@ -20,9 +20,9 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
     const [editValues, setEditValues] = useState<any>({});
     
     // Flatten all anomalies
-    const tripAnomalies = (auditState?.sanitized?.trips || []).filter(t => (t.flags || []).length > 0 && !t.isExcluded);
-    const driverAnomalies = (auditState?.sanitized?.drivers || []).filter(d => (d.flags || []).length > 0 && !d.isExcluded);
-    const vehicleAnomalies = (auditState?.sanitized?.vehicles || []).filter(v => (v.flags || []).length > 0 && !v.isExcluded);
+    const tripAnomalies = (auditState?.sanitized?.trips || []).filter(t => (t.issues || []).length > 0 && !t.isExcluded);
+    const driverAnomalies = (auditState?.sanitized?.drivers || []).filter(d => (d.issues || []).length > 0 && !d.isExcluded);
+    const vehicleAnomalies = (auditState?.sanitized?.vehicles || []).filter(v => (v.issues || []).length > 0 && !v.isExcluded);
 
     const hasAnomalies = tripAnomalies.length > 0 || driverAnomalies.length > 0 || vehicleAnomalies.length > 0;
 
@@ -83,16 +83,16 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                         <TableRow key={item.data.id} className="bg-amber-50/30 hover:bg-amber-50/50">
                                             <TableCell>
                                                 <div className="flex flex-wrap gap-1">
-                                                    {item.flags.map((flag, i) => (
+                                                    {item.issues.map((issue, i) => (
                                                         <TooltipProvider key={i}>
                                                             <Tooltip>
                                                                 <TooltipTrigger>
-                                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 cursor-help">
-                                                                        {flag.code}
+                                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 cursor-help">
+                                                                        {issue.field || 'Warning'}
                                                                     </Badge>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent>
-                                                                    <p>{flag.message}</p>
+                                                                    <p>{issue.message}</p>
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>
@@ -191,9 +191,9 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                  <CardContent className="p-4 space-y-3">
                                      <div className="flex justify-between items-start">
                                          <div className="flex flex-wrap gap-1">
-                                            {item.flags.map((flag, i) => (
-                                                <Badge key={i} variant="outline" className="bg-red-50 text-red-700 border-red-200 text-[10px]">
-                                                    {flag.code}
+                                            {item.issues.map((issue, i) => (
+                                                <Badge key={i} variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
+                                                    {issue.field || 'Warning'}
                                                 </Badge>
                                             ))}
                                          </div>
@@ -244,9 +244,9 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                         <Badge variant="outline" className="text-xs">{item.data.driverId}</Badge>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {item.flags.map((flag, i) => (
-                                            <span key={i} className="text-xs text-red-600 flex items-center bg-red-50 px-2 py-0.5 rounded">
-                                                <AlertCircle className="h-3 w-3 mr-1" /> {flag.message}
+                                        {item.issues.map((issue, i) => (
+                                            <span key={i} className="text-xs text-amber-600 flex items-center bg-amber-50 px-2 py-0.5 rounded">
+                                                <AlertCircle className="h-3 w-3 mr-1" /> {issue.message}
                                             </span>
                                         ))}
                                     </div>

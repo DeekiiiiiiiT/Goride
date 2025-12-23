@@ -202,6 +202,7 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
     if (
         has('Organization UUID') || has('OrganizationUUID') ||
         has('NetFare') || has('Net Fare') || 
+        has('End Of Period Balance') || has('Balance End') || // Relaxed: Allow just End Balance
         (has('Start Of Period Balance') && has('End Of Period Balance')) ||
         (has('Balance Start') && has('Balance End')) ||
         name.includes('payment_organisation') || name.includes('payment_organization')
@@ -240,6 +241,60 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
 
 // Helper to normalize keys for merging (e.g., lower case UUIDs)
 const cleanId = (id: any) => String(id || '').trim();
+
+// Phase 6: Robust Date Parsing Helper
+const parseDateString = (str: string, isMMDD: boolean): Date | null => {
+    if (!str) return null;
+    const s = String(str).trim();
+    
+    // Check if it's strictly numeric date parts (slash or dash)
+    // "12/14/2025" or "12/14/2025 10:30 AM"
+    // Regex matches start of string: NN/NN/NNNN or NN-NN-NNNN
+    const dateMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4}|\d{2})/);
+    
+    if (dateMatch) {
+        let p1 = parseInt(dateMatch[1]);
+        let p2 = parseInt(dateMatch[2]);
+        let year = parseInt(dateMatch[3]);
+        if (year < 100) year += 2000; // 2-digit year assumption
+        
+        let month, day;
+        if (isMMDD) {
+            month = p1;
+            day = p2;
+        } else {
+            // DD/MM
+            month = p2;
+            day = p1;
+        }
+        
+        // Basic Validation
+        if (month < 1 || month > 12 || day < 1 || day > 31) {
+             // If validation fails, fallback to standard parser
+             const d = new Date(s);
+             return isNaN(d.getTime()) ? null : d;
+        }
+        
+        // Preserve Time
+        const timeMatch = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+        let h = 0, m = 0, s_sec = 0;
+        if (timeMatch) {
+            h = parseInt(timeMatch[1]);
+            m = parseInt(timeMatch[2]);
+            s_sec = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
+            const meridian = timeMatch[4] ? timeMatch[4].toUpperCase() : null;
+            
+            if (meridian === 'PM' && h < 12) h += 12;
+            if (meridian === 'AM' && h === 12) h = 0;
+        }
+        
+        return new Date(year, month - 1, day, h, m, s_sec);
+    }
+    
+    // Fallback to standard parser (ISO, etc.)
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+};
 
 export interface ProcessedBatch {
     trips: Trip[];
@@ -295,6 +350,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     const rentalContracts: RentalContract[] = [];
     const organizationMetrics: OrganizationMetrics[] = [];
     let organizationName = knownFleetName || ''; // Phase 1: Track Fleet Owner Name
+    
+    // Phase 6: Cross-File Verification Accumulators
+    let sumVehicleCash = 0; // From Vehicle Performance Report
+    let sumDriverCash = 0;  // From Driver Payments Report
 
     // 1. Process all files
     files.forEach(file => {
@@ -305,12 +364,39 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             const processed = processData(file.rows, mapping, availableFields);
             processed.forEach(t => {
                 if (t.driverId === 'fleet-org-ignore') return; // Filter out Fleet Org trips
+
+                // Step 4: "No ID, No Entry" Rule
+                // If we have a Driver Name but NO Driver UUID, strictly discard the row.
+                // This prevents Organization files (which have names but no Driver UUIDs) from creating ghost drivers.
+                if (t.driverName && (!t.driverId || t.driverId === 'unknown' || t.driverId === '')) return;
+
                 genericTrips.push(t);
             });
             return;
         }
 
         // Process Uber Files
+        // Phase 6: Detect Date Format (MM/DD vs DD/MM)
+        // Default to MM/DD (US) as it's most common for Uber, but switch if we see DD > 12 in first position
+        let isMMDD = true; 
+        if (file.type === 'uber_trip' || file.type === 'uber_payment') {
+             let detected = false;
+             for (const row of file.rows.slice(0, 50)) {
+                 for (const val of Object.values(row)) {
+                     if (typeof val !== 'string') continue;
+                     // Look for NN/NN/NNNN pattern
+                     const match = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4}|\d{2})/);
+                     if (match) {
+                         const p1 = parseInt(match[1]);
+                         const p2 = parseInt(match[2]);
+                         if (p1 > 12) { isMMDD = false; detected = true; break; } // 14/12 -> DD/MM
+                         if (p2 > 12) { isMMDD = true; detected = true; break; }  // 12/14 -> MM/DD
+                     }
+                 }
+                 if (detected) break;
+             }
+        }
+
         file.rows.forEach(row => {
              // ... existing trip logic ...
              if (file.type === 'uber_trip' || file.type === 'uber_payment') {
@@ -321,9 +407,36 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 
                 if (file.type === 'uber_trip') {
                     const schema = UBER_SCHEMAS.TRIP_ACTIVITY.mapping;
+                    
+                    // Improved Date Parsing: Don't default to Now() immediately
                     if (row[schema.date]) {
-                         try { current.date = new Date(String(row[schema.date])).toISOString(); } catch(e) { current.date = new Date().toISOString(); }
+                         try { 
+                             const d = parseDateString(String(row[schema.date]), isMMDD);
+                             if (d && !isNaN(d.getTime())) current.date = d.toISOString();
+                         } catch(e) { }
                     }
+
+                    // Fallback Date Search if schema failed
+                    if (!current.date) {
+                         const dateKeys = ['Trip request time', 'Request Time', 'Date', 'Time', 'Trip Date', 'Begin Trip Time'];
+                         for (const k of dateKeys) {
+                             if (row[k]) {
+                                 try {
+                                     const d = parseDateString(String(row[k]), isMMDD);
+                                     if (d && !isNaN(d.getTime())) {
+                                         current.date = d.toISOString();
+                                         break;
+                                     }
+                                 } catch(e) {}
+                             }
+                         }
+                    }
+
+                    // Final Fallback: Use File Report Date or leave undefined (don't force Today)
+                    if (!current.date && file.reportDate) {
+                        current.date = file.reportDate;
+                    }
+
                     if (row[schema.pickupLocation]) current.pickupLocation = String(row[schema.pickupLocation]);
                     if (row[schema.dropoffLocation]) current.dropoffLocation = String(row[schema.dropoffLocation]);
                     
@@ -360,7 +473,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                         if (key) reqVal = row[key];
                     }
                     if (reqVal) {
-                        try { current.requestTime = new Date(String(reqVal)).toISOString(); } catch(e) {}
+                        try { 
+                             const d = parseDateString(String(reqVal), isMMDD);
+                             if (d) current.requestTime = d.toISOString(); 
+                        } catch(e) {}
                     }
 
                     // 2. Dropoff Time
@@ -373,7 +489,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                         if (key) dropVal = row[key];
                     }
                     if (dropVal) {
-                        try { current.dropoffTime = new Date(String(dropVal)).toISOString(); } catch(e) {}
+                        try { 
+                            const d = parseDateString(String(dropVal), isMMDD);
+                            if (d) current.dropoffTime = d.toISOString(); 
+                        } catch(e) {}
                     }
 
                     // Phase 4: Per-Trip Analytics Logic
@@ -479,7 +598,31 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
                 } else if (file.type === 'uber_payment') {
                     const schema = UBER_SCHEMAS.PAYMENTS_ORDER.mapping;
-                    
+
+                    // Phase 4: Extract Date from Payment Rows (if available)
+                    if (!current.date) {
+                         // Common Payment Date Columns
+                         const dateKeys = ['Trip request time', 'Request Time', 'Date/Time', 'Date', 'Time', 'Trip Date', 'Job Date'];
+                         for (const k of dateKeys) {
+                             // Check exact match or case-insensitive match
+                             let val = row[k];
+                             if (!val) {
+                                 const foundKey = Object.keys(row).find(rk => rk.toLowerCase() === k.toLowerCase());
+                                 if (foundKey) val = row[foundKey];
+                             }
+                             
+                             if (val) {
+                                 try {
+                                     const d = parseDateString(String(val), isMMDD);
+                                     if (d && !isNaN(d.getTime())) {
+                                         current.date = d.toISOString();
+                                         break;
+                                     }
+                                 } catch(e) {}
+                             }
+                         }
+                    }
+
                     // Helper for currency parsing
                     const parseCurrency = (val: any) => parseFloat(String(val || '0').replace(/[^0-9.-]/g, '')) || 0;
 
@@ -491,11 +634,17 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     let earningsVal = row['Paid to you : Your earnings'] || row['Paid to you:Your earnings'] || row['Paid to you'] || row['Fare'];
                     let netPayoutVal = row['Paid to you'];
                     let payoutsVal = row['Payouts'] || row['Your Earnings'] || '0';
+                    
+                    // Option 2: The Ledger Method - Extracting 'Paid to you : Trip balance : Payouts : Cash Collected'
+                    // We extract the RAW signed value to handle corrections properly (Summing signed values).
+                    // "The result will be a negative number... You must multiply the result by -1"
                     let cashVal = row['Paid to you : Trip balance : Payouts : Cash Collected'] || row['Paid to you:Trip balance:Payouts:Cash Collected'] || row['Cash Collected'] || row['Cash collected'] || '0';
                     
                     let earnings = parseCurrency(earningsVal);
                     const netPayoutRaw = parseCurrency(netPayoutVal);
-                    const cash = Math.abs(parseCurrency(cashVal)); // Cash is often negative in payout columns, we want the absolute magnitude
+                    
+                    // Keep sign for aggregation (usually negative: -10.00). Corrections might be positive.
+                    const cash = parseCurrency(cashVal); 
 
                     // FIX for Zero-Earnings Rows (Adjustments/Tips)
                     // If "Your earnings" is 0, but "Paid to you" has value:
@@ -634,14 +783,14 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      const refundsAndExpenses = parseFloat(String(row['Refunds and Expenses'] || row['Refunds'] || '0').replace(/[^0-9.-]/g, '')) || 0;
                      const cashCollected = parseFloat(String(row['Cash Collected'] || '0').replace(/[^0-9.-]/g, '')) || 0;
                      
-                     current.totalEarnings = totalEarnings;
-                     current.refundsAndExpenses = refundsAndExpenses;
-                     current.cashCollected = cashCollected;
+                     current.totalEarnings = (current.totalEarnings || 0) + totalEarnings;
+                     current.refundsAndExpenses = (current.refundsAndExpenses || 0) + refundsAndExpenses;
+                     current.cashCollected = (current.cashCollected || 0) + cashCollected;
                      
                      // Calculations Step 2.2
-                     current.netEarnings = totalEarnings - refundsAndExpenses;
-                     current.cashFlowRisk = (totalEarnings > 0 && (cashCollected / totalEarnings) > 0.3) ? 'HIGH' : 'OK';
-                     current.expenseRatio = totalEarnings !== 0 ? (refundsAndExpenses / totalEarnings) * 100 : 0;
+                     current.netEarnings = current.totalEarnings - current.refundsAndExpenses;
+                     current.cashFlowRisk = (current.totalEarnings > 0 && (current.cashCollected / current.totalEarnings) > 0.3) ? 'HIGH' : 'OK';
+                     current.expenseRatio = current.totalEarnings !== 0 ? (current.refundsAndExpenses / current.totalEarnings) * 100 : 0;
 
                      driverMetricsMap.set(driverId, current);
                  }
@@ -655,12 +804,45 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                  const extractedOrgName = String(row['Organization Name'] || row['Organization'] || row['Account Name'] || row['Organization Description'] || '').trim();
                  if (extractedOrgName && !organizationName) organizationName = extractedOrgName;
 
+                 // Helper for case-insensitive and fuzzy lookup
+                 const getValue = (keys: string[]) => {
+                     // 1. Exact match
+                     for (const k of keys) {
+                         if (row[k] !== undefined) return row[k];
+                     }
+                     
+                     // 2. Fuzzy match (normalize header: lowercase + remove non-alphanumeric)
+                     const normalize = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+                     const rowKeys = Object.keys(row);
+                     
+                     for (const k of keys) {
+                         const searchNorm = normalize(k);
+                         // Find a header that "contains" the search term (to handle "Payouts: Cash Collected (USD)")
+                         // OR exact normalized match
+                         const match = rowKeys.find(rk => {
+                             const rowNorm = normalize(rk);
+                             return rowNorm === searchNorm || rowNorm.includes(searchNorm);
+                         });
+                         if (match) return row[match];
+                     }
+                     return '0';
+                 };
+
                  // 2. Financial Metrics
-                 const balanceStart = parseFloat(String(row['Start Of Period Balance'] || row['Balance Start'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-                 const balanceEnd = parseFloat(String(row['End Of Period Balance'] || row['Balance End'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-                 const totalEarnings = parseFloat(String(row['Total Earnings'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-                 const netFare = parseFloat(String(row['NetFare'] || row['Net Fare'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-                 const cashCollected = parseFloat(String(row['Cash Collected'] || '0').replace(/[^0-9.-]/g, '')) || 0;
+                 const balanceStart = parseFloat(String(getValue(['Start Of Period Balance', 'Balance Start'])).replace(/[^0-9.-]/g, '')) || 0;
+                 const balanceEnd = parseFloat(String(getValue(['End Of Period Balance', 'Balance End'])).replace(/[^0-9.-]/g, '')) || 0;
+                 const bankTransfer = parseFloat(String(getValue(['Transferred To Bank Account', 'Bank Transfer'])).replace(/[^0-9.-]/g, '')) || 0;
+                 const totalEarnings = parseFloat(String(getValue(['Total Earnings'])).replace(/[^0-9.-]/g, '')) || 0;
+                 const netFare = parseFloat(String(getValue(['NetFare', 'Net Fare'])).replace(/[^0-9.-]/g, '')) || 0;
+                 
+                 // IMPROVED CASH COLLECTION PARSING
+                 // We look for specific variations found in Uber reports
+                 const cashCollected = Math.abs(parseFloat(String(getValue([
+                     'Payouts : Cash Collected', // Standard
+                     'Payouts: Cash Collected',  // Colon variation
+                     'Payouts Cash Collected',   // No colon
+                     'Cash Collected'            // Simple
+                 ])).replace(/[^0-9.-]/g, '')) || 0);
 
                  // 3. Date Extraction
                  let pStart = row['Period Start'] || row['Start Date'] || row['Date'];
@@ -674,8 +856,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      periodEnd: safeDateISO(pEnd) || new Date().toISOString(),
                      balanceStart,
                      balanceEnd,
+                     bankTransfer,
                      totalEarnings,
                      netFare,
+                     totalCashExposure: cashCollected, // Explicitly store from Summary Report
                      
                      // Calculations
                      periodChange: balanceEnd - balanceStart,
@@ -795,6 +979,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      const onTripHours = parseFloat(String(row['On Trip Hours'] || '0')) || 0;
                      let earningsPerHour = parseFloat(String(row['Earnings Per Hour'] || row['Earnings / Hour'] || row['Earnings/Hour'] || '0').replace(/[^0-9.-]/g, '')) || 0;
                      
+                     // Option 1: The Summary Method (Fastest) - Summing 'Cash Collected'
+                     // Note: This is already a positive number in vehicle_performance.csv
+                     // Capture Cash for Verification
+                     const cashCollected = parseFloat(String(row['Cash Collected'] || '0').replace(/[^0-9.-]/g, '')) || 0;
+                     sumVehicleCash += cashCollected;
+
                      // Fallback: Calculate Earnings Per Hour if missing
                      if (earningsPerHour === 0 && onlineHours > 0) {
                          earningsPerHour = totalEarnings / onlineHours;
@@ -896,15 +1086,18 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
     const mergedTrips = Array.from(tripMap.values()).map(t => {
         const amount = t.amount || 0;
-        const cashCollected = t.cashCollected || 0;
+        const cashCollectedSigned = t.cashCollected || 0;
         const distance = t.distance || 0;
+        
+        // For the Trip Object (UI), we usually show the magnitude (Absolute).
+        // But for internal calculation above (Ledger Sum), we used the signed value from tripMap directly.
         
         return {
             id: t.id || `trip-${Math.random()}`,
             date: t.date || new Date().toISOString(),
             amount: amount,
-            cashCollected: cashCollected,
-            netPayout: amount - cashCollected, // Phase 3: Auto-calculate reconciliation
+            cashCollected: Math.abs(cashCollectedSigned), // Show positive magnitude in UI
+            netPayout: amount + cashCollectedSigned, // Phase 3: Auto-calculate reconciliation (Earnings + (-Cash))
             driverId: t.driverId || 'unknown',
             platform: t.platform || 'Other',
             status: t.status || 'Completed',
@@ -1007,8 +1200,15 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     // REVENUE CALCULATION (Option 2: Bottom-Up)
     // We ignore the "Summary" columns from the CSVs to avoid double-counting.
     // Instead, we sum the actual transactions we processed.
+    
+    // Option 2: The Ledger Method Logic
+    // "Sum up all values... The result will be a negative number... multiply by -1"
+    // We sum the signed values from tripMap first to handle corrections (e.g. -10 + 10 = 0), then take Absolute.
+    const ledgerSum = Array.from(tripMap.values()).reduce((sum, t) => sum + (t.cashCollected || 0), 0);
+    const calculatedCashExposure = Math.abs(ledgerSum);
+    
     const calculatedTotalEarnings = mergedTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
-    const calculatedCashExposure = mergedTrips.reduce((sum, t) => sum + (t.cashCollected || 0), 0);
+    // const calculatedCashExposure = mergedTrips.reduce((sum, t) => sum + (t.cashCollected || 0), 0); // Replaced by signed ledger sum above
     const calculatedNetFare = mergedTrips.reduce((sum, t) => sum + (t.netTransaction || 0), 0);
 
     // If no explicit organization report, create a synthetic one from the bottom-up data
@@ -1025,16 +1225,35 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
              cashPosition: 0
          });
     } else if (organizationMetrics.length > 0) {
-        // If we DO have summary reports, we still OVERWRITE the revenue numbers 
-        // with our calculated bottom-up numbers to ensure accuracy and prevent double-counting.
+        // If we DO have summary reports, we use them as the primary source of truth.
+        // We only backfill from calculated numbers if the summary is missing data.
         organizationMetrics.forEach(om => {
-            om.totalEarnings = calculatedTotalEarnings;
-            om.netFare = calculatedNetFare;
-            om.totalCashExposure = calculatedCashExposure;
+            // Prioritize Summary Report Values (Source of Truth)
+            // Only backfill if the summary report was incomplete (e.g. older format)
+            if (!om.totalEarnings) om.totalEarnings = calculatedTotalEarnings;
+            if (!om.netFare) om.netFare = calculatedNetFare;
             
-            // Re-calculate derived metrics
-            om.cashPosition = calculatedTotalEarnings > 0 ? calculatedCashExposure / calculatedTotalEarnings : 0;
-            om.fleetProfitMargin = calculatedTotalEarnings > 0 ? (calculatedNetFare / calculatedTotalEarnings) * 100 : 0;
+            // FIX: Respect the totalCashExposure from the summary report if it exists.
+            // This fixes the "Cash Collected in Hand" discrepancy where transaction-summing differs from the official statement.
+            // Priority Order:
+            // 1. Payment Organization Report (Direct Statement)
+            // 2. Vehicle Performance Report (Aggregated Cash)
+            // 3. Calculated Sum (Transaction Logs - Prone to noise/adjustments)
+            if (om.totalCashExposure === undefined || om.totalCashExposure === 0) {
+                 if (sumVehicleCash > 0) {
+                     om.totalCashExposure = sumVehicleCash;
+                 } else {
+                     om.totalCashExposure = calculatedCashExposure;
+                 }
+            }
+            
+            // Re-calculate derived metrics based on the final values
+            const earnings = om.totalEarnings;
+            const cash = om.totalCashExposure || 0;
+            const net = om.netFare || 0;
+            
+            om.cashPosition = earnings > 0 ? cash / earnings : 0;
+            om.fleetProfitMargin = earnings > 0 ? (net / earnings) * 100 : 0;
         });
     }
 
@@ -1043,7 +1262,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         const om = organizationMetrics[0];
         
         // 1. Counts
-        const activeDrivers = new Set(driverMetrics.map(d => d.driverId)).size || new Set(mergedTrips.map(t => t.driverId)).size;
+        const activeDrivers = new Set(driverMetrics.map(d => d.driverId)).size || new Set(mergedTrips.map(t => t.driverId).filter(id => id && id !== 'unknown' && id !== 'fleet-org-ignore')).size;
         const activeVehicles = new Set(vehicleMetrics.map(v => v.vehicleId)).size || new Set(mergedTrips.map(t => t.vehicleId).filter(Boolean)).size;
         
         // FIX: Only count COMPLETED trips for the KPI to match user expectation (42 trips vs 50 requests)
@@ -1063,7 +1282,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         om.activeVehicles = activeVehicles;
         om.totalTrips = totalTrips;
         om.fleetUtilization = avgUtilization;
-        om.totalCashExposure = calculatedCashExposure; // Ensure this is set
+        // removed unconditional overwrite of totalCashExposure
     }
 
     return {
@@ -1107,6 +1326,11 @@ export function detectMapping(headers: string[], availableFields: FieldDefinitio
 
     const match = findBestMatch(keywords);
     if (match) {
+        // ACTION 1: Strict Unmapping for Organization Files
+        // If we are looking for a Driver UUID, we must NEVER accept "Organization UUID"
+        if (field.key === 'driverId' && match.toLowerCase().includes('organization uuid')) {
+             return; // Skip this match
+        }
         mapping[field.key] = match;
     }
   });

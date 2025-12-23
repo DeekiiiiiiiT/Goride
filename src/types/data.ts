@@ -315,6 +315,7 @@ export interface OrganizationMetrics {
     netFare: number;
     balanceStart: number;
     balanceEnd: number;
+    bankTransfer?: number;
     
     // Calculated
     periodChange: number;       // End - Start

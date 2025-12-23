@@ -43,7 +43,7 @@ o	Transaction Audit: List rows from Payments_Transaction.csv where Description !
 ________________________________________
 relationships between specific CSV files.
 
-PROMPT START
+
 I am building a Fleet Management App with four specific screens. I have 7 CSV files containing raw data from Uber. I need you to write the logic/code to map the raw CSV columns to the UI components for each screen described below.
 The Data Structure (CSV Sources):
 1.	Drivers: driver_quality.csv (Ratings, Acceptance), driver_activity.csv (Time online)
@@ -82,5 +82,5 @@ o	Tolls/Refunds: Refunds & Expenses:Refunds:Toll
 •	Transaction Ledger: Populate a table using Payments_Transaction.csv. Columns: Time, Description, Paid to you.
 Technical Requirement:
 Please generate the code/logic to parse these CSVs and bind them to the UI components defined above. Ensure Driver UUID is used as the foreign key to link Drivers to their specific Trips and Financial transactions.
-PROMPT END
+
 
