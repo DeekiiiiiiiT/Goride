@@ -18,6 +18,7 @@ export const DEFAULT_SYSTEM_FIELDS: FieldDefinition[] = [
   { key: 'dropoffLocation', label: 'Dropoff Location', type: 'address', isCustom: false, isRequired: false, isVisible: true },
   { key: 'driverName', label: 'Driver Name', type: 'text', isCustom: false, isRequired: false, isVisible: true },
   { key: 'vehicleId', label: 'Vehicle ID', type: 'text', isCustom: false, isRequired: false, isVisible: true },
+  { key: 'odometer', label: 'Odometer Reading', type: 'number', isCustom: false, isRequired: false, isVisible: true },
   { key: 'notes', label: 'Notes', type: 'text', isCustom: false, isRequired: false, isVisible: true },
 ];
 
@@ -342,6 +343,200 @@ const extractDriverName = (row: ParsedRow, schema: any = {}): string => {
     return 'Unknown Driver';
 };
 
+// Phase 2: Static Import Reconstruction Helper
+interface FleetStats {
+    onTripRatio: number;
+    toTripRatio: number;
+    availableRatio: number;
+    totalOnlineHours: number;
+    totalOnJobHours: number;
+    totalOnTripHours: number;
+}
+
+function calculateFleetStats(files: FileData[]): FleetStats {
+    let sumOnTrip = 0;
+    let sumOnJob = 0;
+    let sumOnline = 0;
+    let foundPerformance = false;
+
+    for (const file of files) {
+        if (file.type === 'uber_vehicle_performance') {
+            foundPerformance = true;
+            file.rows.forEach(row => {
+                 const getVal = (keys: string[]) => {
+                     // 1. Exact/Trimmed Match
+                     for (const k of keys) {
+                          if (row[k] !== undefined) return String(row[k]);
+                          const found = Object.keys(row).find(rk => rk.toLowerCase().trim() === k.toLowerCase().trim());
+                          if (found) return String(row[found]);
+                     }
+                     // 2. Fuzzy Match (Contains)
+                     for (const k of keys) {
+                          const found = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+                          if (found) return String(row[found]);
+                     }
+                     return '0';
+                 };
+
+                 const oh = parseFloat(getVal(['Online Hours', 'Hours Online', 'Time Online']).replace(/[^0-9.-]/g, '')) || 0;
+                 const oth = parseFloat(getVal(['Hours On Trip', 'On Trip Hours', 'Time On Trip']).replace(/[^0-9.-]/g, '')) || 0;
+                 const hoj = parseFloat(getVal(['Hours On Job', 'Hours on Job', 'Job Hours']).replace(/[^0-9.-]/g, '')) || 0;
+
+                 sumOnline += oh;
+                 sumOnTrip += oth;
+                 sumOnJob += hoj;
+            });
+        }
+    }
+
+    if (!foundPerformance || sumOnJob === 0) {
+        // Fallback: If no performance data, default to 100% OnTrip (Job Duration = Total Time)
+        return { 
+            onTripRatio: 1, 
+            toTripRatio: 0, 
+            availableRatio: 0,
+            totalOnlineHours: 0,
+            totalOnJobHours: 0,
+            totalOnTripHours: 0
+        };
+    }
+
+    const onTripRatio = sumOnTrip / sumOnJob;
+    const toTripRatio = (sumOnJob - sumOnTrip) / sumOnJob;
+    const availableRatio = (sumOnline - sumOnJob) / sumOnJob;
+
+    console.log(`[Import] Fleet Stats Calculated: OnTrip=${onTripRatio.toFixed(2)}, ToTrip=${toTripRatio.toFixed(2)}, Available=${availableRatio.toFixed(2)}, Online=${sumOnline}, Job=${sumOnJob}`);
+
+    return { 
+        onTripRatio, 
+        toTripRatio, 
+        availableRatio,
+        totalOnlineHours: sumOnline,
+        totalOnJobHours: sumOnJob,
+        totalOnTripHours: sumOnTrip
+    };
+}
+
+// Helper to extract duration for calibration (and potentially main loop)
+const calculateTripDurationMinutes = (row: any, isMMDD: boolean): number => {
+    let requestTime: string | undefined;
+    let dropoffTime: string | undefined;
+
+    // 1. Request Time
+    let reqVal = row['Trip request time'] || row['Request Time'] || row['Request time'];
+    if (!reqVal) {
+        const key = Object.keys(row).find(k => k.toLowerCase().includes('request') && k.toLowerCase().includes('time'));
+        if (key) reqVal = row[key];
+    }
+    if (reqVal) {
+        try { 
+             const d = parseDateString(String(reqVal), isMMDD);
+             if (d) requestTime = d.toISOString(); 
+        } catch(e) {}
+    }
+
+    // 2. Dropoff Time
+    let dropVal = row['Drop off time'] || row['Drop-off time'] || row['Dropoff Time'];
+    if (!dropVal) {
+        const key = Object.keys(row).find(k => {
+            const l = k.toLowerCase();
+            return l.includes('drop') && l.includes('time') && !l.includes('wait');
+        });
+        if (key) dropVal = row[key];
+    }
+    if (dropVal) {
+        try { 
+            const d = parseDateString(String(dropVal), isMMDD);
+            if (d) dropoffTime = d.toISOString(); 
+        } catch(e) {}
+    }
+
+    // 3. Calc Diff
+    if (requestTime && dropoffTime) {
+         const start = new Date(requestTime).getTime();
+         const end = new Date(dropoffTime).getTime();
+         const diff = (end - start) / 60000;
+         if (diff >= 0 && diff < 1440) return diff;
+    }
+
+    // 4. Fallback Column
+    let rawDur = String(row['Trip duration'] || row['Duration (min)'] || row['Duration'] || row['Trip Duration'] || '');
+    if (!rawDur) {
+         const key = Object.keys(row).find(k => k.toLowerCase().includes('duration'));
+         if (key) rawDur = String(row[key]);
+    }
+
+    if (rawDur) {
+        if (rawDur.includes(':')) {
+            const parts = rawDur.split(':').map(Number);
+            if (parts.length === 3) return parts[0]*60 + parts[1] + parts[2]/60;
+            if (parts.length === 2) return parts[0] + parts[1]/60;
+        } else {
+            let val = parseFloat(rawDur);
+            // Heuristic: If value is > 1000, assume seconds (e.g. 1200 sec = 20 min). 
+            const isSeconds = Object.keys(row).some(k => k.toLowerCase().includes('duration') && (k.toLowerCase().includes('sec') || k.toLowerCase().includes('(s)')));
+            
+            if (isSeconds || val > 1000) {
+                val = val / 60;
+            }
+            return val || 0;
+        }
+    }
+
+    return 0;
+};
+
+function calculateCalibrationDeduction(fleetStats: FleetStats, files: FileData[]): number {
+    let rawLogSumMinutes = 0;
+    let tripCount = 0;
+
+    files.forEach(file => {
+        if (file.type === 'uber_trip') {
+            // Date Detection Logic (Duplicated from main loop)
+            let isMMDD = true;
+            let detected = false;
+            for (const row of file.rows.slice(0, 50)) {
+                 for (const val of Object.values(row)) {
+                     if (typeof val !== 'string') continue;
+                     const match = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4}|\d{2})/);
+                     if (match) {
+                         const p1 = parseInt(match[1]);
+                         const p2 = parseInt(match[2]);
+                         if (p1 > 12) { isMMDD = false; detected = true; break; } 
+                         if (p2 > 12) { isMMDD = true; detected = true; break; }
+                     }
+                 }
+                 if (detected) break;
+            }
+
+            file.rows.forEach(row => {
+                const dur = calculateTripDurationMinutes(row, isMMDD);
+                if (dur > 0) {
+                    rawLogSumMinutes += dur;
+                    tripCount++;
+                }
+            });
+        }
+    });
+
+    if (tripCount === 0) return 0;
+
+    const rawLogSumHours = rawLogSumMinutes / 60;
+    
+    // THE CORE LOGIC: Compare with Total On Job
+    // If Logs > OnJob, we have "Phantom Lag"
+    const excessHours = rawLogSumHours - fleetStats.totalOnJobHours;
+
+    if (excessHours > 0) {
+        const deductionHoursPerTrip = excessHours / tripCount;
+        console.log(`[Calibration] Phantom Lag Detected! Excess=${excessHours.toFixed(2)}h, Trips=${tripCount}, Deduction=${(deductionHoursPerTrip*60).toFixed(2)}m/trip`);
+        return deductionHoursPerTrip;
+    }
+
+    console.log(`[Calibration] No Phantom Lag. Logs=${rawLogSumHours.toFixed(2)}h, Job=${fleetStats.totalOnJobHours.toFixed(2)}h`);
+    return 0;
+}
+
 export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
     const genericTrips: Trip[] = [];
@@ -351,6 +546,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     const organizationMetrics: OrganizationMetrics[] = [];
     let organizationName = knownFleetName || ''; // Phase 1: Track Fleet Owner Name
     
+    // Phase 2: Calculate Global Fleet Stats for Static Reconstruction
+    const fleetStats = calculateFleetStats(files);
+
+    // Phase 3: Dynamic Auto-Calibration (Phantom Lag Calculation)
+    const deductionPerTrip = calculateCalibrationDeduction(fleetStats, files);
+
     // Phase 6: Cross-File Verification Accumulators
     let sumVehicleCash = 0; // From Vehicle Performance Report
     let sumDriverCash = 0;  // From Driver Payments Report
@@ -542,6 +743,31 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     }
                     
                     current.duration = durationMinutes > 0 ? durationMinutes : 0;
+                    
+                    // Phase 2: Static Reconstruction of Time Metrics
+                    const rawDurationHours = current.duration / 60;
+                    
+                    // Phase 3: Apply Dynamic Auto-Calibration (Phantom Lag Deduction)
+                    // We deduct the "lag" from the raw duration to get the "True Job Time"
+                    const trueJobTime = Math.max(0, rawDurationHours - deductionPerTrip);
+
+                    current.onTripHours = trueJobTime * fleetStats.onTripRatio;
+                    current.toTripHours = trueJobTime * fleetStats.toTripRatio;
+                    current.availableHours = trueJobTime * fleetStats.availableRatio;
+                    
+                    // Phase 4: Data Integrity Check
+                    // Ensure totalHours never exceeds 24 hours for a single trip (sanity check)
+                    let rawTotal = (current.onTripHours || 0) + (current.toTripHours || 0) + (current.availableHours || 0);
+                    
+                    if (rawTotal > 24) {
+                         const scale = 24 / rawTotal;
+                         if (current.onTripHours) current.onTripHours *= scale;
+                         if (current.toTripHours) current.toTripHours *= scale;
+                         if (current.availableHours) current.availableHours *= scale;
+                         rawTotal = 24;
+                    }
+
+                    current.totalHours = rawTotal;
                     
                     // Time of Day
                     if (current.requestTime) {
@@ -923,8 +1149,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                          id: `dm-${driverId}-${Math.random()}`,
                          driverId: driverId,
                          driverName: 'Unknown Driver',
-                         periodStart: new Date().toISOString(),
-                         periodEnd: new Date().toISOString(),
+                         periodStart: safeDateISO(row['Period Start'] || row['Start Date'] || row['Date'] || file.reportDate) || new Date().toISOString(),
+                         periodEnd: safeDateISO(row['Period End'] || row['End Date'] || row['Date'] || file.reportDate) || new Date().toISOString(),
                          totalEarnings: 0, refundsAndExpenses: 0, cashCollected: 0,
                          netEarnings: 0, cashFlowRisk: 'OK', expenseRatio: 0,
                          acceptanceRate: 0, cancellationRate: 0, completionRate: 0,
@@ -957,12 +1183,23 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      }
 
                      // Merge Activity Metrics
-                     const oh = parseFloat(String(row['Online Hours'] || row['Hours Online'] || '0')) || 0;
-                     const oth = parseFloat(String(row['On Trip Hours'] || '0')) || 0;
-                     const tc = parseInt(String(row['Trips Completed'] || row['Finished Trips'] || '0')) || 0;
+                     const getValLocal = (keys: string[]) => {
+                        for (const k of keys) {
+                            if (row[k] !== undefined) return String(row[k]);
+                            const found = Object.keys(row).find(rk => rk.toLowerCase().trim() === k.toLowerCase().trim());
+                            if (found) return String(row[found]);
+                        }
+                        return '0';
+                     };
+
+                     const oh = parseFloat(getValLocal(['Online Hours', 'Hours Online', 'Time Online', 'Hours'])) || 0;
+                     const oth = parseFloat(getValLocal(['On Trip Hours', 'Hours On Trip', 'Hours on trip'])) || 0;
+                     const hoj = parseFloat(getValLocal(['Hours On Job', 'Hours on Job', 'Hours on job'])) || 0;
+                     const tc = parseInt(getValLocal(['Trips Completed', 'Finished Trips', 'Total Trips'])) || 0;
                      
                      if (oh > 0) current.onlineHours = oh;
                      if (oth > 0) current.onTripHours = oth;
+                     if (hoj > 0) current.hoursOnJob = hoj;
                      if (tc > 0) current.tripsCompleted = tc;
                      
                      driverMetricsMap.set(driverId, current);
@@ -972,17 +1209,43 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
              else if (file.type === 'uber_vehicle_performance') {
                  // Vehicle Metrics Parsing
                  // Spec: "Vehicle Plate Number", "Earnings Per Hour", "Total Trips"
-                 const vId = String(row['Vehicle UUID'] || row['Vehicle ID'] || row['Vehicle Plate Number'] || row['License Plate'] || '');
-                 if (vId) {
-                     const totalEarnings = parseFloat(String(row['Total Earnings'] || row['Gross Fares'] || row['Gross Earnings'] || '0').replace(/[^0-9.-]/g, '')) || 0;
-                     const onlineHours = parseFloat(String(row['Online Hours'] || row['Hours Online'] || row['Time Online'] || row['Hours'] || '0')) || 0;
-                     const onTripHours = parseFloat(String(row['On Trip Hours'] || '0')) || 0;
-                     let earningsPerHour = parseFloat(String(row['Earnings Per Hour'] || row['Earnings / Hour'] || row['Earnings/Hour'] || '0').replace(/[^0-9.-]/g, '')) || 0;
+                 
+                 const getVal = (keys: string[]) => {
+                     // 1. Exact/Trimmed Match
+                     for (const k of keys) {
+                         if (row[k] !== undefined) return String(row[k]);
+                         const found = Object.keys(row).find(rk => rk.toLowerCase().trim() === k.toLowerCase().trim());
+                         if (found) return String(row[found]);
+                     }
+                     // 2. Fuzzy Match (Contains)
+                     for (const k of keys) {
+                         const found = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+                         if (found) return String(row[found]);
+                     }
+                     return '0';
+                 };
+
+                 const vId = getVal(['Vehicle UUID', 'Vehicle ID', 'Vehicle Plate Number', 'License Plate']);
+                 if (vId && vId !== '0') {
+                     // DEBUG: Log headers to verify parser sees them
+                     console.log('Parsed Vehicle Headers:', Object.keys(row));
+
+                     const totalEarnings = parseFloat(getVal(['Total Earnings', 'Gross Fares', 'Gross Earnings']).replace(/[^0-9.-]/g, '')) || 0;
+                     const onlineHours = parseFloat(getVal(['Online Hours', 'Hours Online', 'Time Online', 'Hours']).replace(/[^0-9.-]/g, '')) || 0;
+                     
+                     // FIX: Enforce exact casing for Hours On Trip and Hours On Job
+                     const onTripHours = parseFloat(getVal(['Hours On Trip', 'Hours on Trip', 'On Trip Hours', 'Time On Trip', 'Trip Hours', 'Time on trip']).replace(/[^0-9.-]/g, '')) || 0;
+                     const hoursOnJob = parseFloat(getVal(['Hours On Job', 'Hours on Job', 'Job Hours', 'Time On Job']).replace(/[^0-9.-]/g, '')) || 0;
+                     
+                     // DEBUG: Log extracted value
+                     console.log('Extracted Job Hours:', hoursOnJob, ' | Key used:', 'Hours On Job');
+
+                     let earningsPerHour = parseFloat(getVal(['Earnings Per Hour', 'Earnings / Hour', 'Earnings/Hour']).replace(/[^0-9.-]/g, '')) || 0;
                      
                      // Option 1: The Summary Method (Fastest) - Summing 'Cash Collected'
                      // Note: This is already a positive number in vehicle_performance.csv
                      // Capture Cash for Verification
-                     const cashCollected = parseFloat(String(row['Cash Collected'] || '0').replace(/[^0-9.-]/g, '')) || 0;
+                     const cashCollected = parseFloat(getVal(['Cash Collected']).replace(/[^0-9.-]/g, '')) || 0;
                      sumVehicleCash += cashCollected;
 
                      // Fallback: Calculate Earnings Per Hour if missing
@@ -1007,17 +1270,18 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      vehicleMetrics.push({
                          id: `vm-${vId}-${Math.random()}`,
                          vehicleId: vId,
-                         plateNumber: String(row['Vehicle Plate Number'] || row['License Plate'] || row['Plate'] || 'Unknown'),
-                         vehicleName: String(row['Vehicle Make'] || '') + ' ' + String(row['Vehicle Model'] || ''),
-                         periodStart: new Date().toISOString(),
-                         periodEnd: new Date().toISOString(),
+                         plateNumber: getVal(['Vehicle Plate Number', 'License Plate', 'Plate', 'Vehicle']),
+                         vehicleName: getVal(['Vehicle Make']) + ' ' + getVal(['Vehicle Model']),
+                         periodStart: safeDateISO(getVal(['Period Start', 'Start Date', 'Date']) || file.reportDate) || new Date().toISOString(),
+                         periodEnd: safeDateISO(getVal(['Period End', 'End Date', 'Date']) || file.reportDate) || new Date().toISOString(),
                          
                          totalEarnings,
                          earningsPerHour,
                          tripsPerHour: 0,
                          onlineHours,
                          onTripHours,
-                         totalTrips: parseInt(String(row['Trips Completed'] || row['Total Trips'] || '0')) || 0,
+                         hoursOnJob,
+                         totalTrips: parseInt(getVal(['Trips Completed', 'Total Trips', 'Total trips'])) || 0,
                          
                          // Phase 4 Fields
                          utilizationRate,
@@ -1323,6 +1587,7 @@ export function detectMapping(headers: string[], availableFields: FieldDefinitio
     if (field.key === 'pickupLocation') keywords.push('pickup address', 'origin', 'start location');
     if (field.key === 'dropoffLocation') keywords.push('dropoff address', 'destination', 'end location');
     if (field.key === 'vehicleId') keywords.push('plate', 'license plate', 'vehicle');
+    if (field.key === 'odometer') keywords.push('odometer', 'reading', 'mileage', 'odo', 'end odometer', 'trip_distance');
 
     const match = findBestMatch(keywords);
     if (match) {

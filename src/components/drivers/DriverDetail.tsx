@@ -96,6 +96,7 @@ interface DriverDetailProps {
   driver?: any;
   trips: Trip[];
   metrics?: DriverMetrics[];
+  vehicleMetrics?: import('../../types/data').VehicleMetrics[];
   onBack: () => void;
   fleetStats?: {
     avgEarningsPerTrip: number;
@@ -105,10 +106,11 @@ interface DriverDetailProps {
   };
 }
 
-export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, onBack, fleetStats }: DriverDetailProps) {
+export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, vehicleMetrics, onBack, fleetStats }: DriverDetailProps) {
   const [activeTab, setActiveTab] = useState("overview");
   const [tripSearch, setTripSearch] = useState("");
   const [tripPage, setTripPage] = useState(1);
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
@@ -239,6 +241,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // Efficiency Metrics
      let totalDistance = 0;
      let totalDuration = 0; // minutes
+     
+     // Phase 3: Fleet Efficiency Accumulators (Pre-Calculated from Import)
+     let sumOnTripHours = 0;
+     let sumToTripHours = 0;
+     let sumAvailableHours = 0;
+     let sumTotalHours = 0;
+     
      const hoursDistribution = new Array(24).fill(0);
 
      // Breakdown
@@ -261,6 +270,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              chartDataMap.set(format(d, 'yyyy-MM-dd'), { Uber: 0, InDrive: 0, Other: 0 });
          });
      } catch (e) { }
+
+     // --- Phase 3: Ratio-Reconstruction Algorithm ---
+     // We no longer need to calculate "Report Duration" because we use the Efficiency Ratio method.
+     // This ignores mismatched file dates and focuses on the Driver's Performance Profile.
 
      trips.forEach(trip => {
         const tripDateObj = new Date(trip.date);
@@ -294,6 +307,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 pStats.distance += trip.distance;
             }
             if (trip.duration) totalDuration += trip.duration;
+            
+            // Phase 3: Sum pre-calculated hours (Static Reconstruction)
+            sumOnTripHours += trip.onTripHours || 0;
+            sumToTripHours += trip.toTripHours || 0;
+            sumAvailableHours += trip.availableHours || 0;
+            sumTotalHours += trip.totalHours || 0;
 
             // Hourly Distribution
             const h = tripDateObj.getHours();
@@ -436,6 +455,61 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      const periodNetChange = cashCollected - periodCashReceived;
 
+     // Trip Ratio Logic (from Vehicle Metrics)
+     // Solution 1: "The Bridge" - Link Driver to Vehicle via Trips
+     const activePlates = new Set<string>();
+     
+     // 1. Identify vehicles driven in this period from Trip Logs
+     trips.forEach(trip => {
+         const tripDateObj = new Date(trip.date);
+         if (isWithinInterval(tripDateObj, { start, end }) && trip.vehicleId) {
+             // Normalize plate (remove spaces, uppercase)
+             activePlates.add(trip.vehicleId.replace(/[\s-]/g, '').toUpperCase());
+         }
+     });
+
+     let relevantVehicleMetrics = vehicleMetrics?.filter(vm => {
+         const vmStart = new Date(vm.periodStart);
+         const vmEnd = new Date(vm.periodEnd);
+         // FIX: Allow metrics with missing dates (defaulted to year 2000) or valid overlap
+         const overlaps = (vmStart <= end && vmEnd >= start) || vmStart.getFullYear() === 2000;
+         
+         const vmPlate = (vm.plateNumber || '').replace(/[\s-]/g, '').toUpperCase();
+         // Check if this vehicle matches any plate from the driver's trips
+         const matchesTripPlate = Array.from(activePlates).some(p => vmPlate.includes(p));
+         
+         return overlaps && matchesTripPlate;
+     }) || [];
+
+     // 2. Fallback: If no trips (so no bridge), try the static profile assignment
+     if (relevantVehicleMetrics.length === 0 && driver?.vehicle) {
+         let profilePlate = driver.vehicle;
+         const parenMatch = profilePlate.match(/\((.*?)\)/);
+         if (parenMatch) profilePlate = parenMatch[1];
+         profilePlate = profilePlate.replace(/[\s-]/g, '').toUpperCase();
+
+         relevantVehicleMetrics = vehicleMetrics?.filter(vm => {
+             const vmStart = new Date(vm.periodStart);
+             const vmEnd = new Date(vm.periodEnd);
+             // FIX: Allow metrics with missing dates (defaulted to year 2000) or valid overlap
+             const overlaps = (vmStart <= end && vmEnd >= start) || vmStart.getFullYear() === 2000;
+             
+             const vmPlate = (vm.plateNumber || '').replace(/[\s-]/g, '').toUpperCase();
+             return overlaps && vmPlate.includes(profilePlate);
+         }) || [];
+     }
+
+     // --- Phase 3: Ratio-Reconstruction Algorithm ---
+     // We now simply sum the pre-calculated fields from the Trip object.
+     // These fields were populated during import based on the fleet efficiency ratios.
+     
+     const tripRatio = {
+         onTrip: sumOnTripHours,
+         toTrip: sumToTripHours,
+         available: sumAvailableHours,
+         totalOnline: sumTotalHours
+     };
+
      return {
         periodEarnings,
         prevPeriodEarnings,
@@ -467,9 +541,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         platformStats,
         // Phase 2 New Params
         acceptanceRate,
-        currentRating
+        currentRating,
+        tripRatio // New
      };
-  }, [trips, dateRange, csvMetrics, transactions]);
+  }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver]);
 
   const handleDateSelect = (newRange: DateRange | undefined) => {
     if (newRange?.from) {
@@ -630,27 +705,75 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   }
                />
                <MetricCard 
-                  title="Completion Rate" 
-                  value={`${metrics.completionRate.toFixed(0)}%`} 
-                  target="Target: 95%"
-                  progress={metrics.completionRate}
-                  progressColor={metrics.completionRate >= 95 ? "bg-emerald-500" : "bg-rose-500"}
-                  icon={<CheckCircle2 className="h-4 w-4 text-slate-500" />}
+                  title="Km Driven for Period" 
+                  value={`${metrics.totalDistance.toFixed(1)} km`} 
+                  icon={<Navigation className="h-4 w-4 text-slate-500" />}
                    breakdown={[
-                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
-                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
+                       { label: 'Uber', value: `${metrics.platformStats.Uber.distance.toFixed(1)} km`, color: '#3b82f6' },
+                       { label: 'InDrive', value: `${metrics.platformStats.InDrive.distance.toFixed(1)} km`, color: '#10b981' }
                    ]}
                />
-               <MetricCard 
-                  title="Customer Rating" 
-                  value={metrics.currentRating.toFixed(1)} 
-                  subtext="Last 4 weeks"
-                  icon={<Star className="h-4 w-4 text-slate-500" />}
-                   breakdown={[
-                       { label: 'Uber', value: metrics.platformStats.Uber.ratingCount > 0 ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#3b82f6' },
-                       { label: 'InDrive', value: metrics.platformStats.InDrive.ratingCount > 0 ? (metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#10b981' }
-                   ]}
-               />
+               <Card>
+                  <CardHeader className="pb-2">
+                     <CardTitle className="text-sm font-medium text-slate-500">Trip Meter</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                     <div className="h-[180px] w-full relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                           <PieChart>
+                              <Pie
+                                 data={[
+                                    { name: 'Available', value: metrics.tripRatio.available, fill: '#1e3a8a' },
+                                    { name: 'To Trip', value: metrics.tripRatio.toTrip, fill: '#fbbf24' },
+                                    { name: 'On Trip', value: metrics.tripRatio.onTrip, fill: '#10b981' }
+                                 ]}
+                                 cx="50%"
+                                 cy="50%"
+                                 innerRadius={55}
+                                 outerRadius={75}
+                                 paddingAngle={0}
+                                 dataKey="value"
+                                 startAngle={90}
+                                 endAngle={-270}
+                                 stroke="none"
+                              >
+                                 <Cell key="Available" fill="#1e3a8a" />
+                                 <Cell key="To Trip" fill="#fbbf24" />
+                                 <Cell key="On Trip" fill="#10b981" />
+                              </Pie>
+                              <Tooltip formatter={(value: number) => [value.toFixed(2) + ' hrs', 'Duration']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
+                           </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                           <div className="text-2xl font-bold text-slate-900">{metrics.tripRatio.totalOnline.toFixed(2)}</div>
+                           <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Hours Online</div>
+                        </div>
+                     </div>
+                     <div className="mt-4 flex justify-between px-2">
+                        <div className="flex flex-col items-center gap-1">
+                           <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.available.toFixed(2)} hrs</span>
+                           <div className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-[#1e3a8a]"></div>
+                              <span className="text-xs font-medium text-slate-500">Available</span>
+                           </div>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                           <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.toTrip.toFixed(2)} hrs</span>
+                           <div className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-[#fbbf24]"></div>
+                              <span className="text-xs font-medium text-slate-500">To trip</span>
+                           </div>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                           <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.onTrip.toFixed(2)} hrs</span>
+                           <div className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
+                              <span className="text-xs font-medium text-slate-500">On trip</span>
+                           </div>
+                        </div>
+                     </div>
+                  </CardContent>
+               </Card>
                <MetricCard 
                   title="Acceptance Rate" 
                   value={metrics.acceptanceRate !== null ? `${metrics.acceptanceRate}%` : '-'} 
@@ -954,6 +1077,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          <TabsContent value="quality" className="space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <MetricCard 
+                    title="Customer Rating" 
+                    value={metrics.currentRating.toFixed(1)} 
+                    subtext="Last 4 weeks"
+                    icon={<Star className="h-4 w-4 text-slate-500" />}
+                     breakdown={[
+                        { label: 'Uber', value: metrics.platformStats.Uber.ratingCount > 0 ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#3b82f6' },
+                        { label: 'InDrive', value: metrics.platformStats.InDrive.ratingCount > 0 ? (metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#10b981' }
+                     ]}
+                 />
+                 <MetricCard 
                     title="Completion Rate" 
                     value={`${metrics.completionRate.toFixed(1)}%`} 
                     icon={<CheckCircle2 className="h-4 w-4 text-slate-500" />}
@@ -1168,7 +1301,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     </TableCell>
                                     <TableCell className="font-medium">${trip.amount.toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8"
+                                            onClick={() => setSelectedTrip(trip)}
+                                        >
                                             <Eye className="h-4 w-4 text-slate-400" />
                                         </Button>
                                     </TableCell>
@@ -1302,6 +1440,98 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     </Button>
                  )}
             </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trip Details Modal */}
+      <Dialog open={!!selectedTrip} onOpenChange={(open) => !open && setSelectedTrip(null)}>
+        <DialogContent className="max-w-xl w-full">
+          <DialogHeader>
+            <DialogTitle>Trip Details</DialogTitle>
+            <DialogDescription>
+                Trip ID: {selectedTrip?.id}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedTrip && (
+              <div className="grid grid-cols-2 gap-4 py-4">
+                  <div className="space-y-1">
+                      <Label className="text-slate-500 text-xs">Date & Time</Label>
+                      <div className="font-medium">
+                          {selectedTrip.date ? format(new Date(selectedTrip.date), 'MMM d, yyyy h:mm a') : 'N/A'}
+                      </div>
+                  </div>
+                  <div className="space-y-1">
+                      <Label className="text-slate-500 text-xs">Platform</Label>
+                      <div className="font-medium flex items-center gap-2">
+                          <Badge variant="outline">{selectedTrip.platform}</Badge>
+                          <Badge variant={selectedTrip.status === 'Completed' ? 'default' : 'secondary'} className={selectedTrip.status === 'Completed' ? 'bg-emerald-500' : ''}>
+                              {selectedTrip.status}
+                          </Badge>
+                      </div>
+                  </div>
+
+                  <div className="col-span-2 space-y-1 pt-2">
+                      <Label className="text-slate-500 text-xs">Pickup</Label>
+                      <div className="font-medium flex items-start gap-2">
+                          <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                          <span>{selectedTrip.pickupLocation || 'Unknown Location'}</span>
+                      </div>
+                  </div>
+                  <div className="col-span-2 space-y-1 pb-2 border-b">
+                      <Label className="text-slate-500 text-xs">Dropoff</Label>
+                      <div className="font-medium flex items-start gap-2">
+                          <MapPin className="h-4 w-4 text-rose-400 mt-0.5 shrink-0" />
+                          <span>{selectedTrip.dropoffLocation || 'Unknown Location'}</span>
+                      </div>
+                  </div>
+
+                  <div className="space-y-1">
+                      <Label className="text-slate-500 text-xs">Distance</Label>
+                      <div className="font-medium">{selectedTrip.distance ? `${selectedTrip.distance.toFixed(1)} km` : '-'}</div>
+                  </div>
+                  <div className="space-y-1">
+                      <Label className="text-slate-500 text-xs">Duration</Label>
+                      <div className="font-medium">{selectedTrip.duration ? `${selectedTrip.duration.toFixed(0)} min` : '-'}</div>
+                  </div>
+
+                  <div className="space-y-1">
+                      <Label className="text-slate-500 text-xs">Driver Earnings</Label>
+                      <div className="font-bold text-lg text-emerald-600">${selectedTrip.amount?.toFixed(2)}</div>
+                  </div>
+                  <div className="space-y-1">
+                      <Label className="text-slate-500 text-xs">Cash Collected</Label>
+                      <div className="font-bold text-lg text-amber-600">
+                        {Math.abs(Number(selectedTrip.cashCollected || 0)) > 0 
+                            ? `$${Math.abs(Number(selectedTrip.cashCollected)).toFixed(2)}` 
+                            : '-'}
+                      </div>
+                  </div>
+
+                  {selectedTrip.fareBreakdown && (
+                    <div className="col-span-2 pt-2 border-t mt-2">
+                        <Label className="text-slate-500 text-xs mb-2 block">Fare Breakdown</Label>
+                        <div className="text-sm bg-slate-50 p-3 rounded-md border space-y-1">
+                            {Object.entries(selectedTrip.fareBreakdown).map(([key, value]) => {
+                                if (!value) return null;
+                                // Convert camelCase to Title Case
+                                const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                                return (
+                                    <div key={key} className="flex justify-between items-center text-xs">
+                                        <span className="text-slate-500">{label}</span>
+                                        <span className="font-medium text-slate-900">${Number(value).toFixed(2)}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                  )}
+              </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+               <Button variant="outline" onClick={() => setSelectedTrip(null)}>Close</Button>
+          </div>
         </DialogContent>
       </Dialog>
 

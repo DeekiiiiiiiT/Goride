@@ -267,6 +267,44 @@ app.post("/make-server-37f42386/transactions", async (c) => {
   }
 });
 
+// Maintenance Logs Endpoints
+app.get("/make-server-37f42386/maintenance-logs/:vehicleId", async (c) => {
+  try {
+    const vehicleId = c.req.param("vehicleId");
+    // Get all logs for this vehicle. We assume keys are formatted as maintenance_log:{vehicleId}:{logId}
+    const logs = await kv.getByPrefix(`maintenance_log:${vehicleId}:`);
+    
+    // Sort by date desc
+    logs.sort((a: any, b: any) => {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        return timeB - timeA;
+    });
+    
+    return c.json(logs);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/maintenance-logs", async (c) => {
+  try {
+    const log = await c.req.json();
+    if (!log.id) {
+        log.id = crypto.randomUUID();
+    }
+    if (!log.vehicleId) {
+        return c.json({ error: "Vehicle ID is required" }, 400);
+    }
+    
+    // Key structure: maintenance_log:{vehicleId}:{logId}
+    await kv.set(`maintenance_log:${log.vehicleId}:${log.id}`, log);
+    return c.json({ success: true, data: log });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Storage Upload Endpoint
 app.post("/make-server-37f42386/upload", async (c) => {
   try {
@@ -1476,6 +1514,237 @@ app.post("/make-server-37f42386/financials", async (c) => {
         const data = await c.req.json();
         await kv.set("organization_metrics:current", data);
         return c.json({ success: true, data });
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Parse Invoice Endpoint
+app.post("/make-server-37f42386/parse-invoice", async (c) => {
+    try {
+        const body = await c.req.parseBody();
+        const file = body['file'];
+
+        if (!file || !(file instanceof File)) {
+            return c.json({ error: "No file uploaded" }, 400);
+        }
+
+        const apiKey = Deno.env.get("GEMINI_API_KEY");
+        if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 500);
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        
+        // Robust model selection
+        const modelCandidates = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        const mimeType = file.type;
+
+        const prompt = `Analyze this vehicle service invoice or receipt. Extract the following information in strict JSON format:
+        - date (YYYY-MM-DD)
+        - type (Choose the best fit: 'oil', 'tires', 'brake', 'inspection', 'repair', 'maintenance' (for multi-service visits), or 'other')
+        - cost (number, total numeric amount. Ignore currency symbols like JMD or $)
+        - odometer (number, if present)
+        - notes (Create a clean, detailed summary. List every service performed and part replaced. Include customer complaints if visible (e.g. 'Customer reported soft brakes'). Format as a readable string.)
+        
+        If a field is missing, use null. Return ONLY the JSON object, no markdown code blocks.`;
+
+        let result = null;
+        let lastError = null;
+
+        for (const modelName of modelCandidates) {
+            try {
+                console.log(`Attempting invoice analysis with model: ${modelName}`);
+                const model = genAI.getGenerativeModel({ model: modelName });
+                result = await model.generateContent([
+                    prompt,
+                    {
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: mimeType
+                        }
+                    }
+                ]);
+                if (result) break;
+            } catch (e: any) {
+                console.warn(`Model ${modelName} failed:`, e.message);
+                lastError = e;
+            }
+        }
+
+        if (!result) {
+             throw new Error(`All Gemini models failed. Last Error: ${lastError?.message}`);
+        }
+
+        const response = result.response;
+        const text = response.text();
+        
+        // Clean markdown code blocks if present
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        let data;
+        try {
+            data = JSON.parse(jsonStr);
+        } catch (e) {
+            console.error("Failed to parse JSON from Gemini:", text);
+            return c.json({ error: "Failed to parse invoice data" }, 500);
+        }
+
+        return c.json({ success: true, data });
+
+    } catch (e: any) {
+        console.error("Error parsing invoice:", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Parse Inspection Endpoint
+app.post("/make-server-37f42386/parse-inspection", async (c) => {
+    try {
+        const body = await c.req.parseBody();
+        const file = body['file'];
+
+        if (!file || !(file instanceof File)) {
+            return c.json({ error: "No file uploaded" }, 400);
+        }
+
+        const apiKey = Deno.env.get("GEMINI_API_KEY");
+        if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 500);
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        
+        // Robust model selection
+        const modelCandidates = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        const mimeType = file.type;
+
+        const checklistItems = [
+            "Replace Engine Oil & Filter",
+            "Replace Air Filter",
+            "Replace Cabin Filter",
+            "Replace Spark Plugs",
+            "Replace Brake Pads (Front)",
+            "Replace Brake Pads (Rear)",
+            "Resurface/Replace Rotors",
+            "Flush Brake Fluid",
+            "Flush Coolant",
+            "Transmission Service",
+            "Wheel Alignment",
+            "Rotate/Balance Tires",
+            "Replace Tires",
+            "Replace Wipers",
+            "Replace Battery",
+            "Suspension Repair",
+            "Steering System Repair",
+            "Exhaust System Repair",
+            "AC Service",
+            "Matching/Calibration",
+            "Throttle Body Cleaning"
+        ];
+
+        const prompt = `Analyze this vehicle inspection report (or mechanic's checklist). Extract the following information in strict JSON format:
+        - issues: array of strings. Identify all items marked as 'Failed', 'Needs Attention', 'Repair Needed', 'Bad', 'Replace', or general negative findings. 
+          IMPORTANT: Try to map each issue to one of the following exact categories if it matches closely:
+          ${JSON.stringify(checklistItems)}
+          If an issue does not match any of these, use a concise, descriptive string (e.g. "Leaking Radiator").
+        - notes: string. A comprehensive summary of the inspection findings. Include specific measurements (e.g. "Front Brake Pads: 3mm", "Tire Tread: 4/32") if visible. Include mechanic recommendations.
+        
+        Return ONLY the JSON object, no markdown code blocks.`;
+
+        let result = null;
+        let lastError = null;
+
+        for (const modelName of modelCandidates) {
+            try {
+                console.log(`Attempting inspection analysis with model: ${modelName}`);
+                const model = genAI.getGenerativeModel({ model: modelName });
+                result = await model.generateContent([
+                    prompt,
+                    {
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: mimeType
+                        }
+                    }
+                ]);
+                if (result) break;
+            } catch (e: any) {
+                console.warn(`Model ${modelName} failed:`, e.message);
+                lastError = e;
+            }
+        }
+
+        if (!result) {
+             throw new Error(`All Gemini models failed. Last Error: ${lastError?.message}`);
+        }
+
+        const response = result.response;
+        const text = response.text();
+        
+        // Clean markdown code blocks if present
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        let data;
+        try {
+            data = JSON.parse(jsonStr);
+        } catch (e) {
+            console.error("Failed to parse JSON from Gemini:", text);
+            return c.json({ error: "Failed to parse inspection data" }, 500);
+        }
+
+        return c.json({ success: true, data });
+
+    } catch (e: any) {
+        console.error("Error parsing inspection:", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Odometer History Endpoints
+app.get("/make-server-37f42386/odometer-history/:vehicleId", async (c) => {
+  try {
+    const vehicleId = c.req.param("vehicleId");
+    const history = await kv.getByPrefix(`odometer_reading:${vehicleId}:`);
+    
+    // Sort by date desc
+    history.sort((a: any, b: any) => {
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+    
+    return c.json(history);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/odometer-history", async (c) => {
+  try {
+    const reading = await c.req.json();
+    if (!reading.id) reading.id = crypto.randomUUID();
+    if (!reading.vehicleId) return c.json({ error: "Vehicle ID required" }, 400);
+    if (!reading.createdAt) reading.createdAt = new Date().toISOString();
+    
+    // Key format: odometer_reading:{vehicleId}:{readingId}
+    await kv.set(`odometer_reading:${reading.vehicleId}:${reading.id}`, reading);
+    
+    return c.json({ success: true, data: reading });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/odometer-history/:id", async (c) => {
+    const id = c.req.param("id");
+    const vehicleId = c.req.query("vehicleId");
+    
+    if (!vehicleId) return c.json({ error: "vehicleId query param required" }, 400);
+    
+    try {
+        await kv.del(`odometer_reading:${vehicleId}:${id}`);
+        return c.json({ success: true });
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }

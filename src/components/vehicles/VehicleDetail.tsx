@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { 
   ArrowLeft, 
+  ArrowRight,
   Calendar, 
   MapPin, 
   TrendingUp, 
@@ -23,8 +24,14 @@ import {
   Eye,
   Download,
   Trash2,
-  Pencil
+  Pencil,
+  Loader2,
+  Scan,
+  Camera,
+  Search,
+  User
 } from 'lucide-react';
+import { toast } from "sonner@2.0.3";
 import { 
   LineChart, 
   Line, 
@@ -88,6 +95,11 @@ import { format, subDays, isSameDay, startOfDay, getDay, getHours } from 'date-f
 import { toast } from 'sonner@2.0.3';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
+import { OdometerHistory } from './odometer/OdometerHistory';
+import { UpdateOdometerDialog } from './odometer/UpdateOdometerDialog';
+import { odometerService } from '../../services/odometerService';
+import { calculateLiveMileage } from '../../utils/mileageProjection';
+
 const MOCK_DOCUMENTS: VehicleDocument[] = [];
 
 interface VehicleDetailProps {
@@ -97,9 +109,349 @@ interface VehicleDetailProps {
   onAssignDriver?: () => void; // Added
 }
 
+import { Textarea } from "../ui/textarea";
+import { Checkbox } from "../ui/checkbox";
+
+interface MaintenanceLog {
+    id: string;
+    vehicleId: string;
+    date: string;
+    type: string; // 'oil', 'tires', 'maintenance', etc.
+    serviceInterval?: 'A' | 'B' | 'C' | 'D'; // A=Basic, B=Interm, C=Major, D=LongTerm
+    cost: number;
+    odo: number;
+    provider: string;
+    providerLocationUrl?: string;
+    notes: string;
+    checklist?: string[]; // Array of completed items
+    itemCosts?: Record<string, { material: number, labor: number }>; // Cost breakdown per item
+    inspectionFee?: number; // Separate inspection fee
+    inspectionResults?: {
+        issues: string[]; // List of items needing attention
+        notes: string;    // Detailed inspection notes
+    };
+}
+
+const INSPECTION_CHECKLIST = [
+    "Replace Engine Oil & Filter",
+    "Replace Air Filter",
+    "Replace Cabin Filter",
+    "Replace Spark Plugs",
+    "Replace Brake Pads (Front)",
+    "Replace Brake Pads (Rear)",
+    "Resurface/Replace Rotors",
+    "Flush Brake Fluid",
+    "Flush Coolant",
+    "Transmission Service",
+    "Wheel Alignment",
+    "Rotate/Balance Tires",
+    "Replace Tires",
+    "Replace Wipers",
+    "Replace Battery",
+    "Suspension Repair",
+    "Steering System Repair",
+    "Exhaust System Repair",
+    "AC Service",
+    "Matching/Calibration",
+    "Throttle Body Cleaning"
+];
+
+const MAINTENANCE_SCHEDULE = {
+    A: {
+        label: "Basic Service (Every 5,000 km)",
+        interval: 5000,
+        items: [
+            "Replace Engine Oil (0W-20 or 5W-30)",
+            "Replace Oil Filter",
+            "Check Tire Pressures (LF, RF, LR, RR)",
+            "Top Up Window Washer Fluid",
+            "Check Coolant Level",
+            "Check Lights (Head, Brake, Indicators, Reverse)"
+        ]
+    },
+    B: {
+        label: "Intermediate Service (Every 10,000 km)",
+        interval: 10000,
+        items: [
+            "Includes all Basic Service items",
+            "Rotate Tires",
+            "Inspect/Clean/Replace Engine Air Filter",
+            "Replace Cabin A/C Filter",
+            "Inspect Wiper Blades",
+            "Inspect Brake Pads"
+        ]
+    },
+    C: {
+        label: "Major Service (Every 40,000 km)",
+        interval: 40000,
+        items: [
+            "Includes all Intermediate Service items",
+            "Drain & Refill CVT Transmission Fluid",
+            "Flush & Replace Brake Fluid",
+            "Inspect Drive/Serpentine Belt",
+            "Inspect Suspension Bushings & Boots"
+        ]
+    },
+    D: {
+        label: "Long-Term Service (Every 100,000 km)",
+        interval: 100000,
+        items: [
+            "Replace Spark Plugs (Iridium)",
+            "Flush Radiator Coolant"
+        ]
+    }
+};
+
 export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: VehicleDetailProps) {
   const [isLogServiceOpen, setIsLogServiceOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+
+  // Service Log State
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanInspectionLoading, setScanInspectionLoading] = useState(false);
+  const [logStep, setLogStep] = useState<'details' | 'inspection'>('details');
+  const [checklistSearch, setChecklistSearch] = useState("");
+  const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
+  const [serviceForm, setServiceForm] = useState({
+      date: new Date().toISOString().split('T')[0],
+      type: '',
+      serviceInterval: '', // 'A', 'B', 'C', 'D'
+      cost: '',
+      odo: '',
+      notes: '',
+      provider: '',
+      providerLocationUrl: '',
+      checklist: [] as string[],
+      itemCosts: {} as Record<string, { material: number, labor: number }>,
+      inspectionFee: '',
+      hasInspectionFee: false,
+      inspectionIssues: [] as string[],
+      inspectionNotes: ''
+  });
+
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+
+  const resetServiceForm = () => {
+      setServiceForm({
+          date: new Date().toISOString().split('T')[0],
+          type: '',
+          serviceInterval: '', 
+          cost: '',
+          odo: '',
+          notes: '',
+          provider: '',
+          providerLocationUrl: '',
+          checklist: [] as string[],
+          itemCosts: {} as Record<string, { material: number, labor: number }>,
+          inspectionFee: '',
+          hasInspectionFee: false,
+          inspectionIssues: [],
+          inspectionNotes: ''
+      });
+      setLogStep('details');
+      setEditingLogId(null);
+  };
+
+  const handleEditLog = (log: MaintenanceLog) => {
+      setEditingLogId(log.id);
+      setServiceForm({
+          date: log.date,
+          type: log.type,
+          serviceInterval: log.serviceInterval || '',
+          cost: log.cost.toString(),
+          odo: log.odo.toString(),
+          notes: log.notes,
+          provider: log.provider,
+          providerLocationUrl: log.providerLocationUrl || '',
+          checklist: log.checklist || [],
+          itemCosts: log.itemCosts || {},
+          inspectionFee: log.inspectionFee ? log.inspectionFee.toString() : '',
+          hasInspectionFee: !!log.inspectionFee,
+          inspectionIssues: log.inspectionResults?.issues || [],
+          inspectionNotes: log.inspectionResults?.notes || ''
+      });
+      setLogStep('details');
+      setIsLogServiceOpen(true);
+  };
+
+  // Fetch Maintenance Logs
+  React.useEffect(() => {
+      if (vehicle.id || vehicle.licensePlate) {
+          const vId = vehicle.id || vehicle.licensePlate;
+          api.getMaintenanceLogs(vId).then(setMaintenanceLogs).catch(console.error);
+          
+          // Phase 5: Calculate Live Mileage
+          calculateLiveMileage(vId, vehicle.metrics.odometer).then(res => {
+             setProjectedMileage({
+                 value: res.estimatedOdo,
+                 isProjected: res.isProjected
+             });
+          });
+      }
+  }, [vehicle.id, vehicle.licensePlate, vehicle.metrics.odometer]);
+
+  // Calculate Next Service
+  const maintenanceStatus = useMemo(() => {
+      const currentOdo = vehicle.metrics.odometer || 0;
+      
+      // Find last service of each type
+      const lastService = maintenanceLogs[0]; // Assuming sorted desc
+      const lastOdo = lastService?.odo || 0;
+      
+      // Default to Basic Service next if no history
+      let nextDueOdo = lastOdo + 5000;
+      let nextType = 'A';
+      
+      // Simple logic: If last was A, next is B (if mult of 10k). 
+      // Actually simpler: 
+      // Next 5k is A.
+      // Next 10k is B.
+      // Next 40k is C.
+      
+      // Just check remainder of currentOdo to find next major milestone
+      const distToNext5k = 5000 - (currentOdo % 5000);
+      nextDueOdo = currentOdo + distToNext5k;
+      
+      // Determine what kind of milestone that is
+      if (nextDueOdo % 100000 === 0) nextType = 'D';
+      else if (nextDueOdo % 40000 === 0) nextType = 'C';
+      else if (nextDueOdo % 10000 === 0) nextType = 'B';
+      else nextType = 'A';
+      
+      const daysToService = Math.ceil(distToNext5k / 50); // Assume 50km/day avg
+      
+      return {
+          nextTypeLabel: MAINTENANCE_SCHEDULE[nextType as keyof typeof MAINTENANCE_SCHEDULE].label.split('(')[0].trim(),
+          nextOdo: nextDueOdo,
+          remainingKm: distToNext5k,
+          daysToService,
+          status: distToNext5k < 500 ? 'Due Soon' : 'Healthy'
+      };
+  }, [vehicle.metrics.odometer, maintenanceLogs]);
+
+  // Auto-calculate total cost when items change
+  React.useEffect(() => {
+      const items = serviceForm.itemCosts || {};
+      const inspectionCost = serviceForm.hasInspectionFee ? (parseFloat(serviceForm.inspectionFee) || 0) : 0;
+      
+      let itemsTotal = 0;
+      Object.values(items).forEach(c => {
+          itemsTotal += (c.material || 0) + (c.labor || 0);
+      });
+      
+      const total = itemsTotal + inspectionCost;
+
+      // Only auto-update if we have some itemized data to rely on
+      // This prevents overwriting the AI-scanned total if no items are detailed yet
+      const hasItemizedData = Object.keys(items).length > 0 || serviceForm.hasInspectionFee;
+      
+      if (hasItemizedData) {
+          const currentCost = parseFloat(serviceForm.cost) || 0;
+          if (Math.abs(total - currentCost) > 0.01) {
+              setServiceForm(prev => ({ ...prev, cost: total.toFixed(2) }));
+          }
+      }
+  }, [serviceForm.itemCosts, serviceForm.inspectionFee, serviceForm.hasInspectionFee]);
+
+  const handleServiceScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setScanLoading(true);
+      try {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
+          const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/parse-invoice`, {
+              method: 'POST',
+              headers: {
+                  'Authorization': `Bearer ${publicAnonKey}`
+              },
+              body: formData
+          });
+
+          const result = await response.json();
+          if (result.success && result.data) {
+               const odoVal = result.data.odometer ? String(result.data.odometer) : '';
+               const costVal = result.data.cost ? String(result.data.cost) : '';
+               
+               // Try to infer service interval from type or notes
+               let inferredInterval = '';
+               const notesLower = (result.data.notes || '').toLowerCase();
+               if (notesLower.includes('cvt') || notesLower.includes('transmission')) inferredInterval = 'C';
+               else if (notesLower.includes('spark plug')) inferredInterval = 'D';
+               else if (notesLower.includes('cabin filter') || notesLower.includes('air filter')) inferredInterval = 'B';
+               else if (result.data.type === 'maintenance') inferredInterval = 'A';
+
+               setServiceForm({
+                   date: result.data.date || new Date().toISOString().split('T')[0],
+                   type: result.data.type || 'other', 
+                   serviceInterval: inferredInterval,
+                   cost: costVal,
+                   odo: odoVal,
+                   notes: result.data.notes || '',
+                   provider: '', // AI doesn't extract provider yet, maybe next time
+                   providerLocationUrl: '',
+                   checklist: [],
+                   itemCosts: {},
+                   inspectionFee: '',
+                   hasInspectionFee: false,
+                   inspectionIssues: [],
+                   inspectionNotes: ''
+               });
+               toast.success("Invoice scanned successfully!");
+          } else {
+               toast.error("Failed to scan invoice: " + (result.error || "Unknown error"));
+          }
+      } catch (err: any) {
+          console.error(err);
+          toast.error("Error scanning invoice");
+      } finally {
+          setScanLoading(false);
+      }
+  };
+
+  const handleInspectionScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setScanInspectionLoading(true);
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
+        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/parse-inspection`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${publicAnonKey}`
+            },
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success && result.data) {
+             const issues = result.data.issues || [];
+             const notes = result.data.notes || '';
+             
+             setServiceForm(prev => ({
+                 ...prev,
+                 inspectionIssues: [...new Set([...prev.inspectionIssues, ...issues])], // Merge and dedupe
+                 inspectionNotes: prev.inspectionNotes ? `${prev.inspectionNotes}\n\n[AI Scan Result]:\n${notes}` : notes
+             }));
+
+             toast.success(`Scanned! Found ${issues.length} issues.`);
+        } else {
+             toast.error("Failed to scan inspection report: " + (result.error || "Unknown error"));
+        }
+    } catch (err: any) {
+        console.error(err);
+        toast.error("Error scanning inspection report");
+    } finally {
+        setScanInspectionLoading(false);
+    }
+  };
   const [selectedDocument, setSelectedDocument] = useState<VehicleDocument | null>(null);
   const [extraDocuments, setExtraDocuments] = useState<VehicleDocument[]>([]);
   const [deletedDocIds, setDeletedDocIds] = useState<string[]>([]);
@@ -108,6 +460,8 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [isUpdateOdometerOpen, setIsUpdateOdometerOpen] = useState(false);
+  const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
 
   const [uploadForm, setUploadForm] = useState({
     type: 'Registration',
@@ -660,15 +1014,18 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
     const vehiclePurchasePrice = 25000;
     const roiPercentage = (netProfit / vehiclePurchasePrice) * 100;
 
-    // 6. Maintenance History (Mocked)
-    const history = [
-        { id: 1, date: '2023-11-15', type: 'Oil Change', cost: 85, odo: Math.max(0, vehicle.metrics.odometer - 3000), provider: 'QuickLube Inc', notes: 'Routine change' },
-        { id: 2, date: '2023-08-10', type: 'Tire Rotation', cost: 45, odo: Math.max(0, vehicle.metrics.odometer - 8000), provider: 'City Tires', notes: 'Checked pressure' },
-        { id: 3, date: '2023-05-22', type: 'Annual Inspection', cost: 120, odo: Math.max(0, vehicle.metrics.odometer - 12000), provider: 'Official Dealer', notes: 'Passed all safety checks' },
-        { id: 4, date: '2023-01-15', type: 'Brake Pad Replacement', cost: 350, odo: Math.max(0, vehicle.metrics.odometer - 20000), provider: 'Mechanic Joe', notes: 'Front pads only' },
+    // 6. Maintenance History
+    const mockHistory = [
+        { id: 'mock-1', date: '2023-11-15', type: 'Oil Change', cost: 85, odo: Math.max(0, vehicle.metrics.odometer - 3000), provider: 'QuickLube Inc', notes: 'Routine change' },
+        { id: 'mock-2', date: '2023-08-10', type: 'Tire Rotation', cost: 45, odo: Math.max(0, vehicle.metrics.odometer - 8000), provider: 'City Tires', notes: 'Checked pressure' },
+        { id: 'mock-3', date: '2023-05-22', type: 'Annual Inspection', cost: 120, odo: Math.max(0, vehicle.metrics.odometer - 12000), provider: 'Official Dealer', notes: 'Passed all safety checks' },
+        { id: 'mock-4', date: '2023-01-15', type: 'Brake Pad Replacement', cost: 350, odo: Math.max(0, vehicle.metrics.odometer - 20000), provider: 'Mechanic Joe', notes: 'Front pads only' },
     ];
     
-    const totalMaintCost = history.reduce((sum, item) => sum + item.cost, 0);
+    // Use real logs if available, otherwise fallback to mock (for demo purposes)
+    const history: any[] = maintenanceLogs.length > 0 ? maintenanceLogs : mockHistory;
+    
+    const totalMaintCost = history.reduce((sum, item) => sum + (item.cost || 0), 0);
 
     // Performance Metrics
     const earningsPerTrip = totalTrips > 0 ? totalEarnings / totalTrips : 0;
@@ -706,7 +1063,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
             nextDue: vehicle.nextServiceDate
         }
     };
-  }, [vehicle, trips]);
+  }, [vehicle, trips, maintenanceLogs]);
 
   const utilizationData = [
     { name: 'Active Driving', value: analytics.metrics.activeHours, color: '#10b981' }, 
@@ -781,10 +1138,32 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
           </Card>
 
           <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-lg">Today's Pulse</CardTitle>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setIsUpdateOdometerOpen(true)}
+                    title="Update Odometer"
+                  >
+                     <Pencil className="h-3 w-3 text-slate-400 hover:text-indigo-600" />
+                  </Button>
               </CardHeader>
               <CardContent className="space-y-4">
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                      <span className="text-slate-500 text-sm">Odometer</span>
+                      <div className="text-right">
+                          <span className="font-bold text-slate-900">
+                              {(projectedMileage?.value || vehicle.metrics.odometer).toLocaleString()} km
+                          </span>
+                          {projectedMileage?.isProjected && (
+                              <p className="text-[10px] text-indigo-500 font-medium flex items-center justify-end gap-1">
+                                  <TrendingUp className="h-3 w-3" /> Projected
+                              </p>
+                          )}
+                      </div>
+                  </div>
                   <div className="flex justify-between items-center py-2 border-b border-slate-100">
                       <span className="text-slate-500 text-sm">Earnings</span>
                       <span className="font-bold text-slate-900">${vehicle.metrics.todayEarnings.toLocaleString()}</span>
@@ -824,6 +1203,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
               <TabsTrigger value="utilization">Utilization</TabsTrigger>
               <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+              <TabsTrigger value="odometer">Odometer</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
@@ -1148,21 +1528,22 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
                       <Card>
                           <CardContent className="p-6">
                              <div className="flex items-center gap-3 mb-4">
-                                 <div className="bg-emerald-100 p-2 rounded-full text-emerald-600">
+                                 <div className={
+                                     maintenanceStatus.status === 'Due Soon' ? "bg-amber-100 p-2 rounded-full text-amber-600" :
+                                     "bg-emerald-100 p-2 rounded-full text-emerald-600"
+                                 }>
                                      <CheckCircle2 className="h-5 w-5" />
                                  </div>
                                  <div>
                                      <p className="text-sm font-medium text-slate-500">Service Status</p>
                                      <h4 className="text-lg font-bold text-slate-900">
-                                         {vehicle.serviceStatus === 'OK' ? 'Healthy' : vehicle.serviceStatus}
+                                         {maintenanceStatus.status}
                                      </h4>
                                  </div>
                              </div>
-                             {vehicle.serviceStatus !== 'OK' && (
-                                 <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                                     Action Required: {vehicle.nextServiceType}
-                                 </p>
-                             )}
+                             <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded">
+                                 Next: {maintenanceStatus.nextTypeLabel}
+                             </p>
                           </CardContent>
                       </Card>
 
@@ -1180,73 +1561,486 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
                           <CardContent className="p-6">
                               <p className="text-sm font-medium text-slate-500 mb-1">Next Service Due</p>
                               <h3 className="text-lg font-bold text-slate-900">
-                                  {format(new Date(vehicle.nextServiceDate || Date.now()), 'MMM d, yyyy')}
+                                  {maintenanceStatus.nextOdo.toLocaleString()} km
                               </h3>
                               <p className="text-xs text-slate-400 mt-1">
-                                  {vehicle.daysToService} days remaining
+                                  {maintenanceStatus.remainingKm.toLocaleString()} km remaining
                               </p>
                           </CardContent>
                       </Card>
 
                       {/* Log Service Action */}
+                      <Button 
+                          className="w-full bg-indigo-600 hover:bg-indigo-700"
+                          onClick={() => {
+                              resetServiceForm();
+                              setIsLogServiceOpen(true);
+                          }}
+                      >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Log New Service
+                      </Button>
+
                       <Dialog open={isLogServiceOpen} onOpenChange={setIsLogServiceOpen}>
-                          <DialogTrigger asChild>
-                              <Button className="w-full bg-indigo-600 hover:bg-indigo-700">
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Log New Service
-                              </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[425px]">
+                          <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
                               <DialogHeader>
-                                  <DialogTitle>Log Vehicle Service</DialogTitle>
+                                  <DialogTitle>
+                                      {logStep === 'inspection' ? 'Inspection Results' : (editingLogId ? 'Edit Service Log' : 'Log Vehicle Service')}
+                                  </DialogTitle>
                                   <DialogDescription>
-                                      Record a new maintenance event for {vehicle.licensePlate}.
+                                      {logStep === 'inspection' 
+                                          ? 'Record detailed findings and recommendations.' 
+                                          : (editingLogId ? 'Update maintenance details.' : 'Record a new maintenance event. Scan an invoice to auto-fill.')}
                                   </DialogDescription>
                               </DialogHeader>
-                              <div className="grid gap-4 py-4">
-                                  <div className="grid grid-cols-4 items-center gap-4">
-                                      <Label htmlFor="date" className="text-right">
-                                          Date
-                                      </Label>
-                                      <Input id="date" type="date" className="col-span-3" />
+
+                              <div className="flex-1 overflow-y-auto py-4 px-1">
+                                  {logStep === 'details' ? (
+                                  <div className="grid gap-6">
+                                      {/* Top Section: Scan & Basic Info */}
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                          {/* Scan Area */}
+                                          <div className="relative w-full h-32 md:h-full min-h-[120px]">
+                                              <input 
+                                                  type="file" 
+                                                  accept="image/*,application/pdf"
+                                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                  onChange={handleServiceScan}
+                                                  disabled={scanLoading}
+                                              />
+                                              <div className={`w-full h-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-4 text-center transition-colors ${scanLoading ? 'bg-indigo-50 border-indigo-200' : 'hover:bg-slate-50 border-slate-200'}`}>
+                                                  {scanLoading ? (
+                                                      <>
+                                                          <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mb-2" />
+                                                          <span className="font-semibold text-indigo-700">Analyzing Invoice...</span>
+                                                          <span className="text-xs text-indigo-500">Extracting details with AI</span>
+                                                      </>
+                                                  ) : (
+                                                      <>
+                                                          <Scan className="h-8 w-8 text-slate-400 mb-2" />
+                                                          <span className="font-semibold text-slate-700">Scan Invoice / Receipt</span>
+                                                          <span className="text-xs text-slate-500">Upload image or PDF to auto-fill</span>
+                                                      </>
+                                                  )}
+                                              </div>
+                                          </div>
+
+                                          {/* Basic Fields */}
+                                          <div className="space-y-4">
+                                              <div className="grid grid-cols-2 gap-4">
+                                                  <div className="space-y-2">
+                                                      <Label htmlFor="date">Date</Label>
+                                                      <Input 
+                                                          id="date" 
+                                                          type="date" 
+                                                          value={serviceForm.date}
+                                                          onChange={e => setServiceForm({...serviceForm, date: e.target.value})}
+                                                      />
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                      <Label htmlFor="type">Type</Label>
+                                                      <Select 
+                                                          value={serviceForm.type} 
+                                                          onValueChange={val => setServiceForm({...serviceForm, type: val})}
+                                                      >
+                                                          <SelectTrigger>
+                                                              <SelectValue placeholder="Select type" />
+                                                          </SelectTrigger>
+                                                          <SelectContent>
+                                                              <SelectItem value="maintenance">General Maintenance</SelectItem>
+                                                              <SelectItem value="oil">Oil Change</SelectItem>
+                                                              <SelectItem value="tires">Tire Service</SelectItem>
+                                                              <SelectItem value="brake">Brakes</SelectItem>
+                                                              <SelectItem value="inspection">Inspection</SelectItem>
+                                                              <SelectItem value="repair">Repair</SelectItem>
+                                                              <SelectItem value="other">Other</SelectItem>
+                                                          </SelectContent>
+                                                      </Select>
+                                                  </div>
+                                              </div>
+
+                                              <div className="space-y-2">
+                                                  <Label htmlFor="interval">Service Schedule</Label>
+                                                  <Select 
+                                                      value={serviceForm.serviceInterval} 
+                                                      onValueChange={val => setServiceForm({...serviceForm, serviceInterval: val})}
+                                                  >
+                                                      <SelectTrigger>
+                                                          <SelectValue placeholder="Select interval (e.g. 5,000 km)" />
+                                                      </SelectTrigger>
+                                                      <SelectContent>
+                                                          <SelectItem value="A">Basic Service (5,000 km)</SelectItem>
+                                                          <SelectItem value="B">Intermediate Service (10,000 km)</SelectItem>
+                                                          <SelectItem value="C">Major Service (40,000 km)</SelectItem>
+                                                          <SelectItem value="D">Long-Term Service (100,000 km)</SelectItem>
+                                                      </SelectContent>
+                                                  </Select>
+                                              </div>
+                                          </div>
+                                      </div>
+
+                                      {/* Middle Section: Checklist & Details */}
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                          <div className="space-y-4">
+                                              {/* Checklist */}
+                                              {serviceForm.serviceInterval && MAINTENANCE_SCHEDULE[serviceForm.serviceInterval as keyof typeof MAINTENANCE_SCHEDULE] ? (
+                                                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                                      <h4 className="font-semibold text-sm mb-3 text-slate-800 flex items-center justify-between">
+                                                          <span>Checklist Items</span>
+                                                          <span className="text-xs font-normal text-slate-500">
+                                                              {serviceForm.checklist.length}/{MAINTENANCE_SCHEDULE[serviceForm.serviceInterval as keyof typeof MAINTENANCE_SCHEDULE].items.length}
+                                                          </span>
+                                                      </h4>
+                                                      <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                                                          {MAINTENANCE_SCHEDULE[serviceForm.serviceInterval as keyof typeof MAINTENANCE_SCHEDULE].items.map((item, idx) => (
+                                                              <div key={idx} className={`space-y-2 pb-2 ${serviceForm.checklist.includes(item) ? 'border-b border-slate-200 last:border-0' : ''}`}>
+                                                                  <div className="flex items-start space-x-2.5">
+                                                                      <Checkbox 
+                                                                          id={`item-${idx}`} 
+                                                                          checked={serviceForm.checklist.includes(item)}
+                                                                          onCheckedChange={(checked) => {
+                                                                              if (checked) {
+                                                                                  setServiceForm(prev => ({...prev, checklist: [...prev.checklist, item]}));
+                                                                              } else {
+                                                                                  setServiceForm(prev => {
+                                                                                      const newCosts = {...prev.itemCosts};
+                                                                                      delete newCosts[item];
+                                                                                      return {...prev, checklist: prev.checklist.filter(i => i !== item), itemCosts: newCosts};
+                                                                                  });
+                                                                              }
+                                                                          }}
+                                                                      />
+                                                                      <label
+                                                                          htmlFor={`item-${idx}`}
+                                                                          className="text-sm text-slate-600 leading-snug cursor-pointer select-none pt-0.5"
+                                                                      >
+                                                                          {item}
+                                                                      </label>
+                                                                  </div>
+                                                                  {serviceForm.checklist.includes(item) && (
+                                                                      <div className="flex gap-3 pl-7 animate-in slide-in-from-top-1 duration-200">
+                                                                          <div className="relative w-24">
+                                                                              <span className="text-[10px] text-slate-500 absolute -top-3 left-0">Material ($)</span>
+                                                                              <Input 
+                                                                                  type="number" 
+                                                                                  className="h-7 text-xs px-2" 
+                                                                                  placeholder="0.00" 
+                                                                                  value={serviceForm.itemCosts[item]?.material || ''}
+                                                                                  onChange={e => {
+                                                                                      const val = parseFloat(e.target.value) || 0;
+                                                                                      setServiceForm(prev => ({
+                                                                                          ...prev,
+                                                                                          itemCosts: {
+                                                                                              ...prev.itemCosts,
+                                                                                              [item]: { ...prev.itemCosts[item], material: val }
+                                                                                          }
+                                                                                      }));
+                                                                                  }}
+                                                                              />
+                                                                          </div>
+                                                                          <div className="relative w-24">
+                                                                              <span className="text-[10px] text-slate-500 absolute -top-3 left-0">Labor ($)</span>
+                                                                              <Input 
+                                                                                  type="number" 
+                                                                                  className="h-7 text-xs px-2" 
+                                                                                  placeholder="0.00" 
+                                                                                  value={serviceForm.itemCosts[item]?.labor || ''}
+                                                                                  onChange={e => {
+                                                                                      const val = parseFloat(e.target.value) || 0;
+                                                                                      setServiceForm(prev => ({
+                                                                                          ...prev,
+                                                                                          itemCosts: {
+                                                                                              ...prev.itemCosts,
+                                                                                              [item]: { ...prev.itemCosts[item], labor: val }
+                                                                                          }
+                                                                                      }));
+                                                                                  }}
+                                                                              />
+                                                                          </div>
+                                                                      </div>
+                                                                  )}
+                                                              </div>
+                                                          ))}
+
+                                                          {/* Inspection Fee Option */}
+                                                          <div className={`space-y-2 pb-2 mt-4 pt-4 border-t border-dashed border-slate-200`}>
+                                                                  <div className="flex items-center space-x-2.5">
+                                                                      <Checkbox 
+                                                                          id="inspection-fee" 
+                                                                          checked={serviceForm.hasInspectionFee}
+                                                                          onCheckedChange={(checked) => {
+                                                                               setServiceForm(prev => ({...prev, hasInspectionFee: !!checked}));
+                                                                          }}
+                                                                      />
+                                                                      <label
+                                                                          htmlFor="inspection-fee"
+                                                                          className="text-sm font-medium text-slate-700 cursor-pointer select-none"
+                                                                      >
+                                                                          Inspection Fee
+                                                                      </label>
+                                                                  </div>
+                                                                  {serviceForm.hasInspectionFee && (
+                                                                      <div className="flex gap-3 pl-7 animate-in slide-in-from-top-1 duration-200">
+                                                                          <div className="relative w-full">
+                                                                              <span className="text-[10px] text-slate-500 absolute -top-3 left-0">Cost ($)</span>
+                                                                              <Input 
+                                                                                  type="number" 
+                                                                                  className="h-7 text-xs px-2" 
+                                                                                  placeholder="0.00" 
+                                                                                  value={serviceForm.inspectionFee}
+                                                                                  onChange={e => setServiceForm(prev => ({...prev, inspectionFee: e.target.value}))}
+                                                                              />
+                                                                          </div>
+                                                                      </div>
+                                                                  )}
+                                                          </div>
+                                                      </div>
+                                                  </div>
+                                              ) : (
+                                                  <div className="bg-slate-50 p-6 rounded-lg border border-dashed border-slate-200 text-center flex flex-col items-center justify-center h-[200px] text-slate-400">
+                                                      <FileText className="h-8 w-8 mb-2 opacity-50" />
+                                                      <p className="text-sm">Select a Service Schedule to view the checklist.</p>
+                                                  </div>
+                                              )}
+
+                                              <div className="grid grid-cols-2 gap-4">
+                                                  <div className="space-y-2">
+                                                      <Label htmlFor="cost">Total Cost ($)</Label>
+                                                      <div className="relative">
+                                                          <span className="absolute left-3 top-2.5 text-slate-500">$</span>
+                                                          <Input 
+                                                              id="cost" 
+                                                              type="number" 
+                                                              className="pl-7"
+                                                              placeholder="0.00" 
+                                                              value={serviceForm.cost}
+                                                              onChange={e => setServiceForm({...serviceForm, cost: e.target.value})}
+                                                          />
+                                                      </div>
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                      <Label htmlFor="odo">Odometer (km)</Label>
+                                                      <Input 
+                                                          id="odo" 
+                                                          type="number" 
+                                                          placeholder={vehicle.metrics.odometer.toString()}
+                                                          value={serviceForm.odo}
+                                                          onChange={e => setServiceForm({...serviceForm, odo: e.target.value})}
+                                                      />
+                                                  </div>
+                                              </div>
+                                              
+                                              <div className="space-y-2">
+                                                  <Label htmlFor="provider">Service Provider</Label>
+                                                  <div className="space-y-2">
+                                                      <div className="flex gap-2">
+                                                          <Input 
+                                                              id="provider" 
+                                                              placeholder="e.g. QuickLube, Toyota Dealer" 
+                                                              value={serviceForm.provider}
+                                                              onChange={e => setServiceForm({...serviceForm, provider: e.target.value})}
+                                                          />
+                                                          {serviceForm.providerLocationUrl && (
+                                                              <Button
+                                                                  variant="outline"
+                                                                  size="icon"
+                                                                  type="button"
+                                                                  title="View on Google Maps"
+                                                                  onClick={() => window.open(serviceForm.providerLocationUrl, '_blank')}
+                                                              >
+                                                                  <MapPin className="h-4 w-4" />
+                                                              </Button>
+                                                          )}
+                                                      </div>
+                                                      <Input 
+                                                          id="providerLocation" 
+                                                          placeholder="Paste Google Maps Link (Optional)" 
+                                                          value={serviceForm.providerLocationUrl}
+                                                          onChange={e => setServiceForm({...serviceForm, providerLocationUrl: e.target.value})}
+                                                          className="text-xs text-slate-500"
+                                                      />
+                                                  </div>
+                                              </div>
+                                          </div>
+
+                                          {/* Right Column: Notes */}
+                                          <div className="flex flex-col h-full space-y-2">
+                                              <Label htmlFor="notes">Notes & Observations</Label>
+                                              <Textarea 
+                                                  id="notes" 
+                                                  className="flex-1 min-h-[300px] resize-none p-4 leading-relaxed" 
+                                                  placeholder="Paste detailed invoice items here, note any repairs needed, or add mechanic comments..." 
+                                                  value={serviceForm.notes}
+                                                  onChange={e => setServiceForm({...serviceForm, notes: e.target.value})}
+                                              />
+                                          </div>
+                                      </div>
                                   </div>
-                                  <div className="grid grid-cols-4 items-center gap-4">
-                                      <Label htmlFor="type" className="text-right">
-                                          Type
-                                      </Label>
-                                      <Select>
-                                          <SelectTrigger className="col-span-3">
-                                              <SelectValue placeholder="Select service type" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                              <SelectItem value="oil">Oil Change</SelectItem>
-                                              <SelectItem value="tires">Tire Service</SelectItem>
-                                              <SelectItem value="brake">Brakes</SelectItem>
-                                              <SelectItem value="inspection">General Inspection</SelectItem>
-                                          </SelectContent>
-                                      </Select>
+                              ) : (
+                                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                                      <div className="relative group cursor-pointer">
+                                          <input 
+                                              type="file" 
+                                              accept="image/*,application/pdf"
+                                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                              onChange={handleInspectionScan}
+                                              disabled={scanInspectionLoading}
+                                          />
+                                          <div className={`bg-indigo-50 border-2 border-dashed border-indigo-200 group-hover:bg-indigo-100 group-hover:border-indigo-300 transition-colors rounded-lg p-4 ${scanInspectionLoading ? 'opacity-75' : ''}`}>
+                                              <div className="flex items-start gap-3">
+                                                  <div className="bg-white p-2 rounded-full shadow-sm group-hover:scale-110 transition-transform">
+                                                      {scanInspectionLoading ? (
+                                                          <Loader2 className="h-5 w-5 text-indigo-600 animate-spin" />
+                                                      ) : (
+                                                          <Scan className="h-5 w-5 text-indigo-600" />
+                                                      )}
+                                                  </div>
+                                                  <div>
+                                                      <h4 className="text-sm font-semibold text-indigo-800">
+                                                          {scanInspectionLoading ? 'Analyzing Report...' : 'Inspection Report (Click to Scan)'}
+                                                      </h4>
+                                                      <p className="text-xs text-indigo-600 mt-1">
+                                                          {scanInspectionLoading 
+                                                              ? 'Extracting issues and recommendations...' 
+                                                              : 'Upload a mechanic\'s report to auto-fill action items and notes.'}
+                                                      </p>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      </div>
+
+                                      <div className="space-y-3">
+                                          <Label>Action Items (Needs Attention)</Label>
+                                          <div className="relative">
+                                              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                                              <Input 
+                                                  placeholder="Search checklist..." 
+                                                  className="pl-9 bg-white"
+                                                  value={checklistSearch}
+                                                  onChange={(e) => setChecklistSearch(e.target.value)}
+                                              />
+                                          </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto border rounded-lg p-4 bg-slate-50">
+                                              {INSPECTION_CHECKLIST
+                                                  .filter(item => item.toLowerCase().includes(checklistSearch.toLowerCase()))
+                                                  .map((item) => (
+                                                  <div key={item} className="flex items-center space-x-2 p-2 hover:bg-white rounded transition-colors border border-transparent hover:border-slate-200">
+                                                      <Checkbox 
+                                                          id={`ins-${item}`}
+                                                          checked={serviceForm.inspectionIssues.includes(item)}
+                                                          onCheckedChange={(checked) => {
+                                                              if (checked) {
+                                                                  setServiceForm(prev => ({...prev, inspectionIssues: [...prev.inspectionIssues, item]}));
+                                                              } else {
+                                                                  setServiceForm(prev => ({...prev, inspectionIssues: prev.inspectionIssues.filter(x => x !== item)}));
+                                                              }
+                                                          }}
+                                                          className="data-[state=checked]:bg-indigo-600 border-slate-300"
+                                                      />
+                                                      <label htmlFor={`ins-${item}`} className="text-sm cursor-pointer flex-1 text-slate-700">
+                                                          {item}
+                                                      </label>
+                                                  </div>
+                                              ))}
+                                              {INSPECTION_CHECKLIST.filter(item => item.toLowerCase().includes(checklistSearch.toLowerCase())).length === 0 && (
+                                                  <div className="col-span-full text-center py-4 text-slate-400 text-sm italic">
+                                                      No items found matching "{checklistSearch}"
+                                                  </div>
+                                              )}
+                                          </div>
+                                      </div>
+
+                                      <div className="space-y-2">
+                                          <Label>Detailed Observations</Label>
+                                          <Textarea 
+                                              placeholder="Enter detailed inspection findings, measurements (e.g., brake pad thickness), or specific recommendations..."
+                                              className="min-h-[150px] resize-none"
+                                              value={serviceForm.inspectionNotes}
+                                              onChange={e => setServiceForm({...serviceForm, inspectionNotes: e.target.value})}
+                                          />
+                                      </div>
                                   </div>
-                                  <div className="grid grid-cols-4 items-center gap-4">
-                                      <Label htmlFor="cost" className="text-right">
-                                          Cost ($)
-                                      </Label>
-                                      <Input id="cost" type="number" className="col-span-3" placeholder="0.00" />
-                                  </div>
-                                  <div className="grid grid-cols-4 items-center gap-4">
-                                      <Label htmlFor="odo" className="text-right">
-                                          Odometer
-                                      </Label>
-                                      <Input id="odo" type="number" className="col-span-3" defaultValue={vehicle.metrics.odometer} />
-                                  </div>
-                                  <div className="grid grid-cols-4 items-center gap-4">
-                                      <Label htmlFor="notes" className="text-right">
-                                          Notes
-                                      </Label>
-                                      <Input id="notes" className="col-span-3" placeholder="Mechanic notes..." />
-                                  </div>
+                              )}
                               </div>
-                              <DialogFooter>
-                                  <Button type="submit" onClick={() => setIsLogServiceOpen(false)}>Save Log</Button>
+                              <DialogFooter className="sm:justify-between gap-4 border-t pt-4">
+                                  <Button 
+                                      variant="ghost" 
+                                      onClick={() => {
+                                          if (logStep === 'inspection') setLogStep('details');
+                                          else setIsLogServiceOpen(false);
+                                      }} 
+                                      className="text-slate-500"
+                                  >
+                                    <ArrowLeft className="h-4 w-4 mr-2" />
+                                    {logStep === 'inspection' ? 'Back' : 'Back'}
+                                  </Button>
+                                  <div className="flex gap-2">
+                                      <Button variant="outline" onClick={() => setIsLogServiceOpen(false)}>Cancel</Button>
+                                      
+                                      {logStep === 'details' && serviceForm.hasInspectionFee ? (
+                                          <Button onClick={() => setLogStep('inspection')}>
+                                              Next <ArrowRight className="h-4 w-4 ml-2" />
+                                          </Button>
+                                      ) : (
+                                          <Button type="submit" onClick={async () => {
+                                              try {
+                                                  const logId = editingLogId || crypto.randomUUID();
+                                                  const log = {
+                                                      id: logId,
+                                                      vehicleId: vehicle.id || vehicle.licensePlate,
+                                                      date: serviceForm.date,
+                                                      type: serviceForm.type,
+                                                      serviceInterval: serviceForm.serviceInterval as any,
+                                                      checklist: serviceForm.checklist,
+                                                      itemCosts: serviceForm.itemCosts,
+                                                      inspectionFee: serviceForm.hasInspectionFee ? parseFloat(serviceForm.inspectionFee) : 0,
+                                                      cost: parseFloat(serviceForm.cost) || 0,
+                                                      odo: parseFloat(serviceForm.odo) || 0,
+                                                      notes: serviceForm.notes,
+                                                      provider: serviceForm.provider || 'Unknown',
+                                                      providerLocationUrl: serviceForm.providerLocationUrl,
+                                                      inspectionResults: serviceForm.hasInspectionFee ? {
+                                                          issues: serviceForm.inspectionIssues,
+                                                          notes: serviceForm.inspectionNotes
+                                                      } : undefined
+                                                  };
+                                                  
+                                                  await api.saveMaintenanceLog(log);
+                                                  
+                                                  // Odometer Sync: Also save as an odometer reading
+                                                  if (log.odo > 0) {
+                                                      await odometerService.addReading({
+                                                          vehicleId: log.vehicleId,
+                                                          date: log.date,
+                                                          value: log.odo,
+                                                          type: 'Hard', // Service logs are trusted hard readings
+                                                          source: 'Service Log',
+                                                          notes: `Auto-recorded from ${log.type} Service (Ref: ${log.id.slice(0,8)})`
+                                                      });
+                                                  }
+                                                  
+                                                  // Refresh logs locally
+                                                  let newLogs;
+                                                  if (editingLogId) {
+                                                      newLogs = maintenanceLogs.map(l => l.id === editingLogId ? log : l);
+                                                  } else {
+                                                      newLogs = [log, ...maintenanceLogs];
+                                                  }
+                                                  newLogs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                                  
+                                                  // @ts-ignore
+                                                  setMaintenanceLogs(newLogs);
+                                                  
+                                                  toast.success(editingLogId ? "Service log updated!" : "Service log saved!");
+                                                  setIsLogServiceOpen(false);
+                                                  resetServiceForm();
+                                              } catch (err) {
+                                                  console.error(err);
+                                                  toast.error("Failed to save log");
+                                              }
+                                          }}>Save Log</Button>
+                                      )}
+                                  </div>
                               </DialogFooter>
                           </DialogContent>
                       </Dialog>
@@ -1262,23 +2056,40 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
                           <div className="space-y-6">
                               {analytics.maintenance.history.map((item, index) => (
                                   <div key={item.id} className="relative pl-6 pb-2 border-l border-slate-200 last:border-0">
-                                      <div className="absolute left-[-5px] top-1 h-2.5 w-2.5 rounded-full bg-slate-300 ring-4 ring-white"></div>
+                                      <div className={`absolute left-[-5px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-white ${item.inspectionResults?.issues && item.inspectionResults.issues.length > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
                                       
                                       <div className="flex justify-between items-start mb-1">
                                           <div>
                                               <h4 className="text-sm font-semibold text-slate-900">{item.type}</h4>
                                               <p className="text-xs text-slate-500">{format(new Date(item.date), 'MMMM d, yyyy')}</p>
                                           </div>
-                                          <Badge variant="outline" className="text-slate-600">
-                                              ${item.cost}
-                                          </Badge>
+                                          <div className="flex items-center gap-2">
+                                              <Badge variant="outline" className="text-slate-600">
+                                                  ${item.cost}
+                                              </Badge>
+                                              <Button 
+                                                  variant="ghost" 
+                                                  size="icon" 
+                                                  className="h-6 w-6"
+                                                  onClick={() => handleEditLog(item)}
+                                              >
+                                                  <Pencil className="h-3 w-3 text-slate-400 hover:text-indigo-600" />
+                                              </Button>
+                                          </div>
                                       </div>
                                       
                                       <div className="bg-slate-50 p-3 rounded-md mt-2 text-sm">
                                           <div className="flex justify-between text-slate-500 mb-1">
-                                              <span className="flex items-center gap-1">
+                                              <a 
+                                                  href={item.providerLocationUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.provider)}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="flex items-center gap-1 hover:text-indigo-600 hover:underline transition-colors"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  title="View on Google Maps"
+                                              >
                                                   <MapPin className="h-3 w-3" /> {item.provider}
-                                              </span>
+                                              </a>
                                               <span className="flex items-center gap-1">
                                                   <Activity className="h-3 w-3" /> {item.odo.toLocaleString()} km
                                               </span>
@@ -1287,6 +2098,38 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
                                               <p className="text-slate-600 italic border-t border-slate-200 pt-2 mt-2">
                                                   "{item.notes}"
                                               </p>
+                                          )}
+
+                                          {item.checklist && item.checklist.length > 0 && (
+                                              <div className="mt-3 pt-2 border-t border-slate-200">
+                                                  <div className="flex items-center gap-2 mb-2 text-emerald-600">
+                                                      <CheckCircle2 className="h-3 w-3" />
+                                                      <span className="text-xs font-semibold">Services Performed</span>
+                                                  </div>
+                                                  <div className="flex flex-wrap gap-1">
+                                                      {item.checklist.map((task: string, i: number) => (
+                                                          <Badge key={i} variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                              {task}
+                                                          </Badge>
+                                                      ))}
+                                                  </div>
+                                              </div>
+                                          )}
+                                          
+                                          {item.inspectionResults?.issues && item.inspectionResults.issues.length > 0 && (
+                                              <div className="mt-3 pt-2 border-t border-slate-200">
+                                                  <div className="flex items-center gap-2 mb-2 text-amber-600">
+                                                      <AlertTriangle className="h-3 w-3" />
+                                                      <span className="text-xs font-semibold">Action Items Required</span>
+                                                  </div>
+                                                  <div className="flex flex-wrap gap-1">
+                                                      {item.inspectionResults.issues.map((issue: string, i: number) => (
+                                                          <Badge key={i} variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                                                              {issue}
+                                                          </Badge>
+                                                      ))}
+                                                  </div>
+                                              </div>
                                           )}
                                       </div>
                                   </div>
@@ -1297,6 +2140,45 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
 
               </div>
           </TabsContent>
+          {/* --- Odometer Tab --- */}
+          <TabsContent value="odometer" className="space-y-6 mt-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                      <OdometerHistory vehicleId={vehicle.id} maintenanceLogs={maintenanceLogs} trips={trips} />
+                  </div>
+                  <div className="space-y-6">
+                      <Card>
+                          <CardHeader>
+                              <CardTitle>About Odometer History</CardTitle>
+                          </CardHeader>
+                          <CardContent className="text-sm text-slate-600 space-y-4">
+                              <p>
+                                  This timeline tracks your vehicle's mileage from multiple sources to provide a unified history.
+                              </p>
+                              <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                      <Wrench className="h-4 w-4 text-blue-500" />
+                                      <span><strong>Service Log:</strong> Verified readings from maintenance visits.</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                      <FileText className="h-4 w-4 text-green-500" />
+                                      <span><strong>Trip Import:</strong> Calculated mileage from uploaded trip logs.</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                      <User className="h-4 w-4 text-slate-500" />
+                                      <span><strong>Manual:</strong> Ad-hoc readings you enter yourself.</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                      <TrendingUp className="h-4 w-4 text-indigo-500" />
+                                      <span><strong>Projected:</strong> Estimated based on daily average usage.</span>
+                                  </div>
+                              </div>
+                          </CardContent>
+                      </Card>
+                  </div>
+              </div>
+          </TabsContent>
+
           {/* --- Phase 7: Documents Tab --- */}
           <TabsContent value="documents" className="space-y-6 mt-6">
              <Card>
@@ -1787,6 +2669,19 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
             </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Update Odometer Dialog */}
+      <UpdateOdometerDialog 
+        isOpen={isUpdateOdometerOpen}
+        onClose={() => setIsUpdateOdometerOpen(false)}
+        onSuccess={() => {
+            // Trigger a refresh of the vehicle metrics if possible?
+            // For now, at least close the dialog. 
+            // Phase 5 will handle live metric updates.
+        }}
+        vehicleId={vehicle.id || vehicle.licensePlate}
+        currentReading={vehicle.metrics.odometer}
+      />
 
       {/* Upload Document Modal */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>

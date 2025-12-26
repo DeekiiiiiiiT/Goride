@@ -1,5 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics } from '../types/data';
+import { OdometerReading } from '../types/vehicle';
 
 const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
@@ -22,6 +23,36 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 }
 
 export const api = {
+  async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
+    const response = await fetchWithRetry(`${BASE_URL}/odometer-history/${vehicleId}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch odometer history");
+    return response.json();
+  },
+
+  async addOdometerReading(reading: Partial<OdometerReading>) {
+    const response = await fetchWithRetry(`${BASE_URL}/odometer-history`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(reading)
+    });
+    if (!response.ok) throw new Error("Failed to save odometer reading");
+    return response.json();
+  },
+
+  async deleteOdometerReading(id: string, vehicleId: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/odometer-history/${id}?vehicleId=${vehicleId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete odometer reading");
+    return response.json();
+  },
+
   async getBatches(): Promise<ImportBatch[]> {
     const response = await fetchWithRetry(`${BASE_URL}/batches`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -452,6 +483,27 @@ export const api = {
           body: JSON.stringify(financials)
       });
       if (!response.ok) throw new Error("Failed to save financials");
+      return response.json();
+  },
+
+  async getMaintenanceLogs(vehicleId: string) {
+      const response = await fetchWithRetry(`${BASE_URL}/maintenance-logs/${vehicleId}`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      });
+      if (!response.ok) throw new Error("Failed to fetch maintenance logs");
+      return response.json();
+  },
+
+  async saveMaintenanceLog(log: any) {
+      const response = await fetchWithRetry(`${BASE_URL}/maintenance-logs`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify(log)
+      });
+      if (!response.ok) throw new Error("Failed to save maintenance log");
       return response.json();
   }
 };

@@ -53,6 +53,12 @@ export interface Trip {
   tripRating?: number; // 1-5
   dayOfWeek?: string; // Mon-Sun
   
+  // Phase 2 (Static Import Reconstruction): Fleet Efficiency
+  onTripHours?: number;   // Period 3
+  toTripHours?: number;   // Period 2
+  availableHours?: number; // Period 1 (Allocated)
+  totalHours?: number;    // Total Online Time attributed
+
   cancellationReason?: string;
   cancelledBy?: 'rider' | 'driver' | 'admin';
   estimatedLoss?: number; // For cancelled trips
@@ -211,6 +217,7 @@ export interface DriverMetrics {
   // Activity Metrics (REPORT_TYPE_DRIVER_ACTIVITY)
   onlineHours: number;       // Decimal format (e.g., 8.5)
   onTripHours: number;
+  hoursOnJob?: number;
   tripsCompleted: number;
 
   // Financial Metrics (REPORT_TYPE_PAYMENTS_DRIVER)
@@ -251,6 +258,7 @@ export interface VehicleMetrics {
   tripsPerHour: number;
   onlineHours: number;
   onTripHours: number;
+  hoursOnJob?: number; // Added for vehicle performance
   totalTrips: number;
   
   // Phase 2 New Metrics

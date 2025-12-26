@@ -86,6 +86,7 @@ export function DriversPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [manualDrivers, setManualDrivers] = useState<DriverProfile[]>([]);
   const [importedMetrics, setImportedMetrics] = useState<import('../../types/data').DriverMetrics[]>([]);
+  const [vehicleMetrics, setVehicleMetrics] = useState<import('../../types/data').VehicleMetrics[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -103,14 +104,16 @@ export function DriversPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tripsData, driversData, metricsData] = await Promise.all([
+        const [tripsData, driversData, metricsData, vehicleMetricsData] = await Promise.all([
              api.getTrips(),
              api.getDrivers().catch(() => []),
-             api.getDriverMetrics().catch(() => [])
+             api.getDriverMetrics().catch(() => []),
+             api.getVehicleMetrics().catch(() => [])
         ]);
         setTrips(tripsData);
         setManualDrivers(driversData);
         setImportedMetrics(metricsData);
+        setVehicleMetrics(vehicleMetricsData);
       } catch (err) {
         console.error("Failed to fetch data for drivers page", err);
       } finally {
@@ -441,6 +444,7 @@ export function DriversPage() {
         driver={selectedDriver}
         trips={driverTrips}
         metrics={driverMetrics}
+        vehicleMetrics={vehicleMetrics}
         onBack={() => setSelectedDriverId(null)}
         fleetStats={fleetStats}
       />

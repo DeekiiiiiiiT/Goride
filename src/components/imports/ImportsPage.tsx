@@ -96,6 +96,7 @@ export function ImportsPage() {
   const [warning, setWarning] = useState<string | null>(null);
   const [manageFieldsOpen, setManageFieldsOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
+  const [disabledColumns, setDisabledColumns] = useState<Record<string, string[]>>({});
 
   // Load Fields
   useEffect(() => {
@@ -105,7 +106,10 @@ export function ImportsPage() {
         const parsed = JSON.parse(saved);
         // Simple validation to ensure we don't break the app
         if (Array.isArray(parsed) && parsed.length > 0) {
-            setAvailableFields(parsed);
+            // Ensure system fields like 'odometer' are present if missing from saved config
+            const systemFields = DEFAULT_FIELDS.filter(df => !parsed.some((pf: any) => pf.key === df.key));
+            const merged = [...parsed, ...systemFields];
+            setAvailableFields(merged);
         }
       } catch (e) {}
     }
@@ -247,13 +251,35 @@ export function ImportsPage() {
       setStep('preview_merged');
   };
 
+  const getFilteredFiles = useCallback(() => {
+    return uploadedFiles.map(file => {
+        const disabled = disabledColumns[file.id] || [];
+        if (disabled.length === 0) return file;
+
+        const newHeaders = file.headers.filter(h => !disabled.includes(h));
+        const newRows = file.rows.map(row => {
+            const newRow: any = {};
+            Object.keys(row).forEach(key => {
+                if (!disabled.includes(key)) {
+                    newRow[key] = row[key];
+                }
+            });
+            return newRow;
+        });
+
+        return { ...file, headers: newHeaders, rows: newRows };
+    });
+  }, [uploadedFiles, disabledColumns]);
+
   const handleAnalyze = async () => {
     setIsParsing(true);
     setWarning("AI is analyzing your fleet data... This may take 30-60 seconds.");
     
     try {
+        const filteredFiles = getFilteredFiles();
+
         // 1. Get AI Analysis
-        const payload = constructAiPayload(uploadedFiles);
+        const payload = constructAiPayload(filteredFiles);
         const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
         
         const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/analyze-fleet`, {
@@ -273,7 +299,7 @@ export function ImportsPage() {
         // 2. Get Local Trips (for the table view)
         // This also runs the robust "Bottom-Up" financial calculation we just fixed.
         const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
-        const localResult = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName);
+        const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName);
         
         if (localResult.organizationName) {
             localStorage.setItem('goride_fleet_name', localResult.organizationName);
@@ -299,8 +325,9 @@ export function ImportsPage() {
                 : (aiData.financials || { totalEarnings: 0, netFare: 0, balanceStart: 0, balanceEnd: 0, periodChange: 0, fleetProfitMargin: 0, cashPosition: 0, periodStart: new Date().toISOString(), periodEnd: new Date().toISOString() });
 
             const audit = DataSanitizer.audit({
-                drivers: aiData.drivers || [],
-                vehicles: aiData.vehicles || [],
+                // FIX: Prioritize Local Parser for Drivers/Vehicles (AI is hallucinating zeros)
+                drivers: localResult.driverMetrics.length > 0 ? localResult.driverMetrics : (aiData.drivers || []),
+                vehicles: localResult.vehicleMetrics.length > 0 ? localResult.vehicleMetrics : (aiData.vehicles || []),
                 financials: trustedFinancials,
                 metadata: aiData.metadata || { analysisDate: new Date().toISOString(), periodStart: new Date().toISOString(), periodEnd: new Date().toISOString(), filesProcessed: uploadedFiles.length },
                 insights: aiData.insights || { alerts: [], trends: [], recommendations: [] }
@@ -743,44 +770,53 @@ export function ImportsPage() {
                         Fields
                     </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-3xl max-h-[80vh]">
                     <DialogHeader>
                         <DialogTitle>Manage System Fields</DialogTitle>
                         <DialogDescription>
-                            Add, remove, or modify the data fields used during import mapping.
+                            Select which columns should be parsed for each file. Uncheck columns to ignore them.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="flex gap-2 items-end">
-                             <div className="flex-1 space-y-1">
-                                <Label>New Field Name</Label>
-                                <Input value={fieldNameInput} onChange={e => setFieldNameInput(e.target.value)} placeholder="e.g. Tolls" />
-                             </div>
-                             <div className="w-[120px] space-y-1">
-                                <Label>Type</Label>
-                                <Select value={fieldTypeInput} onValueChange={(v: any) => setFieldTypeInput(v)}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="text">Text</SelectItem>
-                                        <SelectItem value="number">Number</SelectItem>
-                                        <SelectItem value="date">Date</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                             </div>
-                             <Button onClick={handleAddField} disabled={!fieldNameInput}><Plus className="h-4 w-4" /></Button>
-                        </div>
-                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                            {availableFields.map(f => (
-                                <div key={f.key} className="flex justify-between items-center p-2 border rounded text-sm">
-                                    <span>{f.label} <span className="text-xs text-slate-400">({f.type})</span></span>
-                                    {f.removable && (
-                                        <Button variant="ghost" size="icon" onClick={() => deleteField(f.key)} className="h-6 w-6 text-slate-400 hover:text-red-500">
-                                            <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                    )}
+                    <div className="space-y-4 py-4 overflow-y-auto max-h-[60vh]">
+                        {uploadedFiles.map(file => (
+                            <div key={file.id} className="border rounded-lg p-4 bg-slate-50 dark:bg-slate-900">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <FileText className="h-4 w-4 text-indigo-500" />
+                                        <span className="font-semibold text-sm">{file.name}</span>
+                                    </div>
+                                    <Badge variant="outline" className="bg-white">{file.type}</Badge>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    {file.headers.map(header => (
+                                        <div key={header} className="flex items-center space-x-2 bg-white dark:bg-slate-800 p-2 rounded border border-slate-100 dark:border-slate-700">
+                                            <Checkbox 
+                                                id={`col-${file.id}-${header}`} 
+                                                checked={!disabledColumns[file.id]?.includes(header)}
+                                                onCheckedChange={(checked) => {
+                                                    setDisabledColumns(prev => {
+                                                        const current = prev[file.id] || [];
+                                                        if (checked) {
+                                                            return { ...prev, [file.id]: current.filter(h => h !== header) };
+                                                        } else {
+                                                            return { ...prev, [file.id]: [...current, header] };
+                                                        }
+                                                    });
+                                                }}
+                                            />
+                                            <Label htmlFor={`col-${file.id}-${header}`} className="text-xs truncate cursor-pointer select-none" title={header}>
+                                                {header}
+                                            </Label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        {uploadedFiles.length === 0 && (
+                            <div className="text-center text-slate-500 py-8">
+                                No files uploaded.
+                            </div>
+                        )}
                     </div>
                 </DialogContent>
            </Dialog>
@@ -1124,6 +1160,9 @@ export function ImportsPage() {
                               </TabsTrigger>
                               <TabsTrigger value="vehicles" disabled={processedVehicleMetrics.length === 0}>
                                    Vehicle Health {processedVehicleMetrics.length > 0 && `(${processedVehicleMetrics.length})`}
+                              </TabsTrigger>
+                              <TabsTrigger value="trip_meter" disabled={processedData.length === 0}>
+                                   Trip Meter {processedData.length > 0 && `(${processedData.length})`}
                               </TabsTrigger>
                           </TabsList>
 
@@ -1570,6 +1609,68 @@ export function ImportsPage() {
                             </div>
                             <div className="h-[500px] overflow-auto">
                               <VehicleHealthCard metrics={processedVehicleMetrics} />
+                            </div>
+                          </TabsContent>
+
+                          <TabsContent value="trip_meter" className="space-y-4">
+                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                                <FileText className="h-4 w-4 text-slate-500 mt-1 sm:mt-0" />
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {uploadedFiles.filter(f => ['uber_trip', 'uber_vehicle_performance'].includes(f.type)).map(f => (
+                                            <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                                {f.name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="h-[500px] overflow-auto border rounded-md">
+                                <Table>
+                                    <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                                        <TableRow>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Trip ID</TableHead>
+                                            <TableHead className="text-right">Available (hrs)</TableHead>
+                                            <TableHead className="text-right">To Trip (hrs)</TableHead>
+                                            <TableHead className="text-right">On Trip (hrs)</TableHead>
+                                            <TableHead className="text-right">Total (hrs)</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {processedData.slice(0, 100).map((trip, i) => {
+                                            const dateStr = trip.date || trip.requestTime;
+                                            const date = dateStr ? new Date(dateStr).toLocaleDateString() : '-';
+                                            
+                                            return (
+                                                <TableRow key={trip.id || i}>
+                                                    <TableCell className="font-medium">{date}</TableCell>
+                                                    <TableCell className="font-mono text-xs text-slate-500">{trip.id ? trip.id.substring(0, 8) : '-'}</TableCell>
+                                                    <TableCell className="text-right font-medium text-blue-700 bg-blue-50">
+                                                        {(trip.availableHours || 0).toFixed(2)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-medium text-amber-700 bg-amber-50">
+                                                        {(trip.toTripHours || 0).toFixed(2)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-medium text-emerald-700 bg-emerald-50">
+                                                        {(trip.onTripHours || 0).toFixed(2)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-slate-500">
+                                                        {(trip.totalHours || 0).toFixed(2)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                        {processedData.length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                                    No trips found. Please upload a "Trip Activity" file.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
                             </div>
                           </TabsContent>
                       </Tabs>

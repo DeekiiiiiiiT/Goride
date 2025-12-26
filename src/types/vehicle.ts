@@ -82,3 +82,18 @@ export interface Vehicle {
   // Attached Documents
   documents?: VehicleDocument[];
 }
+
+export type OdometerSource = 'Service Log' | 'Manual Update' | 'Fuel Log' | 'Trip Import' | 'Baseline';
+export type OdometerType = 'Hard' | 'Calculated';
+
+export interface OdometerReading {
+  id: string;
+  vehicleId: string;
+  date: string; // ISO string
+  value: number; // The odometer reading in km
+  type: OdometerType;
+  source: OdometerSource;
+  notes?: string;
+  referenceId?: string; // ID of the service log, document, or trip batch
+  createdAt: string;
+}
