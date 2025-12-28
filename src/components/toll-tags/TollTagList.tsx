@@ -9,7 +9,7 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Trash2, Link as LinkIcon, AlertCircle, History } from "lucide-react";
+import { Trash2, Link as LinkIcon, AlertCircle, History, Pencil } from "lucide-react";
 import { TollTag } from "../../types/vehicle";
 
 interface TollTagListProps {
@@ -19,9 +19,10 @@ interface TollTagListProps {
   onAssign: (tag: TollTag) => void;
   onUnassign: (tag: TollTag) => void;
   onViewHistory: (tag: TollTag) => void;
+  onEdit: (tag: TollTag) => void;
 }
 
-export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, onViewHistory }: TollTagListProps) {
+export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, onViewHistory, onEdit }: TollTagListProps) {
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading inventory...</div>;
   }
@@ -82,7 +83,7 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
                 )}
               </TableCell>
               <TableCell className="text-slate-500 text-sm">
-                {new Date(tag.createdAt).toLocaleDateString()}
+                {tag.dateAdded ? new Date(tag.dateAdded).toLocaleDateString() : "-"}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-2">
@@ -118,6 +119,14 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
                   )}
                   <Button 
                     variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-slate-400 hover:text-blue-600"
+                    onClick={() => onEdit(tag)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost"  
                     size="icon" 
                     className="h-8 w-8 text-slate-400 hover:text-red-600"
                     onClick={() => {

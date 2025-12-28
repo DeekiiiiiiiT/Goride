@@ -162,9 +162,13 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
                         <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
                              <MinusCircle className="h-3 w-3 mr-1" /> Usage (Toll)
                         </Badge>
+                    ) : (tx.category === 'Toll Top-up' || tx.description?.toLowerCase().includes('top-up')) ? (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                             <ArrowDownLeft className="h-3 w-3 mr-1" /> Top-up (Credit)
+                        </Badge>
                     ) : tx.amount < 0 ? (
                         <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                             <ArrowUpRight className="h-3 w-3 mr-1" /> Top-up (Expense)
+                             <ArrowUpRight className="h-3 w-3 mr-1" /> Expense
                         </Badge>
                     ) : (
                         <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">

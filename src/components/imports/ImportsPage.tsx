@@ -67,7 +67,6 @@ import {
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState } from '../../types/data';
 import { api } from '../../services/api';
 import { DataSanitizer } from '../../services/dataSanitizer';
-import { generateRealTransactions } from '../../services/financialService';
 import { ImpactAnalysis } from './ImpactAnalysis';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
@@ -430,17 +429,11 @@ export function ImportsPage() {
           await api.createBatch(batchMeta);
           
           if (auditState) {
-              // Generate Transactions for Persistence
-              // Use file-level batchId if available (from csvHelpers), fallback to session batchId
-              const tripsForTx = auditState.sanitized.trips.map(t => ({ ...t.data, batchId: t.data.batchId || batchId }));
-              const generatedTransactions = generateRealTransactions(tripsForTx);
-
               // PHASE 7: NEW SAVE FLOW (Mega-JSON)
               const fleetState = {
                   drivers: auditState.sanitized.drivers.map(d => d.data),
                   vehicles: auditState.sanitized.vehicles.map(v => v.data),
-                  trips: tripsForTx,
-                  transactions: generatedTransactions,
+                  trips: auditState.sanitized.trips.map(t => ({ ...t.data, batchId })), // Attach Batch ID
                   financials: auditState.sanitized.financials.data,
                   metadata: auditState.sanitized.metadata,
                   insights: auditState.sanitized.insights

@@ -16,8 +16,6 @@ export interface Trip {
   vehicleId?: string;
   notes?: string;
   batchId?: string; // ID of the upload batch this trip belongs to
-  batchName?: string; // Name of the batch/file
-  sourceFileName?: string; // Original filename
   
   // Financial Reconciliation (Phase 3)
   cashCollected?: number; // The amount of physical cash the driver collected

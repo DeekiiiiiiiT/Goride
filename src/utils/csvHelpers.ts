@@ -564,11 +564,6 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
     // 1. Process all files
     files.forEach(file => {
-        // Generate a deterministic but unique batch ID for this file
-        // This ensures that "Group by File" in Transaction List shows 14 groups for 14 files.
-        const fileBatchId = crypto.randomUUID();
-        const fileBatchName = file.name;
-
         if (file.type === 'generic') {
             // Process generic files immediately as standalone trips
             // Priority: 1. AI Custom Mapping, 2. Auto-Detect
@@ -581,11 +576,6 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 // If we have a Driver Name but NO Driver UUID, strictly discard the row.
                 // This prevents Organization files (which have names but no Driver UUIDs) from creating ghost drivers.
                 if (t.driverName && (!t.driverId || t.driverId === 'unknown' || t.driverId === '')) return;
-
-                // Assign File Batch Info
-                t.batchId = fileBatchId;
-                t.batchName = fileBatchName;
-                t.sourceFileName = fileBatchName;
 
                 genericTrips.push(t);
             });
@@ -622,19 +612,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
                 const current = tripMap.get(tripId) || { id: tripId, platform: 'Uber' };
                 
-                // Assign Batch Info if new
-                if (!current.batchId) {
-                    current.batchId = fileBatchId;
-                    current.batchName = fileBatchName;
-                    current.sourceFileName = fileBatchName;
-                }
-
                 if (file.type === 'uber_trip') {
-                    // Force update batch info if this is the Trip Activity file (Source of Truth)
-                    current.batchId = fileBatchId;
-                    current.batchName = fileBatchName;
-                    current.sourceFileName = fileBatchName;
-
                     const schema = UBER_SCHEMAS.TRIP_ACTIVITY.mapping;
                     
                     // Improved Date Parsing: Don't default to Now() immediately

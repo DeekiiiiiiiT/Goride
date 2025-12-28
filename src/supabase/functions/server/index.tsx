@@ -1553,7 +1553,7 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
 // Fleet Sync Endpoint (Mega-JSON Persistence)
 app.post("/make-server-37f42386/fleet/sync", async (c) => {
   try {
-    const { drivers, vehicles, financials, trips, transactions, metadata, insights } = await c.req.json();
+    const { drivers, vehicles, financials, trips, metadata, insights } = await c.req.json();
     
     const operations = [];
 
@@ -1574,12 +1574,6 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
     if (Array.isArray(trips) && trips.length > 0) {
         const tripKeys = trips.map((t: any) => `trip:${t.id}`);
         operations.push(kv.mset(tripKeys, trips));
-    }
-
-    // 3b. Transactions (NEW)
-    if (Array.isArray(transactions) && transactions.length > 0) {
-        const txKeys = transactions.map((t: any) => `transaction:${t.id}`);
-        operations.push(kv.mset(txKeys, transactions));
     }
 
     // 4. Financials (Singleton)

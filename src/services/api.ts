@@ -454,7 +454,6 @@ export const api = {
       drivers: DriverMetrics[], 
       vehicles: VehicleMetrics[], 
       trips: Trip[], 
-      transactions?: FinancialTransaction[], // Added transactions
       financials: any,
       metadata?: any,
       insights?: any 

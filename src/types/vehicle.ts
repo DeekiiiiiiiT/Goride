@@ -11,6 +11,7 @@ export interface TollTag {
   status: TollTagStatus;
   assignedVehicleId?: string;
   assignedVehicleName?: string; // Denormalized for easier display
+  dateAdded?: string; // Date added to inventory/fleet
   createdAt: string;
   updatedAt?: string;
 }

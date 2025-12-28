@@ -19,6 +19,7 @@ export function TollTags() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState<TollTag | null>(null);
+  const [editingTag, setEditingTag] = useState<TollTag | null>(null);
   const [activeTab, setActiveTab] = useState("inventory");
   const [assignModalState, setAssignModalState] = useState<{ isOpen: boolean; tag: TollTag | null }>({
     isOpen: false,
@@ -42,16 +43,29 @@ export function TollTags() {
     fetchTags();
   }, []);
 
-  const handleAddTag = async (data: { provider: TollProvider; tagNumber: string; status: TollTagStatus }) => {
+  const handleSaveTag = async (data: { provider: TollProvider; tagNumber: string; status: TollTagStatus; dateAdded?: string }) => {
     try {
-      await api.saveTollTag(data);
-      toast.success("Toll tag added successfully");
+      const payload = editingTag ? { ...data, id: editingTag.id, createdAt: editingTag.createdAt } : data;
+      // Preserve createdAt if editing, or let server handle it?
+      // Server says if !tag.createdAt -> new Date().
+      // If I don't send createdAt, server makes a new one? No, I should send it if I have it.
+      // But data doesn't have createdAt. editingTag does.
+      // So { ...data, id: editingTag.id, createdAt: editingTag.createdAt } is safer.
+      
+      await api.saveTollTag(payload);
+      toast.success(editingTag ? "Toll tag updated" : "Toll tag added successfully");
       fetchTags();
+      setEditingTag(null);
     } catch (error) {
       console.error("Failed to save tag:", error);
       toast.error("Failed to save toll tag");
       throw error; 
     }
+  };
+
+  const handleEditTag = (tag: TollTag) => {
+    setEditingTag(tag);
+    setIsAddModalOpen(true);
   };
 
   const handleDeleteTag = async (id: string) => {
@@ -136,7 +150,7 @@ export function TollTags() {
         
         {activeTab === 'inventory' && (
             <div className="flex gap-2">
-                <Button onClick={() => setIsAddModalOpen(true)}>
+                <Button onClick={() => { setEditingTag(null); setIsAddModalOpen(true); }}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add New Tag
                 </Button>
@@ -172,6 +186,7 @@ export function TollTags() {
                     onAssign={handleAssignClick}
                     onUnassign={handleUnassignClick}
                     onViewHistory={setSelectedTag}
+                    onEdit={handleEditTag}
                 />
                 </CardContent>
             </Card>
@@ -184,8 +199,9 @@ export function TollTags() {
 
       <AddTollTagModal 
         isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
-        onSave={handleAddTag} 
+        onClose={() => { setIsAddModalOpen(false); setEditingTag(null); }} 
+        onSave={handleSaveTag} 
+        initialData={editingTag || undefined}
       />
 
       <BulkImportTagsModal
