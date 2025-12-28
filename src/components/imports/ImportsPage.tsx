@@ -34,7 +34,11 @@ import {
   Globe,
   MapPin,
   CloudDownload,
-  AlertTriangle
+  AlertTriangle,
+  ChevronsUpDown,
+  ShieldCheck,
+  Clock,
+  BarChart2
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
@@ -42,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Checkbox } from "../ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Badge } from "../ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { DriverScorecard } from '../drivers/DriverScorecard';
 import { VehicleHealthCard } from '../vehicles/VehicleHealthCard';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
@@ -62,12 +67,40 @@ import {
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState } from '../../types/data';
 import { api } from '../../services/api';
 import { DataSanitizer } from '../../services/dataSanitizer';
+import { generateRealTransactions } from '../../services/financialService';
 import { ImpactAnalysis } from './ImpactAnalysis';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { QuarantineList } from './QuarantineList';
+import { CalibrationReport } from './CalibrationReport';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
+
+const CollapsibleSection = ({ title, children, defaultOpen = true, icon }: { title: string, children: React.ReactNode, defaultOpen?: boolean, icon?: React.ReactNode }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    return (
+        <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+                 <div className="flex items-center gap-2">
+                    {icon}
+                    <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                    {!isOpen && <Badge variant="outline" className="text-xs font-normal text-slate-500">Hidden</Badge>}
+                    <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-slate-200">
+                            <ChevronsUpDown className="h-4 w-4 text-slate-500" />
+                            <span className="sr-only">Toggle</span>
+                        </Button>
+                    </CollapsibleTrigger>
+                </div>
+            </div>
+            <CollapsibleContent className="space-y-4">
+                {children}
+            </CollapsibleContent>
+        </Collapsible>
+    )
+}
 
 export function ImportsPage() {
   const [step, setStep] = useState<Step>('select_platform');
@@ -86,6 +119,9 @@ export function ImportsPage() {
   const [processedRentalContracts, setProcessedRentalContracts] = useState<any[]>([]);
   const [processedInsights, setProcessedInsights] = useState<{ alerts: string[], trends: string[] } | null>(null);
   
+  // Phase 5: Calibration Stats
+  const [calibrationStats, setCalibrationStats] = useState<ProcessedBatch['calibrationStats']>(undefined);
+
   // Phase 1: New Audit State
   const [auditState, setAuditState] = useState<ImportAuditState | null>(null);
 
@@ -229,7 +265,7 @@ export function ImportsPage() {
       // 1. Merge
       // Phase 1: Capture Organization Name
       const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, organizationName } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName);
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, organizationName, calibrationStats } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName);
 
       if (organizationName) {
           localStorage.setItem('goride_fleet_name', organizationName);
@@ -248,6 +284,7 @@ export function ImportsPage() {
       setProcessedVehicleMetrics(vehicleMetrics);
       setProcessedOrganizationMetrics(organizationMetrics);
       setProcessedRentalContracts(rentalContracts);
+      setCalibrationStats(calibrationStats);
       setStep('preview_merged');
   };
 
@@ -314,6 +351,7 @@ export function ImportsPage() {
 
         // 3. Merge AI Data into State
         setProcessedData(finalTrips); // Keep local trips for table
+        setCalibrationStats(localResult.calibrationStats);
         
         // Phase 1: Run AI Auditor
         if (aiData.drivers || aiData.vehicles || aiData.financials) {
@@ -392,11 +430,17 @@ export function ImportsPage() {
           await api.createBatch(batchMeta);
           
           if (auditState) {
+              // Generate Transactions for Persistence
+              // Use file-level batchId if available (from csvHelpers), fallback to session batchId
+              const tripsForTx = auditState.sanitized.trips.map(t => ({ ...t.data, batchId: t.data.batchId || batchId }));
+              const generatedTransactions = generateRealTransactions(tripsForTx);
+
               // PHASE 7: NEW SAVE FLOW (Mega-JSON)
               const fleetState = {
                   drivers: auditState.sanitized.drivers.map(d => d.data),
                   vehicles: auditState.sanitized.vehicles.map(v => v.data),
-                  trips: auditState.sanitized.trips.map(t => ({ ...t.data, batchId })), // Attach Batch ID
+                  trips: tripsForTx,
+                  transactions: generatedTransactions,
                   financials: auditState.sanitized.financials.data,
                   metadata: auditState.sanitized.metadata,
                   insights: auditState.sanitized.insights
@@ -1047,101 +1091,131 @@ export function ImportsPage() {
           <div className="flex flex-col h-[calc(100vh-140px)] gap-4">
               
                {/* PHASE 2: AI Audit Summary Card */}
-              {auditState ? (
-                   <AuditSummaryCard report={auditState.report} />
-              ) : (
-                  // Legacy Warning (Fallback)
-                  warning && (
-                    <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
-                        <Info className="h-4 w-4 text-yellow-800" />
-                        <AlertTitle>System Notice</AlertTitle>
-                        <AlertDescription>{warning}</AlertDescription>
-                    </Alert>
-                  )
+              <CollapsibleSection 
+                  title="Data Quality Assessment" 
+                  icon={<ShieldCheck className="h-5 w-5 text-indigo-600" />}
+              >
+                  {auditState ? (
+                       <AuditSummaryCard report={auditState.report} />
+                  ) : (
+                      // Legacy Warning (Fallback)
+                      warning && (
+                        <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
+                            <Info className="h-4 w-4 text-yellow-800" />
+                            <AlertTitle>System Notice</AlertTitle>
+                            <AlertDescription>{warning}</AlertDescription>
+                        </Alert>
+                      )
+                  )}
+              </CollapsibleSection>
+
+              {/* Phase 5: Calibration Verification */}
+              {calibrationStats && (
+                  <CollapsibleSection 
+                      title="Performance Calibration" 
+                      icon={<Clock className="h-5 w-5 text-blue-500" />}
+                  >
+                      <CalibrationReport 
+                          stats={calibrationStats} 
+                          tripCount={processedData.filter(t => t.status === 'Completed').length} 
+                      />
+                  </CollapsibleSection>
               )}
 
               {/* Quick Stats Bar */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <span className="text-xs text-slate-500 uppercase font-medium">Trips Found</span>
-                            <span className="text-2xl font-bold text-slate-900">{processedData.filter(t => t.status === 'Completed').length}</span>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <span className="text-xs text-slate-500 uppercase font-medium">Drivers</span>
-                            <span className="text-2xl font-bold text-slate-900">{processedDriverMetrics.length}</span>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <span className="text-xs text-slate-500 uppercase font-medium">Vehicles</span>
-                            <span className="text-2xl font-bold text-slate-900">{processedVehicleMetrics.length}</span>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <span className="text-xs text-slate-500 uppercase font-medium">Total Volume</span>
-                            <span className="text-2xl font-bold text-slate-900">
-                                ${processedOrganizationMetrics[0]?.totalEarnings?.toLocaleString() || "0"}
-                            </span>
-                        </CardContent>
-                    </Card>
+              <CollapsibleSection 
+                  title="Import Statistics" 
+                  icon={<BarChart2 className="h-5 w-5 text-slate-500" />}
+              >
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <Card>
+                            <CardContent className="p-4 flex flex-col items-center text-center">
+                                <span className="text-xs text-slate-500 uppercase font-medium">Trips Found</span>
+                                <span className="text-2xl font-bold text-slate-900">{processedData.filter(t => t.status === 'Completed').length}</span>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="p-4 flex flex-col items-center text-center">
+                                <span className="text-xs text-slate-500 uppercase font-medium">Drivers</span>
+                                <span className="text-2xl font-bold text-slate-900">{processedDriverMetrics.length}</span>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="p-4 flex flex-col items-center text-center">
+                                <span className="text-xs text-slate-500 uppercase font-medium">Vehicles</span>
+                                <span className="text-2xl font-bold text-slate-900">{processedVehicleMetrics.length}</span>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="p-4 flex flex-col items-center text-center">
+                                <span className="text-xs text-slate-500 uppercase font-medium">Total Volume</span>
+                                <span className="text-2xl font-bold text-slate-900">
+                                    ${processedOrganizationMetrics[0]?.totalEarnings?.toLocaleString() || "0"}
+                                </span>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Financial Health Checks (New Tiles) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Card>
+                            <CardContent className="p-4 flex flex-col items-center text-center">
+                                <span className="text-xs text-slate-500 uppercase font-medium">Pending Balance</span>
+                                <span className="text-2xl font-bold text-slate-900">
+                                    ${processedOrganizationMetrics[0]?.balanceEnd?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
+                                </span>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardContent className="p-4 flex flex-col items-center text-center">
+                                <span className="text-xs text-slate-500 uppercase font-medium">Transferred To Bank Account</span>
+                                <span className="text-2xl font-bold text-slate-900">
+                                    {processedOrganizationMetrics[0]?.bankTransfer ? `$${processedOrganizationMetrics[0].bankTransfer.toLocaleString(undefined, {minimumFractionDigits: 2})}` : '-'}
+                                </span>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardContent className="p-4 flex flex-col items-center text-center">
+                                <span className="text-xs text-slate-500 uppercase font-medium">Cash Collected in Hand</span>
+                                <span className="text-2xl font-bold text-red-600">
+                                    ${processedOrganizationMetrics[0]?.totalCashExposure?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
+                                </span>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
+              </CollapsibleSection>
 
-                {/* Financial Health Checks (New Tiles) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <span className="text-xs text-slate-500 uppercase font-medium">Pending Balance</span>
-                            <span className="text-2xl font-bold text-slate-900">
-                                ${processedOrganizationMetrics[0]?.balanceEnd?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
-                            </span>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <span className="text-xs text-slate-500 uppercase font-medium">Transferred To Bank Account</span>
-                            <span className="text-2xl font-bold text-slate-900">
-                                {processedOrganizationMetrics[0]?.bankTransfer ? `$${processedOrganizationMetrics[0].bankTransfer.toLocaleString(undefined, {minimumFractionDigits: 2})}` : '-'}
-                            </span>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <span className="text-xs text-slate-500 uppercase font-medium">Cash Collected in Hand</span>
-                            <span className="text-2xl font-bold text-red-600">
-                                ${processedOrganizationMetrics[0]?.totalCashExposure?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
-                            </span>
-                        </CardContent>
-                    </Card>
-                </div>
-
-              <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm">
-                  <CardHeader className="pb-2 border-b border-slate-100 bg-white sticky top-0 z-10">
-                      <div className="flex justify-between items-center">
-                          <div className="space-y-1">
-                              <CardTitle className="text-xl">Import Preview</CardTitle>
-                              <CardDescription>
-                                  Review the merged data before committing to the database.
-                              </CardDescription>
+              <CollapsibleSection
+                  title="Import Preview"
+                  icon={<FileText className="h-5 w-5 text-slate-500" />}
+                  defaultOpen={true}
+              >
+                  <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm min-h-[600px]">
+                      <CardHeader className="pb-2 border-b border-slate-100 bg-white sticky top-0 z-10">
+                          <div className="flex justify-between items-center">
+                              <div className="space-y-1">
+                                  <CardTitle className="text-xl">Import Preview</CardTitle>
+                                  <CardDescription>
+                                      Review the merged data before committing to the database.
+                                  </CardDescription>
+                              </div>
+                              <div className="flex gap-2">
+                                  <Button variant="outline" onClick={() => setStep('review_files')}>
+                                      <ArrowLeft className="mr-2 h-4 w-4" /> Back to Files
+                                  </Button>
+                                  <Button onClick={handleConfirmImport} disabled={isUploading || (auditState?.report.status === 'critical')} className={auditState?.report.status === 'critical' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}>
+                                     {isUploading ? "Uploading..." : (auditState?.report.status === 'critical' ? "Force Import (Risky)" : "Confirm Import")}
+                                  </Button>
+                              </div>
                           </div>
-                          <div className="flex gap-2">
-                              <Button variant="outline" onClick={() => setStep('review_files')}>
-                                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Files
-                              </Button>
-                              <Button onClick={handleConfirmImport} disabled={isUploading || (auditState?.report.status === 'critical')} className={auditState?.report.status === 'critical' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}>
-                                 {isUploading ? "Uploading..." : (auditState?.report.status === 'critical' ? "Force Import (Risky)" : "Confirm Import")}
-                              </Button>
-                          </div>
-                      </div>
-                  </CardHeader>
-                  <CardContent className="flex-1 overflow-auto pt-4 bg-slate-50/50">
-                      
-                      <Tabs defaultValue={auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) ? "quarantine" : "fleet"} className="w-full">
+                      </CardHeader>
+                      <CardContent className="flex-1 overflow-auto pt-4 bg-slate-50/50">
+                          
+                          <Tabs defaultValue={auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) ? "quarantine" : "fleet"} className="w-full">
                           <TabsList className="mb-4 bg-white border border-slate-200 p-1 h-auto flex-wrap">
                               {auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) && (
                                   <TabsTrigger value="quarantine" className="data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 flex items-center gap-2">
@@ -1153,15 +1227,15 @@ export function ImportsPage() {
                                   </TabsTrigger>
                               )}
                               <TabsTrigger value="fleet" className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">Analysis Dashboard</TabsTrigger>
-                              <TabsTrigger value="trips">Trips ({processedData.length})</TabsTrigger>
-                              <TabsTrigger value="financials">Financials</TabsTrigger>
-                              <TabsTrigger value="drivers" disabled={processedDriverMetrics.length === 0}>
+                              <TabsTrigger value="trips" className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">Trips ({processedData.length})</TabsTrigger>
+                              <TabsTrigger value="financials" className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">Financials</TabsTrigger>
+                              <TabsTrigger value="drivers" disabled={processedDriverMetrics.length === 0} className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">
                                   Driver Performance {processedDriverMetrics.length > 0 && `(${processedDriverMetrics.length})`}
                               </TabsTrigger>
-                              <TabsTrigger value="vehicles" disabled={processedVehicleMetrics.length === 0}>
+                              <TabsTrigger value="vehicles" disabled={processedVehicleMetrics.length === 0} className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">
                                    Vehicle Health {processedVehicleMetrics.length > 0 && `(${processedVehicleMetrics.length})`}
                               </TabsTrigger>
-                              <TabsTrigger value="trip_meter" disabled={processedData.length === 0}>
+                              <TabsTrigger value="trip_meter" disabled={processedData.length === 0} className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">
                                    Trip Meter {processedData.length > 0 && `(${processedData.length})`}
                               </TabsTrigger>
                           </TabsList>
@@ -1608,7 +1682,10 @@ export function ImportsPage() {
                                 </div>
                             </div>
                             <div className="h-[500px] overflow-auto">
-                              <VehicleHealthCard metrics={processedVehicleMetrics} />
+                              <VehicleHealthCard 
+                                metrics={processedVehicleMetrics} 
+                                totalDistance={processedData.reduce((sum, t) => sum + (t.distance || 0), 0)}
+                              />
                             </div>
                           </TabsContent>
 
@@ -1676,6 +1753,7 @@ export function ImportsPage() {
                       </Tabs>
                   </CardContent>
               </Card>
+              </CollapsibleSection>
           </div>
       )}
 

@@ -6,9 +6,6 @@ import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
 import { Buffer } from "node:buffer";
-import PDFParser from "npm:pdf2json";
-import { PDFDocument } from "npm:pdf-lib";
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@3.11.174";
 
 const app = new Hono();
 
@@ -74,7 +71,7 @@ app.delete("/make-server-37f42386/trips", async (c) => {
   try {
     // Direct delete using Supabase client to avoid pagination limits and round-trips
     // This fixes the issue where only the first 1000 records were being deleted
-    const prefixes = ["trip:", "batch:", "driver_metric:", "vehicle_metric:"];
+    const prefixes = ["trip:", "batch:", "driver_metric:", "vehicle_metric:", "transaction:"];
     const counts: Record<string, number> = {};
 
     for (const prefix of prefixes) {
@@ -95,7 +92,8 @@ app.delete("/make-server-37f42386/trips", async (c) => {
         deletedTrips: counts["trip:"] || 0,
         deletedBatches: counts["batch:"] || 0,
         deletedDriverMetrics: counts["driver_metric:"] || 0,
-        deletedVehicleMetrics: counts["vehicle_metric:"] || 0
+        deletedVehicleMetrics: counts["vehicle_metric:"] || 0,
+        deletedTransactions: counts["transaction:"] || 0
     });
   } catch (e: any) {
     console.error("Error clearing data:", e);
@@ -262,6 +260,16 @@ app.post("/make-server-37f42386/transactions", async (c) => {
     }
     await kv.set(`transaction:${transaction.id}`, transaction);
     return c.json({ success: true, data: transaction });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/transactions/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`transaction:${id}`);
+    return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -473,6 +481,11 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
         try {
             const arrayBuffer = await file.arrayBuffer();
             let buffer = Buffer.from(arrayBuffer);
+            
+            // Dynamic Imports for PDF libraries to prevent server startup crashes
+            const { default: PDFParser } = await import("npm:pdf2json");
+            const { PDFDocument } = await import("npm:pdf-lib");
+            const pdfjsLib = await import("https://esm.sh/pdfjs-dist@3.11.174");
             
             // Helper to parse buffer with pdf2json
             const parsePdfBuffer = (b: Buffer) => new Promise<string>((resolve, reject) => {
@@ -715,6 +728,44 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
   }
 });
 
+// Toll Tag Endpoints
+app.get("/make-server-37f42386/toll-tags", async (c) => {
+  try {
+    const tags = await kv.getByPrefix("toll_tag:");
+    return c.json(tags || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/toll-tags", async (c) => {
+  try {
+    const tag = await c.req.json();
+    if (!tag.id) {
+        tag.id = crypto.randomUUID();
+    }
+    if (!tag.createdAt) {
+        tag.createdAt = new Date().toISOString();
+    }
+    
+    // Key structure: toll_tag:{id}
+    await kv.set(`toll_tag:${tag.id}`, tag);
+    return c.json({ success: true, data: tag });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/toll-tags/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`toll_tag:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Notifications endpoints
 app.get("/make-server-37f42386/notifications", async (c) => {
   try {
@@ -842,15 +893,71 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     // 3. Delete the trips
     if (tripsToDelete.length > 0) {
         const keys = tripsToDelete.map((t: any) => `trip:${t.id}`);
-        await kv.mdel(keys);
+        // Chunk deletion to avoid size limits
+        const chunkSize = 100;
+        for (let i = 0; i < keys.length; i += chunkSize) {
+            const chunk = keys.slice(i, i + chunkSize);
+            if (chunk.length > 0) await kv.mdel(chunk);
+        }
+    }
+
+    // 4. Delete transactions belonging to this batch
+    const allTransactions = await kv.getByPrefix("transaction:");
+    const transactionsToDelete = (allTransactions || []).filter((t: any) => t.batchId === batchId);
+    
+    if (transactionsToDelete.length > 0) {
+        const txKeys = transactionsToDelete.map((t: any) => `transaction:${t.id}`);
+        // Chunk deletion
+        const chunkSize = 100;
+        for (let i = 0; i < txKeys.length; i += chunkSize) {
+             const chunk = txKeys.slice(i, i + chunkSize);
+             if (chunk.length > 0) await kv.mdel(chunk);
+        }
     }
     
-    // 4. Delete the batch record itself
+    // 5. Ghost Data Cleanup
+    // Since DriverMetrics and VehicleMetrics do not always have batchId, they can become "ghosts" 
+    // if all source data is deleted. We check if the database is effectively empty of source data.
+    const remainingTrips = await kv.getByPrefix("trip:");
+    // We can also check transactions, but trips are the primary source for metrics usually.
+    const remainingTransactions = await kv.getByPrefix("transaction:");
+    
+    // Filter out the ones we just deleted (in case of race conditions or if getByPrefix is slightly stale, though usually it's consistent)
+    // Actually, getByPrefix might return the ones we just deleted if consistency is eventual? 
+    // But we awaited mdel, so it should be fine. 
+    // Just in case, let's filter just to be super safe.
+    const activeTrips = (remainingTrips || []).filter((t: any) => t.batchId !== batchId);
+    const activeTransactions = (remainingTransactions || []).filter((t: any) => t.batchId !== batchId);
+
+    if (activeTrips.length === 0 && activeTransactions.length === 0) {
+        console.log("No source data remaining. Cleaning up ghost metrics...");
+        const metricPrefixes = ["driver_metric:", "vehicle_metric:", "organization_metric:"];
+        
+        for (const prefix of metricPrefixes) {
+             const items = await kv.getByPrefix(prefix);
+             if (items && items.length > 0) {
+                 const keys = items.map((item: any) => {
+                     // Handle both ID structures just in case
+                     return `${prefix}${item.id}`; 
+                 });
+                 
+                 // Chunk deletion
+                 const chunkSize = 100;
+                 for (let i = 0; i < keys.length; i += chunkSize) {
+                    const chunk = keys.slice(i, i + chunkSize);
+                    if (chunk.length > 0) await kv.mdel(chunk);
+                 }
+             }
+        }
+    }
+
+    // 6. Delete the batch record itself
     await kv.del(`batch:${batchId}`);
     
     return c.json({ 
         success: true, 
         deletedTrips: tripsToDelete.length,
+        deletedTransactions: transactionsToDelete.length,
         deletedBatch: batchId 
     });
   } catch (e: any) {
@@ -1446,7 +1553,7 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
 // Fleet Sync Endpoint (Mega-JSON Persistence)
 app.post("/make-server-37f42386/fleet/sync", async (c) => {
   try {
-    const { drivers, vehicles, financials, trips, metadata, insights } = await c.req.json();
+    const { drivers, vehicles, financials, trips, transactions, metadata, insights } = await c.req.json();
     
     const operations = [];
 
@@ -1467,6 +1574,12 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
     if (Array.isArray(trips) && trips.length > 0) {
         const tripKeys = trips.map((t: any) => `trip:${t.id}`);
         operations.push(kv.mset(tripKeys, trips));
+    }
+
+    // 3b. Transactions (NEW)
+    if (Array.isArray(transactions) && transactions.length > 0) {
+        const txKeys = transactions.map((t: any) => `transaction:${t.id}`);
+        operations.push(kv.mset(txKeys, transactions));
     }
 
     // 4. Financials (Singleton)
@@ -1732,6 +1845,166 @@ app.post("/make-server-37f42386/odometer-history", async (c) => {
     
     return c.json({ success: true, data: reading });
   } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// AI Toll CSV Parsing
+app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
+  try {
+    const { csvContent } = await c.req.json();
+    if (!csvContent) {
+        return c.json({ error: "No CSV content provided" }, 400);
+    }
+
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) {
+      return c.json({ error: "AI Service not configured" }, 503);
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    const prompt = `
+      You are an expert data parser.
+      Parse the following toll transaction data into a JSON array.
+      
+      The input is likely a CSV, TSV, or copy-pasted table.
+      
+      Output JSON Schema:
+      {
+        "transactions": [
+            {
+            "date": "ISO Date String",
+            "tagId": "Tag ID or Serial Number (String) or empty",
+            "location": "Plaza Name (String)",
+            "laneId": "Lane ID (String) or empty",
+            "amount": Number (Negative for deduction, Positive for Top-up),
+            "type": "Usage" | "Top-up" | "Refund"
+            }
+        ]
+      }
+      
+      Rules:
+      1. Detect the date format intelligently. Current year is 2025 unless specified.
+      2. If amount is like "JMD -275.00", parse as -275.00.
+      3. If amount is negative, type is "Usage". If positive, type is usually "Top-up" (unless it's a refund).
+      4. Ignore header rows or irrelevant lines.
+      5. Extract the Tag ID or Serial Number if present in the first few columns.
+      6. Return ONLY the valid JSON object with the "transactions" key.
+      
+      Input Data:
+      ${csvContent.substring(0, 15000)}
+    `;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a JSON parsing assistant." },
+        { role: "user", content: prompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0
+    });
+
+    const content = response.choices[0].message.content;
+    const result = JSON.parse(content || "{}");
+    
+    return c.json({ success: true, data: result.transactions || [] });
+  } catch (e: any) {
+    console.error("AI Toll Parse Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// AI Toll Image Parsing
+app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
+  try {
+    const body = await c.req.parseBody();
+    const file = body['file'];
+
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: "No file provided" }, 400);
+    }
+
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) {
+      return c.json({ error: "AI Service not configured" }, 503);
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    // Convert file to base64
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    const len = bytes.byteLength;
+    const chunkSize = 1024;
+    for (let i = 0; i < len; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
+    }
+    const base64Image = `data:${file.type};base64,${btoa(binary)}`;
+
+    const prompt = `
+      You are an expert data parser.
+      Analyze the provided image of a toll transaction history or top-up history.
+      Extract the transaction data into a JSON array.
+
+      Output JSON Schema:
+      {
+        "transactions": [
+            {
+            "date": "ISO Date String",
+            "tagId": "Tag ID or Serial Number (String) or empty",
+            "location": "Plaza Name (String) or empty if not visible",
+            "laneId": "Lane ID (String) or empty",
+            "amount": Number (Negative for deduction, Positive for Top-up),
+            "type": "Usage" | "Top-up" | "Refund",
+            "status": "Success" | "Failure" | "Pending",
+            "discount": Number (0 if none),
+            "paymentAfterDiscount": Number (equal to amount if none)
+            }
+        ]
+      }
+
+      Rules:
+      1. Detect the date format intelligently. Current year is 2025 unless specified.
+      2. Identify "Payment" or "Top Up Amount" columns.
+      3. If the row indicates "Failure" or "Failed", ignore it or mark status as Failure.
+      4. If "Top Up Amount" is present (e.g. "JMD 2,000.00"), it is a positive amount (Top-up).
+      5. If "Usage" or toll charges are shown, they are negative amounts.
+      6. Extract Tag ID (e.g. "212100286450") if visible in the header or rows.
+      7. Return ONLY the valid JSON object with the "transactions" key.
+      8. If multiple amounts are shown (e.g. "Payment After Discount" and "Topup Amount"), use the "Topup Amount" for the main 'amount' field.
+      9. Extract "Discount / Bonus" if present.
+      10. Extract "Payment After Discount / Bonus" if present.
+    `;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: "You are a JSON parsing assistant."
+        },
+        {
+          role: "user",
+          content: [
+             { type: "text", text: prompt },
+             { type: "image_url", image_url: { url: base64Image } }
+          ]
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0
+    });
+
+    const content = response.choices[0].message.content;
+    const result = JSON.parse(content || "{}");
+    
+    return c.json({ success: true, data: result.transactions || [] });
+
+  } catch (e: any) {
+    console.error("AI Toll Image Parse Error:", e);
     return c.json({ error: e.message }, 500);
   }
 });

@@ -8,6 +8,7 @@ import { DriversPage } from './components/drivers/DriversPage';
 import { VehiclesPage } from './components/vehicles/VehiclesPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { TransactionsPage } from './components/transactions/TransactionsPage';
+import { TollTags } from './pages/TollTags';
 
 // Driver Portal Components
 import { DriverAuth } from './components/driver-portal/DriverAuth';
@@ -117,6 +118,7 @@ export default function App() {
       {currentPage === 'reports' && <ReportsPage />}
       {currentPage === 'transactions' && <TransactionsPage mode="analytics" />}
       {currentPage === 'transaction-list' && <TransactionsPage mode="list" />}
+      {currentPage === 'toll-tags' && <TollTags />}
       {currentPage === 'settings' && <SettingsPage />}
     </AppLayout>
   );

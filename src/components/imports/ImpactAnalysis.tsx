@@ -68,7 +68,6 @@ export function ImpactAnalysis({ newState, onReady }: ImpactAnalysisProps) {
   const currentFinancials = currentState.financials || { totalEarnings: 0 };
 
   const revenueDelta = newFinancials.totalEarnings - (currentFinancials.totalEarnings || 0);
-  const profitDelta = (newFinancials.fleetProfitMargin || 0) - (currentFinancials.fleetProfitMargin || 0);
   
   // Count *new* entities (simple ID check)
   const currentDriverIds = new Set(currentState.drivers.map(d => d.driverId));
@@ -80,92 +79,106 @@ export function ImpactAnalysis({ newState, onReady }: ImpactAnalysisProps) {
   const newTripsCount = newState.sanitized.trips ? newState.sanitized.trips.length : 0;
 
   return (
-    <Card className="border-indigo-100 shadow-sm bg-indigo-50/30">
-      <CardHeader className="pb-3 border-b border-indigo-100">
-        <CardTitle className="text-indigo-900 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-indigo-600" />
-            Impact Preview
-        </CardTitle>
-        <CardDescription className="text-indigo-700">
-            Committing this import will result in the following changes to your fleet database.
-        </CardDescription>
+    <Card className="border-indigo-100 shadow-sm bg-white">
+      <CardHeader className="pb-4 border-b border-indigo-50 bg-indigo-50/30">
+        <div className="space-y-1">
+            <CardTitle className="text-indigo-900 flex items-center gap-2 text-base">
+                <TrendingUp className="h-5 w-5 text-indigo-600" />
+                Impact Preview
+            </CardTitle>
+            <CardDescription className="text-indigo-600/80">
+                Committing this import will result in the following changes to your fleet database.
+            </CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="flex flex-col md:flex-row justify-between gap-8 md:gap-4">
             
             {/* Revenue Impact */}
-            <div className="space-y-1">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider flex items-center gap-1">
+            <div className="space-y-1 flex-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                     <Wallet className="h-3 w-3" /> Revenue Impact
                 </span>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-slate-900">
-                        ${newFinancials.totalEarnings.toLocaleString()}
-                    </span>
-                    {revenueDelta !== 0 && (
-                        <Badge variant={revenueDelta > 0 ? "default" : "destructive"} className={revenueDelta > 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200" : ""}>
-                            {revenueDelta > 0 ? '+' : ''}{revenueDelta.toLocaleString()}
-                        </Badge>
-                    )}
+                <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                        <span className="text-3xl font-bold text-slate-900 tracking-tight">
+                            ${newFinancials.totalEarnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">
+                        Total Fleet Earnings
+                    </p>
                 </div>
-                <p className="text-xs text-slate-500">
-                    Total Fleet Earnings
-                </p>
             </div>
 
-            {/* Drivers Impact */}
-            <div className="space-y-1">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider flex items-center gap-1">
+            {/* Separator */}
+            <div className="hidden md:block w-px bg-slate-100 mx-2"></div>
+
+            {/* Driver Updates */}
+            <div className="space-y-1 flex-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                     <Users className="h-3 w-3" /> Driver Updates
                 </span>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-slate-900">
-                        {newState.sanitized.drivers.length}
-                    </span>
-                    {newDriversCount > 0 && (
-                        <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200">
-                            +{newDriversCount} New
-                        </Badge>
-                    )}
+                <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                        <span className="text-3xl font-bold text-slate-900 tracking-tight">
+                            {newState.sanitized.drivers.length}
+                        </span>
+                        {newDriversCount > 0 && (
+                            <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 px-1.5 h-5 text-[10px] font-semibold">
+                                +{newDriversCount} New
+                            </Badge>
+                        )}
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">
+                        Active Drivers in Report
+                    </p>
                 </div>
-                 <p className="text-xs text-slate-500">
-                    Active Drivers in Report
-                </p>
             </div>
 
-            {/* Vehicles Impact */}
-            <div className="space-y-1">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider flex items-center gap-1">
+            {/* Separator */}
+            <div className="hidden md:block w-px bg-slate-100 mx-2"></div>
+
+            {/* Vehicle Updates */}
+            <div className="space-y-1 flex-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                     <Car className="h-3 w-3" /> Vehicle Updates
                 </span>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-slate-900">
-                        {newState.sanitized.vehicles.length}
-                    </span>
-                    {newVehiclesCount > 0 && (
-                        <Badge className="bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200">
-                            +{newVehiclesCount} New
-                        </Badge>
-                    )}
+                <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                         <span className="text-3xl font-bold text-slate-900 tracking-tight">
+                            {newState.sanitized.vehicles.length}
+                        </span>
+                        {newVehiclesCount > 0 && (
+                            <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 px-1.5 h-5 text-[10px] font-semibold">
+                                +{newVehiclesCount} New
+                            </Badge>
+                        )}
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">
+                        Active Vehicles in Report
+                    </p>
                 </div>
-                 <p className="text-xs text-slate-500">
-                    Active Vehicles in Report
-                </p>
             </div>
 
-            {/* Trips Added */}
-            <div className="space-y-1">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider flex items-center gap-1">
+            {/* Separator */}
+            <div className="hidden md:block w-px bg-slate-100 mx-2"></div>
+
+            {/* Activity Added */}
+            <div className="space-y-1 flex-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                     <TrendingUp className="h-3 w-3" /> Activity Added
                 </span>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-slate-900">
-                        +{newTripsCount}
-                    </span>
+                <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                        <span className="text-3xl font-bold text-slate-900 tracking-tight">
+                            +{newTripsCount}
+                        </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">
+                        New Trips to be Inserted
+                    </p>
                 </div>
-                <p className="text-xs text-slate-500">
-                    New Trips to be Inserted
-                </p>
             </div>
 
         </div>

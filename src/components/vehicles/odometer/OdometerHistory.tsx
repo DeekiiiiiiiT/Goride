@@ -63,88 +63,180 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
     fetchHistory();
   }, [fetchHistory]);
 
-  const handleSyncFromLogs = useCallback(async () => {
-    const hasMaintenance = maintenanceLogs && maintenanceLogs.length > 0;
-    const hasTrips = trips && trips.length > 0;
+  // Calculate Virtual History by merging persistent history with trip data
+  const combinedHistory = React.useMemo(() => {
+    // 1. Start with Hard Readings
+    const readings = [...history];
+
+    // 2. Identify Trips not covered by Hard Readings
+    // Strategy: Group trips by day. If a day has no Hard Reading, create a Virtual Reading.
+    // Calculation: Previous Hard Reading + Sum(Trips since then)
     
-    if (!hasMaintenance && !hasTrips) return;
+    if (!trips || trips.length === 0) return readings;
+
+    // Filter trips for this vehicle (though parent should have done this)
+    const vehicleTrips = trips.filter(t => t.vehicleId === vehicleId || t.vehicleId === 'unknown' || !t.vehicleId);
     
-    setSyncing(true);
-    try {
-        let count = 0;
-        
-        // 1. Sync from Maintenance Logs
-        if (hasMaintenance) {
-            for (const log of maintenanceLogs) {
-                // Skip if no odo
-                if (!log.odo || log.odo <= 0) continue;
-                
-                // Check if this reading likely already exists to avoid dupes (naive check)
-                const exists = history.some(h => 
-                    h.value === log.odo && 
-                    new Date(h.date).toISOString().split('T')[0] === new Date(log.date).toISOString().split('T')[0]
-                );
-                
-                if (!exists) {
-                    await odometerService.addReading({
-                        vehicleId: vehicleId,
-                        date: log.date,
-                        value: log.odo,
-                        type: 'Hard',
-                        source: 'Service Log',
-                        notes: `Backfilled from ${log.type} Service`
-                    });
-                    count++;
-                }
+    // Group by Day
+    const dailyTrips: Record<string, number> = {};
+    vehicleTrips.forEach(t => {
+        const day = t.date.split('T')[0];
+        dailyTrips[day] = (dailyTrips[day] || 0) + (t.distance || 0);
+    });
+
+    // Create a chronological timeline
+    const allDates = new Set([
+        ...readings.map(r => r.date.split('T')[0]),
+        ...Object.keys(dailyTrips)
+    ]);
+    const sortedDates = Array.from(allDates).sort();
+
+    const result: OdometerReading[] = [];
+    let currentOdo = 0;
+    
+    // Initialize currentOdo from the very first reading if exists
+    // Actually, we should iterate and sync.
+    
+    // Find baseline (earliest hard reading)
+    const sortedReadings = [...readings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    if (sortedReadings.length > 0) {
+        currentOdo = sortedReadings[0].value;
+        // If there are trips *before* the first reading, we might want to subtract? 
+        // For now, let's assume we start tracking from the first Hard reading or 0.
+        // If first reading is in 2025, and trips are in 2024, this logic is tricky.
+        // Simplified: Start from 0 if no readings, or update as we go.
+    }
+
+    // Better approach: Iterate all events chronologically
+    // Event types: 'Reading' | 'DailyTrip'
+    
+    const events: { date: string, type: 'Reading' | 'Trip', value?: number, distance?: number, obj?: any }[] = [];
+    
+    readings.forEach(r => {
+        events.push({ date: r.date.split('T')[0], type: 'Reading', value: r.value, obj: r });
+    });
+    
+    Object.entries(dailyTrips).forEach(([date, dist]) => {
+        // Only add trip event if there isn't already a hard reading for this date?
+        // Or strictly add it.
+        // If there is a hard reading on this date, we assume it overrides/includes the trips of that day.
+        if (!readings.some(r => r.date.split('T')[0] === date)) {
+             events.push({ date, type: 'Trip', distance: dist });
+        }
+    });
+
+    events.sort((a, b) => a.date.localeCompare(b.date));
+
+    // Re-calculate rolling odometer
+    // Reset state
+    // We need to handle the case where we have trips *before* the first hard reading.
+    // If we have no hard readings, we start at 0.
+    // If we have hard readings, we align to them.
+
+    // Pass 1: Find the first Hard Reading to establish baseline?
+    // If we have trips before the first hard reading, we can't accurately know the odometer unless we back-calculate.
+    // Let's keep it simple: Start accumulation from 0, but "snap" to hard readings when encountered.
+    
+    let runningOdo = 0;
+    
+    // Check if we have any hard reading to anchor to
+    const firstHardIndex = events.findIndex(e => e.type === 'Reading');
+    if (firstHardIndex > 0) {
+        // We have trips before the first hard reading.
+        // We can try to back-calculate?
+        // e.g. Reading at index 5 is 10,000. Trips at 4, 3, 2, 1 sum to 500.
+        // So start must have been 9,500.
+        let backCalcOdo = events[firstHardIndex].value || 0;
+        for (let i = firstHardIndex - 1; i >= 0; i--) {
+            if (events[i].type === 'Trip') {
+                backCalcOdo -= (events[i].distance || 0);
             }
         }
-        
-        // 2. Sync from Trip Logs (if they have explicit odometer readings)
-        if (hasTrips) {
-             for (const trip of trips) {
-                // Check for 'odometer' or 'endOdometer'
-                const val = trip.odometer || trip.endOdometer;
-                if (!val || val <= 0) continue;
-                
-                const exists = history.some(h => 
-                    h.value === val && 
-                    new Date(h.date).toISOString().split('T')[0] === new Date(trip.date).toISOString().split('T')[0]
-                );
-
-                if (!exists) {
-                     await odometerService.addReading({
-                        vehicleId: vehicleId,
-                        date: trip.date,
-                        value: val,
-                        type: 'Soft', // Trips are usually less verifiable than service
-                        source: 'Trip Import',
-                        notes: `Imported from trip ${trip.id?.slice(0,8)}`
-                    });
-                    count++;
-                }
-             }
-        }
-        
-        if (count > 0) {
-            toast.success(`Auto-synced ${count} new odometer readings`);
-            await fetchHistory();
-        }
-        
-    } catch (e) {
-        console.error("Sync failed", e);
-    } finally {
-        setSyncing(false);
+        runningOdo = Math.max(0, backCalcOdo);
+    } else if (firstHardIndex === 0) {
+        runningOdo = events[0].value || 0;
     }
-  }, [history, maintenanceLogs, trips, vehicleId, fetchHistory]);
+
+    // Pass 2: Generate timeline
+    const processedEvents: OdometerReading[] = [];
+
+    for (let i = 0; i < events.length; i++) {
+        const e = events[i];
+        
+        if (e.type === 'Reading') {
+            runningOdo = e.value!;
+            processedEvents.push(e.obj);
+        } else {
+            runningOdo += e.distance!;
+            processedEvents.push({
+                id: `virtual-trip-${e.date}`,
+                vehicleId,
+                date: e.date,
+                value: runningOdo,
+                type: 'Calculated',
+                source: 'Trip Import',
+                notes: `Daily aggregate of ${(e.distance || 0).toFixed(1)} km`,
+                isVirtual: true // Marker for UI
+            } as any);
+        }
+    }
+    
+    return processedEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  }, [history, trips, vehicleId]);
+
 
   // Auto-sync when data changes (and history is loaded)
+  // We disabled the naive auto-sync in favor of the virtual calculation above,
+  // to avoid spamming the database.
+  /* 
   useEffect(() => {
       if (!loading) {
           handleSyncFromLogs();
       }
   }, [loading, handleSyncFromLogs]);
+  */
+  
+  // Re-enable sync only for explicit maintenance logs, not trips (since we virtualize trips now)
+  useEffect(() => {
+      if (!loading && maintenanceLogs.length > 0) {
+          // Filter out trips part of the sync logic
+          // Only sync maintenance
+          // (Logic extracted from handleSyncFromLogs)
+           const syncMaintenance = async () => {
+                let count = 0;
+                for (const log of maintenanceLogs) {
+                    if (!log.odo || log.odo <= 0) continue;
+                    const exists = history.some(h => 
+                        h.value === log.odo && 
+                        new Date(h.date).toISOString().split('T')[0] === new Date(log.date).toISOString().split('T')[0]
+                    );
+                    if (!exists) {
+                        await odometerService.addReading({
+                            vehicleId,
+                            date: log.date,
+                            value: log.odo,
+                            type: 'Hard',
+                            source: 'Service Log',
+                            notes: `Backfilled from ${log.type} Service`
+                        });
+                        count++;
+                    }
+                }
+                if (count > 0) {
+                    toast.success(`Synced ${count} service records`);
+                    fetchHistory();
+                }
+           };
+           syncMaintenance();
+      }
+  }, [loading, maintenanceLogs, vehicleId, fetchHistory]); // Excluded trips
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, isVirtual?: boolean) => {
+    if (isVirtual) {
+        toast.info("Cannot delete calculated trip logs directly. Remove the trip data instead.");
+        return;
+    }
     if (!confirm("Are you sure you want to delete this reading?")) return;
     
     try {
@@ -179,9 +271,8 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
     return <div className="p-8 text-center text-slate-500">Loading history...</div>;
   }
 
-  // Calculate deltas
-  // History is already sorted desc by backend, but let's be safe
-  const sortedHistory = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Calculate deltas using combinedHistory
+  const sortedHistory = combinedHistory;
 
   return (
     <Card>
@@ -210,11 +301,15 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
           </TableHeader>
           <TableBody>
             {sortedHistory.map((reading, index) => {
+              // Note: sortedHistory is DESC. Next item is previous in time.
               const prevReading = sortedHistory[index + 1];
               const delta = prevReading ? reading.value - prevReading.value : 0;
               
+              // Type safety cast for virtual property
+              const isVirtual = (reading as any).isVirtual;
+
               return (
-                <TableRow key={reading.id}>
+                <TableRow key={reading.id} className={isVirtual ? 'bg-slate-50/50' : ''}>
                   <TableCell className="font-medium">
                     {format(new Date(reading.date), 'MMM d, yyyy')}
                   </TableCell>
@@ -223,7 +318,7 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
                       {getSourceIcon(reading.source)}
                       <span>{getSourceLabel(reading.source)}</span>
                       {reading.type === 'Calculated' && (
-                        <Badge variant="outline" className="text-xs h-5 px-1.5 ml-1">Calc</Badge>
+                        <Badge variant="outline" className="text-xs h-5 px-1.5 ml-1 border-slate-200 text-slate-500">Calc</Badge>
                       )}
                     </div>
                   </TableCell>
@@ -248,7 +343,11 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleDelete(reading.id)} className="text-red-600 focus:text-red-600">
+                        <DropdownMenuItem 
+                            onClick={() => handleDelete(reading.id, isVirtual)} 
+                            className={`${isVirtual ? 'text-slate-400 cursor-not-allowed' : 'text-red-600 focus:text-red-600'}`}
+                            disabled={isVirtual}
+                        >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete
                         </DropdownMenuItem>

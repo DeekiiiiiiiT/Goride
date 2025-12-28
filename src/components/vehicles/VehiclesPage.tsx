@@ -271,6 +271,10 @@ export function VehiclesPage() {
     setManualVehicles(prev => [...prev, vehicle]);
   };
 
+  const handleVehicleUpdate = (updatedVehicle: Vehicle) => {
+    setManualVehicles(prev => prev.map(v => v.id === updatedVehicle.id ? updatedVehicle : v));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -287,6 +291,7 @@ export function VehiclesPage() {
             trips={trips} 
             onBack={() => setSelectedVehicleId(null)} 
             onAssignDriver={() => handleOpenAssignModal(selectedVehicle.id)}
+            onUpdate={handleVehicleUpdate}
         />
       ) : (
         <div className="space-y-6 animate-in fade-in duration-500">

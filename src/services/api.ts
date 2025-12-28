@@ -364,6 +364,15 @@ export const api = {
     return response.json();
   },
 
+  async deleteTransaction(id: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/transactions/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete transaction");
+    return response.json();
+  },
+
   async uploadFile(file: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -445,6 +454,7 @@ export const api = {
       drivers: DriverMetrics[], 
       vehicles: VehicleMetrics[], 
       trips: Trip[], 
+      transactions?: FinancialTransaction[], // Added transactions
       financials: any,
       metadata?: any,
       insights?: any 
@@ -505,5 +515,92 @@ export const api = {
       });
       if (!response.ok) throw new Error("Failed to save maintenance log");
       return response.json();
+  },
+
+  async getTollTags() {
+    const response = await fetchWithRetry(`${BASE_URL}/toll-tags`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll tags");
+    return response.json();
+  },
+
+  async saveTollTag(tag: any) {
+    const response = await fetchWithRetry(`${BASE_URL}/toll-tags`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(tag)
+    });
+    if (!response.ok) throw new Error("Failed to save toll tag");
+    return response.json();
+  },
+
+  async deleteTollTag(id: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/toll-tags/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete toll tag");
+    return response.json();
+  },
+
+  async parseTollCsvWithAI(csvContent: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/ai/parse-toll-csv`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ csvContent })
+    });
+    if (!response.ok) throw new Error("Failed to parse toll CSV");
+    return response.json();
+  },
+
+  async parseTollImageWithAI(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetchWithRetry(`${BASE_URL}/ai/parse-toll-image`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: formData
+    });
+    
+    if (!response.ok) {
+        throw new Error("Failed to parse toll image");
+    }
+    return response.json();
+  },
+
+  async reconcileTollTransaction(transaction: FinancialTransaction, trip: Trip) {
+    // 1. Update Transaction: Link to trip and mark reconciled
+    const updatedTx = { ...transaction, tripId: trip.id, isReconciled: true };
+    await this.saveTransaction(updatedTx);
+
+    // 2. Return updated objects
+    // Note: We DO NOT update the trip's tollCharges. 
+    // The Trip record from the platform (Uber/Lyft) is the Source of Truth for revenue.
+    // Linking a toll expense is for verification/audit, not for modifying the Trip invoice.
+    return { transaction: updatedTx, trip };
+  },
+
+  async unreconcileTollTransaction(transaction: FinancialTransaction, trip: Trip) {
+    // 1. Update Transaction: Remove link
+    // We explicitly set tripId to null to break the relationship
+    const txToSave = { ...transaction, tripId: null, isReconciled: false };
+    
+    // Note: We cast to any because Typescript might complain about null if defined as string, 
+    // but JSON allows null and Supabase treats it as clearing the field.
+    await this.saveTransaction(txToSave as any);
+
+    // 2. Return updated objects
+    // Note: We DO NOT modify the trip's financials.
+    return { transaction: txToSave, trip };
   }
 };

@@ -33,6 +33,16 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "../ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { toast } from "sonner@2.0.3";
 
 interface TransactionsTabProps {
@@ -61,10 +71,11 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
   
   const [searchTerm, setSearchTerm] = useState('');
   const [listGrouping, setListGrouping] = useState<'flat' | 'grouped'>('flat');
+  const [batchToDelete, setBatchToDelete] = useState<{id: string, name: string} | null>(null);
 
   // Initial Data Generation
   useEffect(() => {
-    if (trips.length > 0) {
+    if (true) {
       setLoading(true);
       
       const loadData = async () => {
@@ -72,16 +83,20 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
              const metrics = await api.getDriverMetrics();
              setDriverMetrics(metrics);
              
-             // Fetch real transactions if available, else mock
+             // Fetch real transactions if available
              try {
                 const realTx = await api.getTransactions();
-                if (realTx && realTx.length > 0) {
+                // Trust the API. If it returns an array (even empty), use it.
+                // Do NOT fallback to mocking from trips if the API call succeeded.
+                if (Array.isArray(realTx)) {
                     setTransactions(realTx);
                 } else {
-                    setTransactions(generateMockTransactions(trips));
+                    setTransactions([]);
                 }
-             } catch {
-                setTransactions(generateMockTransactions(trips));
+             } catch (e) {
+                console.error("Failed to load transactions", e);
+                // Only fallback to mock if the API call specifically failed (network error, 500)
+                setTransactions(trips.length > 0 ? generateMockTransactions(trips) : []);
              }
 
          } catch (e) {
@@ -237,28 +252,40 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
+  const confirmDeleteBatch = async () => {
+    if (!batchToDelete) return;
+    
+    try {
+        await api.deleteBatch(batchToDelete.id);
+        
+        // Update local state
+        setTransactions(prev => prev.filter(t => t.batchId !== batchToDelete.id));
+        
+        // If we were filtering by this batch, reset filter
+        if (filters.batchId === batchToDelete.id) {
+            setFilters(prev => ({ ...prev, batchId: 'all' }));
+        }
+        
+        toast.success("File Removed", {
+          description: `Transactions from "${batchToDelete.name}" have been deleted.`
+        });
+    } catch (error) {
+        console.error("Failed to delete batch", error);
+        toast.error("Failed to delete file");
+    } finally {
+        setBatchToDelete(null);
+    }
+  };
+
   const handleDeleteBatch = () => {
     if (filters.batchId === 'all' || !filters.batchId) return;
-    
-    const batchName = batches.find(b => b.id === filters.batchId)?.name;
-    
-    // In a real app, API call to delete batch
-    setTransactions(prev => prev.filter(t => t.batchId !== filters.batchId));
-    
-    // Reset filter
-    setFilters(prev => ({ ...prev, batchId: 'all' }));
-    
-    toast.success("File Removed", {
-      description: `Transactions from "${batchName}" have been deleted.`
-    });
+    const batchName = batches.find(b => b.id === filters.batchId)?.name || 'Unknown File';
+    setBatchToDelete({ id: filters.batchId, name: batchName });
   };
 
   const handleDeleteBatchById = (batchId: string, batchName: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setTransactions(prev => prev.filter(t => t.batchId !== batchId));
-    toast.success("File Removed", {
-      description: `Transactions from "${batchName}" have been deleted.`
-    });
+    setBatchToDelete({ id: batchId, name: batchName });
   };
 
   const listViewContent = (
@@ -579,7 +606,26 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
   );
 
   if (mode === 'list') {
-      return listViewContent;
+      return (
+          <>
+            {listViewContent}
+            
+            <AlertDialog open={!!batchToDelete} onOpenChange={(open) => !open && setBatchToDelete(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete the file "{batchToDelete?.name}" and all {transactions.filter(t => t.batchId === batchToDelete?.id).length} associated transactions from the database.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={confirmDeleteBatch} className="bg-rose-600 hover:bg-rose-700">Delete File</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+      );
   }
 
   return (

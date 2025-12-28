@@ -25,7 +25,8 @@ import {
   Search,
   Eye,
   Filter,
-  Info
+  Info,
+  Fuel
 } from 'lucide-react';
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -233,6 +234,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      let totalEarnings = 0; // Lifetime
      let lifetimeTrips = 0; // Lifetime
      let totalCashCollected = 0; // Lifetime
+     let lifetimeTolls = 0; // Lifetime
 
      let periodCompletedTrips = 0;
      let periodCancelledTrips = 0;
@@ -253,12 +255,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // Breakdown
      let totalBaseFare = 0;
      let totalTips = 0;
+     let totalTolls = 0;
 
      // Platform Stats
      const platformStats = {
-        Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0 },
-        InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0 },
-        Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0 }
+        Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0 },
+        InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0 },
+        Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0 }
      };
 
      // Chart Data Map
@@ -283,6 +286,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         totalEarnings += trip.amount;
         lifetimeTrips += 1;
         if (trip.cashCollected) totalCashCollected += Math.abs(trip.cashCollected);
+        // Only count tolls as debt if they weren't collected in cash (assuming cash collected includes toll reimbursement)
+        // If it's a card trip (no cash collected), the driver received the toll refund in their payout, so they owe it back.
+        if (trip.tollCharges && !trip.cashCollected) {
+            lifetimeTolls += trip.tollCharges;
+        }
 
         // Filter Check
         if (isWithinInterval(tripDateObj, { start, end })) {
@@ -331,6 +339,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 totalTips += trip.fareBreakdown.tips || 0;
             } else {
                 totalBaseFare += trip.amount;
+            }
+            
+            if (trip.tollCharges) {
+                totalTolls += trip.tollCharges;
+                pStats.tolls = (pStats.tolls || 0) + trip.tollCharges;
             }
         }
 
@@ -444,7 +457,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      }
 
      const cashReceived = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-     const netOutstanding = totalCashCollected - cashReceived;
+     const netOutstanding = (totalCashCollected - cashReceived) + lifetimeTolls;
 
      const periodCashReceived = transactions
         .filter(t => {
@@ -542,7 +555,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         // Phase 2 New Params
         acceptanceRate,
         currentRating,
-        tripRatio // New
+        tripRatio, // New
+        totalTolls
      };
   }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver]);
 
@@ -775,29 +789,20 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardContent>
                </Card>
                <MetricCard 
-                  title="Acceptance Rate" 
-                  value={metrics.acceptanceRate !== null ? `${metrics.acceptanceRate}%` : '-'} 
-                  target="Target: >85%"
-                  progress={metrics.acceptanceRate || 0}
-                  progressColor={!metrics.acceptanceRate ? "bg-slate-200" : metrics.acceptanceRate >= 80 ? "bg-emerald-500" : metrics.acceptanceRate < 40 ? "bg-rose-600" : "bg-amber-500"}
-                  icon={(metrics.acceptanceRate !== null && metrics.acceptanceRate < 40) ? <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" /> : <ThumbsUp className="h-4 w-4 text-slate-500" />}
-                   breakdown={[
-                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
-                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
+                  title="Toll Refunded"
+                  value={`$${metrics.totalTolls.toFixed(2)}`}
+                  subtext="Added to Debt (Cash Risk)"
+                  icon={<DollarSign className="h-4 w-4 text-slate-500" />}
+                  breakdown={[
+                       { label: 'Uber', value: `$${metrics.platformStats.Uber.tolls.toFixed(2)}`, color: '#3b82f6' },
+                       { label: 'InDrive', value: `$${metrics.platformStats.InDrive.tolls.toFixed(2)}`, color: '#10b981' }
                    ]}
                />
                <MetricCard 
-                  title="Cancellation Rate" 
-                  value={metrics.totalTrips > 0 ? `${metrics.cancellationRate.toFixed(1)}%` : '-'} 
-                  target="Target: <5%"
-                  progress={metrics.cancellationRate}
-                  progressColor={metrics.cancellationRate < 5 ? "bg-emerald-500" : "bg-rose-500"}
-                  tooltip={`Calculated from ${metrics.periodCancelledTrips} cancelled trips out of ${metrics.totalTrips} total trips in the selected period.`}
-                  icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
-                   breakdown={[
-                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(( (metrics.platformStats.Uber.trips - metrics.platformStats.Uber.completed) / metrics.platformStats.Uber.trips) * 100).toFixed(1)}%` : '-', color: '#3b82f6' },
-                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${(( (metrics.platformStats.InDrive.trips - metrics.platformStats.InDrive.completed) / metrics.platformStats.InDrive.trips) * 100).toFixed(1)}%` : '-', color: '#10b981' }
-                   ]}
+                  title="Total Fuel Used"
+                  value="Coming Soon"
+                  subtext="Total fuel used for the period"
+                  icon={<Fuel className="h-4 w-4 text-slate-500" />}
                />
             </div>
 
@@ -978,6 +983,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                         <p className="text-xs text-amber-600 font-medium">
                             {metrics.periodEarnings > 0 ? ((metrics.cashCollected / metrics.periodEarnings) * 100).toFixed(1) : 0}% of earnings (Cash Risk)
                         </p>
+                        
+                        <div className="pt-2">
+                             <Button variant="outline" size="sm" className="w-full text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={() => setIsTollModalOpen(true)}>
+                                 Log Toll Card Top-up
+                             </Button>
+                        </div>
                      </div>
                      <Separator />
                      <div className="grid grid-cols-2 gap-4">
@@ -1106,6 +1117,31 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     icon={<Shield className="h-4 w-4 text-slate-500" />}
                     subtext="Based on harsh braking events"
                  />
+               <MetricCard 
+                  title="Acceptance Rate" 
+                  value={metrics.acceptanceRate !== null ? `${metrics.acceptanceRate}%` : '-'} 
+                  target="Target: >85%"
+                  progress={metrics.acceptanceRate || 0}
+                  progressColor={!metrics.acceptanceRate ? "bg-slate-200" : metrics.acceptanceRate >= 80 ? "bg-emerald-500" : metrics.acceptanceRate < 40 ? "bg-rose-600" : "bg-amber-500"}
+                  icon={(metrics.acceptanceRate !== null && metrics.acceptanceRate < 40) ? <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" /> : <ThumbsUp className="h-4 w-4 text-slate-500" />}
+                   breakdown={[
+                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
+                   ]}
+               />
+               <MetricCard 
+                  title="Cancellation Rate" 
+                  value={metrics.totalTrips > 0 ? `${metrics.cancellationRate.toFixed(1)}%` : '-'} 
+                  target="Target: <5%"
+                  progress={metrics.cancellationRate}
+                  progressColor={metrics.cancellationRate < 5 ? "bg-emerald-500" : "bg-rose-500"}
+                  tooltip={`Calculated from ${metrics.periodCancelledTrips} cancelled trips out of ${metrics.totalTrips} total trips in the selected period.`}
+                  icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
+                   breakdown={[
+                       { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(( (metrics.platformStats.Uber.trips - metrics.platformStats.Uber.completed) / metrics.platformStats.Uber.trips) * 100).toFixed(1)}%` : '-', color: '#3b82f6' },
+                       { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${(( (metrics.platformStats.InDrive.trips - metrics.platformStats.InDrive.completed) / metrics.platformStats.InDrive.trips) * 100).toFixed(1)}%` : '-', color: '#10b981' }
+                   ]}
+               />
              </div>
 
              <Card>
@@ -1297,9 +1333,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     <TableCell>{trip.duration ? `${trip.duration.toFixed(0)} min` : '-'}</TableCell>
                                     <TableCell className="font-medium text-amber-600">
                                         {Math.abs(Number(trip.cashCollected || 0)) > 0 ? `$${Math.abs(Number(trip.cashCollected)).toFixed(2)}` : 
-                                        (trip.platform && ['indrive', 'bolt'].includes(trip.platform.toLowerCase()) ? `$${trip.amount.toFixed(2)}` : '-')}
+                                        (trip.platform && ['indrive', 'bolt'].includes(trip.platform.toLowerCase()) ? `$${(trip.amount ?? 0).toFixed(2)}` : '-')}
                                     </TableCell>
-                                    <TableCell className="font-medium">${trip.amount.toFixed(2)}</TableCell>
+                                    <TableCell className="font-medium">${(trip.amount ?? 0).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
                                         <Button 
                                             variant="ghost" 

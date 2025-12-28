@@ -198,7 +198,7 @@ function GeneralPanel() {
       localStorage.removeItem('fleet_name');
       window.dispatchEvent(new Event('storage'));
 
-      toast.success(`System reset complete. Cleared ${result.deletedTrips} trips.`);
+      toast.success(`System reset complete. Cleared ${result.deletedTrips} trips and ${result.deletedTransactions || 0} transactions.`);
     } catch (error) {
       console.error(error);
       toast.error("Failed to reset system data");

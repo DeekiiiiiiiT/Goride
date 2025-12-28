@@ -200,12 +200,13 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
     ) return 'uber_payment';
 
     // 3. Organization Payments (Financials - Fleet Level) - Check this BEFORE Driver Payments
+    const hasOrgId = has('Organization UUID') || has('OrganizationUUID');
+    // We check for specific ledger columns. Note: 'End of period balance' matches the user's screenshot.
+    const hasLedger = has('End Of Period Balance') || has('Balance End') || has('Start Of Period Balance') || has('Balance Start') || has('NetFare') || has('Net Fare') || has('Net Earnings');
+
     if (
-        has('Organization UUID') || has('OrganizationUUID') ||
-        has('NetFare') || has('Net Fare') || 
-        has('End Of Period Balance') || has('Balance End') || // Relaxed: Allow just End Balance
-        (has('Start Of Period Balance') && has('End Of Period Balance')) ||
-        (has('Balance Start') && has('Balance End')) ||
+        (hasOrgId && hasLedger) || // Strongest Signal: Org ID + Ledger Data
+        (hasLedger && !has('Trip UUID')) || // Ledger Data without Trip Data (avoids Trip Activity confusion)
         name.includes('payment_organisation') || name.includes('payment_organization')
     ) return 'uber_payment_org';
 
@@ -305,6 +306,11 @@ export interface ProcessedBatch {
     organizationMetrics: OrganizationMetrics[];
     organizationName?: string; // Phase 1: Fleet Owner
     tripAnalytics?: TripAnalytics; // Phase 4
+    calibrationStats?: {
+        fleetStats: FleetStats;
+        deductionPerTrip: number;
+        phantomLagDetected: boolean;
+    };
 }
 
 // Helper to extract and clean driver name
@@ -558,6 +564,11 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
     // 1. Process all files
     files.forEach(file => {
+        // Generate a deterministic but unique batch ID for this file
+        // This ensures that "Group by File" in Transaction List shows 14 groups for 14 files.
+        const fileBatchId = crypto.randomUUID();
+        const fileBatchName = file.name;
+
         if (file.type === 'generic') {
             // Process generic files immediately as standalone trips
             // Priority: 1. AI Custom Mapping, 2. Auto-Detect
@@ -570,6 +581,11 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 // If we have a Driver Name but NO Driver UUID, strictly discard the row.
                 // This prevents Organization files (which have names but no Driver UUIDs) from creating ghost drivers.
                 if (t.driverName && (!t.driverId || t.driverId === 'unknown' || t.driverId === '')) return;
+
+                // Assign File Batch Info
+                t.batchId = fileBatchId;
+                t.batchName = fileBatchName;
+                t.sourceFileName = fileBatchName;
 
                 genericTrips.push(t);
             });
@@ -606,7 +622,19 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
                 const current = tripMap.get(tripId) || { id: tripId, platform: 'Uber' };
                 
+                // Assign Batch Info if new
+                if (!current.batchId) {
+                    current.batchId = fileBatchId;
+                    current.batchName = fileBatchName;
+                    current.sourceFileName = fileBatchName;
+                }
+
                 if (file.type === 'uber_trip') {
+                    // Force update batch info if this is the Trip Activity file (Source of Truth)
+                    current.batchId = fileBatchId;
+                    current.batchName = fileBatchName;
+                    current.sourceFileName = fileBatchName;
+
                     const schema = UBER_SCHEMAS.TRIP_ACTIVITY.mapping;
                     
                     // Improved Date Parsing: Don't default to Now() immediately
@@ -1489,6 +1517,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
              cashPosition: 0
          });
     } else if (organizationMetrics.length > 0) {
+        // Sort Organization Metrics to prioritize valid ledger data (Largest magnitude Balance)
+        // This handles cases where multiple files might be detected as Org files, but some are empty.
+        organizationMetrics.sort((a, b) => (Math.abs(b.balanceEnd || 0) - Math.abs(a.balanceEnd || 0)));
+
         // If we DO have summary reports, we use them as the primary source of truth.
         // We only backfill from calculated numbers if the summary is missing data.
         organizationMetrics.forEach(om => {
@@ -1556,7 +1588,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         rentalContracts,
         organizationMetrics,
         organizationName, // Return extracted name
-        tripAnalytics
+        tripAnalytics,
+        calibrationStats: {
+            fleetStats,
+            deductionPerTrip,
+            phantomLagDetected: deductionPerTrip > 0
+        }
     };
 }
 

@@ -45,8 +45,6 @@
           "node:buffer": "*",
           "openai": "*",
           "papaparse": "*",
-          "pdf-lib": "*",
-          "pdf2json": "*",
           "pdfjs-dist": "*",
           "react": "^18.3.1",
           "react-day-picker": "^8.10.1",

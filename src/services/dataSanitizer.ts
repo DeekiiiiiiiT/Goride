@@ -61,11 +61,13 @@ export class DataSanitizer {
            status = 'critical';
       }
       
-      // 3. High Fare Anomaly
+      // 3. High Fare Anomaly - REMOVED per user request
+      /* 
       if (trip.amount > 500) {
            issues.push({ id: crypto.randomUUID(), field: 'amount', message: 'High Value Transaction (>$500)', severity: 'warning' });
            if (status !== 'critical') status = 'warning';
       }
+      */
 
       return {
           data: trip,

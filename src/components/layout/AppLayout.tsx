@@ -15,7 +15,8 @@ import {
   BarChart3,
   Bell,
   UploadCloud,
-  History
+  History,
+  Tag
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -89,6 +90,12 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             label="Vehicles" 
             active={currentPage === 'vehicles'}
             onClick={() => onNavigate?.('vehicles')}
+          />
+          <NavItem 
+            icon={<Tag className="h-4 w-4" />} 
+            label="Toll Tags" 
+            active={currentPage === 'toll-tags'}
+            onClick={() => onNavigate?.('toll-tags')}
           />
           <NavItem 
             icon={<FileText className="h-4 w-4" />} 

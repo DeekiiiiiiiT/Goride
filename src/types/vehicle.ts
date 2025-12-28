@@ -1,6 +1,20 @@
 export type VehicleStatus = 'Active' | 'Maintenance' | 'Inactive' | 'Decommissioned';
 export type ServiceStatus = 'OK' | 'Due Soon' | 'Overdue';
 
+export type TollProvider = 'JRC' | 'T-Tag' | 'Other';
+export type TollTagStatus = 'Active' | 'Inactive' | 'Lost' | 'Damaged';
+
+export interface TollTag {
+  id: string;
+  provider: TollProvider;
+  tagNumber: string;
+  status: TollTagStatus;
+  assignedVehicleId?: string;
+  assignedVehicleName?: string; // Denormalized for easier display
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface VehicleDocument {
   id: string;
   name: string;
@@ -79,6 +93,12 @@ export interface Vehicle {
   mvid?: string;
   laNumber?: string;
   
+  // Toll Configuration
+  tollTagId?: string;       // The visible Tag Number (e.g. "212100286450")
+  tollTagUuid?: string;     // Link to the TollTag entity ID
+  tollTagProvider?: string; // e.g. "JRC", "T-Tag"
+  tollBalance?: number;     // Estimated running balance
+
   // Attached Documents
   documents?: VehicleDocument[];
 }

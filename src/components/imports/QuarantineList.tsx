@@ -59,35 +59,36 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
             {/* TRIPS */}
             {tripAnomalies.length > 0 && (
                 <div className="space-y-3">
-                    <h3 className="font-medium text-slate-900 flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-500" />
-                        Flagged Trips ({tripAnomalies.length})
-                    </h3>
+                    <div className="flex items-center gap-2">
+                         <AlertTriangle className="h-4 w-4 text-amber-500" />
+                         <h3 className="font-medium text-slate-900">Flagged Trips ({tripAnomalies.length})</h3>
+                    </div>
+                    
                     {/* Desktop Table */}
-                    <div className="hidden md:block border rounded-md overflow-hidden">
+                    <div className="hidden md:block border rounded-md overflow-hidden bg-white shadow-sm">
                         <Table>
-                            <TableHeader className="bg-slate-50">
+                            <TableHeader className="bg-slate-50/50">
                                 <TableRow>
-                                    <TableHead>Issue</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Driver</TableHead>
-                                    <TableHead className="text-right">Distance</TableHead>
-                                    <TableHead className="text-right">Fare</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
+                                    <TableHead className="w-[100px] font-medium text-slate-500">Issue</TableHead>
+                                    <TableHead className="font-medium text-slate-500">Date</TableHead>
+                                    <TableHead className="font-medium text-slate-500">Driver</TableHead>
+                                    <TableHead className="text-right font-medium text-slate-500">Distance</TableHead>
+                                    <TableHead className="text-right font-medium text-slate-500">Fare</TableHead>
+                                    <TableHead className="text-right font-medium text-slate-500 w-[100px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {tripAnomalies.map((item) => {
                                     const isEditing = editingId === item.data.id;
                                     return (
-                                        <TableRow key={item.data.id} className="bg-amber-50/30 hover:bg-amber-50/50">
+                                        <TableRow key={item.data.id} className="hover:bg-slate-50">
                                             <TableCell>
                                                 <div className="flex flex-wrap gap-1">
                                                     {item.issues.map((issue, i) => (
                                                         <TooltipProvider key={i}>
                                                             <Tooltip>
                                                                 <TooltipTrigger>
-                                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 cursor-help">
+                                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 cursor-help font-normal text-xs px-2 py-0.5">
                                                                         {issue.field || 'Warning'}
                                                                     </Badge>
                                                                 </TooltipTrigger>
@@ -102,10 +103,10 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                             <TableCell className="text-sm text-slate-600">
                                                 {new Date(item.data.requestTime || item.data.date).toLocaleDateString()}
                                             </TableCell>
-                                            <TableCell className="text-sm text-slate-600">
+                                            <TableCell className="text-sm text-slate-600 font-medium">
                                                 {item.data.driverName || 'Unknown'}
                                             </TableCell>
-                                            <TableCell className="text-right font-mono text-sm">
+                                            <TableCell className="text-right text-sm text-slate-600">
                                                 {isEditing ? (
                                                     <Input 
                                                         type="number" 
@@ -117,7 +118,7 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                                     `${item.data.distance?.toFixed(1) || 0} km`
                                                 )}
                                             </TableCell>
-                                            <TableCell className="text-right font-mono text-sm">
+                                            <TableCell className="text-right text-sm font-semibold text-slate-900">
                                                 {isEditing ? (
                                                     <Input 
                                                         type="number" 
@@ -130,13 +131,13 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-1">
+                                                <div className="flex items-center justify-end gap-2">
                                                     {isEditing ? (
                                                         <>
-                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-green-600" onClick={() => saveEdit(item.data.id, 'trip')}>
+                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={() => saveEdit(item.data.id, 'trip')}>
                                                                 <Check className="h-4 w-4" />
                                                             </Button>
-                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400" onClick={cancelEdit}>
+                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 hover:bg-slate-100" onClick={cancelEdit}>
                                                                 <X className="h-4 w-4" />
                                                             </Button>
                                                         </>
@@ -145,33 +146,33 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                                             <TooltipProvider>
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600" onClick={() => startEdit(item.data.id, item.data)}>
-                                                                            <Edit2 className="h-4 w-4" />
+                                                                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full" onClick={() => startEdit(item.data.id, item.data)}>
+                                                                            <Edit2 className="h-3.5 w-3.5" />
                                                                         </Button>
                                                                     </TooltipTrigger>
-                                                                    <TooltipContent>Edit Row</TooltipContent>
+                                                                    <TooltipContent>Edit</TooltipContent>
                                                                 </Tooltip>
                                                             </TooltipProvider>
                                                             
                                                             <TooltipProvider>
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-green-600" onClick={() => onDismiss(item.data.id, 'trip')}>
-                                                                            <CheckCircle className="h-4 w-4" />
+                                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full" onClick={() => onDismiss(item.data.id, 'trip')}>
+                                                                            <CheckCircle className="h-3.5 w-3.5" />
                                                                         </Button>
                                                                     </TooltipTrigger>
-                                                                    <TooltipContent>Dismiss Warning</TooltipContent>
+                                                                    <TooltipContent>Mark as Safe</TooltipContent>
                                                                 </Tooltip>
                                                             </TooltipProvider>
 
                                                             <TooltipProvider>
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-red-600" onClick={() => onExclude(item.data.id, 'trip')}>
-                                                                            <Trash2 className="h-4 w-4" />
+                                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full" onClick={() => onExclude(item.data.id, 'trip')}>
+                                                                            <Trash2 className="h-3.5 w-3.5" />
                                                                         </Button>
                                                                     </TooltipTrigger>
-                                                                    <TooltipContent>Exclude Row</TooltipContent>
+                                                                    <TooltipContent>Delete</TooltipContent>
                                                                 </Tooltip>
                                                             </TooltipProvider>
                                                         </>

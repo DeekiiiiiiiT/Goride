@@ -8,9 +8,10 @@ import { StatsService } from '../../services/statsService';
 
 interface VehicleHealthCardProps {
   metrics: VehicleMetrics[];
+  totalDistance?: number;
 }
 
-export function VehicleHealthCard({ metrics }: VehicleHealthCardProps) {
+export function VehicleHealthCard({ metrics, totalDistance = 0 }: VehicleHealthCardProps) {
   if (!metrics || metrics.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-slate-500">
@@ -29,7 +30,7 @@ export function VehicleHealthCard({ metrics }: VehicleHealthCardProps) {
   return (
     <div className="space-y-6">
       {/* Top Level KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-emerald-50 border-emerald-200">
             <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
@@ -64,6 +65,17 @@ export function VehicleHealthCard({ metrics }: VehicleHealthCardProps) {
                         </h3>
                     </div>
                     <AlertTriangle className={`h-8 w-8 ${underperformers.length > 0 ? 'text-red-300' : 'text-blue-300'}`} />
+                </div>
+            </CardContent>
+        </Card>
+         <Card className="bg-indigo-50 border-indigo-200">
+            <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-indigo-600">Km for Period</p>
+                        <h3 className="text-2xl font-bold text-indigo-900">{totalDistance.toLocaleString()} <span className="text-sm font-normal text-indigo-600">km</span></h3>
+                    </div>
+                    <Car className="h-8 w-8 text-indigo-300" />
                 </div>
             </CardContent>
         </Card>

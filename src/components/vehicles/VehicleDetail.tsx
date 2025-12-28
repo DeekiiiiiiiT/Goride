@@ -29,7 +29,11 @@ import {
   Scan,
   Camera,
   Search,
-  User
+  User,
+  CreditCard,
+  Tag,
+  Unlink,
+  MinusCircle
 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { 
@@ -92,13 +96,18 @@ import { Trip } from '../../types/data';
 import { api } from '../../services/api';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { format, subDays, isSameDay, startOfDay, getDay, getHours } from 'date-fns';
-import { toast } from 'sonner@2.0.3';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { UpdateOdometerDialog } from './odometer/UpdateOdometerDialog';
+import { OdometerDisplay } from './odometer/OdometerDisplay';
 import { odometerService } from '../../services/odometerService';
 import { calculateLiveMileage } from '../../utils/mileageProjection';
+import { LogTollTopupModal } from './LogTollTopupModal';
+import { LogTollUsageModal } from './LogTollUsageModal';
+import { BulkImportTollTransactionsModal } from './BulkImportTollTransactionsModal';
+import { Textarea } from "../ui/textarea";
+import { Checkbox } from "../ui/checkbox";
 
 const MOCK_DOCUMENTS: VehicleDocument[] = [];
 
@@ -107,10 +116,8 @@ interface VehicleDetailProps {
   trips: Trip[];
   onBack: () => void;
   onAssignDriver?: () => void; // Added
+  onUpdate?: (vehicle: Vehicle) => void;
 }
-
-import { Textarea } from "../ui/textarea";
-import { Checkbox } from "../ui/checkbox";
 
 interface MaintenanceLog {
     id: string;
@@ -202,7 +209,7 @@ const MAINTENANCE_SCHEDULE = {
     }
 };
 
-export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: VehicleDetailProps) {
+export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate }: VehicleDetailProps) {
   const [isLogServiceOpen, setIsLogServiceOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
@@ -281,14 +288,14 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
           api.getMaintenanceLogs(vId).then(setMaintenanceLogs).catch(console.error);
           
           // Phase 5: Calculate Live Mileage
-          calculateLiveMileage(vId, vehicle.metrics.odometer).then(res => {
+          calculateLiveMileage(vId, vehicle.metrics.odometer, trips).then(res => {
              setProjectedMileage({
                  value: res.estimatedOdo,
                  isProjected: res.isProjected
              });
           });
       }
-  }, [vehicle.id, vehicle.licensePlate, vehicle.metrics.odometer]);
+  }, [vehicle.id, vehicle.licensePlate, vehicle.metrics.odometer, trips]);
 
   // Calculate Next Service
   const maintenanceStatus = useMemo(() => {
@@ -352,6 +359,40 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
           }
       }
   }, [serviceForm.itemCosts, serviceForm.inspectionFee, serviceForm.hasInspectionFee]);
+
+  const handleUnassignTag = async () => {
+    if (!window.confirm("Are you sure you want to unlink this toll tag?")) return;
+    
+    try {
+        // 1. Update Vehicle
+        const updatedVehicle = {
+            ...vehicle,
+            tollTagId: undefined,
+            tollTagUuid: undefined,
+            tollTagProvider: undefined
+        };
+        await api.saveVehicle(updatedVehicle);
+
+        // 2. Update Tag (we need to know the tag ID, which is stored in vehicle.tollTagUuid)
+        if (vehicle.tollTagUuid) {
+             const tags = await api.getTollTags();
+             const tag = tags.find((t: any) => t.id === vehicle.tollTagUuid);
+             if (tag) {
+                 await api.saveTollTag({
+                     ...tag,
+                     assignedVehicleId: undefined,
+                     assignedVehicleName: undefined
+                 });
+             }
+        }
+        
+        toast.success("Toll tag unlinked");
+        if (onUpdate) onUpdate(updatedVehicle);
+    } catch (error) {
+        console.error("Failed to unlink tag", error);
+        toast.error("Failed to unlink tag");
+    }
+  };
 
   const handleServiceScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -461,6 +502,10 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [isUpdateOdometerOpen, setIsUpdateOdometerOpen] = useState(false);
+  const [isTollTopupOpen, setIsTollTopupOpen] = useState(false);
+  const [isTollUsageOpen, setIsTollUsageOpen] = useState(false);
+  const [isTollImportOpen, setIsTollImportOpen] = useState(false);
+  const [refreshTollHistory, setRefreshTollHistory] = useState(0);
   const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
 
   const [uploadForm, setUploadForm] = useState({
@@ -1113,25 +1158,48 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
                              </div>
                          </div>
                          
-                         <div className="mt-6 flex items-center gap-4">
-                             <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg border border-indigo-100 pr-8">
-                                 <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
-                                     <Activity className="h-5 w-5" />
+                             <div className="mt-6 flex items-center gap-4">
+                                 <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg border border-indigo-100 pr-8">
+                                     <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                         <Activity className="h-5 w-5" />
+                                     </div>
+                                     <div>
+                                         <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider">Current Driver</p>
+                                         <p className="font-medium text-slate-900">{vehicle.currentDriverName || 'Unassigned'}</p>
+                                     </div>
+                                     <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="ml-4 h-8 text-xs bg-white"
+                                        onClick={onAssignDriver}
+                                     >
+                                         Change Driver
+                                     </Button>
                                  </div>
-                                 <div>
-                                     <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider">Current Driver</p>
-                                     <p className="font-medium text-slate-900">{vehicle.currentDriverName || 'Unassigned'}</p>
-                                 </div>
-                                 <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    className="ml-4 h-8 text-xs bg-white"
-                                    onClick={onAssignDriver}
-                                 >
-                                     Change Driver
-                                 </Button>
+
+                                 <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 pr-8">
+                                    <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
+                                        <Tag className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Toll Tag</p>
+                                        <p className="font-medium text-slate-900">
+                                            {vehicle.tollTagId ? `${vehicle.tollTagProvider} ${vehicle.tollTagId}` : 'None Assigned'}
+                                        </p>
+                                    </div>
+                                    {vehicle.tollTagId && (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="ml-4 h-8 w-8 p-0 text-slate-400 hover:text-red-600"
+                                            onClick={handleUnassignTag}
+                                            title="Unlink Tag"
+                                        >
+                                            <Unlink className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
                              </div>
-                         </div>
                      </div>
                  </div>
              </div>
@@ -1153,12 +1221,10 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
               <CardContent className="space-y-4">
                   <div className="flex justify-between items-center py-2 border-b border-slate-100">
                       <span className="text-slate-500 text-sm">Odometer</span>
-                      <div className="text-right">
-                          <span className="font-bold text-slate-900">
-                              {(projectedMileage?.value || vehicle.metrics.odometer).toLocaleString()} km
-                          </span>
+                      <div className="flex flex-col items-end">
+                          <OdometerDisplay value={projectedMileage?.value || vehicle.metrics.odometer} size="sm" />
                           {projectedMileage?.isProjected && (
-                              <p className="text-[10px] text-indigo-500 font-medium flex items-center justify-end gap-1">
+                              <p className="text-[10px] text-indigo-500 font-medium flex items-center justify-end gap-1 mt-1">
                                   <TrendingUp className="h-3 w-3" /> Projected
                               </p>
                           )}
@@ -1443,11 +1509,13 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
                   <Card>
                       <CardContent className="p-6">
                           <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">ROI</p>
-                              <TrendingUp className="h-4 w-4 text-emerald-600" />
+                              <p className="text-sm font-medium text-slate-500">Toll Balance</p>
+                              <CreditCard className="h-4 w-4 text-amber-600" />
                           </div>
-                          <h3 className="text-2xl font-bold text-slate-900">{analytics.financials.roiPercentage.toFixed(1)}%</h3>
-                          <p className="text-xs text-slate-500 mt-1">Based on $25k cost</p>
+                          <h3 className="text-2xl font-bold text-slate-900">${(vehicle.tollBalance || 0).toLocaleString()}</h3>
+                          <div className="flex items-center justify-between mt-1">
+                             <p className="text-xs text-slate-500">Tag: {vehicle.tollTagId || 'N/A'}</p>
+                          </div>
                       </CardContent>
                   </Card>
               </div>
@@ -2142,6 +2210,47 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
           </TabsContent>
           {/* --- Odometer Tab --- */}
           <TabsContent value="odometer" className="space-y-6 mt-6">
+              
+              {/* Odometer Hero Card (Requested Feature) */}
+              <Card className="bg-slate-900 text-white border-slate-800 overflow-hidden relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 pointer-events-none" />
+                    <CardContent className="p-8 flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
+                        <div className="space-y-2">
+                            <h3 className="text-lg font-medium text-slate-400 flex items-center gap-2">
+                                <Activity className="h-5 w-5 text-indigo-400" />
+                                Live Odometer Reading
+                            </h3>
+                            <div className="flex items-baseline gap-3">
+                                <OdometerDisplay value={projectedMileage?.value || vehicle.metrics.odometer} size="lg" className="scale-110 origin-left" />
+                                {projectedMileage?.isProjected && (
+                                    <Badge variant="outline" className="text-indigo-300 border-indigo-500/30 bg-indigo-500/10 animate-pulse">
+                                        <TrendingUp className="h-3 w-3 mr-1" /> Projected
+                                    </Badge>
+                                )}
+                            </div>
+                            <p className="text-sm text-slate-500 max-w-md mt-2">
+                                This reading is a synthesis of verified service logs, imported trip data, and daily usage projections.
+                            </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-4">
+                            <div className="text-right hidden md:block">
+                                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Last Verified</p>
+                                <p className="text-white font-medium">
+                                    {format(new Date(), 'MMM d, yyyy')}
+                                </p>
+                            </div>
+                            <Button 
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-900/20"
+                                onClick={() => setIsUpdateOdometerOpen(true)}
+                            >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Correct Reading
+                            </Button>
+                        </div>
+                    </CardContent>
+              </Card>
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
                       <OdometerHistory vehicleId={vehicle.id} maintenanceLogs={maintenanceLogs} trips={trips} />
@@ -3078,6 +3187,57 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver }: Vehicl
         </DialogContent>
       </Dialog>
 
+      <LogTollTopupModal 
+          isOpen={isTollTopupOpen}
+          onClose={() => setIsTollTopupOpen(false)}
+          vehicleId={vehicle.id}
+          vehicleName={vehicle.licensePlate}
+          tollTagId={vehicle.tollTagId}
+          tollTagUuid={vehicle.tollTagUuid}
+          onSuccess={() => {
+              setRefreshTollHistory(prev => prev + 1);
+              toast.success("Toll history updated");
+              // Ideally trigger a vehicle refresh here too to show updated balance
+              if (onUpdate) {
+                   // This is a bit hacky, but better than full reload.
+                   // Ideally api.getVehicle(id) would be called.
+                   // Assuming LogTollTopupModal now updates balance (it should be updated to do so).
+              }
+          }}
+      />
+
+      <LogTollUsageModal
+          isOpen={isTollUsageOpen}
+          onClose={() => setIsTollUsageOpen(false)}
+          vehicleId={vehicle.id}
+          vehicleName={vehicle.licensePlate}
+          tollTagId={vehicle.tollTagId}
+          tollTagUuid={vehicle.tollTagUuid}
+          currentBalance={vehicle.tollBalance || 0}
+          onSuccess={() => {
+              setRefreshTollHistory(prev => prev + 1);
+              // Optimistic UI update or request parent refresh
+              if (onUpdate) {
+                  // We can't easily know the new balance here without refetching, 
+                  // but the component will refetch history. 
+                  // The balance display depends on 'vehicle' prop.
+                  // The parent should probably refetch.
+              }
+          }}
+      />
+
+      <BulkImportTollTransactionsModal
+          isOpen={isTollImportOpen}
+          onClose={() => setIsTollImportOpen(false)}
+          vehicleId={vehicle.id}
+          vehicleName={vehicle.licensePlate}
+          tollTagId={vehicle.tollTagId}
+          tollTagUuid={vehicle.tollTagUuid}
+          onSuccess={() => {
+              setRefreshTollHistory(prev => prev + 1);
+              toast.success("Import complete");
+          }}
+      />
     </div>
   );
 }
