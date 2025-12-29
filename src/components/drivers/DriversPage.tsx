@@ -41,6 +41,18 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { toast } from "sonner@2.0.3";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -100,6 +112,40 @@ export function DriversPage() {
   const [performanceFilter, setPerformanceFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
+
+  const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteDriver = async () => {
+    if (!driverToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ userId: driverToDelete })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete driver');
+      }
+      
+      setManualDrivers(prev => prev.filter(d => d.id !== driverToDelete));
+      toast.success("Driver deleted successfully");
+      setDriverToDelete(null);
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      toast.error(error.message || "Failed to delete driver");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -620,7 +666,15 @@ export function DriversPage() {
                                                 <DropdownMenuItem onClick={() => setSelectedDriverId(driver.id)}>View Analysis</DropdownMenuItem>
                                                 <DropdownMenuItem>View History</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-rose-600">Deactivate Driver</DropdownMenuItem>
+                                                <DropdownMenuItem 
+                                                    className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 cursor-pointer"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setDriverToDelete(driver.id);
+                                                    }}
+                                                >
+                                                    Delete Driver
+                                                </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -684,6 +738,31 @@ export function DriversPage() {
         onClose={() => setIsAddModalOpen(false)}
         onDriverAdded={handleDriverAdded}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!driverToDelete} onOpenChange={(open) => !open && setDriverToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the driver account and remove their data from the system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteDriver();
+              }}
+              className="bg-rose-600 hover:bg-rose-700 focus:ring-rose-600"
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete Driver"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

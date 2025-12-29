@@ -146,8 +146,17 @@ export const api = {
     return response.json();
   },
 
-  async getTrips(): Promise<Trip[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/trips`, {
+  async getTrips(options?: { limit?: number, offset?: number }): Promise<Trip[]> {
+    let url = `${BASE_URL}/trips`;
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.append('limit', options.limit.toString());
+    if (options?.offset !== undefined) params.append('offset', options.offset.toString());
+    
+    if (params.toString()) {
+        url += `?${params.toString()}`;
+    }
+
+    const response = await fetchWithRetry(url, {
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
         }
@@ -546,6 +555,14 @@ export const api = {
     return response.json();
   },
 
+  async getUsers() {
+    const response = await fetchWithRetry(`${BASE_URL}/users`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch users");
+    return response.json();
+  },
+
   async parseTollCsvWithAI(csvContent: string) {
     const response = await fetchWithRetry(`${BASE_URL}/ai/parse-toll-csv`, {
       method: 'POST',
@@ -574,6 +591,30 @@ export const api = {
     if (!response.ok) {
         throw new Error("Failed to parse toll image");
     }
+    return response.json();
+  },
+
+  async getClaims(driverId?: string) {
+    const url = driverId 
+        ? `${BASE_URL}/claims?driverId=${driverId}` 
+        : `${BASE_URL}/claims`;
+    const response = await fetchWithRetry(url, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch claims");
+    return response.json();
+  },
+
+  async saveClaim(claim: any) {
+    const response = await fetchWithRetry(`${BASE_URL}/claims`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(claim)
+    });
+    if (!response.ok) throw new Error("Failed to save claim");
     return response.json();
   },
 

@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Loader2, Upload, FileText, Check, ShieldCheck, ArrowRight, ArrowLeft, Sparkles, ScanLine, CreditCard, Calendar, Hash, Car, Globe, Camera } from 'lucide-react';
+import { Loader2, Upload, FileText, Check, ShieldCheck, ArrowRight, ArrowLeft, Sparkles, ScanLine, CreditCard, Calendar, Hash, Car, Globe, Camera, Lock } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { cn } from "../ui/utils";
@@ -151,6 +151,7 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   const [countryCode, setCountryCode] = useState('+1');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [nationality, setNationality] = useState('');
   const [status, setStatus] = useState('Active');
   
@@ -263,6 +264,10 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
           toast.error("Email is required");
           return;
       }
+      if (!password) {
+          toast.error("Password is required for login");
+          return;
+      }
       if (!nationality) {
           toast.error("Nationality is required");
           return;
@@ -322,8 +327,8 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
       const fullName = `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
       const fullPhone = phoneNumber ? `${countryCode} ${phoneNumber}` : '';
 
-      const newDriver = {
-        id: crypto.randomUUID(),
+      const driverPayload = {
+        password, // Send password for Account Creation
         name: fullName,
         phone: fullPhone,
         email: email || '',
@@ -356,9 +361,11 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
         avatarUrl: ''
       };
 
-      await api.saveDriver(newDriver);
-      onDriverAdded(newDriver);
-      toast.success("Driver profile created successfully");
+      const res = await api.saveDriver(driverPayload);
+      if (res.error) throw new Error(res.error);
+
+      onDriverAdded(res.data);
+      toast.success("Driver account created successfully");
       handleClose();
       
     } catch (error) {
@@ -521,6 +528,17 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
                                     id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                                     className="col-span-3" placeholder="driver@example.com"
                                 />
+                            </div>
+
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="password" className="text-right">Password <span className="text-red-500">*</span></Label>
+                                <div className="col-span-3 relative">
+                                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                    <Input
+                                        id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                                        className="pl-9" placeholder="Set temporary password"
+                                    />
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-4 items-center gap-4">

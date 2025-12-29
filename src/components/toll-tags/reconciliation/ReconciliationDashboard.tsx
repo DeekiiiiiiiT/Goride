@@ -1,10 +1,12 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { UnmatchedTollsList } from "./UnmatchedTollsList";
 import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
 import { ReconciledTollsList } from "./ReconciledTollsList";
 import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
-import { Loader2, RefreshCw, Wand2, Upload, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet } from "lucide-react";
+import { useClaims } from "../../../hooks/useClaims";
+import { Loader2, RefreshCw, Wand2, Upload, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle } from "lucide-react";
 import { Button } from "../../ui/button";
 import { BulkImportTollTransactionsModal } from "../../vehicles/BulkImportTollTransactionsModal";
 import { runScenarioTest } from "../../../utils/testScenario";
@@ -21,7 +23,7 @@ export function ReconciliationDashboard() {
   };
 
   const { 
-    loading, 
+    loading: tollsLoading, 
     unreconciledTolls, 
     reconciledTolls,
     unclaimedRefunds, 
@@ -33,7 +35,16 @@ export function ReconciliationDashboard() {
     refresh 
   } = useTollReconciliation();
 
-  if (loading) {
+  const { claims, loading: claimsLoading } = useClaims();
+
+  // Filter out tolls that have an existing claim (Active, Resolved, or Rejected)
+  // This ensures we don't double-process a toll or see items we've already handled.
+  const claimedTransactionIds = new Set(claims.map(c => c.transactionId));
+  const filteredUnreconciledTolls = unreconciledTolls.filter(tx => !claimedTransactionIds.has(tx.id));
+
+  const isLoading = tollsLoading || claimsLoading;
+
+  if (isLoading) {
     return (
         <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
@@ -48,7 +59,7 @@ export function ReconciliationDashboard() {
   let personalAmount = 0;   // Purple
   let unknownAmount = 0;    // No match found
 
-  unreconciledTolls.forEach(tx => {
+  filteredUnreconciledTolls.forEach(tx => {
     const matches = suggestions.get(tx.id);
     const bestMatch = matches?.[0];
 
@@ -94,6 +105,7 @@ export function ReconciliationDashboard() {
     .length;
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -137,7 +149,17 @@ export function ReconciliationDashboard() {
             <div className="absolute top-0 right-0 w-2 h-full bg-orange-400" />
             <div className="flex justify-between items-start">
                 <div>
-                    <h3 className="text-xs font-medium text-orange-600 uppercase tracking-wider">Claimable Loss</h3>
+                    <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-medium text-orange-600 uppercase tracking-wider">Claimable Loss</h3>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <HelpCircle className="h-3.5 w-3.5 text-orange-400 hover:text-orange-600 transition-colors" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p className="max-w-[200px] text-xs">Tolls paid during an active trip that were not fully reimbursed. This represents money owed to you.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">${claimableAmount.toFixed(2)}</div>
                     <div className="text-xs text-slate-500 mt-1">Uber underpayments</div>
                 </div>
@@ -150,7 +172,17 @@ export function ReconciliationDashboard() {
             <div className="absolute top-0 right-0 w-2 h-full bg-blue-400" />
             <div className="flex justify-between items-start">
                 <div>
-                    <h3 className="text-xs font-medium text-blue-600 uppercase tracking-wider">Business Expense</h3>
+                    <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-medium text-blue-600 uppercase tracking-wider">Business Expense</h3>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <HelpCircle className="h-3.5 w-3.5 text-blue-400 hover:text-blue-600 transition-colors" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p className="max-w-[200px] text-xs">Tolls paid while approaching a passenger (Deadhead). These are tax deductible but not reimbursed.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">${deductibleAmount.toFixed(2)}</div>
                     <div className="text-xs text-slate-500 mt-1">Deadhead (Tax Deductible)</div>
                 </div>
@@ -163,7 +195,17 @@ export function ReconciliationDashboard() {
             <div className="absolute top-0 right-0 w-2 h-full bg-purple-400" />
             <div className="flex justify-between items-start">
                 <div>
-                    <h3 className="text-xs font-medium text-purple-600 uppercase tracking-wider">Driver Personal</h3>
+                    <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-medium text-purple-600 uppercase tracking-wider">Driver Personal</h3>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <HelpCircle className="h-3.5 w-3.5 text-purple-400 hover:text-purple-600 transition-colors" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p className="max-w-[200px] text-xs">Tolls paid during personal use or outside of any trip context. These are the driver's responsibility.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">${(personalAmount + unknownAmount).toFixed(2)}</div>
                     <div className="text-xs text-slate-500 mt-1">Charge to driver</div>
                 </div>
@@ -176,7 +218,17 @@ export function ReconciliationDashboard() {
             <div className="absolute top-0 right-0 w-2 h-full bg-yellow-400" />
             <div className="flex justify-between items-start">
                 <div>
-                    <h3 className="text-xs font-medium text-yellow-600 uppercase tracking-wider">Unclaimed Refunds</h3>
+                    <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-medium text-yellow-600 uppercase tracking-wider">Unclaimed Refunds</h3>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <HelpCircle className="h-3.5 w-3.5 text-yellow-400 hover:text-yellow-600 transition-colors" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p className="max-w-[200px] text-xs">Refunds provided by the platform (e.g., Uber) where no matching toll expense was found.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">${refundsAmount.toFixed(2)}</div>
                     <div className="text-xs text-slate-500 mt-1">Pay to driver</div>
                 </div>
@@ -189,9 +241,9 @@ export function ReconciliationDashboard() {
         <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
           <TabsTrigger value="unmatched">
             Unmatched Tolls
-            {unreconciledTolls.length > 0 && (
+            {filteredUnreconciledTolls.length > 0 && (
                 <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {unreconciledTolls.length}
+                    {filteredUnreconciledTolls.length}
                 </span>
             )}
           </TabsTrigger>
@@ -213,7 +265,7 @@ export function ReconciliationDashboard() {
         
         <TabsContent value="unmatched" className="mt-4">
             <UnmatchedTollsList 
-                tolls={unreconciledTolls} 
+                tolls={filteredUnreconciledTolls} 
                 suggestions={suggestions}
                 onReconcile={reconcile}
                 allTrips={trips}
@@ -253,5 +305,6 @@ export function ReconciliationDashboard() {
         }}
       />
     </div>
+    </TooltipProvider>
   );
 }

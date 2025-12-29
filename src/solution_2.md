@@ -1,56 +1,79 @@
-# Toll Tag Reconciliation System Documentation
+# Implementation Plan: Dispute Lifecycle & "Closing the Loop"
 
-## Overview
-The Toll Reconciliation System audits financial leakage by comparing **Toll Expenses** against **Trip Reimbursements**. It uses a "Waterfall Logic" to strictly categorize expenses into Reimbursements (Uber), Business Expenses (Tax), or Personal Use (Driver).
+This document outlines the phased implementation plan to establish a complete feedback loop between the Admin (Fleet Manager) and the Driver regarding toll disputes.
 
-## Implementation Plan (Migration to "Idea_1" Logic)
+## Phase 1: Backend & Data Structure Verification
+**Goal:** Ensure the backend and data types support the complete lifecycle of a claim without breaking existing functionality.
 
-### Phase 1: Foundation & Time Mathematics
-*   **Step 1.1:** Create `utils/timeUtils.ts` for precise date arithmetic.
-*   **Step 1.2:** Implement `calculateTripTimes(trip)` helper to derive **Pickup Time** (`dropoff - duration`) and define the **Active Window** vs **Approach Window**.
-*   **Step 1.3:** Verify type definitions in `types/data.ts` ensure `duration` is accessible.
+*   **Step 1.1:** Review `Claim` interface in `/types/data.ts` to ensure `status` enum covers all necessary states (`Sent_to_Driver`, `Submitted_to_Uber`, `Resolved`, `Rejected`).
+    *   *Action:* Verify existing types and add any missing status literals if needed.
+*   **Step 1.2:** Verify `useClaims` hook capabilities.
+    *   *Action:* Ensure the `updateClaim` function is correctly implemented to handle partial updates or full object replacements securely.
+*   **Step 1.3:** Verify Server Endpoint (`/claims`).
+    *   *Action:* Ensure the backend `POST /claims` endpoint (which handles upserts) correctly updates the `updatedAt` timestamp when a status change occurs.
+*   **Step 1.4:** Define "Linked State" logic.
+    *   *Action:* Document how we determine if a Transaction is "In Dispute". (Strategy: We will fetch Claims and join them with Transactions on the client-side using `transactionId`).
 
-### Phase 2: Core Matching Engine (The Waterfall)
-*   **Step 2.1:** Rewrite `tollReconciliation.ts` to implement the new "Three Window" logic.
-*   **Step 2.2:** Implement **Active Trip Logic** (Start -> Dropoff). Strict matching for Green (Paid) and Amber (Claim).
-*   **Step 2.3:** Implement **Approach Window Logic** (Request-45 -> Start). Strict assignment to Blue (Deadhead).
-*   **Step 2.4:** Implement **Gap Analysis** (Everything else -> Purple).
+## Phase 2: Driver Portal Actions ("The Trigger")
+**Goal:** Empower the driver to update the status of a dispute from their dashboard.
 
-### Phase 3: Financial Aggregation & Analytics
-*   **Step 3.1:** Update `useTollReconciliation.ts` (or equivalent hook) to recalculate totals based on new categories.
-*   **Step 3.2:** Separate "Total Claims" (Amber) from "Total Deductions" (Blue + Purple).
-*   **Step 3.3:** Ensure "Likely Cash" (Yellow) logic remains intact.
+*   **Step 2.1:** Modify `DriverClaims.tsx`.
+    *   *Action:* Add state handling for "Submitting" and "Rejecting" actions to the UI.
+*   **Step 2.2:** Update `ClaimCard` Component.
+    *   *Action:* Add a primary button **"Mark as Submitted"**.
+        *   *Logic:* On click, call `updateClaim` to set status to `Submitted_to_Uber`.
+        *   *UI:* Show a loading spinner during the API call. On success, show a checkmark or toast, and update the card visuals (e.g., change badge color).
+*   **Step 2.3:** Add Rejection Workflow.
+    *   *Action:* Add a secondary action (e.g., "Report Issue" or "Uber Rejected").
+        *   *Logic:* On click, set status to `Rejected`.
+*   **Step 2.4:** Filter/Sort Updates.
+    *   *Action:* Ensure `Resolved` or `Rejected` claims eventually move to a "History" tab or bottom of the list so the driver focuses on active tasks.
 
-### Phase 4: UI Updates & Visualization
-*   **Step 4.1:** Update the Status Badge component to reflect the new definitions (e.g., tooltip for Blue: "Deadhead - Tax Deductible").
-*   **Step 4.2:** Update the Reconciliation Row to visually show which "Window" a match fell into (optional but helpful).
-*   **Step 4.3:** Verify color coding consistency (Green, Amber, Blue, Purple, Yellow).
+## Phase 3: Admin Dashboard - "Reimbursement Pending" Tab
+**Goal:** Give the Admin visibility into items that are "in flight" so they don't get stuck in "Unmatched".
 
-### Phase 5: Testing & Verification
-*   **Step 5.1:** Create a "Scenario Test" with the exact examples from `Idea_1.md` (The "2:05 PM Toll" case).
-*   **Step 5.2:** Verify that Deadhead tolls previously marked as Amber now show as Blue.
-*   **Step 5.3:** Final code review and cleanup.
+*   **Step 3.1:** Create `ReimbursementPendingList.tsx` component.
+    *   *Action:* Scaffold a new table/list component.
+*   **Step 3.2:** Implement Data Fetching.
+    *   *Action:* Use `useClaims` to fetch all claims. Filter for statuses: `Sent_to_Driver`, `Submitted_to_Uber`.
+*   **Step 3.3:** Design the List View.
+    *   *Action:* Columns: Date, Driver Name, Amount, Subject (Toll Name), Status Badge.
+    *   *Visuals:*
+        *   `Sent_to_Driver`: Yellow/Orange Badge (Waiting on Driver).
+        *   `Submitted_to_Uber`: Blue Badge (Waiting on Uber).
+*   **Step 3.4:** Add Admin Actions.
+    *   *Action:* Add a "Nudge" button (mock functionality for now) or "Force Status Change" button in case the driver forgets to update it.
 
----
+## Phase 4: Admin Dashboard - "Dispute Lost" Tab
+**Goal:** Handle the "Sad Path" where money is not recovered.
 
-## Core Architecture (Target State)
-The system attempts to match every **Transaction** to a **Trip** using the following priority order:
+*   **Step 4.1:** Create `DisputeLostList.tsx` component.
+    *   *Action:* Scaffold a new component similar to Pending List.
+*   **Step 4.2:** Data Filtering.
+    *   *Action:* Filter claims for status: `Rejected`.
+*   **Step 4.3:** Implementation Resolution Actions.
+    *   *Action:* Add buttons for final resolution:
+        *   **"Write Off":** Marks the claim as `Resolved` (Closed) and potentially updates the Transaction category to "Business Expense".
+        *   **"Charge Driver":** (Future scope hook) Marks claim as `Resolved` but notes that it will be deducted.
+*   **Step 4.4:** Integrate components into Dashboard.
+    *   *Action:* Add the `ReimbursementPendingList` and `DisputeLostList` into the `ReconciliationDashboard.tsx` layout (likely in a new "Claims Workflow" section or tabs).
 
-### 1. Active Trip Window (Uber's Responsibility)
-*   **Time:** `Trip Start (Pickup)` to `Drop-off`.
-*   **Green (Perfect Match):** Time Matches & Amount Matches.
-*   **Amber (Valid Claim):** Time Matches & Amount Mismatch (or $0).
-*   *Note: No buffers. Strict compliance.*
+## Phase 5: Admin Dashboard - "Unmatched" Cleanup
+**Goal:** Ensure the "Unmatched Tolls" list only shows items that *haven't* been addressed yet.
 
-### 2. Approach Window (Driver's Business Expense)
-*   **Time:** `Request Time (-45m)` to `Trip Start (Pickup)`.
-*   **Blue (Deadhead):** Any toll in this window.
-*   *Action: Tax Deductible, but NOT claimable from Uber.*
+*   **Step 5.1:** Update `ReconciliationDashboard.tsx` filtering logic.
+    *   *Action:* When rendering the "Unmatched Tolls" list (the metric tiles or the list below them):
+        *   Check against the list of Active Claims (`Sent_to_Driver`, `Submitted_to_Uber`).
+        *   If a Transaction ID exists in the Active Claims list, **hide** it from the "Unmatched" view.
+*   **Step 5.2:** Add "In Progress" Count.
+    *   *Action:* Optionally add a metric tile showing "X Disputes in Progress" to account for the hidden items.
 
-### 3. Gap Analysis (Personal Use)
-*   **Time:** Outside the above windows.
-*   **Purple (Personal):** No matching trip found.
-*   *Action: Charge driver.*
+## Phase 6: End-to-End Verification
+**Goal:** Verify the full lifecycle.
 
-### Reverse Check
-*   **Yellow (Likely Cash):** Trip has reimbursement but no tag match.
+*   **Step 6.1:** Test "Send to Driver".
+    *   *Verify:* Item leaves "Unmatched" and appears in "Reimbursement Pending".
+*   **Step 6.2:** Test "Driver Update".
+    *   *Verify:* Driver clicks "Submitted", Admin sees status change to "Submitted to Uber".
+*   **Step 6.3:** Test "Resolution".
+    *   *Verify:* "Dispute Lost" workflow correctly archives the claim.

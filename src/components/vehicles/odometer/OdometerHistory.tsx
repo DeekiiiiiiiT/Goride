@@ -274,6 +274,16 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
   // Calculate deltas using combinedHistory
   const sortedHistory = combinedHistory;
 
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    // If it looks like YYYY-MM-DD (length 10), treat as local date to prevent timezone shifts
+    if (dateStr.length === 10 && dateStr.includes('-')) {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return format(new Date(year, month - 1, day), 'MMM d, yyyy');
+    }
+    return format(new Date(dateStr), 'MMM d, yyyy');
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -311,7 +321,7 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
               return (
                 <TableRow key={reading.id} className={isVirtual ? 'bg-slate-50/50' : ''}>
                   <TableCell className="font-medium">
-                    {format(new Date(reading.date), 'MMM d, yyyy')}
+                    {formatDate(reading.date)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

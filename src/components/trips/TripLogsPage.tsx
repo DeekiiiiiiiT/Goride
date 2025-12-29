@@ -132,7 +132,14 @@ export function TripLogsPage() {
           const tDate = new Date(t.requestTime || t.date);
           const today = new Date();
           
-          if (filters.dateRange === 'today') {
+          // SEARCH OVERRIDE: If user is searching (min 2 chars) and hasn't changed the default 'today' filter,
+          // we look across all time. This fixes "Can't search for a trip" even if it's old.
+          const isDefaultDateFilter = filters.dateRange === 'today';
+          const isSearching = searchTerm.length >= 2;
+
+          if (isDefaultDateFilter && isSearching) {
+              // Bypass date check to allow global search
+          } else if (filters.dateRange === 'today') {
               if (!isSameDay(tDate, today)) return false;
           } else if (filters.dateRange === 'yesterday') {
               if (!isSameDay(tDate, subDays(today, 1))) return false;

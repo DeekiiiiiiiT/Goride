@@ -1,26 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Plus, Upload, Tag, Receipt } from "lucide-react";
+import { Plus, Tag } from "lucide-react";
 import { TollTagList } from "../components/toll-tags/TollTagList";
 import { TollTagDetail } from "../components/toll-tags/TollTagDetail";
 import { AddTollTagModal } from "../components/toll-tags/AddTollTagModal";
 import { AssignTagModal } from "../components/toll-tags/AssignTagModal";
 import { BulkImportTagsModal } from "../components/toll-tags/BulkImportTagsModal";
-import { ReconciliationDashboard } from "../components/toll-tags/reconciliation/ReconciliationDashboard";
 import { api } from "../services/api";
 import { TollTag, TollProvider, TollTagStatus, Vehicle } from "../types/vehicle";
 import { toast } from "sonner";
 
-export function TollTags() {
+export function TagInventory() {
   const [tags, setTags] = useState<TollTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState<TollTag | null>(null);
   const [editingTag, setEditingTag] = useState<TollTag | null>(null);
-  const [activeTab, setActiveTab] = useState("inventory");
   const [assignModalState, setAssignModalState] = useState<{ isOpen: boolean; tag: TollTag | null }>({
     isOpen: false,
     tag: null
@@ -46,12 +43,6 @@ export function TollTags() {
   const handleSaveTag = async (data: { provider: TollProvider; tagNumber: string; status: TollTagStatus; dateAdded?: string }) => {
     try {
       const payload = editingTag ? { ...data, id: editingTag.id, createdAt: editingTag.createdAt } : data;
-      // Preserve createdAt if editing, or let server handle it?
-      // Server says if !tag.createdAt -> new Date().
-      // If I don't send createdAt, server makes a new one? No, I should send it if I have it.
-      // But data doesn't have createdAt. editingTag does.
-      // So { ...data, id: editingTag.id, createdAt: editingTag.createdAt } is safer.
-      
       await api.saveTollTag(payload);
       toast.success(editingTag ? "Toll tag updated" : "Toll tag added successfully");
       fetchTags();
@@ -141,61 +132,40 @@ export function TollTags() {
       <div className="flex items-center justify-between">
         <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Toll Management
+            Tag Inventory
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-                Manage transponders and reconcile expenses.
+                Manage your toll transponders and vehicle assignments.
             </p>
         </div>
         
-        {activeTab === 'inventory' && (
-            <div className="flex gap-2">
-                <Button onClick={() => { setEditingTag(null); setIsAddModalOpen(true); }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add New Tag
-                </Button>
-            </div>
-        )}
+        <div className="flex gap-2">
+            <Button onClick={() => { setEditingTag(null); setIsAddModalOpen(true); }}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add New Tag
+            </Button>
+        </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-[300px] mb-4">
-            <TabsTrigger value="inventory" className="flex-1">
-                <Tag className="w-4 h-4 mr-2" />
-                Tag Inventory
-            </TabsTrigger>
-            <TabsTrigger value="reconciliation" className="flex-1">
-                <Receipt className="w-4 h-4 mr-2" />
-                Reconciliation
-            </TabsTrigger>
-        </TabsList>
-      
-        <TabsContent value="inventory">
-            <Card>
-                <CardHeader>
-                <CardTitle>Inventory</CardTitle>
-                <CardDescription>
-                    A centralized list of all toll tags owned by the fleet.
-                </CardDescription>
-                </CardHeader>
-                <CardContent>
-                <TollTagList 
-                    tags={tags} 
-                    isLoading={isLoading} 
-                    onDelete={handleDeleteTag} 
-                    onAssign={handleAssignClick}
-                    onUnassign={handleUnassignClick}
-                    onViewHistory={setSelectedTag}
-                    onEdit={handleEditTag}
-                />
-                </CardContent>
-            </Card>
-        </TabsContent>
-
-        <TabsContent value="reconciliation">
-            <ReconciliationDashboard />
-        </TabsContent>
-      </Tabs>
+      <Card>
+          <CardHeader>
+          <CardTitle>Inventory</CardTitle>
+          <CardDescription>
+              A centralized list of all toll tags owned by the fleet.
+          </CardDescription>
+          </CardHeader>
+          <CardContent>
+          <TollTagList 
+              tags={tags} 
+              isLoading={isLoading} 
+              onDelete={handleDeleteTag} 
+              onAssign={handleAssignClick}
+              onUnassign={handleUnassignClick}
+              onViewHistory={setSelectedTag}
+              onEdit={handleEditTag}
+          />
+          </CardContent>
+      </Card>
 
       <AddTollTagModal 
         isOpen={isAddModalOpen} 

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui
 import { Badge } from "../ui/badge";
 import { Trip } from '../../types/data';
 import { AlertTriangle, TrendingDown, MapPin, Clock, DollarSign, XCircle } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
+// import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts'; // Removed unused imports
 
 interface CancellationAnalysisProps {
   trips: Trip[];

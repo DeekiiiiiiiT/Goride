@@ -1,5 +1,20 @@
 import React from 'react';
-import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarRail, SidebarFooter, SidebarTrigger } from "../ui/sidebar";
+import { 
+  SidebarProvider, 
+  Sidebar, 
+  SidebarContent, 
+  SidebarHeader, 
+  SidebarMenu, 
+  SidebarMenuItem, 
+  SidebarMenuButton, 
+  SidebarRail, 
+  SidebarFooter, 
+  SidebarTrigger,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton
+} from "../ui/sidebar";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "../ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -16,7 +31,11 @@ import {
   Bell,
   UploadCloud,
   History,
-  Tag
+  Tag,
+  ChevronRight,
+  Receipt,
+  AlertCircle,
+  UserCog
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -25,9 +44,10 @@ interface AppLayoutProps {
   children: React.ReactNode;
   currentPage?: string;
   onNavigate?: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps) {
+export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLayoutProps) {
   React.useEffect(() => {
      // Check dark mode preference on app load/layout mount
      const isDark = localStorage.getItem('preference_dark_mode') === 'true';
@@ -43,7 +63,7 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
       <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-900">
         <AppSidebar currentPage={currentPage} onNavigate={onNavigate} />
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <AppHeader />
+          <AppHeader onLogout={onLogout} />
           <div className="flex-1 overflow-auto p-4 md:p-8">
             <div className="mx-auto max-w-7xl">
               {children}
@@ -56,6 +76,8 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
 }
 
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
+  const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
+
   return (
     <Sidebar className="border-r border-slate-200 dark:border-slate-800">
       <SidebarHeader className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800">
@@ -91,12 +113,45 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             active={currentPage === 'vehicles'}
             onClick={() => onNavigate?.('vehicles')}
           />
-          <NavItem 
-            icon={<Tag className="h-4 w-4" />} 
-            label="Toll Tags" 
-            active={currentPage === 'toll-tags'}
-            onClick={() => onNavigate?.('toll-tags')}
-          />
+          
+          {/* Toll Management Section */}
+          <Collapsible defaultOpen={isTollManagementOpen} className="group/collapsible">
+            <SidebarMenuItem>
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton tooltip="Toll Management">
+                  <Receipt className="h-4 w-4" />
+                  <span>Toll Management</span>
+                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'toll-tags'} onClick={() => onNavigate?.('toll-tags')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Toll Reconciliation</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'tag-inventory'} onClick={() => onNavigate?.('tag-inventory')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Tag Inventory</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'claimable-loss'} onClick={() => onNavigate?.('claimable-loss')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Claimable Loss</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
+
           <NavItem 
             icon={<FileText className="h-4 w-4" />} 
             label="Trip Analytics" 
@@ -127,6 +182,12 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
           System
         </div>
         <SidebarMenu>
+          <NavItem 
+            icon={<UserCog className="h-4 w-4" />} 
+            label="User Management" 
+            active={currentPage === 'user-management'} 
+            onClick={() => onNavigate?.('user-management')}
+          />
           <NavItem 
             icon={<Settings className="h-4 w-4" />} 
             label="Settings" 
@@ -169,7 +230,7 @@ function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNo
   );
 }
 
-function AppHeader() {
+function AppHeader({ onLogout }: { onLogout?: () => void }) {
   const [fleetName, setFleetName] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -206,7 +267,7 @@ function AppHeader() {
       <div className="flex items-center gap-4">
         <NotificationCenter />
         <Separator orientation="vertical" className="h-6" />
-        <Button variant="outline" size="sm" className="hidden md:flex">
+        <Button variant="outline" size="sm" className="hidden md:flex" onClick={onLogout}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </Button>

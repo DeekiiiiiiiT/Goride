@@ -15,16 +15,8 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "../ui/dialog";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "../ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { AlertRule, TeamMember } from '../../types/data';
+import { AlertRule } from '../../types/data';
 import { api } from '../../services/api';
 import { 
   Trash2, 
@@ -32,7 +24,6 @@ import {
   BellRing, 
   ShieldAlert, 
   Activity,
-  UserPlus,
   Mail,
   MoreHorizontal,
   Check,
@@ -47,7 +38,6 @@ import {
   Database
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
-import { projectId } from '../../utils/supabase/info';
 import { toast } from 'sonner@2.0.3';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import {
@@ -73,11 +63,10 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="team" className="space-y-4">
+      <Tabs defaultValue="general" className="space-y-4">
         <div className="w-full overflow-x-auto pb-2">
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
             <TabsTrigger value="alerts">Alert Rules</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
@@ -87,10 +76,6 @@ export function SettingsPage() {
         
         <TabsContent value="general">
           <GeneralPanel />
-        </TabsContent>
-
-        <TabsContent value="team">
-          <TeamPanel />
         </TabsContent>
 
         <TabsContent value="alerts">
@@ -127,33 +112,55 @@ function GeneralPanel() {
   const loadPreferences = async () => {
       try {
           const prefs = await api.getPreferences();
-          if (prefs && Object.keys(prefs).length > 0) {
-              if (prefs.currency) setCurrency(prefs.currency);
-              if (prefs.timezone) setTimezone(prefs.timezone);
-              if (prefs.darkMode !== undefined) {
-                  setDarkMode(prefs.darkMode);
-                  if (prefs.darkMode) {
-                      document.documentElement.classList.add('dark');
-                  } else {
-                      document.documentElement.classList.remove('dark');
-                  }
-              }
-          } else {
-              // Fallback to localStorage if no backend prefs
-              const savedCurrency = localStorage.getItem('preference_currency');
-              const savedTimezone = localStorage.getItem('preference_timezone');
-              const savedDarkMode = localStorage.getItem('preference_dark_mode') === 'true';
+          
+          // Helper to toggle theme class
+          const applyTheme = (isDark: boolean) => {
+              if (isDark) document.documentElement.classList.add('dark');
+              else document.documentElement.classList.remove('dark');
+          };
 
-              if (savedCurrency) setCurrency(savedCurrency);
-              if (savedTimezone) setTimezone(savedTimezone);
-              setDarkMode(savedDarkMode);
-              
-              if (savedDarkMode) {
-                  document.documentElement.classList.add('dark');
-              }
+          const localCurrency = localStorage.getItem('preference_currency');
+          const localTimezone = localStorage.getItem('preference_timezone');
+          const localDarkMode = localStorage.getItem('preference_dark_mode');
+
+          // Currency Strategy: API -> LocalStorage -> Default (State initial 'usd')
+          if (prefs?.currency) {
+              setCurrency(prefs.currency);
+          } else if (localCurrency) {
+              setCurrency(localCurrency);
           }
+
+          // Timezone Strategy: API -> LocalStorage -> Default (State initial 'pst')
+          if (prefs?.timezone) {
+              setTimezone(prefs.timezone);
+          } else if (localTimezone) {
+              setTimezone(localTimezone);
+          }
+
+          // DarkMode Strategy: API -> LocalStorage -> Default (State initial false)
+          if (prefs?.darkMode !== undefined) {
+              setDarkMode(prefs.darkMode);
+              applyTheme(prefs.darkMode);
+          } else if (localDarkMode !== null) {
+              const isDark = localDarkMode === 'true';
+              setDarkMode(isDark);
+              applyTheme(isDark);
+          }
+
       } catch (err) {
           console.error("Failed to load preferences", err);
+          // On API error, try to load from local storage
+          const savedCurrency = localStorage.getItem('preference_currency');
+          const savedTimezone = localStorage.getItem('preference_timezone');
+          const savedDarkMode = localStorage.getItem('preference_dark_mode');
+
+          if (savedCurrency) setCurrency(savedCurrency);
+          if (savedTimezone) setTimezone(savedTimezone);
+          if (savedDarkMode !== null) {
+              const isDark = savedDarkMode === 'true';
+              setDarkMode(isDark);
+              if (isDark) document.documentElement.classList.add('dark');
+          }
       }
   };
 
@@ -308,135 +315,6 @@ function GeneralPanel() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function TeamPanel() {
-  const [members, setMembers] = useState<TeamMember[]>([
-    { id: '1', name: 'John Doe', email: 'john@goride.com', role: 'admin', status: 'active', lastActive: '2 mins ago' },
-    { id: '2', name: 'Sarah Smith', email: 'sarah@goride.com', role: 'manager', status: 'active', lastActive: '1 hour ago' },
-    { id: '3', name: 'Mike Johnson', email: 'mike@goride.com', role: 'viewer', status: 'invited' }
-  ]);
-  const [isInviteOpen, setIsInviteOpen] = useState(false);
-
-  const handleInvite = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsInviteOpen(false);
-    toast.success("Invitation sent successfully");
-  };
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Team Management</CardTitle>
-          <CardDescription>
-            Manage access and permissions for your fleet team.
-          </CardDescription>
-        </div>
-        <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Invite Member
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Invite Team Member</DialogTitle>
-              <DialogDescription>
-                Send an invitation email to add a new user to your organization.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleInvite} className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" placeholder="colleague@company.com" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Select defaultValue="viewer">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Admin (Full Access)</SelectItem>
-                    <SelectItem value="manager">Manager (Edit Access)</SelectItem>
-                    <SelectItem value="viewer">Viewer (Read Only)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsInviteOpen(false)} type="button">Cancel</Button>
-                <Button type="submit">Send Invitation</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Last Active</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {members.map((member) => (
-              <TableRow key={member.id}>
-                <TableCell className="flex items-center gap-3">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={member.avatarUrl} />
-                    <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col">
-                    <span className="font-medium text-sm">{member.name}</span>
-                    <span className="text-xs text-slate-500">{member.email}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Select defaultValue={member.role}>
-                    <SelectTrigger className="h-8 w-[110px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                   <Badge variant={member.status === 'active' ? 'outline' : 'secondary'} className={member.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''}>
-                     {member.status}
-                   </Badge>
-                </TableCell>
-                <TableCell className="text-slate-500 text-sm">
-                  {member.lastActive || '-'}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>Edit Details</DropdownMenuItem>
-                      <DropdownMenuItem className="text-rose-600">Remove User</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -659,8 +537,6 @@ function IntegrationsPanel() {
     </Card>
   );
 }
-
-
 
 function AlertRulesPanel() {
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -956,54 +832,16 @@ function HelpPanel() {
                <p className="text-sm text-slate-500">Learn the basics of setting up your fleet, adding drivers, and importing trips.</p>
             </a>
             <a href="#" className="block p-6 border rounded-lg hover:bg-slate-50 transition-colors group">
-               <Activity className="h-8 w-8 text-emerald-600 mb-4 group-hover:scale-110 transition-transform" />
-               <h3 className="font-semibold mb-2">Understanding Analytics</h3>
-               <p className="text-sm text-slate-500">Deep dive into financial reports, driver performance metrics, and system health.</p>
+               <HelpCircle className="h-8 w-8 text-indigo-600 mb-4 group-hover:scale-110 transition-transform" />
+               <h3 className="font-semibold mb-2">Knowledge Base</h3>
+               <p className="text-sm text-slate-500">Detailed articles and FAQs about every feature in the dashboard.</p>
             </a>
             <a href="#" className="block p-6 border rounded-lg hover:bg-slate-50 transition-colors group">
-               <LinkIcon className="h-8 w-8 text-blue-600 mb-4 group-hover:scale-110 transition-transform" />
-               <h3 className="font-semibold mb-2">Integration Setup</h3>
-               <p className="text-sm text-slate-500">Step-by-step guide to connecting Uber, Lyft, and other providers.</p>
+               <Mail className="h-8 w-8 text-indigo-600 mb-4 group-hover:scale-110 transition-transform" />
+               <h3 className="font-semibold mb-2">Contact Support</h3>
+               <p className="text-sm text-slate-500">Need help? Reach out to our dedicated support team for assistance.</p>
             </a>
          </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>FAQ</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-           <div className="space-y-2">
-              <h4 className="font-medium text-sm">How often is data synced?</h4>
-              <p className="text-sm text-slate-500">Data from connected platforms is synced every hour automatically. You can also trigger a manual sync from the Integrations tab.</p>
-           </div>
-           <Separator />
-           <div className="space-y-2">
-              <h4 className="font-medium text-sm">How do I reset my password?</h4>
-              <p className="text-sm text-slate-500">Contact your system administrator to request a password reset link.</p>
-           </div>
-           <Separator />
-           <div className="space-y-2">
-              <h4 className="font-medium text-sm">What formats can I import?</h4>
-              <p className="text-sm text-slate-500">We support CSV files from Uber Fleet and standard Excel exports. Please see the "Import Data" section for templates.</p>
-           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Support</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-           <p className="text-sm text-slate-500">Need technical assistance? Our support team is available Mon-Fri, 9am-5pm EST.</p>
-           <Button className="w-full">
-             <Mail className="mr-2 h-4 w-4" />
-             Contact Support
-           </Button>
-           <div className="text-center">
-             <p className="text-xs text-slate-400">Version 1.2.4 (Build 20251217)</p>
-           </div>
-        </CardContent>
       </Card>
     </div>
   );

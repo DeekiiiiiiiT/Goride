@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './components/auth/AuthContext';
+import { LoginPage } from './components/auth/LoginPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { ImportsPage } from './components/imports/ImportsPage';
@@ -8,27 +10,22 @@ import { DriversPage } from './components/drivers/DriversPage';
 import { VehiclesPage } from './components/vehicles/VehiclesPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { TransactionsPage } from './components/transactions/TransactionsPage';
-import { TollTags } from './pages/TollTags';
+import { TollReconciliation } from './pages/TollReconciliation';
+import { TagInventory } from './pages/TagInventory';
+import { ClaimableLoss } from './pages/ClaimableLoss';
+import { UserManagementPage } from './components/users/UserManagementPage';
 
 // Driver Portal Components
-import { DriverAuth } from './components/driver-portal/DriverAuth';
 import { DriverLayout } from './components/driver-portal/DriverLayout';
 import { DriverDashboard } from './components/driver-portal/DriverDashboard';
 import { DriverEarnings } from './components/driver-portal/DriverEarnings';
 import { DriverTrips } from './components/driver-portal/DriverTrips';
 import { DriverProfile } from './components/driver-portal/DriverProfile';
+import { DriverClaims } from './components/driver-portal/DriverClaims';
 
-type UserRole = 'admin' | 'driver' | null;
-
-export default function App() {
-  const [userRole, setUserRole] = useState<UserRole>(() => {
-    // Persist login across reloads
-    const saved = localStorage.getItem('goride_user_role');
-    return (saved === 'admin' || saved === 'driver') ? saved : null;
-  });
+function AppContent() {
+  const { user, role, loading, signOut } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
-  
-  // Separate state for driver navigation
   const [driverPage, setDriverPage] = useState('dashboard');
 
   // OAuth Callback Handler
@@ -76,23 +73,20 @@ export default function App() {
       return <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-500">Authenticating with Uber...</div>;
   }
 
-  const handleLogin = (role: 'admin' | 'driver') => {
-    localStorage.setItem('goride_user_role', role);
-    setUserRole(role);
-    setCurrentPage('dashboard'); // Reset to dashboard on login
-    setDriverPage('dashboard');
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('goride_user_role');
-    setUserRole(null);
-  };
-
-  if (!userRole) {
-    return <DriverAuth onLogin={handleLogin} />;
+  if (loading) {
+      return <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-500">Loading application...</div>;
   }
 
-  if (userRole === 'driver') {
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  // Handle logout
+  const handleLogout = async () => {
+    await signOut();
+  };
+
+  if (role === 'driver') {
     return (
       <DriverLayout 
         currentPage={driverPage} 
@@ -101,15 +95,16 @@ export default function App() {
       >
         {driverPage === 'dashboard' && <DriverDashboard />}
         {driverPage === 'earnings' && <DriverEarnings />}
+        {driverPage === 'claims' && <DriverClaims />}
         {driverPage === 'trips' && <DriverTrips />}
         {driverPage === 'profile' && <DriverProfile onLogout={handleLogout} />}
       </DriverLayout>
     );
   }
 
-  // Admin View (Existing)
+  // Admin View (Default)
   return (
-    <AppLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+    <AppLayout currentPage={currentPage} onNavigate={setCurrentPage} onLogout={handleLogout}>
       {currentPage === 'dashboard' && <Dashboard />}
       {currentPage === 'imports' && <ImportsPage />}
       {currentPage === 'drivers' && <DriversPage />}
@@ -118,8 +113,19 @@ export default function App() {
       {currentPage === 'reports' && <ReportsPage />}
       {currentPage === 'transactions' && <TransactionsPage mode="analytics" />}
       {currentPage === 'transaction-list' && <TransactionsPage mode="list" />}
-      {currentPage === 'toll-tags' && <TollTags />}
+      {currentPage === 'toll-tags' && <TollReconciliation />}
+      {currentPage === 'tag-inventory' && <TagInventory />}
+      {currentPage === 'claimable-loss' && <ClaimableLoss />}
+      {currentPage === 'user-management' && <UserManagementPage />}
       {currentPage === 'settings' && <SettingsPage />}
     </AppLayout>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

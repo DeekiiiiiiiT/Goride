@@ -6,12 +6,14 @@ import {
   User, 
   Car,
   LogOut,
-  Bell
+  Bell,
+  AlertCircle
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { NotificationCenter } from "../notifications/NotificationCenter";
+import { useAuth } from "../auth/AuthContext";
 
 interface DriverLayoutProps {
   children: React.ReactNode;
@@ -21,6 +23,9 @@ interface DriverLayoutProps {
 }
 
 export function DriverLayout({ children, currentPage, onNavigate, onLogout }: DriverLayoutProps) {
+  const { user } = useAuth();
+  const initials = user?.email ? user.email.substring(0, 2).toUpperCase() : 'DR';
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
       {/* Mobile Header */}
@@ -34,8 +39,8 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
             <Bell className="h-5 w-5" />
           </Button>
           <Avatar className="h-8 w-8 border-2 border-indigo-400">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>DR</AvatarFallback>
+            <AvatarImage src={`https://avatar.vercel.sh/${user?.email || 'driver'}`} />
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </div>
       </header>
@@ -61,6 +66,12 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
             label="Earnings" 
             active={currentPage === 'earnings'} 
             onClick={() => onNavigate('earnings')}
+          />
+          <NavButton 
+            icon={<AlertCircle className="h-5 w-5" />} 
+            label="Claims" 
+            active={currentPage === 'claims'} 
+            onClick={() => onNavigate('claims')}
           />
           <NavButton 
             icon={<FileText className="h-5 w-5" />} 

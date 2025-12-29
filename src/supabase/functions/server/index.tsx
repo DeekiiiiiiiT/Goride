@@ -59,8 +59,27 @@ app.post("/make-server-37f42386/trips", async (c) => {
 
 app.get("/make-server-37f42386/trips", async (c) => {
   try {
-    const trips = await kv.getByPrefix("trip:");
-    return c.json(trips);
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = limitParam ? parseInt(limitParam) : null;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+    let trips = await kv.getByPrefix("trip:");
+    
+    // Sort by date descending (Newest first)
+    if (trips && Array.isArray(trips)) {
+        trips.sort((a: any, b: any) => {
+            const timeA = new Date(a.date).getTime();
+            const timeB = new Date(b.date).getTime();
+            return timeB - timeA;
+        });
+        
+        if (limit !== null) {
+            trips = trips.slice(offset, offset + limit);
+        }
+    }
+    
+    return c.json(trips || []);
   } catch (e: any) {
     console.error("Error fetching trips:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);
@@ -219,12 +238,42 @@ app.get("/make-server-37f42386/drivers", async (c) => {
 
 app.post("/make-server-37f42386/drivers", async (c) => {
   try {
-    const driver = await c.req.json();
-    if (!driver.id) {
-         driver.id = crypto.randomUUID();
+    const body = await c.req.json();
+    // Extract password to prevent saving it to KV, and use it for Auth creation
+    const { password, ...driver } = body;
+    
+    let authUserId = null;
+
+    // If password provided, create Supabase Auth User
+    if (password && driver.email) {
+         const { data, error } = await supabase.auth.admin.createUser({
+            email: driver.email,
+            password: password,
+            user_metadata: { 
+                name: driver.name || '',
+                role: 'driver' 
+            },
+            email_confirm: true
+         });
+
+         if (error) {
+             console.error("Auth Create Error:", error);
+             return c.json({ error: `Failed to create user account: ${error.message}` }, 400);
+         }
+         authUserId = data.user.id;
     }
-    await kv.set(`driver:${driver.id}`, driver);
-    return c.json({ success: true, data: driver });
+
+    // Use Auth ID if created, otherwise fallback to provided ID or random
+    const finalId = authUserId || driver.id || crypto.randomUUID();
+    
+    const newDriver = {
+        ...driver,
+        id: finalId,
+        driverId: driver.driverId || finalId, // Allow distinct legacy ID
+    };
+
+    await kv.set(`driver:${finalId}`, newDriver);
+    return c.json({ success: true, data: newDriver });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -2015,6 +2064,139 @@ app.delete("/make-server-37f42386/odometer-history/:id", async (c) => {
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
+});
+
+// Claims Endpoints
+app.get("/make-server-37f42386/claims", async (c) => {
+  try {
+    const claims = await kv.getByPrefix("claim:");
+    const driverId = c.req.query("driverId");
+    
+    if (driverId && Array.isArray(claims)) {
+        const filtered = claims.filter((claim: any) => claim.driverId === driverId);
+        return c.json(filtered);
+    }
+    
+    return c.json(claims || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/claims", async (c) => {
+  try {
+    const claim = await c.req.json();
+    if (!claim.id) {
+        claim.id = crypto.randomUUID();
+    }
+    if (!claim.createdAt) {
+        claim.createdAt = new Date().toISOString();
+    }
+    claim.updatedAt = new Date().toISOString();
+    
+    await kv.set(`claim:${claim.id}`, claim);
+    return c.json({ success: true, data: claim });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Admin: List Users
+app.get("/make-server-37f42386/users", async (c) => {
+  try {
+    const { data: { users }, error } = await supabase.auth.admin.listUsers();
+    
+    if (error) throw error;
+    
+    // Transform to TeamMember format
+    const members = users.map((u: any) => ({
+        id: u.id,
+        name: u.user_metadata?.name || 'Unknown',
+        email: u.email || '',
+        role: u.user_metadata?.role || 'driver',
+        status: 'active', 
+        lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
+        avatarUrl: u.user_metadata?.avatarUrl
+    }));
+    
+    return c.json(members);
+  } catch (e: any) {
+    console.error("List Users Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Admin: Invite User
+app.post("/make-server-37f42386/invite-user", async (c) => {
+  try {
+    const { email, password, name, role } = await c.req.json();
+    
+    if (!email || !password) {
+      return c.json({ error: "Email and password are required" }, 400);
+    }
+    
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: email,
+      password: password,
+      user_metadata: { 
+        name: name || '',
+        role: role || 'driver'
+      },
+      email_confirm: true
+    });
+    
+    if (error) throw error;
+    
+    // Also create a driver profile if role is driver
+    if ((role === 'driver' || !role) && data.user) {
+        const driverId = data.user.id;
+        const driverProfile = {
+            id: driverId,
+            driverId: driverId, // legacy field compat
+            driverName: name || email.split('@')[0],
+            email: email,
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            // Initialize empty metrics/defaults
+            acceptanceRate: 0,
+            cancellationRate: 0,
+            completionRate: 0,
+            ratingLast500: 5.0,
+            totalEarnings: 0
+        };
+        await kv.set(`driver:${driverId}`, driverProfile);
+    }
+
+    return c.json({ success: true, data });
+  } catch (e: any) {
+    console.error("Invite User Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Admin: Delete User (Driver)
+app.post("/make-server-37f42386/delete-user", async (c) => {
+  try {
+    const { userId } = await c.req.json();
+    
+    if (!userId) {
+      return c.json({ error: "User ID is required" }, 400);
+    }
+    
+    // 1. Delete from Auth (Attempt)
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) {
+        console.warn(`Auth delete failed for ${userId} (ignoring):`, error.message);
+    }
+    
+    // 2. Delete from KV Store
+    await kv.del(`driver:${userId}`);
+    
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.error("Delete User Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 Deno.serve(app.fetch);

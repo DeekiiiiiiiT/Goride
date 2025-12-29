@@ -183,7 +183,7 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'viewer';
+  role: 'admin' | 'manager' | 'viewer' | 'driver';
   status: 'active' | 'invited' | 'disabled';
   lastActive?: string;
   avatarUrl?: string;
@@ -627,4 +627,46 @@ export interface ImportAuditState {
     trips?: AuditRecord<Trip>[]; // Optional for now, added in Phase 3
   };
   report: AuditReport;
+}
+
+// --- Phase 4: Toll Management ---
+
+export interface TollTag {
+  id: string;
+  provider: string; // e.g., 'T-Tag', 'E-ZPass'
+  tagNumber: string;
+  status: 'Active' | 'Inactive' | 'Lost';
+  assignedVehicleId?: string; // Links to vehicle
+  assignedVehiclePlate?: string; // Derived for display
+  addedOn: string; // ISO Date
+}
+
+// --- Phase 5: Claims & Disputes ---
+
+export interface Claim {
+  id: string;
+  type: 'Toll_Refund' | 'Wait_Time' | 'Cleaning_Fee';
+  status: 'Open' | 'Sent_to_Driver' | 'Submitted_to_Uber' | 'Resolved' | 'Rejected';
+  driverId: string;
+  tripId?: string; // Links to the Uber trip
+  transactionId?: string; // Links to the financial transaction (Toll Tag charge)
+  
+  // Financials
+  amount: number; // The amount to be claimed (Missing Amount)
+  expectedAmount: number; // What should have been paid
+  paidAmount: number; // What was paid
+  
+  // Content
+  subject: string;
+  message: string; // The generated text for the driver
+  
+  // Metadata
+  createdAt: string;
+  updatedAt: string;
+  evidenceUrls?: string[];
+  
+  // UI Display helpers
+  tripDate?: string;
+  pickup?: string;
+  dropoff?: string;
 }
