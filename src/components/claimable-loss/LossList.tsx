@@ -9,9 +9,10 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { AlertCircle, ArrowRight } from "lucide-react";
+import { AlertCircle, ArrowRight, Clock } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../types/data";
 import { MatchResult } from "../../utils/tollReconciliation";
+import { calculateDaysRemaining } from "../../utils/timeUtils";
 
 interface LossItem {
   transaction: FinancialTransaction;
@@ -71,12 +72,31 @@ export function LossList({ losses, isLoading, onSelectLoss }: LossListProps) {
             const tollCost = Math.abs(transaction.amount);
             const uberRefund = match.trip.tollCharges || 0;
             const loss = Math.abs(match.varianceAmount || (tollCost - uberRefund));
+            const { daysRemaining, status } = calculateDaysRemaining(transaction.date);
 
             return (
               <TableRow key={transaction.id}>
                 <TableCell className="font-medium text-slate-700">
                   {new Date(transaction.date).toLocaleDateString()}
                   <div className="text-xs text-slate-400">{transaction.time}</div>
+                  
+                  {status === 'warning' && (
+                    <div className="mt-1 text-xs font-bold text-orange-600 flex items-center gap-1 animate-pulse">
+                        <Clock className="h-3 w-3" />
+                        {daysRemaining} days left
+                    </div>
+                  )}
+                  {status === 'expired' && (
+                    <div className="mt-1 text-xs font-bold text-red-600 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Expired
+                    </div>
+                  )}
+                  {status === 'active' && daysRemaining <= 10 && (
+                     <div className="mt-1 text-xs text-slate-400">
+                        {daysRemaining} days left
+                     </div>
+                  )}
                 </TableCell>
                 <TableCell>
                     <div className="font-medium">{transaction.description}</div>

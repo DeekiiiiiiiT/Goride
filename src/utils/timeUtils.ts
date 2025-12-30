@@ -1,5 +1,5 @@
 import { Trip } from '../types/data';
-import { parseISO, subMinutes, addMinutes, isValid, differenceInMinutes } from 'date-fns';
+import { parseISO, subMinutes, addMinutes, isValid, differenceInMinutes, differenceInDays, startOfDay } from 'date-fns';
 
 export interface TripTimes {
   requestTime: Date; // The time the driver accepted the trip
@@ -95,4 +95,30 @@ export function getTripWindows(times: TripTimes): TripWindows {
     searchStart,
     searchEnd
   };
+}
+
+export function calculateDaysRemaining(dateStr: string, windowDays: number = 10): { 
+  daysRemaining: number; 
+  status: 'active' | 'warning' | 'expired';
+  isUrgent: boolean; 
+} {
+  try {
+      const tripDate = parseISO(dateStr);
+      const today = startOfDay(new Date());
+      
+      const daysElapsed = differenceInDays(today, tripDate);
+      const daysRemaining = windowDays - daysElapsed;
+      
+      let status: 'active' | 'warning' | 'expired' = 'active';
+      if (daysRemaining < 0) status = 'expired';
+      else if (daysRemaining <= 3) status = 'warning';
+      
+      return {
+        daysRemaining,
+        status,
+        isUrgent: daysRemaining <= 3 && daysRemaining >= 0
+      };
+  } catch (e) {
+      return { daysRemaining: 0, status: 'expired', isUrgent: false };
+  }
 }

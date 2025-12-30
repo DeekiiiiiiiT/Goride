@@ -233,6 +233,7 @@ export interface DriverMetrics {
   // Phase 3: Scorecard & Tiers
   score?: number; // 0 to 100
   tier?: 'Platinum' | 'Gold' | 'Silver' | 'Bronze';
+  tierConfigId?: string; // Phase 1: Dynamic Tier Link
   recommendation?: string;
 
   // Phase 6: Source Tracking ("Source of Truth" Logic)
@@ -669,4 +670,26 @@ export interface Claim {
   tripDate?: string;
   pickup?: string;
   dropoff?: string;
+
+  // Resolution Tracking
+  resolutionReason?: 'Charge Driver' | 'Write Off' | 'Reimbursed' | 'Other';
+}
+
+// --- Phase 1 Extension: Dynamic Tiers & Expenses ---
+
+export interface TierConfig {
+  id: string;
+  name: string;
+  minEarnings: number;
+  maxEarnings: number | null; // null means "and above"
+  sharePercentage: number; // 0-100 (Driver Share)
+  color?: string; // Hex code for badges
+}
+
+export interface ExpenseSplitRule {
+  id: string;
+  category: string; // e.g., 'Fuel'
+  companyShare: number; // 0-100
+  driverShare: number; // 0-100
+  isDefault: boolean;
 }

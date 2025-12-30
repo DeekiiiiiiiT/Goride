@@ -22,6 +22,7 @@ import { DriverEarnings } from './components/driver-portal/DriverEarnings';
 import { DriverTrips } from './components/driver-portal/DriverTrips';
 import { DriverProfile } from './components/driver-portal/DriverProfile';
 import { DriverClaims } from './components/driver-portal/DriverClaims';
+import { DriverExpenses } from './components/driver-portal/DriverExpenses';
 
 function AppContent() {
   const { user, role, loading, signOut } = useAuth();
@@ -95,8 +96,9 @@ function AppContent() {
       >
         {driverPage === 'dashboard' && <DriverDashboard />}
         {driverPage === 'earnings' && <DriverEarnings />}
-        {driverPage === 'claims' && <DriverClaims />}
+        {driverPage === 'expenses' && <DriverExpenses />}
         {driverPage === 'trips' && <DriverTrips />}
+        {driverPage === 'claims' && <DriverClaims />}
         {driverPage === 'profile' && <DriverProfile onLogout={handleLogout} />}
       </DriverLayout>
     );

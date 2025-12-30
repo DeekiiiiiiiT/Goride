@@ -7,7 +7,7 @@ import {
   Car,
   LogOut,
   Bell,
-  AlertCircle
+  Receipt
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -68,10 +68,10 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
             onClick={() => onNavigate('earnings')}
           />
           <NavButton 
-            icon={<AlertCircle className="h-5 w-5" />} 
-            label="Claims" 
-            active={currentPage === 'claims'} 
-            onClick={() => onNavigate('claims')}
+            icon={<Receipt className="h-5 w-5" />} 
+            label="Expenses" 
+            active={currentPage === 'expenses'} 
+            onClick={() => onNavigate('expenses')}
           />
           <NavButton 
             icon={<FileText className="h-5 w-5" />} 

@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
 import { Search, MoreHorizontal, Download, CheckCircle2, FileText, ArrowUpRight, ArrowDownLeft, Trash2, Layers, List } from "lucide-react";
-import { Trip, FinancialTransaction, TransactionCategory } from "../../types/data";
+import { Trip, FinancialTransaction, TransactionCategory, ImportBatch } from "../../types/data";
 import { generateMockTransactions } from "../../services/financialService";
 import { TransactionFilters, TransactionFilterState } from "./TransactionFilters";
 import { CashFlowDashboard } from "./CashFlowDashboard";
@@ -44,6 +44,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { toast } from "sonner@2.0.3";
+import { ReportGeneratorModal } from "../reports/ReportGeneratorModal";
 
 interface TransactionsTabProps {
   trips: Trip[];
@@ -72,6 +73,7 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
   const [searchTerm, setSearchTerm] = useState('');
   const [listGrouping, setListGrouping] = useState<'flat' | 'grouped'>('flat');
   const [batchToDelete, setBatchToDelete] = useState<{id: string, name: string} | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Initial Data Generation
   useEffect(() => {
@@ -80,27 +82,62 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
       
       const loadData = async () => {
          try {
-             const metrics = await api.getDriverMetrics();
+             // Parallel fetch of all needed data
+             const [metrics, realTx, batches] = await Promise.all([
+                 api.getDriverMetrics().catch(e => { console.error("Metrics load failed", e); return []; }),
+                 api.getTransactions().catch(e => { console.error("Tx load failed", e); return []; }),
+                 api.getBatches().catch(e => { console.error("Batches load failed", e); return []; })
+             ]);
+
              setDriverMetrics(metrics);
              
-             // Fetch real transactions if available
-             try {
-                const realTx = await api.getTransactions();
-                // Trust the API. If it returns an array (even empty), use it.
-                // Do NOT fallback to mocking from trips if the API call succeeded.
-                if (Array.isArray(realTx)) {
-                    setTransactions(realTx);
-                } else {
-                    setTransactions([]);
-                }
-             } catch (e) {
-                console.error("Failed to load transactions", e);
-                // Only fallback to mock if the API call specifically failed (network error, 500)
-                setTransactions(trips.length > 0 ? generateMockTransactions(trips) : []);
+             // Convert Trips to Financial Transactions to unify the view
+             // This ensures Uber/Bolt imports (which are Trips) appear in the Transaction List
+             const tripTransactions: FinancialTransaction[] = trips.map(t => {
+                 const batch = batches.find((b: ImportBatch) => b.id === t.batchId);
+                 
+                 // If this trip is already represented in realTx (e.g. via ID match), strictly speaking we should dedup.
+                 // But typically Trips and FinancialTransactions are separate tables.
+                 
+                 return {
+                     id: t.id,
+                     date: t.date,
+                     time: t.requestTime ? format(new Date(t.requestTime), 'HH:mm:ss') : '00:00:00',
+                     driverId: t.driverId,
+                     driverName: t.driverName,
+                     vehicleId: t.vehicleId,
+                     type: 'Revenue',
+                     category: 'Fare Earnings',
+                     description: `Trip: ${t.pickupLocation || 'Unknown'} -> ${t.dropoffLocation || 'Unknown'}`,
+                     amount: t.netPayout || t.amount,
+                     paymentMethod: 'Digital Wallet',
+                     status: t.status === 'Completed' ? 'Completed' : 'Pending',
+                     batchId: t.batchId,
+                     batchName: batch?.fileName || (t.batchId ? 'Imported Trip File' : undefined),
+                     isReconciled: false
+                 } as FinancialTransaction;
+             });
+
+             // Merge real transactions (expenses, manual entries) with converted Trip transactions
+             // Filter out any realTx that might duplicate a trip (unlikely but safe)
+             const tripIds = new Set(tripTransactions.map(t => t.id));
+             const uniqueRealTx = Array.isArray(realTx) ? realTx.filter((tx: FinancialTransaction) => !tripIds.has(tx.id)) : [];
+             
+             const allTransactions = [...uniqueRealTx, ...tripTransactions];
+             
+             // Sort by date desc
+             allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+             if (allTransactions.length > 0) {
+                setTransactions(allTransactions);
+             } else {
+                setTransactions(generateMockTransactions(trips));
              }
 
          } catch (e) {
              console.error("Failed to load finance data", e);
+             // Fallback
+             setTransactions(generateMockTransactions(trips));
          } finally {
              setLoading(false);
          }
@@ -311,7 +348,13 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                         Group by File
                     </Button>
                 </div>
+                <Button variant="outline" size="sm" onClick={() => setIsReportModalOpen(true)}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Reports
+                </Button>
             </div>
+            
+            <ReportGeneratorModal open={isReportModalOpen} onOpenChange={setIsReportModalOpen} />
 
             {/* Quick Analysis Views */}
             <div className="flex gap-2 overflow-x-auto pb-2">

@@ -9,24 +9,30 @@ import {
   ChevronRight, 
   Download, 
   Loader2,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Trophy
 } from "lucide-react";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { Trip } from '../../types/data';
+import { Trip, TierConfig, FinancialTransaction } from '../../types/data';
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { cn } from "../ui/utils";
 import { DateRange } from "react-day-picker";
 import { startOfDay, endOfDay, format, subDays, differenceInDays } from "date-fns";
+import { tierService } from '../../services/tierService';
+import { TierCalculations } from '../../utils/tierCalculations';
+import { api } from '../../services/api';
 
 export function DriverEarnings() {
   const { user } = useAuth();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   const [loading, setLoading] = useState(true);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [filteredTrips, setFilteredTrips] = useState<Trip[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = useState<FinancialTransaction[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [weeklyData, setWeeklyData] = useState<{ day: string; amount: number }[]>([]);
   const [stats, setStats] = useState({
@@ -36,7 +42,23 @@ export function DriverEarnings() {
     promotions: 0,
     tolls: 0,
     cashCollected: 0,
+    reimbursements: 0,
+    expenses: 0,
     trend: null as number | null
+  });
+
+  const [tierState, setTierState] = useState<{
+    current: TierConfig | null;
+    cumulativeBefore: number;
+    thisWeek: number;
+    newCumulative: number;
+    projectedPayout: number;
+  }>({
+    current: null,
+    cumulativeBefore: 0,
+    thisWeek: 0,
+    newCumulative: 0,
+    projectedPayout: 0
   });
 
   useEffect(() => {
@@ -50,18 +72,32 @@ export function DriverEarnings() {
              'Authorization': `Bearer ${publicAnonKey}`
         };
 
-        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/trips`, { headers });
-        if (res.ok) {
-            const allTrips: Trip[] = await res.json();
-            // Filter for current user or resolved driver
+        const [tripsRes, txData] = await Promise.all([
+             fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/trips`, { headers }),
+             api.getTransactions()
+        ]);
+
+        if (tripsRes.ok) {
+            const allTrips: Trip[] = await tripsRes.json();
             const myTrips = allTrips.filter(t => 
                 t.driverId === user.id || 
                 (driverRecord?.id && t.driverId === driverRecord.id) ||
                 (driverRecord?.driverId && t.driverId === driverRecord.driverId)
             );
             setTrips(myTrips);
-            setFilteredTrips(myTrips); // Initial full list
+            setFilteredTrips(myTrips);
         }
+
+        if (txData) {
+            const myTx = txData.filter((t: FinancialTransaction) => 
+                t.driverId === user.id || 
+                (driverRecord?.id && t.driverId === driverRecord.id) || 
+                (driverRecord?.driverId && t.driverId === driverRecord.driverId)
+            );
+            setTransactions(myTx);
+            setFilteredTransactions(myTx);
+        }
+
       } catch (error) {
         console.error("Error fetching earnings:", error);
       } finally {
@@ -75,6 +111,10 @@ export function DriverEarnings() {
   // Handle Date Filter
   useEffect(() => {
     let filtered = trips;
+    let filteredTx = transactions;
+
+    // Calculate Tier Info based on the "Filtered" period representing "This Week/Period"
+    calculateTierInfo(trips, filtered);
 
     if (date?.from) {
         const from = startOfDay(date.from);
@@ -84,21 +124,69 @@ export function DriverEarnings() {
             const tripDate = new Date(t.date);
             return tripDate >= from && tripDate <= to;
         });
+        
+        filteredTx = filteredTx.filter(t => {
+            const txDate = new Date(t.date);
+            return txDate >= from && txDate <= to;
+        });
     }
 
     setFilteredTrips(filtered);
-    processEarnings(filtered);
-  }, [date, trips]);
+    setFilteredTransactions(filteredTx);
+    processEarnings(filtered, filteredTx);
+  }, [date, trips, transactions]);
 
-  const processEarnings = (currentTrips: Trip[]) => {
+  const calculateTierInfo = async (allTrips: Trip[], currentPeriodTrips: Trip[]) => {
+      // 1. Total Cumulative Earnings (All Time)
+      const totalCumulative = allTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+      // 2. Earnings for the displayed period
+      const periodEarnings = currentPeriodTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+      // 3. Earnings BEFORE this period
+      const beforeEarnings = totalCumulative - periodEarnings;
+      
+      // 4. Get Tier
+      const tiers = await tierService.getTiers();
+      const currentTier = TierCalculations.getTierForEarnings(totalCumulative, tiers);
+      
+      // 5. Calculate Payout (Simplistic: Period Earnings * Share %)
+      // Note: In reality, if they cross a threshold mid-week, the split might change.
+      // For Phase 2, we use the CURRENT tier for the whole calculation or just estimation.
+      const payout = periodEarnings * (currentTier.sharePercentage / 100);
+
+      setTierState({
+          current: currentTier,
+          cumulativeBefore: beforeEarnings,
+          thisWeek: periodEarnings,
+          newCumulative: totalCumulative,
+          projectedPayout: payout
+      });
+  };
+
+  const processEarnings = (currentTrips: Trip[], currentTx: FinancialTransaction[]) => {
       // 1. Calculate Stats
-      const total = currentTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
+      const tripNet = currentTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
       const fares = currentTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
       
       const tips = currentTrips.reduce((sum, t) => sum + (t.fareBreakdown?.tips || 0), 0);
       const tolls = currentTrips.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
       const promotions = currentTrips.reduce((sum, t) => sum + (t.fareBreakdown?.surge || 0), 0);
       const cash = currentTrips.reduce((sum, t) => sum + (t.cashCollected || 0), 0);
+
+      // Financial Transactions: 
+      // Reimbursements (Adjustment/Revenue with positive amount)
+      // Expenses (Expense with negative amount - usually doesn't impact "Payout Balance" unless paid by wallet)
+      // For now, let's treat "Reimbursements" as pure additions to Payout.
+      const reimbursements = currentTx
+        .filter(t => (t.type === 'Adjustment' || t.category === 'Fuel Reimbursement') && t.amount > 0)
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const expenseTotal = currentTx
+        .filter(t => t.type === 'Expense' && t.amount < 0)
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      const totalBalance = tripNet + reimbursements;
       
       let trendValue: number | null = null;
       
@@ -124,12 +212,14 @@ export function DriverEarnings() {
       }
 
       setStats({
-          totalBalance: total,
+          totalBalance: totalBalance,
           tripFares: fares,
           tips: tips, 
           promotions: promotions,
           tolls: tolls,
           cashCollected: cash,
+          reimbursements: reimbursements,
+          expenses: expenseTotal,
           trend: trendValue
       });
 
@@ -333,6 +423,41 @@ export function DriverEarnings() {
          </CardContent>
       </Card>
 
+      {tierState.current && (
+         <Card className="border-indigo-100 bg-indigo-50/50">
+             <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-indigo-600" />
+                    <CardTitle className="text-base text-indigo-900">Tier Calculation</CardTitle>
+                </div>
+                <CardDescription>
+                    Payout based on {tierState.current.name} Tier ({tierState.current.sharePercentage}%)
+                </CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-3">
+                 <div className="flex justify-between text-sm">
+                     <span className="text-slate-500">Cumulative (Before)</span>
+                     <span className="font-mono text-slate-700">${tierState.cumulativeBefore.toLocaleString()}</span>
+                 </div>
+                 <div className="flex justify-between text-sm">
+                     <span className="text-slate-500">This Period</span>
+                     <span className="font-mono text-slate-700">+ ${tierState.thisWeek.toLocaleString()}</span>
+                 </div>
+                 <div className="h-px bg-indigo-200" />
+                 <div className="flex justify-between text-sm font-medium">
+                     <span className="text-indigo-900">New Cumulative</span>
+                     <span className="font-mono text-indigo-900">${tierState.newCumulative.toLocaleString()}</span>
+                 </div>
+                 <div className="mt-4 pt-3 border-t border-indigo-200 flex justify-between items-center">
+                     <span className="font-semibold text-indigo-900">Estimated Payout</span>
+                     <span className="text-xl font-bold text-indigo-700">
+                         ${tierState.projectedPayout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                     </span>
+                 </div>
+             </CardContent>
+         </Card>
+      )}
+
       <Card>
          <CardHeader>
             <CardTitle className="text-base">Breakdown</CardTitle>
@@ -342,6 +467,7 @@ export function DriverEarnings() {
             <Row label="Tips" value={`$${stats.tips.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
             <Row label="Surge" value={`$${stats.promotions.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
             <Row label="Tolls & Fees" value={`$${stats.tolls.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+            <Row label="Reimbursements" value={`$${stats.reimbursements.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
             <Row label="Cash Collected" value={`$${stats.cashCollected.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
             <div className="h-px bg-slate-100 dark:bg-slate-800 my-2" />
             <Row label="Net Earnings" value={`$${stats.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} bold />

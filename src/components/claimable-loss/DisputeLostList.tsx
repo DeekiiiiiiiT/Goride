@@ -9,17 +9,27 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { RefreshCw, XCircle, Archive } from "lucide-react";
+import { RefreshCw, XCircle, Archive, ChevronDown, DollarSign } from "lucide-react";
 import { Claim } from "../../types/data";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 interface DisputeLostListProps {
   claims: Claim[];
   isLoading?: boolean;
   onRetry: (claim: Claim) => void;
-  onArchive: (claim: Claim) => void;
+  onChargeDriver: (claim: Claim) => void;
+  onWriteOff: (claim: Claim) => void;
+  getDriverName?: (id: string) => string;
 }
 
-export function DisputeLostList({ claims, isLoading, onRetry, onArchive }: DisputeLostListProps) {
+export function DisputeLostList({ claims, isLoading, onRetry, onChargeDriver, onWriteOff, getDriverName }: DisputeLostListProps) {
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading rejected claims...</div>;
   }
@@ -41,7 +51,7 @@ export function DisputeLostList({ claims, isLoading, onRetry, onArchive }: Dispu
       <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center">
         <div>
             <h3 className="font-semibold text-slate-900">Dispute Lost / Rejected</h3>
-            <p className="text-sm text-slate-500">Claims rejected by drivers or Uber. Action required to close.</p>
+            <p className="text-sm text-slate-500">Claims rejected by drivers or Uber. Action required.</p>
         </div>
         <div className="text-sm font-medium text-slate-600">
             Lost Value: <span className="text-red-600 font-bold ml-1">
@@ -70,7 +80,9 @@ export function DisputeLostList({ claims, isLoading, onRetry, onArchive }: Dispu
                 </div>
               </TableCell>
               <TableCell>
-                  <div className="font-medium text-sm">{claim.driverId}</div> 
+                  <div className="font-medium text-sm">
+                    {getDriverName ? getDriverName(claim.driverId) : claim.driverId}
+                  </div> 
               </TableCell>
               <TableCell>
                   <div className="text-sm truncate max-w-[200px]" title={claim.pickup}>
@@ -95,15 +107,26 @@ export function DisputeLostList({ claims, isLoading, onRetry, onArchive }: Dispu
                   <RefreshCw className="mr-2 h-3 w-3" />
                   Retry
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="h-8 text-slate-600"
-                  onClick={() => onArchive(claim)}
-                >
-                  <Archive className="mr-2 h-3 w-3" />
-                  Write Off
-                </Button>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 text-slate-600">
+                      Resolve <ChevronDown className="ml-2 h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Resolution Options</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onChargeDriver(claim)} className="text-red-600">
+                      <DollarSign className="mr-2 h-4 w-4" />
+                      Charge Driver
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onWriteOff(claim)}>
+                      <Archive className="mr-2 h-4 w-4" />
+                      Write Off (Company Loss)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </TableCell>
             </TableRow>
           ))}

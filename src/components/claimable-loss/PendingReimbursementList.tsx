@@ -11,15 +11,27 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { CheckCircle, AlertTriangle, ArrowRight, Clock } from "lucide-react";
 import { Claim } from "../../types/data";
+import { calculateDaysRemaining } from "../../utils/timeUtils";
 
 interface PendingReimbursementListProps {
   claims: Claim[];
   isLoading?: boolean;
   onResolve: (claim: Claim) => void;
   onRevert: (claim: Claim) => void;
+  title?: string;
+  description?: string;
+  getDriverName?: (id: string) => string;
 }
 
-export function PendingReimbursementList({ claims, isLoading, onResolve, onRevert }: PendingReimbursementListProps) {
+export function PendingReimbursementList({ 
+  claims, 
+  isLoading, 
+  onResolve, 
+  onRevert,
+  title = "Reimbursement Pending",
+  description = "Claims submitted by drivers, waiting for Uber refund.",
+  getDriverName
+}: PendingReimbursementListProps) {
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading pending claims...</div>;
   }
@@ -40,8 +52,8 @@ export function PendingReimbursementList({ claims, isLoading, onResolve, onRever
     <div className="border rounded-md bg-white shadow-sm">
       <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center">
         <div>
-            <h3 className="font-semibold text-slate-900">Reimbursement Pending</h3>
-            <p className="text-sm text-slate-500">Claims submitted by drivers, waiting for Uber refund.</p>
+            <h3 className="font-semibold text-slate-900">{title}</h3>
+            <p className="text-sm text-slate-500">{description}</p>
         </div>
         <div className="text-sm font-medium text-slate-600">
             Pending Value: <span className="text-blue-600 font-bold ml-1">
@@ -61,16 +73,38 @@ export function PendingReimbursementList({ claims, isLoading, onResolve, onRever
           </TableRow>
         </TableHeader>
         <TableBody>
-          {claims.map((claim) => (
+          {claims.map((claim) => {
+            // Calculate urgency based on trip date if available
+            const urgency = claim.tripDate 
+                ? calculateDaysRemaining(claim.tripDate)
+                : { daysRemaining: 10, status: 'active', isUrgent: false };
+
+            return (
             <TableRow key={claim.id}>
               <TableCell className="font-medium text-slate-700">
                 {new Date(claim.updatedAt || claim.createdAt).toLocaleDateString()}
                 <div className="text-xs text-slate-400">
                     {new Date(claim.updatedAt || claim.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </div>
+
+                {/* Show Deadline Warning for Claims waiting for driver */}
+                {claim.status === 'Sent_to_Driver' && urgency.status === 'warning' && (
+                    <div className="mt-1 text-xs font-bold text-orange-600 flex items-center gap-1 animate-pulse">
+                        <Clock className="h-3 w-3" />
+                        {urgency.daysRemaining} days left
+                    </div>
+                )}
+                {claim.status === 'Sent_to_Driver' && urgency.status === 'expired' && (
+                    <div className="mt-1 text-xs font-bold text-red-600 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Expired
+                    </div>
+                )}
               </TableCell>
               <TableCell>
-                  <div className="font-medium text-sm">{claim.driverId}</div> 
+                  <div className="font-medium text-sm">
+                    {getDriverName ? getDriverName(claim.driverId) : claim.driverId}
+                  </div> 
                   {/* Ideally fetch driver name, but ID is fine for now */}
               </TableCell>
               <TableCell>
@@ -82,9 +116,15 @@ export function PendingReimbursementList({ claims, isLoading, onResolve, onRever
                 ${claim.amount.toFixed(2)}
               </TableCell>
               <TableCell className="text-right">
-                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">
-                   Pending Uber
-                </Badge>
+                {claim.status === 'Sent_to_Driver' ? (
+                  <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200">
+                     Awaiting Driver
+                  </Badge>
+                ) : (
+                  <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">
+                     Pending Uber
+                  </Badge>
+                )}
               </TableCell>
               <TableCell className="text-right flex justify-end gap-2">
                 <Button 
@@ -106,7 +146,8 @@ export function PendingReimbursementList({ claims, isLoading, onResolve, onRever
                 </Button>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>

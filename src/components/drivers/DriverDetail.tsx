@@ -69,6 +69,7 @@ import { Calendar } from "../ui/calendar";
 import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
+import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { api } from '../../services/api';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
@@ -1004,6 +1005,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardContent>
                </Card>
             </div>
+
+            <DriverEarningsHistory driverId={driverId} transactions={transactions} />
 
             {/* Transaction Ledger */}
             <Card>

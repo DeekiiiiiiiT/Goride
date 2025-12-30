@@ -10,9 +10,10 @@ import {
   Fuel, 
   Wrench, 
   AlertTriangle,
-  Loader2
+  Loader2,
+  Trophy
 } from "lucide-react";
-import { Trip, FuelLog, ServiceRequest, DriverMetric } from '../../types/data';
+import { Trip, FuelLog, ServiceRequest, DriverMetric, TierConfig, FinancialTransaction } from '../../types/data';
 import { toast } from 'sonner@2.0.3';
 import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
@@ -20,6 +21,10 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { api } from '../../services/api';
+import { Progress } from "../ui/progress";
+import { tierService } from '../../services/tierService';
+import { TierCalculations } from '../../utils/tierCalculations';
+import { format } from "date-fns";
 
 export function DriverDashboard() {
   const { user } = useAuth();
@@ -34,6 +39,19 @@ export function DriverDashboard() {
   const [debugDrivers, setDebugDrivers] = useState<any[]>([]);
   const [unclaimedTripIds, setUnclaimedTripIds] = useState<string[]>([]);
   const [isFixing, setIsFixing] = useState<string | null>(null);
+
+  // Phase 2: Tier State
+  const [tierState, setTierState] = useState<{
+      current: TierConfig | null;
+      next: TierConfig | null;
+      progress: number;
+      cumulativeEarnings: number;
+  }>({
+      current: null,
+      next: null,
+      progress: 0,
+      cumulativeEarnings: 0
+  });
 
   useEffect(() => {
     // Debug fetch if no data found
@@ -93,6 +111,20 @@ export function DriverDashboard() {
                 .reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
             setTodayEarnings(todaySum);
 
+            // Phase 2: Tier Calculation
+            const totalEarnings = myTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
+            const tiers = await tierService.getTiers();
+            const currentTier = TierCalculations.getTierForEarnings(totalEarnings, tiers);
+            const nextTier = TierCalculations.getNextTier(currentTier, tiers);
+            const progress = TierCalculations.calculateProgress(totalEarnings, currentTier);
+            
+            setTierState({
+                current: currentTier,
+                next: nextTier,
+                progress: progress,
+                cumulativeEarnings: totalEarnings
+            });
+
             // Get Most Recent Trip
             if (myTrips.length > 0) {
                 // Sort desc
@@ -123,19 +155,67 @@ export function DriverDashboard() {
     }
   };
 
-  const handleFuelSubmit = (data: Partial<FuelLog>) => {
-      // In a real app, post to backend
-      console.log("Saving Fuel Log:", data);
-      toast.success("Fuel log saved successfully!", {
-          description: `Logged ${data.liters}L at ${data.odometer}km.`
-      });
+  const handleFuelSubmit = async (data: Partial<FuelLog>) => {
+      try {
+          const newTx: Partial<FinancialTransaction> = {
+            id: crypto.randomUUID(),
+            driverId: user?.id,
+            driverName: driverRecord?.name || user?.email,
+            date: data.date || new Date().toISOString(),
+            time: format(new Date(), 'HH:mm:ss'),
+            type: 'Expense',
+            category: 'Fuel',
+            amount: -Math.abs(data.totalCost || 0),
+            description: data.notes || `Fuel Refill: ${data.liters}L`,
+            status: 'Pending',
+            paymentMethod: 'Cash',
+            quantity: data.liters,
+            odometer: data.odometer,
+            receiptUrl: data.receiptUrl
+          };
+
+          await api.saveTransaction(newTx);
+          toast.success("Fuel log saved successfully!", {
+              description: `Logged ${data.liters}L at ${data.odometer}km.`
+          });
+      } catch (e) {
+          console.error("Failed to save fuel log", e);
+          toast.error("Failed to save fuel log");
+      }
   };
 
-  const handleServiceSubmit = (data: Partial<ServiceRequest>) => {
-      console.log("Submitting Service Request:", data);
-      toast.success("Request submitted!", {
-          description: "A fleet manager will review your request shortly."
-      });
+  const handleServiceSubmit = async (data: Partial<ServiceRequest>) => {
+      // Create a pending transaction for Service/Maintenance request
+      try {
+          // If there is a cost associated, log it as an expense
+          // If it's just a request (no cost yet), we might still want to log it as a text-only transaction or a different entity?
+          // For now, let's assume it's an "Issue Report" which creates a transaction with 0 amount or estimated amount if provided?
+          // The ServiceRequestForm usually doesn't have "cost" field unless customized. 
+          // Let's assume for this phase we just log a "Maintenance" expense request with $0 if unknown.
+          
+          const newTx: Partial<FinancialTransaction> = {
+            id: crypto.randomUUID(),
+            driverId: user?.id,
+            driverName: driverRecord?.name || user?.email,
+            date: data.date || new Date().toISOString(),
+            time: format(new Date(), 'HH:mm:ss'),
+            type: 'Expense',
+            category: 'Maintenance',
+            amount: 0, // Placeholder
+            description: `${data.type}: ${data.description}`,
+            status: 'Pending',
+            paymentMethod: 'Cash',
+            notes: `Priority: ${data.priority}`
+          };
+
+          await api.saveTransaction(newTx);
+          toast.success("Service request submitted!", {
+              description: "A fleet manager will review your request shortly."
+          });
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to submit request");
+      }
   };
 
   const handleClaimId = async (id: string) => {
@@ -169,6 +249,87 @@ export function DriverDashboard() {
   return (
     <div className="space-y-6">
       {/* Sync Status Warning - Explains why screen might be blank */}
+      {/* Phase 2: Driver Home Screen Header */}
+      {tierState.current && (
+         <Card className="border-0 shadow-xl overflow-hidden relative">
+             {/* Background with Gradient and Pattern */}
+             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-[#1e1b4b] to-slate-900 z-0" />
+             
+             {/* Decorative Elements */}
+             <div className="absolute top-0 right-0 p-4 opacity-5 z-0">
+                 <Trophy className="h-40 w-40 -rotate-12 text-white" />
+             </div>
+             <div className="absolute top-1/2 right-1/4 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+             <CardContent className="p-6 relative z-10">
+                 <div className="flex flex-col gap-6">
+                     
+                     {/* Header Section */}
+                     <div className="flex items-center gap-5">
+                         {/* Avatar / Profile Image */}
+                         <div className="h-16 w-16 rounded-full border-2 border-indigo-400/30 overflow-hidden bg-slate-800 shadow-lg shrink-0 flex items-center justify-center">
+                             <span className="text-2xl font-bold text-indigo-200">
+                                 {driverRecord?.name?.charAt(0) || user?.email?.charAt(0)}
+                             </span>
+                         </div>
+                         
+                         <div className="space-y-1">
+                             <h2 className="text-3xl font-bold text-white tracking-tight">
+                                 Welcome, {driverRecord?.name?.split(' ')[0] || 'Driver'}
+                             </h2>
+                             <div className="flex items-center gap-3">
+                                 {/* Tier Badge - High Fidelity */}
+                                 <div className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-slate-900 text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-1.5">
+                                     <Trophy className="h-3 w-3 fill-slate-900 stroke-none" />
+                                     {tierState.current.name} Tier
+                                 </div>
+                                 <span className="text-sm font-medium text-indigo-200/80 tracking-wide">
+                                     {tierState.current.sharePercentage}% Profit Share
+                                 </span>
+                             </div>
+                         </div>
+                     </div>
+
+                     {/* Progress Section */}
+                     <div className="space-y-3 bg-white/5 rounded-2xl p-4 border border-white/10 backdrop-blur-sm">
+                         <div className="flex justify-between items-end">
+                             <div className="space-y-0.5">
+                                 <span className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Next Milestone</span>
+                                 <div className="flex items-baseline gap-2">
+                                    <span className="text-lg font-bold text-white">
+                                        {tierState.next?.name || 'Max Level'} Status
+                                    </span>
+                                    <span className="text-sm text-white/90 font-bold font-mono">
+                                        {tierState.progress.toFixed(0)}%
+                                    </span>
+                                 </div>
+                             </div>
+                             <div className="text-right">
+                                 <span className="text-xs text-indigo-200 block mb-0.5">Earnings Goal</span>
+                                 <span className="text-sm font-bold text-white font-mono">
+                                    {TierCalculations.formatCurrency(tierState.next?.minEarnings || 0)}
+                                 </span>
+                             </div>
+                         </div>
+
+                         {/* High Visibility Progress Bar */}
+                         <div className="relative h-3 w-full bg-slate-800/80 rounded-full overflow-hidden shadow-inner border border-white/5">
+                             <div 
+                                className="absolute top-0 left-0 h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                                style={{ width: `${tierState.progress}%` }}
+                             />
+                         </div>
+
+                         <div className="flex justify-between text-[10px] font-semibold text-slate-300 uppercase tracking-wide">
+                             <span>Current: {TierCalculations.formatCurrency(tierState.current.minEarnings)}</span>
+                             <span>Target: {TierCalculations.formatCurrency(tierState.next?.minEarnings || 0)}</span>
+                         </div>
+                     </div>
+                 </div>
+             </CardContent>
+         </Card>
+      )}
+
       {!metrics && !recentTrip && !loading && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-start gap-3">

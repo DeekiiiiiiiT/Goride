@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LossList } from "../components/claimable-loss/LossList";
 import { PendingReimbursementList } from "../components/claimable-loss/PendingReimbursementList";
 import { DisputeLostList } from "../components/claimable-loss/DisputeLostList";
+import { ResolvedHistoryList } from "../components/claimable-loss/ResolvedHistoryList";
 import { DisputeModal } from "../components/claimable-loss/DisputeModal";
 import { useTollReconciliation } from "../hooks/useTollReconciliation";
 import { useClaims } from "../hooks/useClaims";
+import { api } from "../services/api";
 import { FinancialTransaction, Claim } from "../types/data";
 import { MatchResult } from "../utils/tollReconciliation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
@@ -18,6 +20,16 @@ export function ClaimableLoss() {
   } = useTollReconciliation();
 
   const { claims, loading: loadingClaims, updateClaim, refresh: refreshClaims } = useClaims();
+  const [drivers, setDrivers] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.getDrivers().then(setDrivers).catch(console.error);
+  }, []);
+
+  const getDriverName = (driverId: string) => {
+    const driver = drivers.find(d => d.id === driverId || d.uberDriverId === driverId || d.inDriveDriverId === driverId);
+    return driver ? driver.name : driverId;
+  };
 
   const [selectedLoss, setSelectedLoss] = useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,11 +60,19 @@ export function ClaimableLoss() {
   // 4. Awaiting Driver Claims
   const awaitingDriverClaims = claims.filter(c => c.status === 'Sent_to_Driver');
 
+  // 5. Resolved Claims (History)
+  const resolvedClaims = claims.filter(c => c.status === 'Resolved');
+
 
   // Handlers
   const handleResolve = async (claim: Claim) => {
       try {
-          await updateClaim({ ...claim, status: 'Resolved', updatedAt: new Date().toISOString() });
+          await updateClaim({ 
+              ...claim, 
+              status: 'Resolved', 
+              resolutionReason: 'Reimbursed',
+              updatedAt: new Date().toISOString() 
+          });
           toast.success("Claim resolved and verified!");
           refreshClaims();
       } catch (e) {
@@ -80,15 +100,36 @@ export function ClaimableLoss() {
       }
   };
 
-  const handleArchive = async (claim: Claim) => {
+  const handleChargeDriver = async (claim: Claim) => {
       try {
           // Writing off means we resolve it but accept the loss. 
           // Status is 'Resolved' (Closed).
-          await updateClaim({ ...claim, status: 'Resolved', updatedAt: new Date().toISOString() });
-          toast.success("Claim written off and closed.");
+          // Ideally, this would also trigger a deduction transaction.
+          await updateClaim({ 
+              ...claim, 
+              status: 'Resolved', 
+              resolutionReason: 'Charge Driver',
+              updatedAt: new Date().toISOString() 
+          });
+          toast.success(`Claim resolved. $${claim.amount.toFixed(2)} will be deducted from driver pay.`);
           refreshClaims();
       } catch (e) {
-          toast.error("Failed to archive claim");
+          toast.error("Failed to charge driver");
+      }
+  };
+
+  const handleWriteOff = async (claim: Claim) => {
+      try {
+          await updateClaim({ 
+              ...claim, 
+              status: 'Resolved', 
+              resolutionReason: 'Write Off',
+              updatedAt: new Date().toISOString() 
+          });
+          toast.success("Claim written off as company loss.");
+          refreshClaims();
+      } catch (e) {
+          toast.error("Failed to write off claim");
       }
   };
 
@@ -104,7 +145,7 @@ export function ClaimableLoss() {
       </div>
       
       <Tabs defaultValue="unmatched" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[800px]">
+        <TabsList className="grid w-full grid-cols-5 lg:w-[1000px]">
           <TabsTrigger value="unmatched">
             Unmatched Tolls 
             {losses.length > 0 && <span className="ml-2 bg-slate-200 text-slate-700 px-1.5 rounded-full text-xs">{losses.length}</span>}
@@ -120,6 +161,9 @@ export function ClaimableLoss() {
           <TabsTrigger value="lost">
             Dispute Lost
             {lostClaims.length > 0 && <span className="ml-2 bg-red-100 text-red-700 px-1.5 rounded-full text-xs">{lostClaims.length}</span>}
+          </TabsTrigger>
+          <TabsTrigger value="resolved">
+            History
           </TabsTrigger>
         </TabsList>
 
@@ -140,6 +184,9 @@ export function ClaimableLoss() {
                 isLoading={loadingClaims}
                 onResolve={(c) => handleRetry(c)} 
                 onRevert={(c) => handleRevert(c)}
+                title="Awaiting Driver Submission"
+                description="Claims sent to drivers but not yet submitted to Uber."
+                getDriverName={getDriverName}
              />
              <p className="text-xs text-slate-500 mt-2 text-center">
                 * These claims have been sent to drivers but they haven't submitted them to Uber yet.
@@ -152,6 +199,7 @@ export function ClaimableLoss() {
                 isLoading={loadingClaims}
                 onResolve={handleResolve}
                 onRevert={handleRevert}
+                getDriverName={getDriverName}
             />
         </TabsContent>
 
@@ -160,7 +208,17 @@ export function ClaimableLoss() {
                 claims={lostClaims}
                 isLoading={loadingClaims}
                 onRetry={handleRetry}
-                onArchive={handleArchive}
+                onChargeDriver={handleChargeDriver}
+                onWriteOff={handleWriteOff}
+                getDriverName={getDriverName}
+            />
+        </TabsContent>
+
+        <TabsContent value="resolved" className="mt-6">
+            <ResolvedHistoryList 
+                claims={resolvedClaims}
+                isLoading={loadingClaims}
+                getDriverName={getDriverName}
             />
         </TabsContent>
       </Tabs>

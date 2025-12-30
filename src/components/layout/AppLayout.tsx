@@ -251,9 +251,7 @@ function AppHeader({ onLogout }: { onLogout?: () => void }) {
   return (
     <header className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
       <div className="flex items-center gap-4">
-        <div className="md:hidden">
-            <SidebarTrigger />
-        </div>
+        <SidebarTrigger />
         
         {/* Phase 4: Fleet Identity Display */}
         {fleetName && (
