@@ -7,6 +7,7 @@ import { Label } from "../ui/label";
 import { toast } from 'sonner@2.0.3';
 import { AlertEngine } from '../../utils/alertEngine';
 import { api } from '../../services/api';
+import { fuelService } from '../../services/fuelService';
 import { ReportGenerator, ReportSummary } from '../../utils/ReportGenerator';
 import { Loader2 } from 'lucide-react';
 
@@ -31,6 +32,9 @@ export function ReportsPage() {
           } else if (type.includes('Tax')) {
               const trips = await api.getTrips();
               summary = ReportGenerator.generateTaxExport(trips);
+          } else if (type.includes('Fuel')) {
+              const entries = await fuelService.getFuelEntries();
+              summary = ReportGenerator.generateFuelReport(entries);
           } else {
               const vehicles = await api.getVehicleMetrics();
               summary = ReportGenerator.generateMaintenanceLog(vehicles);
@@ -131,6 +135,13 @@ export function ReportsPage() {
                 date="Generated: Quarterly"
                 isGenerating={isGenerating === 'Tax Preparation Export'}
                 onDownload={() => handleExport('Tax Preparation Export')}
+            />
+            <ReportCard 
+                title="Fuel Consumption Analysis" 
+                description="Comprehensive log of fuel purchases, efficiency stats, and cost per gallon."
+                date="Generated: Monthly"
+                isGenerating={isGenerating === 'Fuel Consumption Analysis'}
+                onDownload={() => handleExport('Fuel Consumption Analysis')}
             />
         </div>
       </div>

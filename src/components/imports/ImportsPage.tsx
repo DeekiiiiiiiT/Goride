@@ -38,7 +38,8 @@ import {
   ChevronsUpDown,
   ShieldCheck,
   Clock,
-  BarChart2
+  BarChart2,
+  Fuel
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
@@ -65,7 +66,9 @@ import {
     extractReportDate
 } from '../../utils/csvHelpers';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState } from '../../types/data';
+import { FuelEntry, FuelCard } from '../../types/fuel';
 import { api } from '../../services/api';
+import { fuelService } from '../../services/fuelService';
 import { DataSanitizer } from '../../services/dataSanitizer';
 import { ImpactAnalysis } from './ImpactAnalysis';
 
@@ -124,6 +127,10 @@ export function ImportsPage() {
   // Phase 1: New Audit State
   const [auditState, setAuditState] = useState<ImportAuditState | null>(null);
 
+  // Phase 3: Fuel Data
+  const [fuelCards, setFuelCards] = useState<FuelCard[]>([]);
+  const [processedFuelEntries, setProcessedFuelEntries] = useState<FuelEntry[]>([]);
+
   // UI States
   const [isParsing, setIsParsing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -148,6 +155,19 @@ export function ImportsPage() {
         }
       } catch (e) {}
     }
+  }, []);
+
+  // Load Fuel Cards
+  useEffect(() => {
+      const loadFuelCards = async () => {
+          try {
+              const cards = await fuelService.getFuelCards();
+              setFuelCards(cards);
+          } catch (e) {
+              console.error("Failed to load fuel cards for matching", e);
+          }
+      };
+      loadFuelCards();
   }, []);
 
   const saveFields = (fields: FieldDefinition[]) => {
@@ -264,7 +284,7 @@ export function ImportsPage() {
       // 1. Merge
       // Phase 1: Capture Organization Name
       const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, organizationName, calibrationStats } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName);
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
           localStorage.setItem('goride_fleet_name', organizationName);
@@ -283,6 +303,7 @@ export function ImportsPage() {
       setProcessedVehicleMetrics(vehicleMetrics);
       setProcessedOrganizationMetrics(organizationMetrics);
       setProcessedRentalContracts(rentalContracts);
+      setProcessedFuelEntries(fuelEntries || []);
       setCalibrationStats(calibrationStats);
       setStep('preview_merged');
   };
@@ -335,7 +356,7 @@ export function ImportsPage() {
         // 2. Get Local Trips (for the table view)
         // This also runs the robust "Bottom-Up" financial calculation we just fixed.
         const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
-        const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName);
+        const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName, fuelCards);
         
         if (localResult.organizationName) {
             localStorage.setItem('goride_fleet_name', localResult.organizationName);
@@ -351,6 +372,7 @@ export function ImportsPage() {
         // 3. Merge AI Data into State
         setProcessedData(finalTrips); // Keep local trips for table
         setCalibrationStats(localResult.calibrationStats);
+        setProcessedFuelEntries(localResult.fuelEntries || []);
         
         // Phase 1: Run AI Auditor
         if (aiData.drivers || aiData.vehicles || aiData.financials) {
@@ -490,6 +512,13 @@ export function ImportsPage() {
               if (processedVehicleMetrics.length > 0) {
                   await api.saveVehicleMetrics(processedVehicleMetrics);
               }
+          }
+
+          // Phase 5: Save Fuel Entries
+          if (processedFuelEntries.length > 0) {
+              await Promise.all(processedFuelEntries.map(entry => 
+                  fuelService.createFuelEntry(entry)
+              ));
           }
           
           setStep('success');
@@ -635,6 +664,7 @@ export function ImportsPage() {
       if (type === 'uber_driver_quality') return <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Zap className="h-5 w-5" /></div>;
       if (type === 'uber_driver_activity') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Zap className="h-5 w-5" /></div>;
       if (type === 'uber_vehicle_performance') return <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><Car className="h-5 w-5" /></div>;
+      if (type === 'fuel_statement') return <div className="p-2 bg-rose-100 rounded-lg text-rose-600"><Fuel className="h-5 w-5" /></div>;
       return <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><FileText className="h-5 w-5" /></div>;
   };
 
@@ -647,6 +677,7 @@ export function ImportsPage() {
       if (type === 'uber_vehicle_performance') return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">Vehicle Perf.</Badge>;
       if (type === 'uber_driver_activity') return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200">Driver Activity</Badge>;
       if (type === 'uber_rental_contract') return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-yellow-200">Rental Contract</Badge>;
+      if (type === 'fuel_statement') return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-200 border-rose-200">Fuel Statement</Badge>;
       return <Badge variant="secondary">Generic CSV</Badge>;
   };
 
@@ -907,6 +938,7 @@ export function ImportsPage() {
                     { id: 'Lyft', icon: 'LY', color: 'bg-pink-600 text-white' },
                     { id: 'Bolt', icon: 'BO', color: 'bg-green-500 text-white' },
                     { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white' },
+                    { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white' },
                     { id: 'Custom', icon: '?', color: 'bg-slate-500 text-white' },
                 ].map(platform => (
                     <Card 
@@ -939,6 +971,8 @@ export function ImportsPage() {
                     <CardDescription>
                         {selectedPlatform === 'Uber' 
                         ? 'Upload "Trip Activity" AND "Payment Orders" files together.' 
+                        : selectedPlatform === 'Fuel'
+                        ? 'Upload your fuel card statement (CSV).'
                         : `Upload your ${selectedPlatform} CSV export files.`}
                     </CardDescription>
                 </div>
@@ -1230,6 +1264,9 @@ export function ImportsPage() {
                               </TabsTrigger>
                               <TabsTrigger value="trip_meter" disabled={processedData.length === 0} className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">
                                    Trip Meter {processedData.length > 0 && `(${processedData.length})`}
+                              </TabsTrigger>
+                              <TabsTrigger value="fuel" disabled={processedFuelEntries.length === 0} className="data-[state=active]:bg-rose-50 data-[state=active]:text-rose-700">
+                                   Fuel Data {processedFuelEntries.length > 0 && `(${processedFuelEntries.length})`}
                               </TabsTrigger>
                           </TabsList>
 
@@ -1743,6 +1780,61 @@ export function ImportsPage() {
                                 </Table>
                             </div>
                           </TabsContent>
+
+                          <TabsContent value="fuel" className="space-y-4">
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
+                                <Fuel className="h-4 w-4 text-rose-500 mt-1 sm:mt-0" />
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-sm text-slate-500 font-medium whitespace-nowrap">Source Files:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {uploadedFiles.filter(f => f.type === 'fuel_statement').map(f => (
+                                            <Badge key={f.id} variant="secondary" className="bg-white border-slate-200 text-slate-600 hover:bg-white font-normal">
+                                                {f.name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="h-[500px] overflow-auto border rounded-md">
+                                <Table>
+                                    <TableHeader className="bg-slate-50 sticky top-0">
+                                        <TableRow>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Card Status</TableHead>
+                                            <TableHead>Location</TableHead>
+                                            <TableHead className="text-right">Volume (L)</TableHead>
+                                            <TableHead className="text-right">Amount ($)</TableHead>
+                                            <TableHead>Type</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {processedFuelEntries.map(entry => (
+                                            <TableRow key={entry.id}>
+                                                <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
+                                                <TableCell>
+                                                    {entry.cardId ? (
+                                                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Matched</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Unmatched</Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-xs truncate max-w-[200px]" title={entry.location}>{entry.location || '-'}</TableCell>
+                                                <TableCell className="text-right">{entry.liters?.toFixed(2) || '-'}</TableCell>
+                                                <TableCell className="text-right font-medium">${entry.amount.toFixed(2)}</TableCell>
+                                                <TableCell><Badge variant="outline" className="font-normal text-slate-500">{entry.type.replace('_', ' ')}</Badge></TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {processedFuelEntries.length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                                    No fuel data found. Please upload a "Fuel Statement" file.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                          </TabsContent>
                       </Tabs>
                   </CardContent>
               </Card>
@@ -1761,6 +1853,7 @@ export function ImportsPage() {
                <p className="text-slate-500">
                   Your fleet database has been updated successfully.<br/>
                   {processedData.length} trips and {processedDriverMetrics.length} driver records have been committed.
+                  {processedFuelEntries.length > 0 && <><br/>{processedFuelEntries.length} fuel entries imported.</>}
                </p>
                {processedInsights && (processedInsights.alerts?.length || 0) > 0 && (
                    <div className="mt-4 p-4 bg-orange-50 text-orange-800 rounded-md text-sm border border-orange-100 max-w-md mx-auto">

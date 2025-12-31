@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Star, 
@@ -26,7 +26,9 @@ import {
   Eye,
   Filter,
   Info,
-  Fuel
+  Fuel,
+  CreditCard as CreditCardIcon,
+  Car as CarIcon
 } from 'lucide-react';
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";

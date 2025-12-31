@@ -1,4 +1,5 @@
 import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics, VehicleMetrics, RentalContract, OrganizationMetrics } from '../types/data';
+import { FuelEntry, FuelCard } from '../types/fuel';
 import Papa from 'papaparse';
 
 // ... (Legacy code support if needed, but we focus on new logic)
@@ -62,7 +63,7 @@ export interface FileData {
   name: string;
   rows: ParsedRow[];
   headers: string[];
-  type: 'uber_trip' | 'uber_payment' | 'uber_payment_driver' | 'uber_payment_org' | 'uber_driver_quality' | 'uber_vehicle_performance' | 'uber_driver_activity' | 'uber_rental_contract' | 'generic';
+  type: 'uber_trip' | 'uber_payment' | 'uber_payment_driver' | 'uber_payment_org' | 'uber_driver_quality' | 'uber_vehicle_performance' | 'uber_driver_activity' | 'uber_rental_contract' | 'fuel_statement' | 'generic';
   validationErrors?: string[];
   reportDate?: string; // ISO String
   customMapping?: Record<string, string>;
@@ -238,6 +239,13 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
     // 8. Rental Contracts
     if (has('TermUUID') || (has('OrganizationUUID') && has('Balance'))) return 'uber_rental_contract';
     
+    // 9. Fuel Statement
+    if (
+        (has('Card Number') || has('Card #') || has('Pan') || has('Card ID')) && 
+        (has('Volume') || has('Liters') || has('Gallons') || has('Qty') || has('Quantity')) && 
+        (has('Amount') || has('Cost') || has('Total') || has('Price'))
+    ) return 'fuel_statement';
+    
     return 'generic';
 }
 
@@ -304,6 +312,7 @@ export interface ProcessedBatch {
     vehicleMetrics: VehicleMetrics[];
     rentalContracts: RentalContract[];
     organizationMetrics: OrganizationMetrics[];
+    fuelEntries?: FuelEntry[];
     organizationName?: string; // Phase 1: Fleet Owner
     tripAnalytics?: TripAnalytics; // Phase 4
     calibrationStats?: {
@@ -543,13 +552,90 @@ function calculateCalibrationDeduction(fleetStats: FleetStats, files: FileData[]
     return 0;
 }
 
-export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string): ProcessedBatch {
+function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] {
+    const entries: FuelEntry[] = [];
+    
+    rows.forEach(row => {
+        // 1. Identify Key Fields
+        const getVal = (keys: string[]) => {
+             for (const k of keys) {
+                  if (row[k] !== undefined) return String(row[k]);
+                  const found = Object.keys(row).find(rk => rk.toLowerCase().trim() === k.toLowerCase().trim());
+                  if (found) return String(row[found]);
+             }
+             return undefined;
+        };
+
+        // Date
+        const dateStr = getVal(['Date', 'Transaction Date', 'Time', 'Date/Time']);
+        if (!dateStr) return;
+        
+        let date: Date | null = null;
+        try {
+            date = parseDateString(dateStr, true); // Default to MM/DD
+        } catch (e) {}
+        
+        if (!date) return;
+
+        // Amount
+        const amountStr = getVal(['Amount', 'Total', 'Cost', 'Net Amount', 'Total Cost']);
+        if (!amountStr) return;
+        const amount = parseFloat(amountStr.replace(/[^0-9.-]/g, ''));
+        if (isNaN(amount) || amount === 0) return;
+
+        // Volume
+        const volStr = getVal(['Volume', 'Liters', 'Gallons', 'Qty', 'Quantity']);
+        const liters = volStr ? parseFloat(volStr.replace(/[^0-9.-]/g, '')) : undefined;
+
+        // Price Unit
+        const priceStr = getVal(['Price', 'Unit Price', 'PPG', 'PPL']);
+        const pricePerLiter = priceStr ? parseFloat(priceStr.replace(/[^0-9.-]/g, '')) : undefined;
+
+        // Card
+        const cardNumRaw = getVal(['Card Number', 'Card #', 'Pan', 'Card ID']);
+        const cardNum = cardNumRaw ? cardNumRaw.replace(/[^0-9]/g, '') : '';
+        
+        // Location
+        const location = getVal(['Location', 'Site', 'Station', 'Merchant', 'Site Name']);
+
+        // Match Card
+        let matchedCard: FuelCard | undefined;
+        if (cardNum && fuelCards && fuelCards.length > 0) {
+            // Try exact match (last 4 or full)
+            matchedCard = fuelCards.find(c => {
+                const cleanStored = c.cardNumber.replace(/[^0-9]/g, '');
+                return cleanStored.endsWith(cardNum) || cardNum.endsWith(cleanStored);
+            });
+        }
+
+        const entry: FuelEntry = {
+            id: crypto.randomUUID(),
+            date: date.toISOString(),
+            amount,
+            liters,
+            pricePerLiter,
+            location,
+            cardId: matchedCard?.id,
+            vehicleId: matchedCard?.assignedVehicleId,
+            driverId: matchedCard?.assignedDriverId,
+            type: 'Card_Transaction'
+        };
+
+        entries.push(entry);
+    });
+
+    console.log(`[Import] Processed ${entries.length} fuel entries.`);
+    return entries;
+}
+
+export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string, fuelCards: FuelCard[] = []): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
     const genericTrips: Trip[] = [];
     const driverMetricsMap = new Map<string, DriverMetrics>();
     const vehicleMetrics: VehicleMetrics[] = [];
     const rentalContracts: RentalContract[] = [];
     const organizationMetrics: OrganizationMetrics[] = [];
+    const fuelEntries: FuelEntry[] = [];
     let organizationName = knownFleetName || ''; // Phase 1: Track Fleet Owner Name
     
     // Phase 2: Calculate Global Fleet Stats for Static Reconstruction
@@ -564,6 +650,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
     // 1. Process all files
     files.forEach(file => {
+        if (file.type === 'fuel_statement') {
+             const entries = processFuelData(file.rows, fuelCards);
+             fuelEntries.push(...entries);
+             return;
+        }
+
         if (file.type === 'generic') {
             // Process generic files immediately as standalone trips
             // Priority: 1. AI Custom Mapping, 2. Auto-Detect

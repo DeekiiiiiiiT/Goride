@@ -14,6 +14,7 @@ import { Badge } from "../ui/badge";
 import { CalendarIcon, FileCheck, AlertCircle, TrendingUp, Info } from "lucide-react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
@@ -127,16 +128,71 @@ export function ReconciliationTable({
                             <TableRow>
                                 <TableHead className="w-[250px]">Vehicle / Driver</TableHead>
                                 <TableHead className="w-[100px]">Status</TableHead>
-                                <TableHead className="text-right">Gas Card Charges</TableHead>
                                 <TableHead className="text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                        Operating Cost
-                                        <Info className="h-3 w-3 text-slate-400" />
-                                    </div>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Gas Card Charges
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Total amount charged to fuel cards for this vehicle.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
                                 </TableHead>
-                                <TableHead className="text-right">Fuel Misc (Leakage)</TableHead>
-                                <TableHead className="text-right bg-blue-50/50">Company Share</TableHead>
-                                <TableHead className="text-right bg-amber-50/50">Driver Share</TableHead>
+                                <TableHead className="text-right">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Operating Cost
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Calculated based on efficiency (L/100km) × Trip Distance.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Fuel Misc (Leakage)
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Difference between Actual Spend and Operating Cost. Positive values indicate excess consumption.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right bg-blue-50/50">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Company Share
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Portion of fuel cost covered by the company.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right bg-amber-50/50">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Driver Share
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Portion of fuel cost split to the driver to incentivize efficiency.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>

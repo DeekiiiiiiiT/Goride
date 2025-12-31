@@ -1,4 +1,5 @@
 import { Trip, DriverMetrics, VehicleMetrics } from '../types/data';
+import { FuelEntry } from '../types/fuel';
 import { format, startOfWeek, endOfWeek, subDays, isWithinInterval } from 'date-fns';
 
 export interface ReportSummary {
@@ -63,6 +64,24 @@ export const ReportGenerator = {
         { label: "Total Fleet", value: vehicles.length }
       ],
       details: vehicles
+    };
+  },
+
+  generateFuelReport(entries: FuelEntry[]): ReportSummary {
+    const totalSpend = entries.reduce((sum, e) => sum + e.amount, 0);
+    const totalGallons = entries.reduce((sum, e) => sum + e.gallons, 0);
+    const avgPrice = totalGallons > 0 ? totalSpend / totalGallons : 0;
+    
+    return {
+      title: "Fuel Consumption Analysis",
+      generatedAt: new Date().toISOString(),
+      period: "Last 30 Days",
+      stats: [
+        { label: "Total Fuel Cost", value: `$${totalSpend.toLocaleString()}` },
+        { label: "Gallons Pumped", value: totalGallons.toFixed(1) },
+        { label: "Avg Price/Gal", value: `$${avgPrice.toFixed(2)}` }
+      ],
+      details: entries.slice(0, 10)
     };
   },
 

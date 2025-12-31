@@ -4,7 +4,8 @@ import {
   CreditCard, 
   FileSpreadsheet, 
   Fuel,
-  LayoutDashboard
+  LayoutDashboard,
+  FileText
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -26,9 +27,6 @@ export function FuelLayout({ children, activeTab = "dashboard", onTabChange, onA
           <p className="text-slate-500 mt-1">Track consumption, reconcile expenses, and manage gas cards.</p>
         </div>
         <div className="flex items-center gap-2">
-           <Button variant="outline">
-              Export Report
-           </Button>
            <Button onClick={onAddTransaction}>
               <Fuel className="h-4 w-4 mr-2" />
               Add Transaction
@@ -37,7 +35,7 @@ export function FuelLayout({ children, activeTab = "dashboard", onTabChange, onA
       </div>
 
       <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-        <TabsList className="grid w-full md:w-[600px] grid-cols-4">
+        <TabsList className="grid w-full md:w-[750px] grid-cols-5">
           <TabsTrigger value="dashboard">
              <LayoutDashboard className="h-4 w-4 mr-2" />
              Overview
@@ -53,6 +51,10 @@ export function FuelLayout({ children, activeTab = "dashboard", onTabChange, onA
           <TabsTrigger value="logs">
              <BarChart3 className="h-4 w-4 mr-2" />
              Logs
+          </TabsTrigger>
+          <TabsTrigger value="reports">
+             <FileText className="h-4 w-4 mr-2" />
+             Reports
           </TabsTrigger>
         </TabsList>
         

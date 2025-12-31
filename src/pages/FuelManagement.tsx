@@ -7,7 +7,7 @@ import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
-import { FuelImportModal } from '../components/fuel/FuelImportModal';
+import { ReportsPage } from '../components/fuel/ReportsPage';
 import { ReconciliationTable } from '../components/fuel/ReconciliationTable';
 import { DatePickerWithRange } from '../components/ui/date-range-picker';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
@@ -38,7 +38,6 @@ export function FuelManagement() {
   // Fuel Log State
   const [logs, setLogs] = useState<FuelEntry[]>([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<FuelEntry | null>(null);
 
   // Adjustment State
@@ -146,20 +145,6 @@ export function FuelManagement() {
       }
   };
 
-  const handleImportLogs = async (newEntries: FuelEntry[]) => {
-      try {
-          // Save all imported entries
-          // Ideally backend would support bulk insert, but loop is fine for MVP
-          const savedEntries = await Promise.all(newEntries.map(entry => fuelService.saveFuelEntry(entry)));
-          
-          setLogs(prev => [...savedEntries, ...prev]);
-          toast.success(`Imported ${savedEntries.length} transactions`);
-          setIsImportModalOpen(false);
-      } catch (e) {
-          console.error(e);
-          toast.error("Failed to save imported transactions");
-      }
-  };
 
   const handleSaveAdjustment = async (adj: MileageAdjustment) => {
       try {
@@ -296,10 +281,6 @@ export function FuelManagement() {
                     <p className="text-sm text-slate-500">History of all fuel purchases and manual entries.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Import Statement
-                    </Button>
                     <Button onClick={() => { setEditingLog(null); setIsLogModalOpen(true); }}>
                         <Plus className="h-4 w-4 mr-2" />
                         Add Entry
@@ -315,6 +296,10 @@ export function FuelManagement() {
                 getDriverName={getDriverName}
             />
         </div>
+      )}
+
+      {activeTab === 'reports' && (
+          <ReportsPage />
       )}
 
       {/* Modals */}
@@ -337,14 +322,6 @@ export function FuelManagement() {
             cards={cards}
       />
 
-      <FuelImportModal 
-            isOpen={isImportModalOpen}
-            onClose={() => setIsImportModalOpen(false)}
-            onSave={handleImportLogs}
-            cards={cards}
-            vehicles={vehicles}
-            drivers={drivers}
-      />
 
       <MileageAdjustmentModal 
             isOpen={isAdjustmentModalOpen}
