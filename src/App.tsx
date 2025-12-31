@@ -14,6 +14,8 @@ import { TollReconciliation } from './pages/TollReconciliation';
 import { TagInventory } from './pages/TagInventory';
 import { ClaimableLoss } from './pages/ClaimableLoss';
 import { UserManagementPage } from './components/users/UserManagementPage';
+import { TierConfigPage } from './components/tiers/TierConfigPage';
+import { FuelManagement } from './pages/FuelManagement';
 
 // Driver Portal Components
 import { DriverLayout } from './components/driver-portal/DriverLayout';
@@ -118,6 +120,8 @@ function AppContent() {
       {currentPage === 'toll-tags' && <TollReconciliation />}
       {currentPage === 'tag-inventory' && <TagInventory />}
       {currentPage === 'claimable-loss' && <ClaimableLoss />}
+      {currentPage === 'tier-config' && <TierConfigPage />}
+      {currentPage === 'fuel-management' && <FuelManagement />}
       {currentPage === 'user-management' && <UserManagementPage />}
       {currentPage === 'settings' && <SettingsPage />}
     </AppLayout>

@@ -106,6 +106,7 @@ import { calculateLiveMileage } from '../../utils/mileageProjection';
 import { LogTollTopupModal } from './LogTollTopupModal';
 import { LogTollUsageModal } from './LogTollUsageModal';
 import { BulkImportTollTransactionsModal } from './BulkImportTollTransactionsModal';
+import { FuelSettingsCard } from '../fuel/FuelSettingsCard';
 import { Textarea } from "../ui/textarea";
 import { Checkbox } from "../ui/checkbox";
 
@@ -2657,6 +2658,9 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                 )}
                             </CardContent>
                          </Card>
+                         
+                         {/* Fuel Settings */}
+                         <FuelSettingsCard vehicle={vehicle} onSave={(v) => onUpdate?.(v)} />
                     </div>
                 );
             })()}

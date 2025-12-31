@@ -30,6 +30,7 @@ import { api } from '../../services/api';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { DriverClaims } from './DriverClaims';
+import { DriverFuelStats } from './DriverFuelStats';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 function ExpenseLogger() {
@@ -384,9 +385,10 @@ export function DriverExpenses() {
   return (
     <div className="space-y-4">
       <Tabs defaultValue="claims" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-100 p-1 rounded-xl">
+        <TabsList className="grid w-full grid-cols-3 mb-4 bg-slate-100 p-1 rounded-xl">
           <TabsTrigger value="claims" className="rounded-lg">Refund Claims</TabsTrigger>
           <TabsTrigger value="expenses" className="rounded-lg">My Expenses</TabsTrigger>
+          <TabsTrigger value="fuel" className="rounded-lg">Fuel & MPG</TabsTrigger>
         </TabsList>
 
         <TabsContent value="expenses" className="mt-0">
@@ -395,6 +397,10 @@ export function DriverExpenses() {
 
         <TabsContent value="claims" className="mt-0">
            <DriverClaims />
+        </TabsContent>
+
+        <TabsContent value="fuel" className="mt-0">
+           <DriverFuelStats />
         </TabsContent>
       </Tabs>
     </div>

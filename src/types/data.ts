@@ -316,6 +316,15 @@ export interface RentalContract {
   weeksRemaining?: number; // If total contract value known (placeholder)
 }
 
+// Phase 1: Fuel Management Types
+export interface FuelCard {
+    id: string;
+    cardNumber: string; 
+    provider: string;
+    status: 'Active' | 'Inactive';
+    assignedVehicleId?: string;
+}
+
 // 5. Organization Metrics (Phase 2 New)
 export interface OrganizationMetrics {
     periodStart: string;
@@ -692,4 +701,19 @@ export interface ExpenseSplitRule {
   companyShare: number; // 0-100
   driverShare: number; // 0-100
   isDefault: boolean;
+  customSplits?: {
+    id: string;
+    name: string;
+    percentage: number;
+  }[];
+}
+
+// --- Phase 1 Extension: Driver History (Monthly Tier Tracking) ---
+export interface MonthlyPerformance {
+  monthKey: string; // "YYYY-MM" for sorting
+  monthLabel: string; // "October 2023" for display
+  earnings: number;
+  tripCount: number;
+  tier: TierConfig;
+  isCurrentMonth: boolean;
 }

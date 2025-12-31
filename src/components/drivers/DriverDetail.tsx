@@ -71,6 +71,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { api } from '../../services/api';
+import { tierService } from '../../services/tierService';
+import { TierCalculations } from '../../utils/tierCalculations';
+import { TierConfig } from '../../types/data';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
@@ -120,6 +123,20 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterCashOnly, setFilterCashOnly] = useState<boolean>(false);
   const tripsPerPage = 10;
+
+  // Phase 2: Tier State
+  const [tiers, setTiers] = useState<TierConfig[]>([]);
+
+  useEffect(() => {
+    tierService.getTiers().then(setTiers).catch(console.error);
+  }, []);
+
+  // Calculate Monthly Earnings & Current Tier (Independent of Date Range Selection)
+  const { monthlyEarnings, currentTier } = useMemo(() => {
+      const mEarnings = TierCalculations.calculateMonthlyEarnings(trips);
+      const cTier = TierCalculations.getTierForEarnings(mEarnings, tiers);
+      return { monthlyEarnings: mEarnings, currentTier: cTier };
+  }, [trips, tiers]);
 
   // Fetch Transactions
   React.useEffect(() => {
@@ -663,7 +680,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
            <div className="flex justify-between items-center">
               <span className="text-sm text-slate-500">Performance Tier</span>
               <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 flex items-center gap-1">
-                 <Award className="h-3 w-3" /> {metrics.totalEarnings > 5000 ? 'PLATINUM' : metrics.totalEarnings > 3000 ? 'GOLD' : metrics.totalEarnings > 1000 ? 'SILVER' : 'BRONZE'}
+                 <Award className="h-3 w-3" /> {currentTier?.name.toUpperCase() || 'BRONZE'}
               </Badge>
            </div>
            <div className="flex justify-between items-center">
@@ -800,10 +817,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                    ]}
                />
                <MetricCard 
-                  title="Total Fuel Used"
-                  value="Coming Soon"
-                  subtext="Total fuel used for the period"
-                  icon={<Fuel className="h-4 w-4 text-slate-500" />}
+                  title="Month-to-Date Earnings"
+                  value={`$${monthlyEarnings.toFixed(2)}`}
+                  subtext="Earnings for current month tier status"
+                  icon={<Award className="h-4 w-4 text-slate-500" />}
                />
             </div>
 
@@ -1066,6 +1083,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     title="Total Distance" 
                     value={`${metrics.totalDistance.toFixed(1)} km`} 
                     icon={<MapPin className="h-4 w-4 text-slate-500" />}
+                 />
+                 <MetricCard 
+                    title="Total Fuel Used"
+                    value="Coming Soon"
+                    subtext="Total fuel used for the period"
+                    icon={<Fuel className="h-4 w-4 text-slate-500" />}
                  />
              </div>
              

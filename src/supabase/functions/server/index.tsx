@@ -647,6 +647,119 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
   }
 });
 
+// Fuel Cards Endpoints
+app.get("/make-server-37f42386/fuel-cards", async (c) => {
+  try {
+    const cards = await kv.getByPrefix("fuel_card:");
+    return c.json(cards || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/fuel-cards", async (c) => {
+  try {
+    const card = await c.req.json();
+    if (!card.id) {
+        card.id = crypto.randomUUID();
+    }
+    await kv.set(`fuel_card:${card.id}`, card);
+    return c.json({ success: true, data: card });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/fuel-cards/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`fuel_card:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Fuel Entries (Logs) Endpoints
+app.get("/make-server-37f42386/fuel-entries", async (c) => {
+  try {
+    const entries = await kv.getByPrefix("fuel_entry:");
+    // Sort by date desc
+    if (entries && Array.isArray(entries)) {
+        entries.sort((a: any, b: any) => {
+            const timeA = new Date(a.date).getTime();
+            const timeB = new Date(b.date).getTime();
+            return timeB - timeA;
+        });
+    }
+    return c.json(entries || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/fuel-entries", async (c) => {
+  try {
+    const entry = await c.req.json();
+    if (!entry.id) {
+        entry.id = crypto.randomUUID();
+    }
+    await kv.set(`fuel_entry:${entry.id}`, entry);
+    return c.json({ success: true, data: entry });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/fuel-entries/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`fuel_entry:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Mileage Adjustments Endpoints
+app.get("/make-server-37f42386/mileage-adjustments", async (c) => {
+  try {
+    const adjustments = await kv.getByPrefix("fuel_adjustment:");
+     // Sort by week desc
+    if (adjustments && Array.isArray(adjustments)) {
+        adjustments.sort((a: any, b: any) => {
+            return (b.week || "").localeCompare(a.week || "");
+        });
+    }
+    return c.json(adjustments || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/mileage-adjustments", async (c) => {
+  try {
+    const adj = await c.req.json();
+    if (!adj.id) {
+        adj.id = crypto.randomUUID();
+    }
+    await kv.set(`fuel_adjustment:${adj.id}`, adj);
+    return c.json({ success: true, data: adj });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/mileage-adjustments/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`fuel_adjustment:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
   try {
     const { make, model, year, color, bodyType, licensePlate } = await c.req.json();
@@ -2195,6 +2308,42 @@ app.post("/make-server-37f42386/delete-user", async (c) => {
     return c.json({ success: true });
   } catch (e: any) {
     console.error("Delete User Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Fuel Dispute Endpoints
+app.get("/make-server-37f42386/fuel-disputes", async (c) => {
+  try {
+    const disputes = await kv.getByPrefix("fuel_dispute:");
+    return c.json(disputes || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/fuel-disputes", async (c) => {
+  try {
+    const dispute = await c.req.json();
+    if (!dispute.id) {
+        dispute.id = crypto.randomUUID();
+    }
+    if (!dispute.createdAt) {
+        dispute.createdAt = new Date().toISOString();
+    }
+    await kv.set(`fuel_dispute:${dispute.id}`, dispute);
+    return c.json({ success: true, data: dispute });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/fuel-disputes/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`fuel_dispute:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
