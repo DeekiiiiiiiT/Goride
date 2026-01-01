@@ -8,9 +8,10 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
-import { Loader2, Wrench, AlertTriangle, CheckCircle, HelpCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, Wrench, AlertTriangle, CheckCircle, HelpCircle, ArrowLeft, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { Label } from '../ui/label';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 
 interface DriverEquipmentProps {
     onBack?: () => void;
@@ -103,6 +104,13 @@ export function DriverEquipment({ onBack }: DriverEquipmentProps) {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
     };
 
+    const calculateTotalCost = (item: EquipmentItem) => {
+        const basePrice = item.price || 0;
+        const shipping = item.shippingCost || 0;
+        const subItemsTotal = (item.subItems || []).reduce((sum, sub) => sum + (sub.cost || 0), 0);
+        return basePrice + shipping + subItemsTotal;
+    };
+
     if (loading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
     }
@@ -119,90 +127,149 @@ export function DriverEquipment({ onBack }: DriverEquipmentProps) {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-                {onBack && (
-                    <Button variant="ghost" size="icon" onClick={onBack} className="-ml-2">
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                )}
-                <div>
-                    <h2 className="text-xl font-bold text-slate-900">Vehicle Equipment</h2>
-                    <p className="text-sm text-slate-500">Inventory for your assigned vehicle</p>
-                </div>
-            </div>
+            <Collapsible defaultOpen={false} className="w-full">
+                <CollapsibleTrigger asChild>
+                    <div className="flex items-center justify-between w-full p-4 bg-white rounded-lg border border-slate-200 shadow-sm cursor-pointer hover:bg-slate-50 transition-all active:scale-[0.99] select-none group">
+                        <div className="flex items-center gap-3">
+                            {onBack && (
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onBack();
+                                    }} 
+                                    className="-ml-2 h-8 w-8 text-slate-500 hover:text-slate-900"
+                                >
+                                    <ArrowLeft className="h-5 w-5" />
+                                </Button>
+                            )}
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-900 leading-tight">Vehicle Equipment</h2>
+                                <p className="text-sm text-slate-500 font-normal">Inventory for your assigned vehicle</p>
+                            </div>
+                        </div>
+                        <ChevronDown className="h-5 w-5 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                    </div>
+                </CollapsibleTrigger>
 
-            <div className="grid gap-4">
-                {items.length === 0 ? (
-                    <Card>
-                        <CardContent className="flex flex-col items-center justify-center p-8 text-center">
-                            <CheckCircle className="h-12 w-12 text-emerald-100 mb-4" />
-                            <h3 className="font-medium text-slate-900">No Equipment Listed</h3>
-                            <p className="text-sm text-slate-500 mt-1">This vehicle has no tracked equipment inventory.</p>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    items.map(item => (
-                        <Card key={item.id} className={item.status === 'Damaged' || item.status === 'Missing' ? 'border-red-200 bg-red-50/30' : ''}>
-                            <CardContent className="p-4 flex justify-between items-start">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <h4 className="font-semibold text-slate-900">{item.name}</h4>
-                                        <Badge variant={
-                                            item.status === 'Good' ? 'default' : 
-                                            item.status === 'Maintenance' ? 'secondary' : 'destructive'
-                                        } className="text-[10px] h-5 px-1.5">
-                                            {item.status}
-                                        </Badge>
-                                    </div>
-                                    
-                                    {/* Item Value */}
-                                    {item.price > 0 && (
-                                        <p className="text-sm font-medium text-slate-600 mt-1">
-                                            {formatCurrency(item.price)}
-                                        </p>
-                                    )}
-
-                                    {item.description && <p className="text-sm text-slate-500 mt-1">{item.description}</p>}
-                                    
-                                    {/* Sub Items Display */}
-                                    {item.subItems && item.subItems.length > 0 && (
-                                        <div className="mt-3 pl-3 border-l-2 border-slate-100 space-y-2">
-                                            {item.subItems.map(sub => (
-                                                <div key={sub.id} className="flex items-center justify-between text-sm group">
-                                                    <span className="text-slate-700 flex items-center gap-2">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-slate-400"></span>
-                                                        {sub.name}
-                                                    </span>
-                                                    {sub.cost > 0 && (
-                                                        <span className="text-slate-500 font-mono text-xs">
-                                                            {formatCurrency(sub.cost)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {item.notes && <p className="text-xs text-amber-600 mt-2 bg-amber-50 p-2 rounded border border-amber-100">{item.notes}</p>}
-                                </div>
+                <CollapsibleContent>
+                    <div className="grid gap-4 pt-2">
+                        {items.length === 0 ? (
+                            <Card>
+                                <CardContent className="flex flex-col items-center justify-center p-8 text-center">
+                                    <CheckCircle className="h-12 w-12 text-emerald-100 mb-4" />
+                                    <h3 className="font-medium text-slate-900">No Equipment Listed</h3>
+                                    <p className="text-sm text-slate-500 mt-1">This vehicle has no tracked equipment inventory.</p>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            items.map(item => {
+                                const hasDetails = (item.subItems && item.subItems.length > 0) || (item.shippingCost || 0) > 0;
+                                const totalCost = calculateTotalCost(item);
                                 
-                                {item.status === 'Good' && (
-                                    <Button 
-                                        variant="outline" 
-                                        size="sm" 
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 ml-4 shrink-0"
-                                        onClick={() => handleReportDamage(item)}
-                                    >
-                                        <AlertTriangle className="h-3 w-3 mr-1" />
-                                        Report
-                                    </Button>
-                                )}
-                            </CardContent>
-                        </Card>
-                    ))
-                )}
-            </div>
+                                return (
+                                    <Card key={item.id} className={item.status === 'Damaged' || item.status === 'Missing' ? 'border-red-200 bg-red-50/30' : ''}>
+                                        <CardContent className="p-4 flex justify-between items-start">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-semibold text-slate-900">{item.name}</h4>
+                                                    <Badge variant={
+                                                        item.status === 'Good' ? 'default' : 
+                                                        item.status === 'Maintenance' ? 'secondary' : 'destructive'
+                                                    } className="text-[10px] h-5 px-1.5">
+                                                        {item.status}
+                                                    </Badge>
+                                                </div>
+                                                
+                                                {/* Item Value with Collapsible Dropdown Details */}
+                                                {hasDetails ? (
+                                                    <Collapsible>
+                                                        <CollapsibleTrigger className="group flex items-center gap-2 mt-1 hover:opacity-80 transition-opacity outline-none">
+                                                            <p className="text-sm font-medium text-slate-600">
+                                                                {formatCurrency(totalCost)}
+                                                            </p>
+                                                            <ChevronDown className="h-4 w-4 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                                        </CollapsibleTrigger>
+                                                        
+                                                        {item.description && <p className="text-sm text-slate-500 mt-1">{item.description}</p>}
 
+                                                        <CollapsibleContent>
+                                                            <div className="mt-3 pl-3 border-l-2 border-slate-100 space-y-2 animate-in slide-in-from-top-2 fade-in duration-200">
+                                                                {/* Base Item Cost */}
+                                                                {(item.price || 0) > 0 && (
+                                                                    <div className="flex items-center justify-between text-sm group">
+                                                                        <span className="text-slate-700 flex items-center gap-2">
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-slate-400"></span>
+                                                                            {item.name}
+                                                                        </span>
+                                                                        <span className="text-slate-500 font-mono text-xs">
+                                                                            {formatCurrency(item.price)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {/* Shipping Cost Line Item */}
+                                                                {(item.shippingCost || 0) > 0 && (
+                                                                    <div className="flex items-center justify-between text-sm group">
+                                                                        <span className="text-slate-700 flex items-center gap-2">
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-slate-400"></span>
+                                                                            Shipping
+                                                                        </span>
+                                                                        <span className="text-slate-500 font-mono text-xs">
+                                                                            {formatCurrency(item.shippingCost!)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+
+                                                                {item.subItems?.map(sub => (
+                                                                    <div key={sub.id} className="flex items-center justify-between text-sm group">
+                                                                        <span className="text-slate-700 flex items-center gap-2">
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-slate-400"></span>
+                                                                            {sub.name}
+                                                                        </span>
+                                                                        {sub.cost > 0 && (
+                                                                            <span className="text-slate-500 font-mono text-xs">
+                                                                                {formatCurrency(sub.cost)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </CollapsibleContent>
+                                                    </Collapsible>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-sm font-medium text-slate-600 mt-1">
+                                                            {formatCurrency(totalCost)}
+                                                        </p>
+                                                        {item.description && <p className="text-sm text-slate-500 mt-1">{item.description}</p>}
+                                                    </>
+                                                )}
+
+                                                {item.notes && <p className="text-xs text-amber-600 mt-2 bg-amber-50 p-2 rounded border border-amber-100">{item.notes}</p>}
+                                            </div>
+                                            
+                                            {item.status === 'Good' && (
+                                                <Button 
+                                                    variant="outline" 
+                                                    size="sm" 
+                                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 ml-4 shrink-0"
+                                                    onClick={() => handleReportDamage(item)}
+                                                >
+                                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                                    Report
+                                                </Button>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })
+                        )}
+                    </div>
+                </CollapsibleContent>
+            </Collapsible>
+            
             <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
                 <DialogContent>
                     <DialogHeader>

@@ -54,7 +54,7 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
       </main>
 
       {/* Bottom Navigation for Mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 pb-safe">
         <div className="flex items-center justify-around h-16 px-2">
           <NavButton 
             icon={<LayoutDashboard className="h-5 w-5" />} 

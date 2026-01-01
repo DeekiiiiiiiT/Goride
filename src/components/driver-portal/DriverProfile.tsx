@@ -16,7 +16,8 @@ import {
   Bell,
   Moon,
   Globe,
-  Download
+  Download,
+  Loader2
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useCurrentDriver } from "../../hooks/useCurrentDriver";
@@ -40,6 +41,7 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
   const [vehicle, setVehicle] = useState<any | null>(null);
   const [metrics, setMetrics] = useState<any | null>(null);
   const [activeSetting, setActiveSetting] = useState<SettingView>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   
   const name = driverRecord?.name || user?.user_metadata?.name || 'Driver';
   const email = driverRecord?.email || user?.email || 'No Email';
@@ -107,6 +109,16 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
   const insuranceStatus = getDocStatus(vehicle?.insuranceExpiry);
   const fitnessStatus = getDocStatus(vehicle?.fitnessExpiry);
   const regStatus = getDocStatus(vehicle?.registrationExpiry);
+
+  const handleLogoutClick = async () => {
+    try {
+      setIsLoggingOut(true);
+      await onLogout();
+    } catch (error) {
+      console.error("Logout failed", error);
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -214,9 +226,18 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
          </Card>
       </div>
 
-      <Button variant="destructive" className="w-full" onClick={onLogout}>
-         <LogOut className="mr-2 h-4 w-4" />
-         Log Out
+      <Button variant="destructive" className="w-full" onClick={handleLogoutClick} disabled={isLoggingOut}>
+         {isLoggingOut ? (
+             <>
+                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                 Logging Out...
+             </>
+         ) : (
+             <>
+                <LogOut className="mr-2 h-4 w-4" />
+                Log Out
+             </>
+         )}
       </Button>
 
       <p className="text-center text-xs text-slate-400 pb-4">
