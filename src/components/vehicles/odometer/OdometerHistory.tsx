@@ -39,9 +39,11 @@ interface OdometerHistoryProps {
   vehicleId: string;
   maintenanceLogs?: any[]; // Passed from parent to allow backfilling
   trips?: any[]; // Passed from parent to allow backfilling from imports
+  onCorrectReading?: () => void;
+  refreshTrigger?: number;
 }
 
-export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, maintenanceLogs = [], trips = [] }) => {
+export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, maintenanceLogs = [], trips = [], onCorrectReading, refreshTrigger = 0 }) => {
   const [history, setHistory] = useState<OdometerReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -61,7 +63,7 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
 
   useEffect(() => {
     fetchHistory();
-  }, [fetchHistory]);
+  }, [fetchHistory, refreshTrigger]);
 
   // Calculate Virtual History by merging persistent history with trip data
   const combinedHistory = React.useMemo(() => {
@@ -273,6 +275,15 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
 
   // Calculate deltas using combinedHistory
   const sortedHistory = combinedHistory;
+  
+  // Get latest live reading
+  const liveReading = sortedHistory.length > 0 ? sortedHistory[0].value : 0;
+  const lastVerified = sortedHistory.find(r => !((r as any).isVirtual))?.date || '';
+  const isProjected = sortedHistory.length > 0 && (sortedHistory[0] as any).isVirtual;
+
+  // Digits for the counter
+  const digits = liveReading.toLocaleString('en-US', { minimumIntegerDigits: 6, useGrouping: false }).split('').slice(-6);
+
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -285,92 +296,195 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ vehicleId, mai
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="space-y-1.5">
-            <CardTitle>Odometer History</CardTitle>
-            <CardDescription>Timeline of mileage readings from all sources</CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {sortedHistory.length === 0 ? (
-            <div className="py-8 text-center text-slate-500">
-                <p>No odometer history found for this vehicle.</p>
-                <p className="text-sm mt-2 text-slate-400">Import trips or add service logs to populate history.</p>
+    <div className="space-y-6">
+      {/* Top Banner */}
+      <div className="bg-slate-900 rounded-xl p-6 text-white relative overflow-hidden shadow-lg">
+        {/* Background Accent */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+        
+        <div className="flex flex-col md:flex-row justify-between items-end gap-6 relative z-10">
+          <div>
+            <div className="flex items-center gap-2 mb-4 text-indigo-300">
+               <div className="h-5 w-5"><RefreshCw className="h-4 w-4" /></div>
+               <span className="font-medium">Live Odometer Reading</span>
             </div>
-        ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Reading</TableHead>
-              <TableHead>Delta</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedHistory.map((reading, index) => {
-              // Note: sortedHistory is DESC. Next item is previous in time.
-              const prevReading = sortedHistory[index + 1];
-              const delta = prevReading ? reading.value - prevReading.value : 0;
-              
-              // Type safety cast for virtual property
-              const isVirtual = (reading as any).isVirtual;
+            
+            <div className="flex items-end gap-3">
+               <div className="flex gap-1">
+                  {digits.map((digit, i) => (
+                      <div key={i} className="w-10 h-14 bg-slate-800 border border-slate-700 rounded flex items-center justify-center text-3xl font-mono font-bold shadow-inner">
+                          {digit}
+                      </div>
+                  ))}
+               </div>
+               <div className="mb-2">
+                   <span className="text-xl text-slate-400 font-mono ml-2">km</span>
+                   {isProjected && (
+                       <Badge variant="outline" className="ml-3 border-indigo-500/50 text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20">
+                           <RefreshCw className="w-3 h-3 mr-1" /> Projected
+                       </Badge>
+                   )}
+               </div>
+            </div>
+            
+            <p className="text-sm text-slate-400 mt-4 max-w-md">
+                This reading is a synthesis of verified service logs, imported trip data, and daily usage projections.
+            </p>
+          </div>
 
-              return (
-                <TableRow key={reading.id} className={isVirtual ? 'bg-slate-50/50' : ''}>
-                  <TableCell className="font-medium">
-                    {formatDate(reading.date)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getSourceIcon(reading.source)}
-                      <span>{getSourceLabel(reading.source)}</span>
-                      {reading.type === 'Calculated' && (
-                        <Badge variant="outline" className="text-xs h-5 px-1.5 ml-1 border-slate-200 text-slate-500">Calc</Badge>
-                      )}
+          <div className="flex flex-col items-end gap-2">
+              <div className="text-right mb-2">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Last Verified</p>
+                  <p className="text-lg font-medium">{lastVerified ? formatDate(lastVerified) : 'Never'}</p>
+              </div>
+              
+              <Button onClick={onCorrectReading} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-900/20">
+                  <Wrench className="w-4 h-4 mr-2" />
+                  Correct Reading
+              </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+            <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="space-y-1">
+                    <CardTitle className="text-lg text-slate-900">Odometer History</CardTitle>
+                    <CardDescription>Timeline of mileage readings from all sources</CardDescription>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {sortedHistory.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                        <Calendar className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+                        <p className="font-medium text-slate-900">No History Available</p>
+                        <p className="text-sm mt-1 text-slate-500 max-w-xs mx-auto">Import trips or add service logs to start tracking your vehicle's mileage.</p>
                     </div>
-                  </TableCell>
-                  <TableCell className="font-mono">
-                    {reading.value.toLocaleString()} km
-                  </TableCell>
-                  <TableCell>
-                    {prevReading && (
-                      <span className={`text-xs ${delta >= 0 ? 'text-slate-500' : 'text-red-500'}`}>
-                        {delta >= 0 ? '+' : ''}{delta.toLocaleString()} km
-                      </span>
-                    )}
-                    {!prevReading && <span className="text-xs text-slate-400">-</span>}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem 
-                            onClick={() => handleDelete(reading.id, isVirtual)} 
-                            className={`${isVirtual ? 'text-slate-400 cursor-not-allowed' : 'text-red-600 focus:text-red-600'}`}
-                            disabled={isVirtual}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-        )}
-      </CardContent>
-    </Card>
+                ) : (
+                <Table>
+                <TableHeader>
+                    <TableRow className="hover:bg-transparent border-b-slate-100">
+                    <TableHead className="w-[150px] font-semibold text-slate-900">Date</TableHead>
+                    <TableHead className="w-[180px] font-semibold text-slate-900">Source</TableHead>
+                    <TableHead className="font-semibold text-slate-900">Reading</TableHead>
+                    <TableHead className="font-semibold text-slate-900">Delta</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {sortedHistory.map((reading, index) => {
+                    // Note: sortedHistory is DESC. Next item is previous in time.
+                    const prevReading = sortedHistory[index + 1];
+                    const delta = prevReading ? reading.value - prevReading.value : 0;
+                    
+                    // Type safety cast for virtual property
+                    const isVirtual = (reading as any).isVirtual;
+
+                    return (
+                        <TableRow key={reading.id} className={`border-b-slate-50 group hover:bg-slate-50 ${isVirtual ? 'bg-slate-50/30' : ''}`}>
+                        <TableCell className="font-medium text-slate-700 py-4">
+                            {formatDate(reading.date)}
+                        </TableCell>
+                        <TableCell>
+                            <div className="flex items-center gap-2">
+                            {getSourceIcon(reading.source)}
+                            <span className="text-sm text-slate-600">{getSourceLabel(reading.source)}</span>
+                            {reading.type === 'Calculated' && (
+                                <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1 border-slate-200 text-slate-400 font-normal bg-white">Calc</Badge>
+                            )}
+                            </div>
+                        </TableCell>
+                        <TableCell className="font-mono font-medium text-slate-900">
+                            {reading.value.toLocaleString()} <span className="text-slate-400 text-xs ml-0.5">km</span>
+                        </TableCell>
+                        <TableCell>
+                            {prevReading && (
+                            <span className={`text-xs font-medium ${delta >= 0 ? 'text-slate-500' : 'text-red-500'}`}>
+                                {delta > 0 && '+'}{delta.toLocaleString()} km
+                            </span>
+                            )}
+                            {!prevReading && <span className="text-xs text-slate-400">-</span>}
+                        </TableCell>
+                        <TableCell>
+                            <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="sr-only">Open menu</span>
+                                <MoreHorizontal className="h-4 w-4 text-slate-400" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem 
+                                    onClick={() => handleDelete(reading.id, isVirtual)} 
+                                    className={`${isVirtual ? 'text-slate-400 cursor-not-allowed' : 'text-red-600 focus:text-red-600'}`}
+                                    disabled={isVirtual}
+                                >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                            </DropdownMenu>
+                        </TableCell>
+                        </TableRow>
+                    );
+                    })}
+                </TableBody>
+                </Table>
+                )}
+            </CardContent>
+            </Card>
+        </div>
+
+        <div className="lg:col-span-1">
+             <Card className="border-slate-200 sticky top-6">
+                 <CardHeader>
+                     <CardTitle className="text-base text-slate-900">About Odometer History</CardTitle>
+                 </CardHeader>
+                 <CardContent className="space-y-6">
+                     <p className="text-sm text-slate-500 leading-relaxed">
+                         This timeline tracks your vehicle's mileage from multiple sources to provide a unified history.
+                     </p>
+                     
+                     <div className="space-y-4">
+                         <div className="flex gap-3">
+                             <div className="mt-0.5"><Wrench className="h-4 w-4 text-blue-500" /></div>
+                             <div>
+                                 <p className="text-sm font-medium text-slate-900">Service Log</p>
+                                 <p className="text-xs text-slate-500">Verified readings from maintenance visits.</p>
+                             </div>
+                         </div>
+                         
+                         <div className="flex gap-3">
+                             <div className="mt-0.5"><FileUp className="h-4 w-4 text-green-500" /></div>
+                             <div>
+                                 <p className="text-sm font-medium text-slate-900">Trip Import</p>
+                                 <p className="text-xs text-slate-500">Calculated mileage from uploaded trip logs.</p>
+                             </div>
+                         </div>
+
+                         <div className="flex gap-3">
+                             <div className="mt-0.5"><User className="h-4 w-4 text-slate-500" /></div>
+                             <div>
+                                 <p className="text-sm font-medium text-slate-900">Manual</p>
+                                 <p className="text-xs text-slate-500">Ad-hoc readings you enter yourself.</p>
+                             </div>
+                         </div>
+
+                         <div className="flex gap-3">
+                             <div className="mt-0.5"><RefreshCw className="h-4 w-4 text-indigo-500" /></div>
+                             <div>
+                                 <p className="text-sm font-medium text-slate-900">Projected</p>
+                                 <p className="text-xs text-slate-500">Estimated based on daily average usage.</p>
+                             </div>
+                         </div>
+                     </div>
+                 </CardContent>
+             </Card>
+        </div>
+      </div>
+    </div>
   );
 };

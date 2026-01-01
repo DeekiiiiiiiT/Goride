@@ -22,7 +22,9 @@ import {
   Eye,
   Download,
   Trash2,
-  MoreVertical
+  MoreVertical,
+  DollarSign,
+  Receipt
 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { 
@@ -44,6 +46,7 @@ import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { Textarea } from "../ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +74,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Vehicle, VehicleDocument } from '../../types/vehicle';
 import { Trip } from '../../types/data';
 import { api } from '../../services/api';
+import { odometerService } from '../../services/odometerService';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { format, subDays, isSameDay, getDay, getHours } from 'date-fns';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -141,6 +145,14 @@ const MAINTENANCE_SCHEDULE = {
 export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate }: VehicleDetailProps) {
 
   const [isUpdateOdometerOpen, setIsUpdateOdometerOpen] = useState(false);
+  const [odometerRefreshTrigger, setOdometerRefreshTrigger] = useState(0);
+  
+  // Odometer Update Form
+  const [newOdometerValue, setNewOdometerValue] = useState('');
+  const [newOdometerDate, setNewOdometerDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newOdometerNotes, setNewOdometerNotes] = useState('');
+  const [isUpdatingOdometer, setIsUpdatingOdometer] = useState(false);
+
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<{url: string, name: string, type: string} | null>(null);
   
@@ -436,6 +448,38 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   };
 
 
+
+  const handleUpdateOdometer = async () => {
+      if (!newOdometerValue || !newOdometerDate) {
+          toast.error("Please enter a valid reading and date");
+          return;
+      }
+      
+      setIsUpdatingOdometer(true);
+      try {
+          await odometerService.addReading({
+              vehicleId: vehicle.id || vehicle.licensePlate,
+              value: parseFloat(newOdometerValue),
+              date: newOdometerDate,
+              source: 'Manual Update',
+              type: 'Hard',
+              notes: newOdometerNotes
+          });
+          
+          toast.success("Odometer updated successfully");
+          setOdometerRefreshTrigger(prev => prev + 1);
+          setIsUpdateOdometerOpen(false);
+          
+          // Reset form
+          setNewOdometerValue('');
+          setNewOdometerNotes('');
+      } catch (error) {
+          console.error(error);
+          toast.error("Failed to update odometer");
+      } finally {
+          setIsUpdatingOdometer(false);
+      }
+  };
 
   const handleSaveDocument = async () => {
     let docId = editingDocId;
@@ -769,7 +813,33 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           </TabsContent>
 
           <TabsContent value="financials" className="space-y-6 mt-6">
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                      <CardContent className="p-6">
+                          <div className="flex justify-between items-start mb-2">
+                              <p className="text-sm font-medium text-slate-500">Total Revenue</p>
+                              <DollarSign className="h-4 w-4 text-emerald-500" />
+                          </div>
+                          <h3 className="text-2xl font-bold text-slate-900">
+                              ${analytics.financials.totalRevenue.toLocaleString(undefined, {maximumFractionDigits: 2})}
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1">Lifetime</p>
+                      </CardContent>
+                  </Card>
+
+                  <Card>
+                      <CardContent className="p-6">
+                          <div className="flex justify-between items-start mb-2">
+                              <p className="text-sm font-medium text-slate-500">Total Expenses</p>
+                              <Receipt className="h-4 w-4 text-rose-500" />
+                          </div>
+                          <h3 className="text-2xl font-bold text-slate-900">
+                              ${analytics.financials.totalExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1">Est. Fuel, Maint, Ins.</p>
+                      </CardContent>
+                  </Card>
+
                   <Card>
                       <CardContent className="p-6">
                           <div className="flex justify-between items-start mb-2">
@@ -782,6 +852,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                           <p className="text-xs text-slate-500 mt-1">{analytics.financials.profitMargin.toFixed(1)}% Margin</p>
                       </CardContent>
                   </Card>
+
                   <Card>
                       <CardContent className="p-6">
                           <div className="flex justify-between items-start mb-2">
@@ -800,6 +871,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   <Card>
                       <CardHeader>
                           <CardTitle>Expense Breakdown</CardTitle>
+                          <CardDescription>Where is the money going?</CardDescription>
                       </CardHeader>
                       <CardContent className="h-[300px]">
                           <ResponsiveContainer width="100%" height="100%">
@@ -807,9 +879,45 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                   <Pie data={analytics.financials.breakdown} innerRadius={60} outerRadius={80} dataKey="value">
                                       {analytics.financials.breakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                                   </Pie>
-                                  <RechartsTooltip />
-                                  <Legend />
+                                  <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                                  <Legend verticalAlign="bottom" height={36}/>
                               </PieChart>
+                          </ResponsiveContainer>
+                      </CardContent>
+                  </Card>
+
+                  <Card>
+                      <CardHeader>
+                          <CardTitle>Profitability Analysis</CardTitle>
+                          <CardDescription>Revenue vs Expenses vs Profit</CardDescription>
+                      </CardHeader>
+                      <CardContent className="h-[300px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <BarChart 
+                                layout="vertical" 
+                                data={[
+                                    { name: 'Revenue', value: analytics.financials.totalRevenue, fill: '#10b981' },
+                                    { name: 'Expenses', value: analytics.financials.totalExpenses, fill: '#ef4444' },
+                                    { name: 'Net Profit', value: analytics.financials.netProfit, fill: '#6366f1' }
+                                ]}
+                                margin={{ left: 20 }}
+                              >
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                  <XAxis type="number" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val/1000}k`} />
+                                  <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                                  <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} cursor={{fill: 'transparent'}} />
+                                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={32}>
+                                    {
+                                        [
+                                            { name: 'Revenue', value: analytics.financials.totalRevenue, fill: '#10b981' },
+                                            { name: 'Expenses', value: analytics.financials.totalExpenses, fill: '#ef4444' },
+                                            { name: 'Net Profit', value: analytics.financials.netProfit, fill: '#6366f1' }
+                                        ].map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                                        ))
+                                    }
+                                  </Bar>
+                              </BarChart>
                           </ResponsiveContainer>
                       </CardContent>
                   </Card>
@@ -847,7 +955,16 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           </TabsContent>
 
           <TabsContent value="odometer" className="mt-6">
-              <OdometerHistory vehicleId={vehicle.id || vehicle.licensePlate} maintenanceLogs={maintenanceLogs} trips={trips} />
+              <OdometerHistory 
+                  vehicleId={vehicle.id || vehicle.licensePlate} 
+                  maintenanceLogs={maintenanceLogs} 
+                  trips={trips} 
+                  onCorrectReading={() => {
+                      setNewOdometerValue(vehicle.metrics.odometer?.toString() || '');
+                      setIsUpdateOdometerOpen(true);
+                  }}
+                  refreshTrigger={odometerRefreshTrigger}
+              />
           </TabsContent>
 
           <TabsContent value="documents" className="space-y-6 mt-6">
@@ -1311,6 +1428,49 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               </div>
           </TabsContent>
       </Tabs>
+
+      {/* Update Odometer Dialog */}
+      <Dialog open={isUpdateOdometerOpen} onOpenChange={setIsUpdateOdometerOpen}>
+          <DialogContent>
+              <DialogHeader>
+                  <DialogTitle>Correct Odometer Reading</DialogTitle>
+                  <DialogDescription>
+                      Manually record a verified odometer reading.
+                  </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                      <Label>Date</Label>
+                      <Input 
+                          type="date" 
+                          value={newOdometerDate} 
+                          onChange={(e) => setNewOdometerDate(e.target.value)} 
+                      />
+                  </div>
+                  <div className="space-y-2">
+                      <Label>New Reading (km)</Label>
+                      <Input 
+                          type="number" 
+                          placeholder="e.g. 125000" 
+                          value={newOdometerValue} 
+                          onChange={(e) => setNewOdometerValue(e.target.value)} 
+                      />
+                  </div>
+                  <div className="space-y-2">
+                      <Label>Notes (Optional)</Label>
+                      <Textarea 
+                          placeholder="Reason for correction..." 
+                          value={newOdometerNotes} 
+                          onChange={(e) => setNewOdometerNotes(e.target.value)} 
+                      />
+                  </div>
+                  <Button onClick={handleUpdateOdometer} disabled={isUpdatingOdometer} className="w-full">
+                      {isUpdatingOdometer && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      Save Reading
+                  </Button>
+              </div>
+          </DialogContent>
+      </Dialog>
 
       {/* Upload Document Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
