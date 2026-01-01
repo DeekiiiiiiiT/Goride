@@ -80,6 +80,7 @@ import { OdometerDisplay } from './odometer/OdometerDisplay';
 import { calculateLiveMileage } from '../../utils/mileageProjection';
 import { FixedExpensesManager } from './expenses/FixedExpensesManager';
 import { EquipmentManager } from './EquipmentManager';
+import { MaintenanceManager, MaintenanceLog } from './MaintenanceManager';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -89,25 +90,7 @@ interface VehicleDetailProps {
   onUpdate?: (vehicle: Vehicle) => void;
 }
 
-interface MaintenanceLog {
-    id: string;
-    vehicleId: string;
-    date: string;
-    type: string;
-    serviceInterval?: 'A' | 'B' | 'C' | 'D';
-    cost: number;
-    odo: number;
-    provider: string;
-    providerLocationUrl?: string;
-    notes: string;
-    checklist?: string[];
-    itemCosts?: Record<string, { material: number, labor: number }>;
-    inspectionFee?: number;
-    inspectionResults?: {
-        issues: string[];
-        notes: string;
-    };
-}
+
 
 const MAINTENANCE_SCHEDULE = {
     A: {
@@ -156,9 +139,10 @@ const MAINTENANCE_SCHEDULE = {
 };
 
 export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate }: VehicleDetailProps) {
-  const [isLogServiceOpen, setIsLogServiceOpen] = useState(false);
+
   const [isUpdateOdometerOpen, setIsUpdateOdometerOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<{url: string, name: string, type: string} | null>(null);
   
   // State for document management
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
@@ -168,25 +152,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Service Log State
-  const [scanLoading, setScanLoading] = useState(false);
-  const [logStep, setLogStep] = useState<'details' | 'inspection'>('details');
   const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
-  const [serviceForm, setServiceForm] = useState({
-      date: new Date().toISOString().split('T')[0],
-      type: '',
-      serviceInterval: '',
-      cost: '',
-      odo: '',
-      notes: '',
-      provider: '',
-      checklist: [] as string[],
-      itemCosts: {} as Record<string, { material: number, labor: number }>,
-      inspectionFee: '',
-      hasInspectionFee: false,
-      inspectionIssues: [] as string[],
-      inspectionNotes: ''
-  });
-  const [editingLogId, setEditingLogId] = useState<string | null>(null);
 
   const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
 
@@ -469,40 +435,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
     }
   };
 
-  const handleServiceScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
 
-      setScanLoading(true);
-      try {
-          const formData = new FormData();
-          formData.append('file', file);
-          const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
-          const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/parse-invoice`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${publicAnonKey}` },
-              body: formData
-          });
-          const result = await response.json();
-          if (result.success && result.data) {
-               setServiceForm(prev => ({
-                   ...prev,
-                   date: result.data.date || prev.date,
-                   type: result.data.type || 'other', 
-                   cost: result.data.cost ? String(result.data.cost) : prev.cost,
-                   odo: result.data.odometer ? String(result.data.odometer) : prev.odo,
-                   notes: result.data.notes || prev.notes
-               }));
-               toast.success("Invoice scanned successfully!");
-          } else {
-               toast.error("Failed to scan invoice");
-          }
-      } catch (err) {
-          toast.error("Error scanning invoice");
-      } finally {
-          setScanLoading(false);
-      }
-  };
 
   const handleSaveDocument = async () => {
     let docId = editingDocId;
@@ -510,6 +443,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
         if (uploadForm.type === 'Registration') docId = 'reg-cert';
         else if (uploadForm.type === 'Fitness') docId = 'fitness-cert';
         else if (uploadForm.type === 'Insurance') docId = 'insurance-policy';
+        else if (uploadForm.type === 'Valuation') docId = 'valuation-report';
         else docId = `doc-${Date.now()}`;
     }
     
@@ -899,69 +833,15 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   </TabsContent>
 
                   <TabsContent value="maintenance" className="mt-4">
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                           <div className="space-y-4">
-                               <Card>
-                                   <CardContent className="p-6">
-                                      <div className="flex items-center gap-3 mb-4">
-                                          <div className={
-                                              maintenanceStatus.status === 'Due Soon' ? "bg-amber-100 p-2 rounded-full text-amber-600" :
-                                              "bg-emerald-100 p-2 rounded-full text-emerald-600"
-                                          }>
-                                              <CheckCircle2 className="h-5 w-5" />
-                                          </div>
-                                          <div>
-                                              <p className="text-sm font-medium text-slate-500">Service Status</p>
-                                              <h4 className="text-lg font-bold text-slate-900">
-                                                  {maintenanceStatus.status}
-                                              </h4>
-                                          </div>
-                                      </div>
-                                      <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded">
-                                          Next: {maintenanceStatus.nextTypeLabel}
-                                      </p>
-                                   </CardContent>
-                               </Card>
-
-                               <Button 
-                                   className="w-full bg-indigo-600 hover:bg-indigo-700"
-                                   onClick={() => {
-                                       setIsLogServiceOpen(true);
-                                   }}
-                               >
-                                   <Plus className="h-4 w-4 mr-2" />
-                                   Log New Service
-                               </Button>
-                           </div>
-                           
-                           <Card className="md:col-span-2">
-                               <CardHeader>
-                                   <CardTitle>Maintenance History</CardTitle>
-                               </CardHeader>
-                               <CardContent>
-                                   <Table>
-                                       <TableHeader>
-                                           <TableRow>
-                                               <TableHead>Date</TableHead>
-                                               <TableHead>Type</TableHead>
-                                               <TableHead>Odometer</TableHead>
-                                               <TableHead className="text-right">Cost</TableHead>
-                                           </TableRow>
-                                       </TableHeader>
-                                       <TableBody>
-                                           {analytics.maintenance.history.map((log: any) => (
-                                               <TableRow key={log.id}>
-                                                   <TableCell>{format(new Date(log.date), 'MMM d, yyyy')}</TableCell>
-                                                   <TableCell>{log.type}</TableCell>
-                                                   <TableCell>{log.odo.toLocaleString()} km</TableCell>
-                                                   <TableCell className="text-right">${log.cost}</TableCell>
-                                               </TableRow>
-                                           ))}
-                                       </TableBody>
-                                   </Table>
-                               </CardContent>
-                           </Card>
-                       </div>
+                      <MaintenanceManager 
+                          vehicleId={vehicle.id || vehicle.licensePlate} 
+                          logs={maintenanceLogs}
+                          maintenanceStatus={maintenanceStatus}
+                          onRefresh={() => {
+                              const vId = vehicle.id || vehicle.licensePlate;
+                              api.getMaintenanceLogs(vId).then(setMaintenanceLogs).catch(console.error);
+                          }}
+                      />
                   </TabsContent>
               </Tabs>
           </TabsContent>
@@ -971,76 +851,464 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           </TabsContent>
 
           <TabsContent value="documents" className="space-y-6 mt-6">
-               <div className="flex justify-between items-center">
-                   <h3 className="text-lg font-medium">Vehicle Documents</h3>
-                   <Button onClick={() => setIsUploadOpen(true)}>
-                       <Plus className="h-4 w-4 mr-2" />
-                       Add Document
+               <div className="flex justify-between items-end">
+                   <div>
+                       <h3 className="text-lg font-medium text-slate-900">Vehicle Documents</h3>
+                       <p className="text-sm text-slate-500 mt-1">Manage registration, insurance, and permits.</p>
+                   </div>
+                   <Button onClick={() => setIsUploadOpen(true)} className="bg-slate-900 text-white hover:bg-slate-800">
+                       <Upload className="h-4 w-4 mr-2" />
+                       Upload Document
                    </Button>
                </div>
                
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                   {documents.map((doc) => (
-                       <Card key={doc.id}>
-                           <CardContent className="p-4">
-                               <div className="flex justify-between items-start mb-3">
-                                   <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                                       <FileText className="h-5 w-5" />
-                                   </div>
-                                   <Badge variant={doc.status === 'Verified' ? 'default' : 'outline'}>{doc.status}</Badge>
-                               </div>
-                               <h4 className="font-semibold">{doc.name}</h4>
-                               <p className="text-xs text-slate-500 mt-1">Exp: {doc.expiryDate || 'N/A'}</p>
-                               <div className="mt-4 flex gap-2">
-                                   <Button variant="outline" size="sm" className="flex-1" onClick={() => {
-                                       setEditingDocId(doc.id);
-                                       setUploadForm(prev => ({ ...prev, type: doc.type, name: doc.name }));
-                                       setIsUploadOpen(true);
-                                   }}>Edit</Button>
-                                   <Button variant="ghost" size="icon" onClick={() => {
-                                       setDeletedDocIds(prev => [...prev, doc.id]);
-                                       toast.success("Document deleted");
-                                   }}>
-                                       <Trash2 className="h-4 w-4 text-red-500" />
-                                   </Button>
-                               </div>
-                           </CardContent>
-                       </Card>
-                   ))}
+               <div className="border rounded-md overflow-hidden">
+                   <Table>
+                       <TableHeader className="bg-slate-50">
+                           <TableRow>
+                               <TableHead>Document Name</TableHead>
+                               <TableHead>Type</TableHead>
+                               <TableHead>Status</TableHead>
+                               <TableHead>Expiry Date</TableHead>
+                               <TableHead className="text-right">Actions</TableHead>
+                           </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                           {documents.length === 0 && (
+                               <TableRow>
+                                   <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                                       No documents found. Upload one to get started.
+                                   </TableCell>
+                               </TableRow>
+                           )}
+                           {documents.map((doc) => (
+                               <TableRow key={doc.id}>
+                                   <TableCell className="font-medium">
+                                       <div className="flex items-center gap-3">
+                                           <div className="p-2 bg-slate-100 rounded text-slate-500">
+                                               <FileText className="h-4 w-4" />
+                                           </div>
+                                           {doc.name}
+                                       </div>
+                                   </TableCell>
+                                   <TableCell>{doc.type}</TableCell>
+                                   <TableCell>
+                                       <Badge variant="outline" className={doc.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600'}>
+                                           {doc.status}
+                                       </Badge>
+                                   </TableCell>
+                                   <TableCell>{doc.expiryDate ? format(new Date(doc.expiryDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                                   <TableCell className="text-right">
+                                       <div className="flex justify-end items-center gap-1">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => {
+                                                if (doc.url) setViewingDoc({ url: doc.url, name: doc.name, type: doc.type });
+                                                else toast.error("No file available");
+                                            }} title="View Document">
+                                                <Eye className="h-4 w-4" />
+                                            </Button>
+                                            
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => {
+                                                        setEditingDocId(doc.id);
+                                                        const metadata = doc.metadata || {};
+                                                        setUploadForm(prev => ({
+                                                          ...prev,
+                                                          type: doc.type,
+                                                          name: doc.name,
+                                                          expiryDate: doc.expiryDate || '',
+                                                          // Spread all potential metadata fields
+                                                          ...metadata,
+                                                          // Ensure specific mapping if keys differ (mostly matching)
+                                                          valuationDate: metadata.valuationDate || '',
+                                                          modelYear: metadata.modelYear || vehicle.year,
+                                                          marketValue: metadata.marketValue || '',
+                                                          forcedSaleValue: metadata.forcedSaleValue || '',
+                                                          policyNumber: metadata.policyNumber || '',
+                                                          idv: metadata.idv || '',
+                                                          policyPremium: metadata.policyPremium || '',
+                                                          excessDeductible: metadata.excessDeductible || '',
+                                                          depreciationRate: metadata.depreciationRate || '',
+                                                          authorizedDrivers: metadata.authorizedDrivers || '',
+                                                          limitationsUse: metadata.limitationsUse || '',
+                                                          bodyType: metadata.bodyType || vehicle.bodyType || '',
+                                                          engineNumber: metadata.engineNumber || vehicle.engineNumber || '',
+                                                          ccRating: metadata.ccRating || vehicle.ccRating || '',
+                                                          laNumber: metadata.laNumber || vehicle.laNumber || '',
+                                                          mvid: metadata.mvid || vehicle.mvid || '',
+                                                          controlNumber: metadata.controlNumber || vehicle.controlNumber || '',
+                                                          plateNumber: metadata.plateNumber || vehicle.licensePlate,
+                                                          chassisNumber: metadata.chassisNumber || vehicle.vin
+                                                        }));
+                                                        setIsUploadOpen(true);
+                                                    }}>
+                                                        Edit Details
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem className="text-red-600" onClick={() => {
+                                                        setDeletedDocIds(prev => [...prev, doc.id]);
+                                                        toast.success("Document deleted");
+                                                    }}>
+                                                        Delete
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                       </div>
+                                   </TableCell>
+                               </TableRow>
+                           ))}
+                       </TableBody>
+                   </Table>
                </div>
           </TabsContent>
 
           <TabsContent value="profile" className="space-y-6 mt-6">
-              <Card>
-                  <CardHeader>
-                      <CardTitle>Vehicle Profile</CardTitle>
-                      <CardDescription>Core vehicle details</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Certificate of Fitness */}
+                  <Card>
+                      <CardHeader className="flex flex-row items-start justify-between pb-2">
                           <div>
-                              <Label className="text-xs text-slate-500">Make & Model</Label>
-                              <p className="font-medium">{vehicle.make} {vehicle.model}</p>
+                              <CardTitle className="text-base font-bold text-slate-900">Certificate of Fitness</CardTitle>
+                              <CardDescription>Fitness and roadworthiness details</CardDescription>
                           </div>
+                          <div className="flex gap-2">
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Fitness');
+                                  if (doc?.url) {
+                                      setViewingDoc({ url: doc.url, name: doc.name, type: doc.type });
+                                  } else {
+                                      toast.error("No document file available");
+                                  }
+                              }}>
+                                  <Eye className="w-3 h-3 mr-1" /> View
+                              </Button>
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Fitness');
+                                  if (doc) {
+                                      setEditingDocId(doc.id);
+                                      setUploadForm(prev => ({ 
+                                          ...prev, 
+                                          type: 'Fitness',
+                                          name: doc.name,
+                                          expiryDate: doc.expiryDate,
+                                          make: doc.metadata?.make || vehicle.make,
+                                          model: doc.metadata?.model || vehicle.model,
+                                          year: doc.metadata?.year || vehicle.year,
+                                          bodyType: doc.metadata?.bodyType || vehicle.bodyType || '',
+                                          engineNumber: doc.metadata?.engineNumber || vehicle.engineNumber || '',
+                                          ccRating: doc.metadata?.ccRating || vehicle.ccRating || '',
+                                          issueDate: doc.uploadDate
+                                      }));
+                                      setIsUploadOpen(true);
+                                  } else {
+                                      setUploadForm(prev => ({ 
+                                          ...prev, 
+                                          type: 'Fitness',
+                                          make: vehicle.make,
+                                          model: vehicle.model,
+                                          year: vehicle.year,
+                                          bodyType: vehicle.bodyType || '',
+                                          engineNumber: vehicle.engineNumber || '',
+                                          ccRating: vehicle.ccRating || ''
+                                      }));
+                                      setIsUploadOpen(true);
+                                  }
+                              }}>
+                                  <Pencil className="w-3 h-3 mr-1" /> Edit
+                              </Button>
+                              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">Valid</Badge>
+                          </div>
+                      </CardHeader>
+                      <CardContent>
+                          <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                              <div>
+                                  <Label className="text-xs text-slate-500">Make</Label>
+                                  <p className="font-medium text-sm">{vehicle.make}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Model</Label>
+                                  <p className="font-medium text-sm">{vehicle.model}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Year</Label>
+                                  <p className="font-medium text-sm">{vehicle.year}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Colour</Label>
+                                  <p className="font-medium text-sm">{vehicle.color || '-'}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Body Type</Label>
+                                  <p className="font-medium text-sm">{vehicle.bodyType || 'Stn/Waggon'}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Motor / Engine No.</Label>
+                                  <p className="font-medium text-sm">{vehicle.engineNumber || '-'}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">CC Rating</Label>
+                                  <p className="font-medium text-sm">{vehicle.ccRating || '990'}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Issue Date</Label>
+                                  <p className="font-medium text-sm">{vehicle.fitnessIssueDate ? format(new Date(vehicle.fitnessIssueDate), 'MMM d, yyyy') : '-'}</p>
+                              </div>
+                              <div className="col-span-2">
+                                  <Label className="text-xs text-slate-500">Expiry Date</Label>
+                                  <p className="font-medium text-sm">{vehicle.fitnessExpiry ? format(new Date(vehicle.fitnessExpiry), 'MMM d, yyyy') : '-'}</p>
+                              </div>
+                          </div>
+                      </CardContent>
+                  </Card>
+
+                  {/* Registration Certificate */}
+                  <Card>
+                      <CardHeader className="flex flex-row items-start justify-between pb-2">
                           <div>
-                              <Label className="text-xs text-slate-500">Year</Label>
-                              <p className="font-medium">{vehicle.year}</p>
+                              <CardTitle className="text-base font-bold text-slate-900">Registration Certificate</CardTitle>
+                              <CardDescription>Official vehicle registration</CardDescription>
                           </div>
+                          <div className="flex gap-2">
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Registration');
+                                  if (doc?.url) {
+                                      setViewingDoc({ url: doc.url, name: doc.name, type: doc.type });
+                                  } else {
+                                      toast.error("No document file available");
+                                  }
+                              }}>
+                                  <Eye className="w-3 h-3 mr-1" /> View
+                              </Button>
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Registration');
+                                  if (doc) {
+                                      setEditingDocId(doc.id);
+                                      setUploadForm(prev => ({ 
+                                          ...prev, 
+                                          type: 'Registration',
+                                          name: doc.name,
+                                          expiryDate: doc.expiryDate,
+                                          laNumber: doc.metadata?.laNumber || vehicle.laNumber || '',
+                                          plateNumber: doc.metadata?.plateNumber || vehicle.licensePlate,
+                                          mvid: doc.metadata?.mvid || vehicle.mvid || '',
+                                          chassisNumber: doc.metadata?.chassisNumber || vehicle.vin,
+                                          controlNumber: doc.metadata?.controlNumber || vehicle.controlNumber || '',
+                                          issueDate: doc.uploadDate
+                                      }));
+                                      setIsUploadOpen(true);
+                                  } else {
+                                      setUploadForm(prev => ({ 
+                                          ...prev, 
+                                          type: 'Registration',
+                                          plateNumber: vehicle.licensePlate,
+                                          chassisNumber: vehicle.vin,
+                                          laNumber: vehicle.laNumber || '',
+                                          mvid: vehicle.mvid || '',
+                                          controlNumber: vehicle.controlNumber || ''
+                                      }));
+                                      setIsUploadOpen(true);
+                                  }
+                              }}>
+                                  <Pencil className="w-3 h-3 mr-1" /> Edit
+                              </Button>
+                              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">Valid</Badge>
+                          </div>
+                      </CardHeader>
+                      <CardContent>
+                          <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                              <div>
+                                  <Label className="text-xs text-slate-500">LA Number</Label>
+                                  <p className="font-medium text-sm">{vehicle.laNumber || '-'}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Reg. Plate No</Label>
+                                  <p className="font-medium text-sm">{vehicle.licensePlate}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">MVID</Label>
+                                  <p className="font-medium text-sm">{vehicle.mvid || '-'}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">VIN / Chassis No</Label>
+                                  <p className="font-medium text-sm">{vehicle.vin}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Control Number</Label>
+                                  <p className="font-medium text-sm">{vehicle.controlNumber || '-'}</p>
+                              </div>
+                              <div>
+                                  <Label className="text-xs text-slate-500">Date Issued</Label>
+                                  <p className="font-medium text-sm">{vehicle.registrationIssueDate ? format(new Date(vehicle.registrationIssueDate), 'MMM d, yyyy') : '-'}</p>
+                              </div>
+                              <div className="col-span-2">
+                                  <Label className="text-xs text-slate-500">Expiry Date</Label>
+                                  <p className="font-medium text-sm">{vehicle.registrationExpiry ? format(new Date(vehicle.registrationExpiry), 'MMM d, yyyy') : '-'}</p>
+                              </div>
+                          </div>
+                      </CardContent>
+                  </Card>
+
+                  {/* Insurance Certificate */}
+                  <Card>
+                      <CardHeader className="flex flex-row items-start justify-between pb-2">
                           <div>
-                              <Label className="text-xs text-slate-500">License Plate</Label>
-                              <p className="font-medium">{vehicle.licensePlate}</p>
+                              <CardTitle className="text-base font-bold text-slate-900">Insurance Certificate</CardTitle>
+                              <CardDescription>Policy and coverage information</CardDescription>
                           </div>
+                          <div className="flex gap-2">
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Insurance');
+                                  if (doc?.url) {
+                                      setViewingDoc({ url: doc.url, name: doc.name, type: doc.type });
+                                  } else {
+                                      toast.error("No document file available");
+                                  }
+                              }}>
+                                  <Eye className="w-3 h-3 mr-1" /> View
+                              </Button>
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Insurance');
+                                  // Look for stored metadata in the first insurance doc found
+                                  const metadata = doc?.metadata || {};
+                                  setEditingDocId(doc?.id || null);
+                                  setUploadForm(prev => ({ 
+                                      ...prev, 
+                                      type: 'Insurance',
+                                      name: doc?.name || 'Insurance Policy',
+                                      expiryDate: doc?.expiryDate || vehicle.insuranceExpiry || '',
+                                      policyNumber: metadata.policyNumber || '',
+                                      idv: metadata.idv || '',
+                                      policyPremium: metadata.policyPremium || '',
+                                      excessDeductible: metadata.excessDeductible || '',
+                                      depreciationRate: metadata.depreciationRate || '',
+                                      authorizedDrivers: metadata.authorizedDrivers || '',
+                                      limitationsUse: metadata.limitationsUse || ''
+                                  }));
+                                  setIsUploadOpen(true);
+                              }}>
+                                  <Pencil className="w-3 h-3 mr-1" /> Edit
+                              </Button>
+                              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">Active</Badge>
+                          </div>
+                      </CardHeader>
+                      <CardContent>
+                          {(() => {
+                              const doc = documents.find(d => d.type === 'Insurance');
+                              const metadata = doc?.metadata || {};
+                              return (
+                                  <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                                      <div className="col-span-2">
+                                          <Label className="text-xs text-slate-500">Certificate / Policy Number</Label>
+                                          <p className="font-medium text-sm">{metadata.policyNumber || 'PCCO-80302'}</p>
+                                      </div>
+                                      <div>
+                                          <Label className="text-xs text-slate-500">IDV / Sum Insured</Label>
+                                          <p className="font-medium text-sm">${metadata.idv || '2100000'}</p>
+                                      </div>
+                                      <div>
+                                          <Label className="text-xs text-slate-500">Policy Premium</Label>
+                                          <p className="font-medium text-sm">${metadata.policyPremium || '120,504.08'}</p>
+                                      </div>
+                                      <div>
+                                          <Label className="text-xs text-slate-500">Excess / Deductible</Label>
+                                          <p className="font-medium text-sm">${metadata.excessDeductible || '157500'}</p>
+                                      </div>
+                                      <div>
+                                          <Label className="text-xs text-slate-500">Depreciation Rate</Label>
+                                          <p className="font-medium text-sm">{metadata.depreciationRate || '-'}</p>
+                                      </div>
+                                      <div className="col-span-2">
+                                          <Label className="text-xs text-slate-500">Policy Expiry Date</Label>
+                                          <p className="font-medium text-sm">{vehicle.insuranceExpiry ? format(new Date(vehicle.insuranceExpiry), 'MMM d, yyyy') : '-'}</p>
+                                      </div>
+                                      <div className="col-span-2">
+                                          <Label className="text-xs text-slate-500">Authorized Drivers</Label>
+                                          <p className="text-xs text-slate-700 mt-1 uppercase leading-relaxed">
+                                              {metadata.authorizedDrivers || 'SADIKI ABAYOMI THOMAS, KENNY GREGORY RATTRAY ONLY.'}
+                                          </p>
+                                      </div>
+                                      <div className="col-span-2">
+                                          <Label className="text-xs text-slate-500">Limitations as to Use</Label>
+                                          <p className="text-xs text-slate-700 mt-1 uppercase leading-relaxed">
+                                              {metadata.limitationsUse || 'USE ONLY FOR SOCIAL DOMESTIC AND PLEASURE PURPOSES. The Policy does not cover use for hire or reward or commercial travelling.'}
+                                          </p>
+                                      </div>
+                                  </div>
+                              );
+                          })()}
+                      </CardContent>
+                  </Card>
+
+                  {/* Valuation Report */}
+                  <Card>
+                      <CardHeader className="flex flex-row items-start justify-between pb-2">
                           <div>
-                              <Label className="text-xs text-slate-500">VIN</Label>
-                              <p className="font-medium">{vehicle.vin}</p>
+                              <CardTitle className="text-base font-bold text-slate-900">Valuation Report</CardTitle>
+                              <CardDescription>Asset value and deprecation</CardDescription>
                           </div>
-                          <div>
-                              <Label className="text-xs text-slate-500">Color</Label>
-                              <p className="font-medium">{vehicle.color || 'N/A'}</p>
+                          <div className="flex gap-2">
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Valuation');
+                                  if (doc?.url) {
+                                      setViewingDoc({ url: doc.url, name: doc.name, type: doc.type });
+                                  } else {
+                                      toast.error("No document file available");
+                                  }
+                              }}>
+                                  <Eye className="w-3 h-3 mr-1" /> View
+                              </Button>
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => {
+                                  const doc = documents.find(d => d.type === 'Valuation');
+                                  const metadata = doc?.metadata || {};
+                                  setEditingDocId(doc?.id || null);
+                                  setUploadForm(prev => ({ 
+                                      ...prev, 
+                                      type: 'Valuation', // Make sure to add this to Select in Dialog
+                                      name: doc?.name || 'Valuation Report',
+                                      expiryDate: doc?.expiryDate || '',
+                                      marketValue: metadata.marketValue || '',
+                                      forcedSaleValue: metadata.forcedSaleValue || '',
+                                      valuationDate: metadata.valuationDate || '',
+                                      modelYear: metadata.modelYear || vehicle.year
+                                  }));
+                                  setIsUploadOpen(true);
+                              }}>
+                                  <Pencil className="w-3 h-3 mr-1" /> Edit
+                              </Button>
                           </div>
-                      </div>
-                  </CardContent>
-              </Card>
+                      </CardHeader>
+                      <CardContent>
+                          {(() => {
+                              const doc = documents.find(d => d.type === 'Valuation');
+                              const metadata = doc?.metadata || {};
+                              return (
+                                  <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                                      <div>
+                                          <Label className="text-xs text-slate-500">Market Value</Label>
+                                          <p className="font-bold text-lg text-emerald-600">${metadata.marketValue || '2100000'}</p>
+                                      </div>
+                                      <div>
+                                          <Label className="text-xs text-slate-500">Forced Sale Value</Label>
+                                          <p className="font-bold text-lg text-amber-600">${metadata.forcedSaleValue || '1890000'}</p>
+                                      </div>
+                                      <div>
+                                          <Label className="text-xs text-slate-500">Valuation Date</Label>
+                                          <p className="font-medium text-sm">{metadata.valuationDate ? format(new Date(metadata.valuationDate), 'MMM d, yyyy') : 'Aug 12, 2025'}</p>
+                                      </div>
+                                      <div>
+                                          <Label className="text-xs text-slate-500">Model Year</Label>
+                                          <p className="font-medium text-sm">{metadata.modelYear || vehicle.year}</p>
+                                      </div>
+                                  </div>
+                              );
+                          })()}
+                      </CardContent>
+                  </Card>
+              </div>
           </TabsContent>
       </Tabs>
 
@@ -1063,6 +1331,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                <SelectItem value="Registration">Registration</SelectItem>
                                <SelectItem value="Insurance">Insurance</SelectItem>
                                <SelectItem value="Fitness">Fitness</SelectItem>
+                               <SelectItem value="Valuation">Valuation</SelectItem>
                                <SelectItem value="Other">Other</SelectItem>
                            </SelectContent>
                        </Select>
@@ -1075,63 +1344,136 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                        <Label>Expiry Date</Label>
                        <Input type="date" value={uploadForm.expiryDate} onChange={(e) => setUploadForm({...uploadForm, expiryDate: e.target.value})} />
                    </div>
+
+                   {/* Dynamic Form Fields based on Type */}
+                   {uploadForm.type === 'Registration' && (
+                       <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-2">
+                               <Label>LA Number</Label>
+                               <Input value={uploadForm.laNumber} onChange={e => setUploadForm({...uploadForm, laNumber: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>MVID</Label>
+                               <Input value={uploadForm.mvid} onChange={e => setUploadForm({...uploadForm, mvid: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>Control Number</Label>
+                               <Input value={uploadForm.controlNumber} onChange={e => setUploadForm({...uploadForm, controlNumber: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>Reg. Plate No</Label>
+                               <Input value={uploadForm.plateNumber} onChange={e => setUploadForm({...uploadForm, plateNumber: e.target.value})} />
+                           </div>
+                       </div>
+                   )}
+
+                   {uploadForm.type === 'Fitness' && (
+                       <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-2">
+                               <Label>Body Type</Label>
+                               <Input value={uploadForm.bodyType} onChange={e => setUploadForm({...uploadForm, bodyType: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>Engine Number</Label>
+                               <Input value={uploadForm.engineNumber} onChange={e => setUploadForm({...uploadForm, engineNumber: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>CC Rating</Label>
+                               <Input value={uploadForm.ccRating} onChange={e => setUploadForm({...uploadForm, ccRating: e.target.value})} />
+                           </div>
+                       </div>
+                   )}
+
+                   {uploadForm.type === 'Insurance' && (
+                       <div className="space-y-4">
+                           <div className="grid grid-cols-2 gap-4">
+                               <div className="space-y-2">
+                                   <Label>Policy Number</Label>
+                                   <Input value={uploadForm.policyNumber} onChange={e => setUploadForm({...uploadForm, policyNumber: e.target.value})} />
+                               </div>
+                               <div className="space-y-2">
+                                   <Label>IDV / Sum Insured</Label>
+                                   <Input value={uploadForm.idv} onChange={e => setUploadForm({...uploadForm, idv: e.target.value})} />
+                               </div>
+                               <div className="space-y-2">
+                                   <Label>Premium</Label>
+                                   <Input value={uploadForm.policyPremium} onChange={e => setUploadForm({...uploadForm, policyPremium: e.target.value})} />
+                               </div>
+                               <div className="space-y-2">
+                                   <Label>Excess / Deductible</Label>
+                                   <Input value={uploadForm.excessDeductible} onChange={e => setUploadForm({...uploadForm, excessDeductible: e.target.value})} />
+                               </div>
+                           </div>
+                           <div className="space-y-2">
+                               <Label>Authorized Drivers</Label>
+                               <Input value={uploadForm.authorizedDrivers} onChange={e => setUploadForm({...uploadForm, authorizedDrivers: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>Limitations of Use</Label>
+                               <Input value={uploadForm.limitationsUse} onChange={e => setUploadForm({...uploadForm, limitationsUse: e.target.value})} />
+                           </div>
+                       </div>
+                   )}
+
+                   {uploadForm.type === 'Valuation' && (
+                       <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-2">
+                               <Label>Market Value</Label>
+                               <Input value={uploadForm.marketValue} onChange={e => setUploadForm({...uploadForm, marketValue: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>Forced Sale Value</Label>
+                               <Input value={uploadForm.forcedSaleValue} onChange={e => setUploadForm({...uploadForm, forcedSaleValue: e.target.value})} />
+                           </div>
+                           <div className="space-y-2">
+                               <Label>Valuation Date</Label>
+                               <Input type="date" value={uploadForm.valuationDate} onChange={e => setUploadForm({...uploadForm, valuationDate: e.target.value})} />
+                           </div>
+                       </div>
+                   )}
                    <Button onClick={handleSaveDocument} className="w-full">Save Document</Button>
                </div>
            </DialogContent>
       </Dialog>
 
-      {/* Service Log Dialog */}
-      <Dialog open={isLogServiceOpen} onOpenChange={setIsLogServiceOpen}>
-          <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                  <DialogTitle>Log Service</DialogTitle>
-                  <DialogDescription>Record a new service event.</DialogDescription>
+
+
+      {/* Document Viewer Dialog */}
+      <Dialog open={!!viewingDoc} onOpenChange={(open) => !open && setViewingDoc(null)}>
+          <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0 overflow-hidden">
+              <DialogHeader className="p-4 border-b">
+                  <DialogTitle>{viewingDoc?.name}</DialogTitle>
+                  <DialogDescription>
+                    Viewing document: {viewingDoc?.type}
+                  </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                           <Label>Date</Label>
-                           <Input type="date" value={serviceForm.date} onChange={e => setServiceForm({...serviceForm, date: e.target.value})} />
-                       </div>
-                       <div className="space-y-2">
-                           <Label>Type</Label>
-                           <Select value={serviceForm.type} onValueChange={val => setServiceForm({...serviceForm, type: val})}>
-                               <SelectTrigger><SelectValue /></SelectTrigger>
-                               <SelectContent>
-                                   <SelectItem value="maintenance">Maintenance</SelectItem>
-                                   <SelectItem value="oil">Oil Change</SelectItem>
-                                   <SelectItem value="tires">Tires</SelectItem>
-                                   <SelectItem value="repair">Repair</SelectItem>
-                               </SelectContent>
-                           </Select>
-                       </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                           <Label>Odometer</Label>
-                           <Input type="number" value={serviceForm.odo} onChange={e => setServiceForm({...serviceForm, odo: e.target.value})} />
-                       </div>
-                       <div className="space-y-2">
-                           <Label>Cost</Label>
-                           <Input type="number" value={serviceForm.cost} onChange={e => setServiceForm({...serviceForm, cost: e.target.value})} />
-                       </div>
-                  </div>
-                  <div className="space-y-2">
-                       <Label>Upload Invoice (AI Scan)</Label>
-                       <div className="flex items-center gap-2">
-                           <Input type="file" onChange={handleServiceScan} disabled={scanLoading} />
-                           {scanLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                       </div>
-                  </div>
-                  <div className="space-y-2">
-                       <Label>Notes</Label>
-                       <Input value={serviceForm.notes} onChange={e => setServiceForm({...serviceForm, notes: e.target.value})} />
-                  </div>
-                  <Button onClick={() => {
-                      // Save Logic simplified
-                      toast.success("Service logged!");
-                      setIsLogServiceOpen(false);
-                  }} className="w-full">Save Log</Button>
+              <div className="flex-1 overflow-auto bg-slate-100 flex items-center justify-center p-4">
+                  {viewingDoc?.url ? (
+                      viewingDoc.url.toLowerCase().endsWith('.pdf') ? (
+                          <iframe 
+                              src={viewingDoc.url} 
+                              className="w-full h-full border-0 rounded-md bg-white shadow-sm"
+                              title={viewingDoc.name}
+                          />
+                      ) : (
+                          <img 
+                              src={viewingDoc.url} 
+                              alt={viewingDoc.name} 
+                              className="max-w-full max-h-full object-contain rounded-md shadow-sm" 
+                          />
+                      )
+                  ) : (
+                      <div className="text-center py-12 text-slate-500">
+                          <FileText className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                          <p>No preview available for this document.</p>
+                      </div>
+                  )}
+              </div>
+              <div className="p-4 border-t bg-slate-50 flex justify-between items-center">
+                  <p className="text-xs text-slate-500">
+                      If the document does not load, you can <a href={viewingDoc?.url} target="_blank" rel="noreferrer" className="text-indigo-600 underline">download it directly</a>.
+                  </p>
+                  <Button variant="outline" onClick={() => setViewingDoc(null)}>Close</Button>
               </div>
           </DialogContent>
       </Dialog>
