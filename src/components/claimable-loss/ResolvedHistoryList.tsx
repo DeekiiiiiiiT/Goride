@@ -11,6 +11,36 @@ import { Badge } from "../ui/badge";
 import { CheckCircle2, History } from "lucide-react";
 import { Claim } from "../../types/data";
 
+interface ResolutionStyle {
+  badgeClass: string;
+  textClass: string;
+}
+
+const getResolutionStyle = (reason?: string): ResolutionStyle => {
+  switch (reason) {
+    case 'Reimbursed':
+      return {
+        badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        textClass: "text-emerald-600"
+      };
+    case 'Charge Driver':
+      return {
+        badgeClass: "bg-red-50 text-red-700 border-red-200",
+        textClass: "text-red-600"
+      };
+    case 'Write Off':
+      return {
+        badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+        textClass: "text-blue-600"
+      };
+    default:
+      return {
+        badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
+        textClass: "text-slate-500"
+      };
+  }
+};
+
 interface ResolvedHistoryListProps {
   claims: Claim[];
   isLoading?: boolean;
@@ -58,46 +88,45 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName }: Resolv
           </TableRow>
         </TableHeader>
         <TableBody>
-          {claims.map((claim) => (
-            <TableRow key={claim.id}>
-              <TableCell className="font-medium text-slate-700">
-                {new Date(claim.updatedAt || claim.createdAt).toLocaleDateString()}
-                <div className="text-xs text-slate-400">
-                    {new Date(claim.updatedAt || claim.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </div>
-              </TableCell>
-              <TableCell>
-                  <div className="font-medium text-sm">
-                    {getDriverName ? getDriverName(claim.driverId) : claim.driverId}
-                  </div> 
-              </TableCell>
-              <TableCell>
-                  <div className="text-sm truncate max-w-[200px]" title={claim.pickup}>
-                      {claim.pickup || 'Unknown Location'}
+          {claims.map((claim) => {
+            const styles = getResolutionStyle(claim.resolutionReason);
+            return (
+              <TableRow key={claim.id}>
+                <TableCell className="font-medium text-slate-700">
+                  {new Date(claim.updatedAt || claim.createdAt).toLocaleDateString()}
+                  <div className="text-xs text-slate-400">
+                      {new Date(claim.updatedAt || claim.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </div>
-              </TableCell>
-              <TableCell className="text-right font-bold text-slate-700">
-                ${claim.amount.toFixed(2)}
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex flex-col items-end gap-1">
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                     <CheckCircle2 className="h-3 w-3" />
-                     {claim.status}
-                  </Badge>
-                  {claim.resolutionReason && (
-                      <span className={`text-xs font-medium ${
-                          claim.resolutionReason === 'Charge Driver' ? 'text-amber-600' :
-                          claim.resolutionReason === 'Write Off' ? 'text-slate-500' :
-                          'text-emerald-600'
-                      }`}>
-                          {claim.resolutionReason}
-                      </span>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
+                </TableCell>
+                <TableCell>
+                    <div className="font-medium text-sm">
+                      {getDriverName ? getDriverName(claim.driverId) : claim.driverId}
+                    </div> 
+                </TableCell>
+                <TableCell>
+                    <div className="text-sm truncate max-w-[200px]" title={claim.pickup}>
+                        {claim.pickup || 'Unknown Location'}
+                    </div>
+                </TableCell>
+                <TableCell className="text-right font-bold text-slate-700">
+                  ${claim.amount.toFixed(2)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge variant="outline" className={`${styles.badgeClass} gap-1`}>
+                       <CheckCircle2 className="h-3 w-3" />
+                       {claim.status}
+                    </Badge>
+                    {claim.resolutionReason && (
+                        <span className={`text-xs font-medium ${styles.textClass}`}>
+                            {claim.resolutionReason}
+                        </span>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

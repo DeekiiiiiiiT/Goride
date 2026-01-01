@@ -7,6 +7,7 @@ import {
   DollarSign, 
   TrendingUp, 
   ChevronRight, 
+  ChevronDown,
   Download, 
   Loader2,
   Calendar as CalendarIcon,
@@ -17,6 +18,7 @@ import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { Trip, TierConfig, FinancialTransaction } from '../../types/data';
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { Calendar } from "../ui/calendar";
 import { cn } from "../ui/utils";
 import { DateRange } from "react-day-picker";
@@ -43,7 +45,17 @@ export function DriverEarnings() {
     tolls: 0,
     cashCollected: 0,
     reimbursements: 0,
+    reimbursementBreakdown: [] as { label: string; amount: number }[],
     expenses: 0,
+    expenseDetailed: {
+      tolls: 0,
+      fuel: {
+        total: 0,
+        breakdown: [] as { label: string; amount: number }[]
+      },
+      other: 0,
+      total: 0
+    },
     trend: null as number | null
   });
 
@@ -72,13 +84,12 @@ export function DriverEarnings() {
              'Authorization': `Bearer ${publicAnonKey}`
         };
 
-        const [tripsRes, txData] = await Promise.all([
-             fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/trips`, { headers }),
+        const [allTrips, txData] = await Promise.all([
+             api.getTrips(),
              api.getTransactions()
         ]);
 
-        if (tripsRes.ok) {
-            const allTrips: Trip[] = await tripsRes.json();
+        if (allTrips) {
             const myTrips = allTrips.filter(t => 
                 t.driverId === user.id || 
                 (driverRecord?.id && t.driverId === driverRecord.id) ||
@@ -164,6 +175,12 @@ export function DriverEarnings() {
       });
   };
 
+  // Phase 5: Net Payout Calculation
+  // We start with the Projected Payout (Tier Share of Fares)
+  // + Reimbursements (Tolls + Adjustments)
+  // - Expenses (Tolls + Fuel + Other)
+  const netPayout = tierState.projectedPayout + stats.reimbursements - stats.expenses;
+
   const processEarnings = (currentTrips: Trip[], currentTx: FinancialTransaction[]) => {
       // 1. Calculate Stats
       const tripNet = currentTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
@@ -177,16 +194,62 @@ export function DriverEarnings() {
       // Financial Transactions: 
       // Reimbursements (Adjustment/Revenue with positive amount)
       // Expenses (Expense with negative amount - usually doesn't impact "Payout Balance" unless paid by wallet)
-      // For now, let's treat "Reimbursements" as pure additions to Payout.
-      const reimbursements = currentTx
-        .filter(t => (t.type === 'Adjustment' || t.category === 'Fuel Reimbursement') && t.amount > 0)
-        .reduce((sum, t) => sum + t.amount, 0);
-
-      const expenseTotal = currentTx
-        .filter(t => t.type === 'Expense' && t.amount < 0)
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
       
-      const totalBalance = tripNet + reimbursements;
+      const txReimbursements = currentTx.filter(t => 
+        (t.type === 'Adjustment' || t.category === 'Fuel Reimbursement' || (t.category && typeof t.category === 'string' && t.category.includes('Reimbursement'))) && t.amount > 0
+      );
+
+      const reimbursementBreakdown: { label: string; amount: number }[] = [];
+      
+      // Add Tolls to breakdown if > 0 (as requested by user to be under Reimbursements)
+      if (tolls > 0) {
+          reimbursementBreakdown.push({ label: 'Tolls', amount: tolls });
+      }
+
+      // Group Transactions
+      const txBreakdown: Record<string, number> = {};
+      txReimbursements.forEach(t => {
+          const label = typeof t.category === 'string' ? t.category : (t.description || 'Other Adjustment');
+          txBreakdown[label] = (txBreakdown[label] || 0) + t.amount;
+      });
+      
+      Object.entries(txBreakdown).forEach(([label, amount]) => {
+          reimbursementBreakdown.push({ label, amount });
+      });
+
+      const txReimbursementTotal = txReimbursements.reduce((sum, t) => sum + t.amount, 0);
+      const displayReimbursementsTotal = tolls + txReimbursementTotal;
+
+      // Phase 1: Expense Categorization Logic
+      const expenseTx = currentTx.filter(t => t.type === 'Expense');
+
+      // 1. Tolls (Driver Charged - Expenses)
+      const tollExpensesTx = expenseTx.filter(t => t.category === 'Tolls' || t.category === 'Toll Charge');
+      const tollExpensesTotal = tollExpensesTx.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+      // 2. Fuel Expenses
+      const fuelExpensesTx = expenseTx.filter(t => t.category === 'Fuel');
+      const fuelExpensesTotal = fuelExpensesTx.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+      // 2.1 Fuel Breakdown by subType or description
+      const fuelBreakdownMap: Record<string, number> = {};
+      fuelExpensesTx.forEach(t => {
+          const label = t.subType || t.description || 'Fuel';
+          fuelBreakdownMap[label] = (fuelBreakdownMap[label] || 0) + Math.abs(t.amount);
+      });
+      const fuelBreakdown = Object.entries(fuelBreakdownMap).map(([label, amount]) => ({ label, amount }));
+
+      // 3. Other Expenses
+      const otherExpensesTx = expenseTx.filter(t => 
+          t.category !== 'Tolls' && 
+          t.category !== 'Toll Charge' && 
+          t.category !== 'Fuel'
+      );
+      const otherExpensesTotal = otherExpensesTx.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      const totalExpenses = tollExpensesTotal + fuelExpensesTotal + otherExpensesTotal;
+      
+      const totalBalance = tripNet + txReimbursementTotal - totalExpenses; // Deduct expenses from payout balance
       
       let trendValue: number | null = null;
       
@@ -218,8 +281,18 @@ export function DriverEarnings() {
           promotions: promotions,
           tolls: tolls,
           cashCollected: cash,
-          reimbursements: reimbursements,
-          expenses: expenseTotal,
+          reimbursements: displayReimbursementsTotal,
+          reimbursementBreakdown: reimbursementBreakdown,
+          expenses: totalExpenses,
+          expenseDetailed: {
+              tolls: tollExpensesTotal,
+              fuel: {
+                  total: fuelExpensesTotal,
+                  breakdown: fuelBreakdown
+              },
+              other: otherExpensesTotal,
+              total: totalExpenses
+          },
           trend: trendValue
       });
 
@@ -382,10 +455,10 @@ export function DriverEarnings() {
       <Card className="bg-slate-900 text-white border-slate-800">
          <CardContent className="p-6">
             <span className="text-slate-400 text-sm">
-                {date?.from ? `Total Earnings (${format(date.from, 'MMM d')}${date.to ? ` - ${format(date.to, 'MMM d')}` : ''})` : 'Total Earnings (All Time)'}
+                {date?.from ? `Estimated Payout (${format(date.from, 'MMM d')}${date.to ? ` - ${format(date.to, 'MMM d')}` : ''})` : 'Estimated Payout (All Time)'}
             </span>
             <div className="flex items-end justify-between mt-1 mb-6">
-               <h1 className="text-4xl font-bold">${stats.tripFares.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h1>
+               <h1 className="text-4xl font-bold">${netPayout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h1>
                {stats.trend !== null && (
                    <div className={cn("flex items-center text-sm font-medium mb-1", stats.trend >= 0 ? "text-emerald-400" : "text-rose-400")}>
                       <TrendingUp className={cn("h-4 w-4 mr-1", stats.trend < 0 && "rotate-180")} />
@@ -435,20 +508,7 @@ export function DriverEarnings() {
                 </CardDescription>
              </CardHeader>
              <CardContent className="space-y-3">
-                 <div className="flex justify-between text-sm">
-                     <span className="text-slate-500">Cumulative (Before)</span>
-                     <span className="font-mono text-slate-700">${tierState.cumulativeBefore.toLocaleString()}</span>
-                 </div>
-                 <div className="flex justify-between text-sm">
-                     <span className="text-slate-500">This Period</span>
-                     <span className="font-mono text-slate-700">+ ${tierState.thisWeek.toLocaleString()}</span>
-                 </div>
-                 <div className="h-px bg-indigo-200" />
-                 <div className="flex justify-between text-sm font-medium">
-                     <span className="text-indigo-900">New Cumulative</span>
-                     <span className="font-mono text-indigo-900">${tierState.newCumulative.toLocaleString()}</span>
-                 </div>
-                 <div className="mt-4 pt-3 border-t border-indigo-200 flex justify-between items-center">
+                 <div className="flex justify-between items-center">
                      <span className="font-semibold text-indigo-900">Estimated Payout</span>
                      <span className="text-xl font-bold text-indigo-700">
                          ${tierState.projectedPayout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -463,14 +523,62 @@ export function DriverEarnings() {
             <CardTitle className="text-base">Breakdown</CardTitle>
          </CardHeader>
          <CardContent className="space-y-4">
-            <Row label="Gross Fares" value={`$${stats.tripFares.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
             <Row label="Tips" value={`$${stats.tips.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-            <Row label="Surge" value={`$${stats.promotions.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-            <Row label="Tolls & Fees" value={`$${stats.tolls.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-            <Row label="Reimbursements" value={`$${stats.reimbursements.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+            
+            <Collapsible>
+                <CollapsibleTrigger className="flex justify-between items-center w-full group py-1">
+                    <div className="flex items-center gap-1">
+                       <span className="text-sm text-slate-500">Reimbursements</span>
+                       <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                    </div>
+                    <span className="text-sm text-slate-900">${stats.reimbursements.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 mt-2 pl-3 border-l-2 border-slate-100 ml-1.5">
+                    {stats.reimbursementBreakdown.length > 0 ? (
+                        stats.reimbursementBreakdown.map((item, index) => (
+                            <Row key={index} label={item.label} value={`$${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                        ))
+                    ) : (
+                        <div className="text-xs text-slate-400 italic py-1">No detailed records</div>
+                    )}
+                </CollapsibleContent>
+            </Collapsible>
+
+            <Collapsible>
+                <CollapsibleTrigger className="flex justify-between items-center w-full group py-1">
+                    <div className="flex items-center gap-1">
+                        <span className="text-sm text-slate-500">Expenses</span>
+                        <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                    </div>
+                    <span className="text-sm text-slate-900">-${stats.expenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 mt-2 pl-3 border-l-2 border-slate-100 ml-1.5">
+                    <Row label="Tolls" value={`-$${stats.expenseDetailed.tolls.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                    
+                    <Collapsible>
+                        <CollapsibleTrigger className="flex justify-between items-center w-full group/fuel py-1">
+                            <div className="flex items-center gap-1">
+                                <span className="text-sm text-slate-500">Fuel</span>
+                                <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                            </div>
+                            <span className="text-sm text-slate-900">-${stats.expenseDetailed.fuel.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-1 mt-1 pl-3 border-l-2 border-slate-100 ml-1.5">
+                            {stats.expenseDetailed.fuel.breakdown.length > 0 ? (
+                                stats.expenseDetailed.fuel.breakdown.map((item, index) => (
+                                    <Row key={index} label={item.label} value={`-$${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                                ))
+                            ) : (
+                                <div className="text-xs text-slate-400 italic py-1">No fuel records</div>
+                            )}
+                        </CollapsibleContent>
+                    </Collapsible>
+
+                    <Row label="Other" value={`-$${stats.expenseDetailed.other.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                </CollapsibleContent>
+            </Collapsible>
+
             <Row label="Cash Collected" value={`$${stats.cashCollected.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-            <div className="h-px bg-slate-100 dark:bg-slate-800 my-2" />
-            <Row label="Net Earnings" value={`$${stats.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} bold />
          </CardContent>
       </Card>
 

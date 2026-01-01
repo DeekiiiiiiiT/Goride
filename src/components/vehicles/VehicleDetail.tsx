@@ -109,6 +109,7 @@ import { BulkImportTollTransactionsModal } from './BulkImportTollTransactionsMod
 import { FuelSettingsCard } from '../fuel/FuelSettingsCard';
 import { Textarea } from "../ui/textarea";
 import { Checkbox } from "../ui/checkbox";
+import { FixedExpensesManager } from './expenses/FixedExpensesManager';
 
 const MOCK_DOCUMENTS: VehicleDocument[] = [];
 
@@ -1269,6 +1270,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               <TabsTrigger value="performance">Performance</TabsTrigger>
               <TabsTrigger value="utilization">Utilization</TabsTrigger>
               <TabsTrigger value="financials">Financials</TabsTrigger>
+              <TabsTrigger value="expenses">Vehicle Expenses</TabsTrigger>
               <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
               <TabsTrigger value="odometer">Odometer</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -1585,6 +1587,35 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                       </CardContent>
                   </Card>
               </div>
+          </TabsContent>
+
+          {/* --- Vehicle Expenses Tab --- */}
+          <TabsContent value="expenses" className="space-y-6 mt-6">
+              <Tabs defaultValue="fixed" className="w-full">
+                  <TabsList>
+                      <TabsTrigger value="fixed">Fixed Expenses</TabsTrigger>
+                      <TabsTrigger value="equipment">Equipment Expenses</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="fixed" className="mt-4">
+                      <FixedExpensesManager vehicleId={vehicle.id || vehicle.licensePlate} />
+                  </TabsContent>
+
+                  <TabsContent value="equipment" className="mt-4">
+                      <Card>
+                          <CardHeader>
+                              <CardTitle>Equipment Expenses</CardTitle>
+                              <CardDescription>Costs related to vehicle equipment.</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                              <div className="text-center py-10 text-slate-500 bg-slate-50 rounded-lg border border-dashed">
+                                  <Wrench className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                                  <p>Equipment expenses content to be added later.</p>
+                              </div>
+                          </CardContent>
+                      </Card>
+                  </TabsContent>
+              </Tabs>
           </TabsContent>
 
           {/* --- Phase 6: Maintenance Tab --- */}

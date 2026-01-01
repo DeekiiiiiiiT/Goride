@@ -171,10 +171,39 @@ function ClaimCard({ claim, onCopy, copiedId, onUpdateStatus, readonly = false }
     const isResolved = claim.status === 'Resolved';
     const isRejected = claim.status === 'Rejected';
 
+    // Determine resolution configuration if resolved
+    let resolutionConfig = {
+        label: 'Resolved',
+        message: 'This claim has been verified and resolved. The refund should appear in your next statement.',
+        badgeClass: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200',
+        borderClass: 'border-l-emerald-500 opacity-75 bg-slate-50',
+        messageClass: 'bg-emerald-50 text-emerald-700'
+    };
+
+    if (isResolved && claim.resolutionReason) {
+        if (claim.resolutionReason === 'Charge Driver') {
+             resolutionConfig = {
+                label: 'Charged to Driver',
+                message: 'This toll was not refunded and has been charged to you.',
+                badgeClass: 'bg-red-100 text-red-700 hover:bg-red-100 border-red-200',
+                borderClass: 'border-l-red-500 opacity-75 bg-slate-50',
+                messageClass: 'bg-red-50 text-red-700'
+            };
+        } else if (claim.resolutionReason === 'Write Off') {
+            resolutionConfig = {
+                label: 'Written Off',
+                message: 'This toll was written off by the business.',
+                badgeClass: 'bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200',
+                borderClass: 'border-l-blue-500 opacity-75 bg-slate-50',
+                messageClass: 'bg-blue-50 text-blue-700'
+            };
+        }
+    }
+
     // Determine card style based on status
     let borderClass = 'border-l-orange-500';
     if (isSubmitted) borderClass = 'border-l-blue-500 opacity-90';
-    if (isResolved) borderClass = 'border-l-emerald-500 opacity-75 bg-slate-50';
+    if (isResolved) borderClass = resolutionConfig.borderClass;
     if (isRejected) borderClass = 'border-l-red-300 opacity-75 bg-slate-50';
 
     const showActions = !readonly && !isSubmitted && !isResolved && !isRejected;
@@ -191,8 +220,8 @@ function ClaimCard({ claim, onCopy, copiedId, onUpdateStatus, readonly = false }
                                 </Badge>
                             )}
                             {isResolved && (
-                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
-                                    <CheckCircle className="w-3 h-3 mr-1" /> Resolved
+                                <Badge className={resolutionConfig.badgeClass}>
+                                    <CheckCircle className="w-3 h-3 mr-1" /> {resolutionConfig.label}
                                 </Badge>
                             )}
                             {isRejected && (
@@ -263,9 +292,9 @@ function ClaimCard({ claim, onCopy, copiedId, onUpdateStatus, readonly = false }
                     </div>
                 )}
                 {isResolved && (
-                    <div className="bg-emerald-50 p-3 rounded-md text-xs text-emerald-700 flex items-start gap-2">
+                    <div className={`${resolutionConfig.messageClass} p-3 rounded-md text-xs flex items-start gap-2`}>
                         <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                        <p>This claim has been verified and resolved. The refund should appear in your next statement.</p>
+                        <p>{resolutionConfig.message}</p>
                     </div>
                 )}
                 {isRejected && (

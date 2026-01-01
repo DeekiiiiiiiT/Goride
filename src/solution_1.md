@@ -1,86 +1,72 @@
 
-# Plan: Consolidate Fuel Import/Export Logic
+# Phase 8: Expense Projection Logic Enhancement
+- **Objective:** Extend `expenseProjection.ts` to support calculating Daily, Weekly, and Monthly Average rates alongside the existing Cash Flow logic.
+- **Steps:**
+    1.  Define a new type `ProjectionViewBasis` with values: `'cash_flow' | 'daily_rate' | 'weekly_rate' | 'monthly_average'`.
+    2.  Create a helper function `getDaysInMonth(year, monthIndex)` to accurately calculate daily rates per month.
+    3.  Create a helper function `convertAmountToDaily(amount, frequency)` which returns the daily cost of a single occurrence.
+    4.  Create a core function `calculateAmortizedMonthlyValues(config, year, basis)`:
+        -   Logic:
+            -   Calculate total annual cost if it were active all year.
+            -   Calculate "cost per day".
+            -   For each month in the target year:
+                -   Determine how many days the expense is *active* in that month (checking start/end dates).
+                -   Multiply active days by "cost per day".
+                -   For 'weekly_rate', multiply daily cost by 7.
+                -   For 'monthly_average', multiply daily cost by (365/12).
+    5.  Export these functions from `utils/expenseProjection.ts`.
 
-## Goal
-Move Fuel Management import functionality to the **Import Data** section and export functionality to the **Reports** section, cleaning up the Fuel Management dashboard.
+# Phase 9: State Management and UI Controls
+- **Objective:** Update `FixedExpensesManager.tsx` to include state for the view basis and the UI controls to toggle it.
+- **Steps:**
+    1.  Import `ProjectionViewBasis` type (or define locally if preferred).
+    2.  Add state `const [viewBasis, setViewBasis] = useState<ProjectionViewBasis>('cash_flow');`.
+    3.  Create a `Select` component in the header area (next to "Group by"):
+        -   Label: "Cost View"
+        -   Options: "Actual (Cash Flow)", "Daily Rate", "Weekly Rate", "Monthly Average".
+    4.  Ensure the UI layout accommodates the new dropdown without breaking responsiveness on mobile.
 
-## Phase 1: Preparation & Type Safety
-1.  **Objective**: Ensure all necessary types and services are available globally.
-2.  **Steps**:
-    -   Verify `FuelEntry` and `FuelCard` types are exported from `types/fuel.ts`.
-    -   Ensure `fuelService` (in `services/fuelService.ts`) has methods for bulk saving if possible, or confirm `saveFuelEntry` is sufficient.
-    -   Create a new interface `FuelFileData` in `utils/csvHelpers.ts` to extend the file handling logic.
+# Phase 10: Integrating Amortized Logic into Matrix
+- **Objective:** Connect the new logic to the `matrixData` calculation.
+- **Steps:**
+    1.  Modify `calculateAnnualProjection` signature to accept `viewBasis` or create a wrapper.
+    2.  In `FixedExpensesManager.tsx`, inside `useMemo(() => { ... }, [expenses, selectedYear, viewBasis])`:
+        -   If `viewBasis === 'cash_flow'`, keep existing logic.
+        -   If not, use the new `calculateAmortizedMonthlyValues` to generate the `monthlyAmounts`.
+    3.  Ensure `total` in `AnnualExpenseProjection` reflects the sum of the transformed monthly values (e.g. Total Daily Rates for the year doesn't make sense as a sum, it makes sense as an average, but for the table footer "Total" usually means "Sum of column". Let's stick to Sum of Column).
 
-## Phase 2: Enhanced File Detection
-1.  **Objective**: Update the central file detector to recognize Fuel Card statements.
-2.  **Steps**:
-    -   Modify `utils/csvHelpers.ts` -> `detectFileType`.
-    -   Add detection logic for fuel headers (keywords: "Card", "Pan", "Volume", "Product", "Merchant", "Station").
-    -   Return `'fuel_statement'` as a new `FileType`.
+# Phase 11: Formatting and Visuals
+- **Objective:** Adjust number formatting because Daily Rates will be small numbers requiring decimals.
+- **Steps:**
+    1.  Create a dynamic formatter `getFormatter(value, viewBasis)`.
+        -   Cash Flow: No decimals (e.g., "$1,200").
+        -   Daily/Weekly: 2 decimals (e.g., "$3.28").
+    2.  Update the Table cells to use this formatter.
+    3.  Update the Table Footers to use this formatter.
+    4.  Add a tooltip or legend explaining what the view shows (e.g., "Daily Rate shows the amortized cost per day").
 
-## Phase 3: Fuel Import UI (ImportsPage)
-1.  **Objective**: Update `ImportsPage` to display and handle Fuel files.
-2.  **Steps**:
-    -   Open `components/imports/ImportsPage.tsx`.
-    -   Add `Fuel` icon from `lucide-react` to the imports list for `fuel_statement` files.
-    -   Update `getFileIcon` helper.
-    -   Add logic to fetch `fuelCards` (via `fuelService.getFuelCards`) on mount, so we can match cards during import.
+# Phase 12: Validation and Edge Case Handling
+- **Objective:** Ensure date boundaries (Start/End dates) are respected in amortized views.
+- **Steps:**
+    1.  Test case: Expense starts Jan 15th.
+        -   Jan Daily Rate column: Should be roughly same as Feb (daily cost is constant), OR should it be weighted?
+        -   Decision: "Daily Rate" usually means "How much does this cost me per day?" -> It is constant.
+        -   "Monthly Cost" in Jan: Should be ~50% of Feb.
+        -   Refine logic in Phase 8 accordingly.
+    2.  Test case: One-time expense.
+        -   If I buy a part for $100 on Jan 1st.
+        -   Daily Rate: Should it be $100/365? Or $100/1?
+        -   Decision: One-time expenses are usually "Events". Amortizing them implies they are assets depreciating. For "Fixed Expenses" (bills), they are usually periodic.
+        -   Rule: One-time expenses in "Daily Rate" view should probably be shown as-is in the month they occur, OR amortized over the year if "Auto-renew" is off?
+        -   Let's stick to: One-time expenses are treated as occurring on that day. Daily rate = Amount on that day. (This might spike the graph).
+        -   Alternative: Exclude one-time from "Daily Rate" view?
+        -   Better: Amortize one-time expenses over 12 months if user desires, but standard is: Just show the daily hit (which is huge) or the amortized hit.
+        -   Let's amortize One-time expenses over 1 year for the "Daily Rate" view to smooth it out, OR just exclude them.
+        -   Simpler approach: Treat One-time like 'Yearly' but without renew. Daily cost = Amount / 365.
 
-## Phase 4: Fuel Import Logic (Parsing & Mapping)
-1.  **Objective**: Port the parsing logic from `FuelImportModal` to `ImportsPage`.
-2.  **Steps**:
-    -   In `ImportsPage.tsx`, inside `handleMerge` (or a new handler `handleFuelProcess`), implement the mapping logic found in `FuelImportModal`.
-    -   It needs to map CSV columns to `FuelEntry` fields: `date`, `amount`, `liters`, `cardId`.
-    -   Implement the "Card Matching" logic (match last 4 digits of CSV card number to `cards` list).
-    -   Store valid fuel entries in a new state variable `processedFuelEntries`.
-
-## Phase 5: Fuel Import Execution (Saving)
-1.  **Objective**: Save the parsed fuel entries to the backend.
-2.  **Steps**:
-    -   In `ImportsPage.tsx` -> `handleConfirmImport`:
-    -   Add a check: `if (processedFuelEntries.length > 0)`.
-    -   Loop through and call `fuelService.saveFuelEntry` for each.
-    -   Add toast notification for success/failure.
-
-## Phase 6: Fuel Report Generation Logic
-1.  **Objective**: Create the logic to generate the Fuel Reconciliation Report.
-2.  **Steps**:
-    -   Open `utils/ReportGenerator.ts`.
-    -   Add method `generateFuelReconciliation(entries: FuelEntry[], vehicles: any[])`.
-    -   Logic: Group by Vehicle, sum Cost, sum Liters, calculate Efficiency.
-    -   Return `ReportSummary` object (compatible with existing report system).
-
-## Phase 7: Reports Page UI
-1.  **Objective**: Add the Fuel Report card to the Reports dashboard.
-2.  **Steps**:
-    -   Open `components/reports/ReportsPage.tsx`.
-    -   Add a new `ReportCard` titled "Fuel Reconciliation Report".
-    -   In `handleExport`, add case for `'Fuel Reconciliation Report'`.
-    -   Inside that case:
-        -   Fetch all fuel entries (`fuelService.getFuelEntries`).
-        -   Fetch vehicles (`api.getVehicles`).
-        -   Call `ReportGenerator.generateFuelReconciliation`.
-        -   Trigger download.
-
-## Phase 8: Clean Up Fuel Management (Imports)
-1.  **Objective**: Remove the old import modal.
-2.  **Steps**:
-    -   Open `pages/FuelManagement.tsx`.
-    -   Remove `FuelImportModal` import.
-    -   Remove `isImportModalOpen` state.
-    -   Remove the "Import Statement" button from the Logs tab.
-    -   Delete `components/fuel/FuelImportModal.tsx` file (optional, but good for cleanup).
-
-## Phase 9: Clean Up Fuel Management (Exports)
-1.  **Objective**: Remove the old export button.
-2.  **Steps**:
-    -   Open `components/fuel/FuelLayout.tsx`.
-    -   Remove the "Export Report" button from the header.
-    -   Remove unused props (`onExport` if it existed).
-
-## Phase 10: Final Integration Test
-1.  **Objective**: Verify the entire flow.
-2.  **Steps**:
-    -   Go to **Imports**: Upload a sample fuel CSV. Verify it detects as `fuel_statement`. Import it.
-    -   Go to **Fuel Management**: Check Logs tab. Verify new entries appear.
-    -   Go to **Reports**: Click "Export" on Fuel Report. Verify CSV/PDF downloads.
+# Phase 13: Cleanup and Polish
+- **Objective:** Final code cleanup.
+- **Steps:**
+    1.  Remove console logs.
+    2.  Verify types are strict.
+    3.  Check mobile view table scrolling.

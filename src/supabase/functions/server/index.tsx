@@ -1513,6 +1513,53 @@ app.post("/make-server-37f42386/settings/preferences", async (c) => {
   }
 });
 
+// Fixed Expenses Endpoints
+app.get("/make-server-37f42386/fixed-expenses/:vehicleId", async (c) => {
+  try {
+    const vehicleId = c.req.param("vehicleId");
+    // Key pattern: fixed_expense:{vehicleId}:{expenseId}
+    const expenses = await kv.getByPrefix(`fixed_expense:${vehicleId}:`);
+    return c.json(expenses || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/fixed-expenses", async (c) => {
+  try {
+    const expense = await c.req.json();
+    if (!expense.vehicleId) {
+        return c.json({ error: "Vehicle ID is required" }, 400);
+    }
+    if (!expense.id) {
+        expense.id = crypto.randomUUID();
+    }
+    if (!expense.createdAt) {
+        expense.createdAt = new Date().toISOString();
+    }
+    expense.updatedAt = new Date().toISOString();
+
+    const key = `fixed_expense:${expense.vehicleId}:${expense.id}`;
+    await kv.set(key, expense);
+    return c.json({ success: true, data: expense });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/fixed-expenses/:vehicleId/:id", async (c) => {
+  const vehicleId = c.req.param("vehicleId");
+  const id = c.req.param("id");
+  try {
+    const key = `fixed_expense:${vehicleId}:${id}`;
+    await kv.del(key);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// AI Fleet Analysis Endpoint
 app.post("/make-server-37f42386/analyze-fleet", async (c) => {
   try {
     const { payload } = await c.req.json();
