@@ -2395,4 +2395,48 @@ app.delete("/make-server-37f42386/fuel-disputes/:id", async (c) => {
   }
 });
 
+// Equipment Endpoints
+app.get("/make-server-37f42386/equipment/:vehicleId", async (c) => {
+  try {
+    const vehicleId = c.req.param("vehicleId");
+    // Get all equipment items for this vehicle. We assume keys are formatted as equipment:{vehicleId}:{itemId}
+    const items = await kv.getByPrefix(`equipment:${vehicleId}:`);
+    return c.json(items || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/equipment", async (c) => {
+  try {
+    const item = await c.req.json();
+    if (!item.id) {
+        item.id = crypto.randomUUID();
+    }
+    if (!item.vehicleId) {
+        return c.json({ error: "Vehicle ID is required" }, 400);
+    }
+    if (!item.updatedAt) {
+        item.updatedAt = new Date().toISOString();
+    }
+    
+    // Key structure: equipment:{vehicleId}:{itemId}
+    await kv.set(`equipment:${item.vehicleId}:${item.id}`, item);
+    return c.json({ success: true, data: item });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/equipment/:vehicleId/:id", async (c) => {
+  const vehicleId = c.req.param("vehicleId");
+  const id = c.req.param("id");
+  try {
+    await kv.del(`equipment:${vehicleId}:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

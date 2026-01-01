@@ -29,11 +29,12 @@ import { Separator } from "../ui/separator";
 
 interface DriverProfileProps {
     onLogout: () => void;
+    onNavigate: (page: string) => void;
 }
 
 type SettingView = 'personal' | 'preferences' | 'tax' | null;
 
-export function DriverProfile({ onLogout }: DriverProfileProps) {
+export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const [vehicle, setVehicle] = useState<any | null>(null);
@@ -162,7 +163,10 @@ export function DriverProfile({ onLogout }: DriverProfileProps) {
       {/* Vehicle Info */}
       <div className="space-y-3">
          <h3 className="font-semibold text-slate-900 dark:text-slate-100 px-1">Vehicle</h3>
-         <Card>
+         <Card 
+            className="cursor-pointer hover:bg-slate-50 transition-colors"
+            onClick={() => onNavigate('equipment')}
+         >
             <CardContent className="p-4 flex items-center gap-4">
                {vehicle?.image ? (
                    <img src={vehicle.image} alt="Vehicle" className="h-12 w-12 rounded-lg object-cover bg-slate-100" />

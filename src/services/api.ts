@@ -4,7 +4,7 @@ import { OdometerReading } from '../types/vehicle';
 
 const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
-async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
+export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
     const response = await fetch(url, options);
     // If 5xx error, retry

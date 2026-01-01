@@ -7,7 +7,8 @@ import {
   Car,
   LogOut,
   Bell,
-  Receipt
+  Receipt,
+  Wrench
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";

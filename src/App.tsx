@@ -25,6 +25,7 @@ import { DriverTrips } from './components/driver-portal/DriverTrips';
 import { DriverProfile } from './components/driver-portal/DriverProfile';
 import { DriverClaims } from './components/driver-portal/DriverClaims';
 import { DriverExpenses } from './components/driver-portal/DriverExpenses';
+import { DriverEquipment } from './components/driver-portal/DriverEquipment';
 
 function AppContent() {
   const { user, role, loading, signOut } = useAuth();
@@ -101,7 +102,8 @@ function AppContent() {
         {driverPage === 'expenses' && <DriverExpenses />}
         {driverPage === 'trips' && <DriverTrips />}
         {driverPage === 'claims' && <DriverClaims />}
-        {driverPage === 'profile' && <DriverProfile onLogout={handleLogout} />}
+        {driverPage === 'equipment' && <DriverEquipment onBack={() => setDriverPage('profile')} />}
+        {driverPage === 'profile' && <DriverProfile onLogout={handleLogout} onNavigate={setDriverPage} />}
       </DriverLayout>
     );
   }
