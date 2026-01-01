@@ -99,6 +99,10 @@ export function DriverEquipment({ onBack }: DriverEquipmentProps) {
         }
     };
 
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+    };
+
     if (loading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
     }
@@ -140,7 +144,7 @@ export function DriverEquipment({ onBack }: DriverEquipmentProps) {
                     items.map(item => (
                         <Card key={item.id} className={item.status === 'Damaged' || item.status === 'Missing' ? 'border-red-200 bg-red-50/30' : ''}>
                             <CardContent className="p-4 flex justify-between items-start">
-                                <div>
+                                <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <h4 className="font-semibold text-slate-900">{item.name}</h4>
                                         <Badge variant={
@@ -150,7 +154,35 @@ export function DriverEquipment({ onBack }: DriverEquipmentProps) {
                                             {item.status}
                                         </Badge>
                                     </div>
+                                    
+                                    {/* Item Value */}
+                                    {item.price > 0 && (
+                                        <p className="text-sm font-medium text-slate-600 mt-1">
+                                            {formatCurrency(item.price)}
+                                        </p>
+                                    )}
+
                                     {item.description && <p className="text-sm text-slate-500 mt-1">{item.description}</p>}
+                                    
+                                    {/* Sub Items Display */}
+                                    {item.subItems && item.subItems.length > 0 && (
+                                        <div className="mt-3 pl-3 border-l-2 border-slate-100 space-y-2">
+                                            {item.subItems.map(sub => (
+                                                <div key={sub.id} className="flex items-center justify-between text-sm group">
+                                                    <span className="text-slate-700 flex items-center gap-2">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-slate-400"></span>
+                                                        {sub.name}
+                                                    </span>
+                                                    {sub.cost > 0 && (
+                                                        <span className="text-slate-500 font-mono text-xs">
+                                                            {formatCurrency(sub.cost)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
                                     {item.notes && <p className="text-xs text-amber-600 mt-2 bg-amber-50 p-2 rounded border border-amber-100">{item.notes}</p>}
                                 </div>
                                 
@@ -158,7 +190,7 @@ export function DriverEquipment({ onBack }: DriverEquipmentProps) {
                                     <Button 
                                         variant="outline" 
                                         size="sm" 
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 ml-4 shrink-0"
                                         onClick={() => handleReportDamage(item)}
                                     >
                                         <AlertTriangle className="h-3 w-3 mr-1" />

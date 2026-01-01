@@ -4614,6 +4614,12 @@
   }
 
   @media (hover: hover) {
+    .group-hover\:bg-slate-400:is(:where(.group):hover *) {
+      background-color: var(--color-slate-400);
+    }
+  }
+
+  @media (hover: hover) {
     .group-hover\:bg-slate-900:is(:where(.group):hover *) {
       background-color: var(--color-slate-900);
     }
