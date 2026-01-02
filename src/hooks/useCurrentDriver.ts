@@ -50,6 +50,24 @@ export function useCurrentDriver() {
 
             if (match) {
                 console.log(`[DriverSync] Resolved Identity: ${user.email} -> ${match.driverName} (${match.id})`);
+                
+                // Enhanced Vehicle Resolution: If driver record doesn't have assignedVehicleId, try to find it in vehicles list
+                if (!match.assignedVehicleId) {
+                    try {
+                        const vehicles = await api.getVehicles();
+                        const assignedVehicle = vehicles.find((v: any) => 
+                            v.currentDriverId === match.id || 
+                            v.currentDriverId === match.driverId
+                        );
+                        if (assignedVehicle) {
+                            match.assignedVehicleId = assignedVehicle.id;
+                            // Also map 'vehicle' property just in case legacy code uses it
+                            match.vehicle = assignedVehicle.id; 
+                        }
+                    } catch (err) {
+                        console.warn("[DriverSync] Failed to check vehicles for assignment", err);
+                    }
+                }
             } else {
                 console.warn(`[DriverSync] Could not link '${user.email}' to any driver record.`);
             }

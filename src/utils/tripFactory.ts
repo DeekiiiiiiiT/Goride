@@ -9,6 +9,7 @@ export interface ManualTripInput {
   dropoffLocation?: string;
   notes?: string;
   distance?: number;
+  vehicleId?: string;
 }
 
 export function createManualTrip(data: ManualTripInput, driverId: string, driverName?: string): Trip {
@@ -31,6 +32,7 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     pickupLocation: data.pickupLocation || 'Manual Entry',
     dropoffLocation: data.dropoffLocation || '',
     distance: data.distance || 0,
+    vehicleId: data.vehicleId,
     notes: data.notes || '',
     
     // Financials

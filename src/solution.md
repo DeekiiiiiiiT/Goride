@@ -1,65 +1,57 @@
-# Location Intelligence Implementation Plan
+# Live Trip Timer Implementation
 
-## Goal
-Enhance the Manual Trip Entry form with "Uber-like" location features:
-1. One-click "Current Location" capture.
-2. Address Autocomplete/Search.
-3. Integration with external navigation apps.
+## Phase 1: Setup and Definitions
+- [ ] Define the `TripSession` interface to track the state of an active trip.
+  - Properties: `isActive` (boolean), `startTime` (number | null), `startLocation` (string | null), `startCoords` ({ lat, lon } | null).
+- [ ] Update `ManualTripInput` interface if needed, or ensure the component can handle "initial values" separately from "form state".
 
-## Strategy
-We will replace standard text inputs with a smart `LocationInput` component backed by OpenStreetMap (Nominatim) services.
+## Phase 2: TripTimer Component (UI & Logic)
+- [ ] Create `components/trips/TripTimer.tsx`.
+- [ ] Implement `useTripTimer` hook to handle the stopwatch logic (setInterval).
+- [ ] Implement `startTrip` function:
+  - Sets `startTime` to `Date.now()`.
+  - Sets `isActive` to `true`.
+  - Saves state to `localStorage` (key: `current_trip_session`).
+- [ ] Implement `stopTrip` function:
+  - Calculates duration.
+  - Clears `localStorage`.
+  - Calls `onComplete(tripData)` prop.
+- [ ] Implement UI for "Idle" state (Start Button).
+- [ ] Implement UI for "Active" state (Stopwatch + Complete Button).
+- [ ] Add "Resume" logic: `useEffect` on mount to check `localStorage` and resume timer if valid.
 
----
+## Phase 3: GPS Integration
+- [ ] Import `getCurrentPosition` and `reverseGeocode` from `utils/locationService`.
+- [ ] Update `startTrip` to:
+  - Set loading state.
+  - Call `getCurrentPosition`.
+  - Call `reverseGeocode` to get the address.
+  - Store `startLocation` and `startCoords` in state and `localStorage`.
+- [ ] Handle errors: If GPS fails, start the timer anyway but leave location empty (user can fill it later).
 
-### Phase 1: Geolocation & Reverse Geocoding Utilities
-**Objective:** Build the core logic to get GPS coordinates and convert them to human-readable addresses.
-- [ ] **Step 1.1:** Create `utils/locationService.ts`.
-- [ ] **Step 1.2:** Implement `getCurrentPosition()` wrapper around `navigator.geolocation` to handle permissions and Promise-based responses.
-- [ ] **Step 1.3:** Implement `reverseGeocode(lat, lon)` function that calls OpenStreetMap Nominatim API (`https://nominatim.openstreetmap.org/reverse`).
-- [ ] **Step 1.4:** Define TypeScript interfaces for the API responses to ensure type safety.
+## Phase 4: Enhancing ManualTripForm
+- [ ] Update `ManualTripForm` props to accept optional `initialData`:
+  - `initialStartTime` (string HH:mm)
+  - `initialEndTime` (string HH:mm)
+  - `initialDuration` (number minutes)
+  - `initialPickupLocation` (string)
+  - `initialPickupCoords` ({ lat, lon })
+- [ ] Update `ManualTripForm` logic:
+  - If `initialData` is present, populate the form fields on mount.
+  - Ensure the "Duration" logic respects the passed value (maybe display it prominently).
+  - Pre-fill `pickupLocation` and set `pickupCoords` state so distance calculation works later when drop-off is entered.
 
-### Phase 2: Address Search (Autocomplete) Logic
-**Objective:** Build the logic to search for addresses based on user text input.
-- [ ] **Step 2.1:** Update `utils/locationService.ts`.
-- [ ] **Step 2.2:** Implement `searchAddress(query)` function calling OpenStreetMap API (`https://nominatim.openstreetmap.org/search`).
-- [ ] **Step 2.3:** Implement a `debounce` utility to prevent API rate limiting (only search after user stops typing for 300-500ms).
-- [ ] **Step 2.4:** Test the API search manually to verify response format.
+## Phase 5: Integration with DriverDashboard
+- [ ] Import `TripTimer` in `components/driver-portal/DriverDashboard.tsx`.
+- [ ] Create a handler `handleTripComplete(data)` in Dashboard:
+  - Sets `manualTripFormOpen` to true.
+  - Sets a new state `tripInitialData` with the results from the timer.
+- [ ] Pass `tripInitialData` to `ManualTripForm`.
+- [ ] Replace the "Log Trip" button in the Quick Actions section with the new `TripTimer` widget (or place it above Quick Actions for visibility).
 
-### Phase 3: Smart Location Input Component (UI Skeleton)
-**Objective:** Create the reusable UI component that will replace the simple text boxes.
-- [ ] **Step 3.1:** Create `components/ui/LocationInput.tsx`.
-- [ ] **Step 3.2:** Design the component layout: An input field with a specific "Right Side" area for action icons.
-- [ ] **Step 3.3:** Add the "Green Map Pin" icon trigger for the Current Location feature.
-- [ ] **Step 3.4:** Add the visual container for the Autocomplete Dropdown (initially hidden).
-- [ ] **Step 3.5:** Ensure it accepts standard props (`value`, `onChange`, `placeholder`) to be compatible with the existing form.
+## Phase 6: Testing & Refinement
+- [ ] Verify "Browser Refresh": Start trip -> Refresh page -> Timer should continue from correct time.
+- [ ] Verify "GPS Flow": Start trip -> Wait for location -> Location appears -> Complete -> Form opens with Address.
+- [ ] Verify "End to End": Save the form -> Trip appears in list with correct duration and distance (once dropoff entered).
+- [ ] UX Polish: Ensure the timer is large and easy to read.
 
-### Phase 4: Integrating "Current Location" Feature
-**Objective:** Make the Green Map Pin functional.
-- [ ] **Step 4.1:** Import utilities from Phase 1 into `LocationInput.tsx`.
-- [ ] **Step 4.2:** Implement specific `handleUseCurrentLocation` function:
-    - Set loading state (spinner icon).
-    - Call `getCurrentPosition`.
-    - Call `reverseGeocode`.
-    - Update the input value with the result.
-- [ ] **Step 4.3:** Add error handling (e.g., Toast notification if GPS is denied).
-
-### Phase 5: Integrating Autocomplete Feature
-**Objective:** Enable type-ahead address searching.
-- [ ] **Step 5.1:** Connect the Input `onChange` to the `searchAddress` utility from Phase 2.
-- [ ] **Step 5.2:** Manage state for `suggestions` (array of results) and `isLoading`.
-- [ ] **Step 5.3:** Render the suggestions in the Dropdown container created in Phase 3.
-- [ ] **Step 5.4:** Implement `handleSelectAddress(address)`:
-    - Update input value.
-    - Clear suggestions.
-    - Close dropdown.
-- [ ] **Step 5.5:** Implement "Click Outside" logic to close the dropdown if the user clicks away.
-
-### Phase 6: Final Integration & Navigation Handoff
-**Objective:** Plug the new component into the main form and add the "Navigate" button.
-- [ ] **Step 6.1:** Open `components/trips/ManualTripForm.tsx`.
-- [ ] **Step 6.2:** Replace the standard `Input` fields for "Pickup" and "Dropoff" with the new `LocationInput` component.
-- [ ] **Step 6.3:** Add a "Navigate" button (Arrow icon) next to the Dropoff field.
-- [ ] **Step 6.4:** Implement `openNavigationApp(address)` function:
-    - Constructs a Universal Link for Google Maps (`https://www.google.com/maps/dir/?api=1&destination=...`).
-    - Opens in a new tab/window.
-- [ ] **Step 6.5:** Verify the entire flow: Locate -> Auto-fill -> Submit.
