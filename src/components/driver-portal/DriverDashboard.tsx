@@ -13,17 +13,20 @@ import {
   Loader2,
   Trophy
 } from "lucide-react";
-import { Trip, FuelLog, ServiceRequest, DriverMetric, TierConfig, FinancialTransaction } from '../../types/data';
+import { Trip, FuelLog, ServiceRequest, DriverMetric, TierConfig, FinancialTransaction, QuotaConfig, DriverGoals } from '../../types/data';
 import { toast } from 'sonner@2.0.3';
 import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
+import { ManualTripForm } from '../trips/ManualTripForm';
+import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
-import { format } from "date-fns";
+import { generateMonthlyProjection } from '../tiers/quota-utils';
+import { format, isSameWeek } from "date-fns";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { DriverOverview } from './DriverOverview';
 import { DriverHistory } from './DriverHistory';
@@ -33,9 +36,11 @@ export function DriverDashboard() {
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   const [fuelFormOpen, setFuelFormOpen] = useState(false);
   const [serviceFormOpen, setServiceFormOpen] = useState(false);
+  const [manualTripFormOpen, setManualTripFormOpen] = useState(false);
   
   const [metrics, setMetrics] = useState<DriverMetric | null>(null);
   const [todayEarnings, setTodayEarnings] = useState(0);
+  const [goals, setGoals] = useState<DriverGoals | null>(null);
   const [recentTrip, setRecentTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
   const [debugDrivers, setDebugDrivers] = useState<any[]>([]);
@@ -109,10 +114,16 @@ export function DriverDashboard() {
             
             // Calculate Today's Earnings
             const today = new Date().toISOString().split('T')[0];
+            const now = new Date();
             const todaySum = myTrips
                 .filter(t => t.date.startsWith(today))
                 .reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
             setTodayEarnings(todaySum);
+
+            // Calculate Weekly Earnings
+            const weeklySum = myTrips
+                .filter(t => isSameWeek(new Date(t.date), now, { weekStartsOn: 1 }))
+                .reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
 
             // Phase 2: Tier Calculation (Monthly Reset Logic)
             const monthlyEarnings = TierCalculations.calculateMonthlyEarnings(myTrips);
@@ -121,6 +132,30 @@ export function DriverDashboard() {
             const nextTier = TierCalculations.getNextTier(currentTier, tiers);
             const progress = TierCalculations.calculateProgress(monthlyEarnings, currentTier);
             
+            // Calculate Quota Goals
+            try {
+                const quotaConfig = await tierService.getQuotaSettings();
+                if (quotaConfig && quotaConfig.weekly && quotaConfig.weekly.enabled) {
+                    const weeklyAmount = quotaConfig.weekly.amount || 0;
+                    const workingDaysCount = quotaConfig.weekly.workingDays?.length || 5;
+                    
+                    const dailyTarget = workingDaysCount > 0 ? weeklyAmount / workingDaysCount : 0;
+                    
+                    // Monthly Target (Specific to current month)
+                    const monthlyProjections = generateMonthlyProjection(weeklyAmount, workingDaysCount);
+                    const currentMonthName = format(now, 'MMMM');
+                    const monthlyTarget = monthlyProjections.find(m => m.monthName === currentMonthName)?.target || 0;
+
+                    setGoals({
+                        daily: { current: todaySum, target: dailyTarget },
+                        weekly: { current: weeklySum, target: weeklyAmount },
+                        monthly: { current: monthlyEarnings, target: monthlyTarget }
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to calculate quota goals", e);
+            }
+
             // Calculate History
             const historyData = TierCalculations.getMonthlyHistory(myTrips, tiers);
             setHistory(historyData);
@@ -155,10 +190,37 @@ export function DriverDashboard() {
         setFuelFormOpen(true);
     } else if (action === 'Service Request' || action === 'Issue Report') {
         setServiceFormOpen(true);
+    } else if (action === 'Log Trip') {
+        setManualTripFormOpen(true);
     } else {
         toast.success(`${action} flow started`, {
             description: "This feature is coming soon."
         });
+    }
+  };
+
+  const handleManualTripSubmit = async (data: ManualTripInput) => {
+    if (!user?.id) return;
+    
+    try {
+      const trip = createManualTrip(data, user.id, driverRecord?.name || user.email);
+      await api.saveTrips([trip]);
+      
+      toast.success("Trip Logged Successfully", {
+        description: `$${data.amount} on ${data.date}`
+      });
+      
+      // Force refresh data
+      // We can achieve this by triggering the useEffect dependency or manually recalling logic.
+      // For simplicity, we'll reload the page or we could extract fetch logic.
+      // Ideally, extract fetch logic, but for now let's just use window.location.reload() 
+      // or duplicate the state update if simple.
+      // Since Dashboard logic is complex, a reload is safest until refactor.
+      setTimeout(() => window.location.reload(), 1000);
+      
+    } catch (e: any) {
+      console.error("Failed to save manual trip", e);
+      toast.error(e.message || "Failed to save trip");
     }
   };
 
@@ -260,6 +322,7 @@ export function DriverDashboard() {
             tierState={tierState}
             metrics={metrics}
             todayEarnings={todayEarnings}
+            goals={goals}
             recentTrip={recentTrip}
             driverRecord={driverRecord}
             loading={loading}
@@ -286,6 +349,13 @@ export function DriverDashboard() {
         open={serviceFormOpen} 
         onOpenChange={setServiceFormOpen} 
         onSubmit={handleServiceSubmit} 
+      />
+
+      <ManualTripForm
+        open={manualTripFormOpen}
+        onOpenChange={setManualTripFormOpen}
+        onSubmit={handleManualTripSubmit}
+        isAdmin={false}
       />
     </div>
   );

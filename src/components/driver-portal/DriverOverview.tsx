@@ -4,16 +4,34 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { 
   DollarSign, 
-  Clock, 
   Star, 
   ShieldCheck,
   Fuel, 
-  Wrench, 
+  Ticket, 
   AlertTriangle,
   Loader2,
-  Trophy
+  Trophy,
+  Target,
+  CheckCircle2,
+  Car,
+  RefreshCw,
+  Users,
+  User,
+  HelpCircle,
+  ShieldAlert,
+  PlusCircle
 } from "lucide-react";
-import { Trip, DriverMetric, TierConfig } from '../../types/data';
+import { 
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+  DrawerFooter,
+  DrawerClose,
+} from "../ui/drawer";
+import { Trip, DriverMetric, TierConfig, DriverGoals } from '../../types/data';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { useAuth } from '../auth/AuthContext';
 
@@ -26,6 +44,7 @@ interface DriverOverviewProps {
   };
   metrics: DriverMetric | null;
   todayEarnings: number;
+  goals: DriverGoals | null;
   recentTrip: Trip | null;
   driverRecord: any;
   loading: boolean;
@@ -36,10 +55,44 @@ interface DriverOverviewProps {
   onAction: (action: string) => void;
 }
 
+function GoalRow({ label, current, target }: { label: string; current: number; target: number }) {
+  const progress = target > 0 ? Math.min(100, (current / target) * 100) : 0;
+  const isMet = target > 0 && current >= target;
+  
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-end text-sm">
+        <span className="font-medium text-slate-600 dark:text-slate-400">{label}</span>
+        <div className="flex items-center gap-1.5">
+          {isMet && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+          <span className={`font-bold ${isMet ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'}`}>
+             {TierCalculations.formatCurrency(current)}
+          </span>
+          <span className="text-xs text-slate-400 font-medium">
+             / {TierCalculations.formatCurrency(target)}
+          </span>
+        </div>
+      </div>
+      
+      <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+        <div 
+          className={`h-full rounded-full transition-all duration-1000 ease-out ${
+            isMet 
+              ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' 
+              : 'bg-indigo-500'
+          }`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function DriverOverview({
   tierState,
   metrics,
   todayEarnings,
+  goals,
   recentTrip,
   driverRecord,
   loading,
@@ -69,28 +122,43 @@ export function DriverOverview({
                  <div className="flex flex-col gap-6">
                      
                      {/* Header Section */}
-                     <div className="flex items-center gap-5">
-                         {/* Avatar / Profile Image */}
-                         <div className="h-16 w-16 rounded-full border-2 border-indigo-400/30 overflow-hidden bg-slate-800 shadow-lg shrink-0 flex items-center justify-center">
-                             <span className="text-2xl font-bold text-indigo-200">
-                                 {driverRecord?.name?.charAt(0) || user?.email?.charAt(0)}
-                             </span>
-                         </div>
-                         
-                         <div className="space-y-1">
-                             <h2 className="text-3xl font-bold text-white tracking-tight">
-                                 Welcome, {driverRecord?.name?.split(' ')[0] || 'Driver'}
-                             </h2>
-                             <div className="flex items-center gap-3">
-                                 {/* Tier Badge - High Fidelity */}
-                                 <div className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-slate-900 text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-1.5">
-                                     <Trophy className="h-3 w-3 fill-slate-900 stroke-none" />
-                                     {tierState.current.name} Tier
-                                 </div>
-                                 <span className="text-sm font-medium text-indigo-200/80 tracking-wide">
-                                     {tierState.current.sharePercentage}% Profit Share
+                     <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-5">
+                             {/* Avatar / Profile Image */}
+                             <div className="h-16 w-16 rounded-full border-2 border-indigo-400/30 overflow-hidden bg-slate-800 shadow-lg shrink-0 flex items-center justify-center">
+                                 <span className="text-2xl font-bold text-indigo-200">
+                                     {driverRecord?.name?.charAt(0) || user?.email?.charAt(0)}
                                  </span>
                              </div>
+                             
+                             <div className="space-y-1">
+                                 <h2 className="text-3xl font-bold text-white tracking-tight">
+                                     Welcome, {driverRecord?.name?.split(' ')[0] || 'Driver'}
+                                 </h2>
+                                 <div className="flex items-center gap-3">
+                                     {/* Tier Badge - High Fidelity */}
+                                     <div className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-slate-900 text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-1.5">
+                                         <Trophy className="h-3 w-3 fill-slate-900 stroke-none" />
+                                         {tierState.current.name} Tier
+                                     </div>
+                                     <span className="text-sm font-medium text-indigo-200/80 tracking-wide">
+                                         {tierState.current.sharePercentage}% Profit Share
+                                     </span>
+                                 </div>
+                             </div>
+                         </div>
+
+                         {/* Rating Display (Relocated) */}
+                         <div className="flex flex-col items-end">
+                            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/20 shadow-lg">
+                                <span className="text-2xl font-bold text-white tracking-tight">
+                                    {metrics?.ratingLast500 || '5.0'}
+                                </span>
+                                <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                            </div>
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-indigo-200 mt-1 pr-1">
+                                Rating
+                            </span>
                          </div>
                      </div>
 
@@ -132,6 +200,26 @@ export function DriverOverview({
                  </div>
              </CardContent>
          </Card>
+      )}
+
+      {/* Quota Goals Section */}
+      {goals && goals.weekly.target > 0 && (
+          <Card className="border-indigo-100 bg-white dark:bg-slate-950 dark:border-slate-800 shadow-sm">
+             <CardContent className="p-4 space-y-4">
+                 <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <div className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-md">
+                        <Target className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Earning Goals</h3>
+                 </div>
+                 
+                 <div className="grid gap-4">
+                     <GoalRow label="Daily Goal" current={goals.daily.current} target={goals.daily.target} />
+                     <GoalRow label="Weekly Goal" current={goals.weekly.current} target={goals.weekly.target} />
+                     <GoalRow label="Monthly Goal" current={goals.monthly.current} target={goals.monthly.target} />
+                 </div>
+             </CardContent>
+          </Card>
       )}
 
       {!metrics && !recentTrip && !loading && (
@@ -206,7 +294,7 @@ export function DriverOverview({
       )}
 
       {/* Today's Stats */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <Card>
           <CardContent className="p-4 flex flex-col items-center justify-center text-center">
              <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
@@ -218,46 +306,10 @@ export function DriverOverview({
              <span className="text-xs text-slate-500">Earned Today</span>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center justify-center text-center">
-             <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center mb-2">
-                <Clock className="h-5 w-5 text-blue-600" />
-             </div>
-             <span className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                {metrics?.hoursOnline || 0}h
-             </span>
-             <span className="text-xs text-slate-500">Online Hours</span>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Metrics Row */}
-      <div className="flex items-center justify-between px-2 py-3 bg-white dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
-         <div className="flex flex-col items-center flex-1 border-r border-slate-100 dark:border-slate-800">
-            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                {metrics?.ratingLast500 || '5.0'}
-            </span>
-            <div className="flex items-center text-amber-400 text-xs">
-               <Star className="h-3 w-3 fill-current" />
-               <span className="ml-1 text-slate-500">Rating</span>
-            </div>
-         </div>
-         <div className="flex flex-col items-center flex-1 border-r border-slate-100 dark:border-slate-800">
-            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                {metrics ? (metrics.cancellationRate * 100).toFixed(0) : 0}%
-            </span>
-            <span className="text-xs text-slate-500">Cancel Rate</span>
-         </div>
-         <div className="flex flex-col items-center flex-1">
-            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                {metrics ? (metrics.acceptanceRate * 100).toFixed(0) : 0}%
-            </span>
-            <span className="text-xs text-slate-500">Acceptance</span>
-         </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
          <button 
            onClick={() => onAction('Fuel Log')}
            className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
@@ -268,68 +320,92 @@ export function DriverOverview({
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Fuel</span>
          </button>
          <button 
-           onClick={() => onAction('Service Request')}
+           onClick={() => onAction('Log Toll')}
            className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
          >
             <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center mb-2">
-               <Wrench className="h-5 w-5 text-blue-600" />
+               <Ticket className="h-5 w-5 text-blue-600" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Service</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Toll</span>
          </button>
          <button 
-           onClick={() => onAction('Issue Report')}
+           onClick={() => onAction('Log Trip')}
            className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
          >
-            <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center mb-2">
-               <AlertTriangle className="h-5 w-5 text-rose-600" />
+            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
+               <PlusCircle className="h-5 w-5 text-emerald-600" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Report</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Trip</span>
          </button>
+         <Drawer>
+           <DrawerTrigger asChild>
+             <button 
+               className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
+             >
+                <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center mb-2">
+                   <AlertTriangle className="h-5 w-5 text-rose-600" />
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Report</span>
+             </button>
+           </DrawerTrigger>
+           <DrawerContent>
+             <div className="mx-auto w-full max-w-sm">
+               <DrawerHeader>
+                 <DrawerTitle>Report an Issue</DrawerTitle>
+                 <DrawerDescription>Select the type of issue you want to report.</DrawerDescription>
+               </DrawerHeader>
+               <div className="p-4 grid grid-cols-2 gap-3">
+                 <button onClick={() => onAction('Report: Item Replacement')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-indigo-100 hover:bg-indigo-50 transition-all">
+                    <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                        <RefreshCw className="h-6 w-6 text-indigo-600" />
+                    </div>
+                    <span className="font-semibold text-slate-700 text-sm text-center">Item Replacement</span>
+                 </button>
+                 
+                 <button onClick={() => onAction('Report: Accident')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-rose-100 hover:bg-rose-50 transition-all">
+                    <div className="h-12 w-12 rounded-full bg-rose-100 flex items-center justify-center">
+                        <Car className="h-6 w-6 text-rose-600" />
+                    </div>
+                    <span className="font-semibold text-slate-700 text-sm text-center">Had an accident?</span>
+                 </button>
+
+                 <button onClick={() => onAction('Report: Vehicle Stolen')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-100 transition-all">
+                    <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center">
+                        <ShieldAlert className="h-6 w-6 text-slate-600" />
+                    </div>
+                    <span className="font-semibold text-slate-700 text-sm text-center">Vehicle Stolen</span>
+                 </button>
+
+                 <button onClick={() => onAction('Report: Rider Damage')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-orange-100 hover:bg-orange-50 transition-all">
+                    <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
+                        <Users className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <span className="font-semibold text-slate-700 text-sm text-center">Rider Damages</span>
+                 </button>
+
+                 <button onClick={() => onAction('Report: Driver Damage')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-sky-100 hover:bg-sky-50 transition-all">
+                    <div className="h-12 w-12 rounded-full bg-sky-100 flex items-center justify-center">
+                        <User className="h-6 w-6 text-sky-600" />
+                    </div>
+                    <span className="font-semibold text-slate-700 text-sm text-center">Driver Damages</span>
+                 </button>
+
+                 <button onClick={() => onAction('Report: Other')} className="col-span-2 flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50 transition-all">
+                    <HelpCircle className="h-5 w-5 text-slate-400" />
+                    <span className="font-semibold text-slate-600 text-sm">Other</span>
+                 </button>
+               </div>
+               <DrawerFooter>
+                 <DrawerClose asChild>
+                   <Button variant="outline">Cancel</Button>
+                 </DrawerClose>
+               </DrawerFooter>
+             </div>
+           </DrawerContent>
+         </Drawer>
       </div>
 
-      {/* Recent Trip */}
-      <div className="space-y-3">
-        <h3 className="font-semibold text-slate-900 dark:text-slate-100">Last Trip</h3>
-        {recentTrip ? (
-            <Card>
-            <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-4">
-                    <Badge variant="secondary" className="bg-slate-100 text-slate-600">
-                    {recentTrip.platform}
-                    </Badge>
-                    <span className="font-bold text-lg">${(recentTrip.netPayout || recentTrip.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="space-y-4 relative">
-                    <div className="absolute left-[7px] top-2 bottom-6 w-0.5 bg-slate-200 dark:bg-slate-800 -z-10" />
-                    
-                    <div className="flex items-start gap-3">
-                    <div className="h-4 w-4 rounded-full border-2 border-slate-300 bg-white mt-1 shrink-0" />
-                    <div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {recentTrip.pickupLocation}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                            {new Date(recentTrip.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </p>
-                    </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                    <div className="h-4 w-4 rounded-full border-2 border-indigo-600 bg-indigo-600 mt-1 shrink-0" />
-                    <div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {recentTrip.dropoffLocation}
-                        </p>
-                    </div>
-                    </div>
-                </div>
-            </CardContent>
-            </Card>
-        ) : (
-            <div className="text-center p-6 bg-slate-50 rounded-lg text-slate-500 text-sm">
-                No trips recorded yet.
-            </div>
-        )}
-      </div>
+
 
       {/* Action Banner */}
       <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg flex items-start gap-3">

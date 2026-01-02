@@ -1,5 +1,5 @@
 import { api } from './api';
-import { TierConfig, ExpenseSplitRule, DriverMetrics } from '../types/data';
+import { TierConfig, ExpenseSplitRule, DriverMetrics, QuotaConfig } from '../types/data';
 
 // Default Tiers if none exist
 const DEFAULT_TIERS: TierConfig[] = [
@@ -14,6 +14,12 @@ const DEFAULT_SPLIT_RULES: ExpenseSplitRule[] = [
     { id: 'fuel_default', category: 'Fuel', companyShare: 50, driverShare: 50, isDefault: true },
     { id: 'maint_default', category: 'Maintenance', companyShare: 100, driverShare: 0, isDefault: true }
 ];
+
+const DEFAULT_QUOTA_SETTINGS: QuotaConfig = {
+  daily: { enabled: false, amount: 0 },
+  weekly: { enabled: false, amount: 0 },
+  monthly: { enabled: false, amount: 0 }
+};
 
 export const tierService = {
   async getTiers(): Promise<TierConfig[]> {
@@ -58,6 +64,28 @@ export const tierService = {
     await api.savePreferences({
         ...prefs,
         expenseRules: rules
+    });
+  },
+
+  async getQuotaSettings(): Promise<QuotaConfig> {
+    try {
+      const prefs = await api.getPreferences();
+      if (!prefs.quotas) {
+        // Initialize if empty, but don't save yet to avoid unnecessary writes
+        return DEFAULT_QUOTA_SETTINGS;
+      }
+      return prefs.quotas;
+    } catch (error) {
+      console.error("Failed to load quota settings", error);
+      return DEFAULT_QUOTA_SETTINGS;
+    }
+  },
+
+  async saveQuotaSettings(settings: QuotaConfig): Promise<void> {
+    const prefs = await api.getPreferences();
+    await api.savePreferences({
+      ...prefs,
+      quotas: settings
     });
   }
 };

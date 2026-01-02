@@ -5,14 +5,20 @@ import { Input } from "../ui/input";
 import { Loader2, Trash2, Plus, X } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { tierService } from '../../services/tierService';
-import { TierConfig, ExpenseSplitRule } from '../../types/data';
+import { TierConfig, ExpenseSplitRule, QuotaConfig } from '../../types/data';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
+import { QuotaConfigTab } from './QuotaConfigTab';
 
 export function TierConfigPage() {
   const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [splitRules, setSplitRules] = useState<ExpenseSplitRule[]>([]);
+  const [quotas, setQuotas] = useState<QuotaConfig>({
+    daily: { enabled: false, amount: 0, workingDays: [0, 1, 2, 3, 4, 5, 6] },
+    weekly: { enabled: false, amount: 0, workingDays: [0, 1, 2, 3, 4, 5, 6] },
+    monthly: { enabled: false, amount: 0, workingDays: [0, 1, 2, 3, 4, 5, 6] }
+  });
 
   useEffect(() => {
     loadData();
@@ -21,12 +27,22 @@ export function TierConfigPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [t, s] = await Promise.all([
+      const [t, s, q] = await Promise.all([
          tierService.getTiers(),
-         tierService.getSplitRules()
+         tierService.getSplitRules(),
+         tierService.getQuotaSettings()
       ]);
       setTiers(t);
       setSplitRules(s);
+      
+      // Ensure defaults for working days if not present
+      const fullWeek = [0, 1, 2, 3, 4, 5, 6];
+      setQuotas({
+        ...q,
+        daily: { ...q.daily, workingDays: q.daily.workingDays || fullWeek },
+        weekly: { ...q.weekly, workingDays: q.weekly.workingDays || fullWeek },
+        monthly: { ...q.monthly, workingDays: q.monthly.workingDays || fullWeek }
+      });
     } catch (e) {
       toast.error("Failed to load tier settings");
     } finally {
@@ -35,11 +51,22 @@ export function TierConfigPage() {
   };
 
   const handleSave = async () => {
+    // Validation
+    if (
+      (quotas.daily.enabled && quotas.daily.amount < 0) ||
+      (quotas.weekly.enabled && quotas.weekly.amount < 0) ||
+      (quotas.monthly.enabled && quotas.monthly.amount < 0)
+    ) {
+      toast.error("Quota amounts cannot be negative");
+      return;
+    }
+
     setSaving(true);
     try {
       await tierService.saveTiers(tiers);
       await tierService.saveSplitRules(splitRules);
-      toast.success("Tier & Expense settings saved");
+      await tierService.saveQuotaSettings(quotas);
+      toast.success("Tier, Expense & Quota settings saved");
     } catch (e) {
       toast.error("Failed to save settings");
     } finally {
@@ -139,9 +166,10 @@ export function TierConfigPage() {
       </div>
 
       <Tabs defaultValue="tiers" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-4">
+        <TabsList className="grid w-full grid-cols-3 mb-4">
           <TabsTrigger value="tiers">Tier Configuration</TabsTrigger>
           <TabsTrigger value="expenses">Expense Splits</TabsTrigger>
+          <TabsTrigger value="quotas">Earning Quota</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tiers">
@@ -340,6 +368,28 @@ export function TierConfigPage() {
                 </Button>
              </CardFooter>
           </Card>
+        </TabsContent>
+        <TabsContent value="quotas">
+          {loading ? (
+             <div className="flex justify-center p-8">
+               <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+             </div>
+          ) : (
+             <>
+                <QuotaConfigTab 
+                  config={quotas} 
+                  onChange={setQuotas} 
+                />
+                <Card className="mt-6">
+                    <CardFooter className="bg-slate-50 border-t px-6 py-4 flex justify-end rounded-b-lg">
+                        <Button onClick={handleSave} disabled={saving}>
+                            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save Configuration
+                        </Button>
+                    </CardFooter>
+                </Card>
+             </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

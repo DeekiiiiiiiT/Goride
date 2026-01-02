@@ -43,14 +43,42 @@ app.post("/make-server-37f42386/trips", async (c) => {
       return c.json({ error: "Expected array of trips" }, 400);
     }
     
+    // Validation and processing
+    const processedTrips = trips.map((trip: any) => {
+        if (trip.isManual) {
+            // Validation for manual trips
+            if (!trip.driverId) throw new Error(`Manual trip ${trip.id || 'unknown'} must have a driverId`);
+            if (typeof trip.amount !== 'number') throw new Error(`Manual trip ${trip.id || 'unknown'} must have a numeric amount`);
+            
+            // Enforce consistency for manual entries
+            return {
+                ...trip,
+                batchId: 'manual_entry',
+                status: trip.status || 'Completed',
+                // Ensure critical financial fields are present
+                netPayout: trip.netPayout ?? trip.amount,
+                fareBreakdown: trip.fareBreakdown || {
+                    baseFare: trip.amount,
+                    tips: 0,
+                    waitTime: 0,
+                    surge: 0,
+                    airportFees: 0,
+                    timeAtStop: 0,
+                    taxes: 0
+                }
+            };
+        }
+        return trip;
+    });
+    
     // Create keys for each trip
     // Assuming each trip has a unique 'id' field
-    const keys = trips.map((t: any) => `trip:${t.id}`);
+    const keys = processedTrips.map((t: any) => `trip:${t.id}`);
     
     // Store using mset
-    await kv.mset(keys, trips);
+    await kv.mset(keys, processedTrips);
     
-    return c.json({ success: true, count: trips.length });
+    return c.json({ success: true, count: processedTrips.length });
   } catch (e: any) {
     console.error("Error saving trips:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);

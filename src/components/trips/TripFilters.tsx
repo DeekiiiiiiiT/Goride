@@ -34,6 +34,7 @@ export interface TripFilterState {
   minDistance?: string;
   hasTip?: string; // 'yes', 'no', 'all'
   hasSurge?: string; // 'yes', 'no', 'all'
+  tripType?: string; // 'all', 'manual', 'platform'
 }
 
 interface TripFiltersProps {
@@ -62,7 +63,8 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
       maxEarnings: '',
       minDistance: '',
       hasTip: 'all',
-      hasSurge: 'all'
+      hasSurge: 'all',
+      tripType: 'all'
     });
     setIsOpen(false);
   };
@@ -73,7 +75,8 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
     filters.vehicleId !== 'all',
     filters.minEarnings,
     filters.hasTip !== 'all',
-    filters.hasSurge !== 'all'
+    filters.hasSurge !== 'all',
+    filters.tripType !== 'all' && filters.tripType !== undefined
   ].filter(Boolean).length;
 
   return (
@@ -137,6 +140,23 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
                 <SelectItem value="Completed">Completed</SelectItem>
                 <SelectItem value="Cancelled">Cancelled</SelectItem>
                 <SelectItem value="Processing">In Progress</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Trip Type */}
+          <div className="w-[140px]">
+             <Select 
+               value={filters.tripType || 'all'} 
+               onValueChange={(val) => updateFilter('tripType', val)}
+             >
+              <SelectTrigger>
+                <SelectValue placeholder="Trip Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="platform">Platform Import</SelectItem>
+                <SelectItem value="manual">Manual Entry</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -5,7 +5,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Loader2, Search, MapPin, MoreHorizontal, Copy } from "lucide-react";
+import { Loader2, Search, MapPin, MoreHorizontal, Copy, Plus } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -35,6 +35,8 @@ import { TripFilters, TripFilterState } from './TripFilters';
 import { CancellationAnalysis } from './CancellationAnalysis';
 import { RouteAnalysis } from './RouteAnalysis';
 import { ReportGenerator } from './ReportGenerator';
+import { ManualTripForm } from './ManualTripForm';
+import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { startOfDay, subDays, isSameDay, isAfter, isBefore, endOfDay } from 'date-fns';
 
 export function TripLogsPage() {
@@ -46,6 +48,7 @@ export function TripLogsPage() {
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [viewMode, setViewMode] = useState<'details' | 'map' | 'issue' | null>(null);
   const [issueReason, setIssueReason] = useState('');
+  const [isManualTripOpen, setIsManualTripOpen] = useState(false);
   const [filters, setFilters] = useState<TripFilterState>({
     status: 'all',
     driverId: 'all',
@@ -57,7 +60,8 @@ export function TripLogsPage() {
     maxEarnings: '',
     minDistance: '',
     hasTip: 'all',
-    hasSurge: 'all'
+    hasSurge: 'all',
+    tripType: 'all'
   });
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -154,6 +158,11 @@ export function TripLogsPage() {
           }
 
           // 6. Advanced Filters
+          if (filters.tripType && filters.tripType !== 'all') {
+              if (filters.tripType === 'manual' && !t.isManual) return false;
+              if (filters.tripType === 'platform' && t.isManual) return false;
+          }
+
           if (filters.minEarnings && (t.amount || 0) < parseFloat(filters.minEarnings)) return false;
           if (filters.maxEarnings && (t.amount || 0) > parseFloat(filters.maxEarnings)) return false;
           if (filters.minDistance && (t.distance || 0) < parseFloat(filters.minDistance)) return false;
@@ -177,6 +186,31 @@ export function TripLogsPage() {
   // Pagination Logic
   const totalPages = Math.ceil(filteredTrips.length / pageSize);
   const paginatedTrips = filteredTrips.slice((page - 1) * pageSize, page * pageSize);
+
+  const handleManualTripSubmit = async (data: ManualTripInput, driverId?: string) => {
+    if (!driverId) {
+        toast.error("Driver must be selected");
+        return;
+    }
+    
+    const driverName = uniqueDrivers.find(d => d.id === driverId)?.name || 'Unknown';
+    
+    try {
+        const trip = createManualTrip(data, driverId, driverName);
+        await api.saveTrips([trip]);
+        
+        toast.success("Manual Trip Logged", {
+            description: `Added trip for ${driverName} - $${data.amount}`
+        });
+        
+        // Optimistically update list
+        setTrips(prev => [trip, ...prev]);
+        
+    } catch (e: any) {
+        console.error(e);
+        toast.error(e.message || "Failed to save trip");
+    }
+  };
 
   const handleFilterChange = (newFilters: TripFilterState) => {
       setFilters(newFilters);
@@ -292,7 +326,13 @@ ${selectedTrip.fareBreakdown ? Object.entries(selectedTrip.fareBreakdown).map(([
             Real-time trip analytics, cancellation insights, and fleet performance.
           </p>
         </div>
-        <ReportGenerator trips={filteredTrips} />
+        <div className="flex items-center gap-2">
+            <Button onClick={() => setIsManualTripOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
+                <Plus className="mr-2 h-4 w-4" />
+                Log Manual Trip
+            </Button>
+            <ReportGenerator trips={filteredTrips} />
+        </div>
       </div>
 
       {/* Global Filter Bar */}
@@ -377,7 +417,12 @@ ${selectedTrip.fareBreakdown ? Object.entries(selectedTrip.fareBreakdown).map(([
                             <div className="flex flex-col">
                                 <span className="font-medium text-slate-900">{trip.driverName || 'Unknown Driver'}</span>
                                 <span className="text-xs text-slate-500 font-mono mb-1">{trip.vehicleId || 'No Vehicle'}</span>
-                                {trip.productType && (
+                                {trip.isManual && (
+                                    <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 bg-amber-50 text-amber-700 border-amber-200">
+                                        Manual Entry
+                                    </Badge>
+                                )}
+                                {trip.productType && !trip.isManual && (
                                     <Badge variant="secondary" className="w-fit text-[10px] h-5 px-1 bg-slate-100 text-slate-600">
                                         {trip.productType}
                                     </Badge>
@@ -633,6 +678,14 @@ ${selectedTrip.fareBreakdown ? Object.entries(selectedTrip.fareBreakdown).map(([
           )}
         </DialogContent>
       </Dialog>
+
+      <ManualTripForm 
+        open={isManualTripOpen}
+        onOpenChange={setIsManualTripOpen}
+        onSubmit={handleManualTripSubmit}
+        isAdmin={true}
+        drivers={uniqueDrivers}
+      />
     </div>
   );
 }

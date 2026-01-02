@@ -94,7 +94,16 @@ export const api = {
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to save trips: ${response.statusText}`);
+      let errorMessage = response.statusText;
+      try {
+          const errorBody = await response.json();
+          if (errorBody.error) {
+              errorMessage = errorBody.error;
+          }
+      } catch (e) {
+          // Ignore json parse error, use statusText
+      }
+      throw new Error(`Failed to save trips: ${errorMessage}`);
     }
     
     return response.json();

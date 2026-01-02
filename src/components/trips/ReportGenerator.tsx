@@ -29,7 +29,7 @@ export function ReportGenerator({ trips }: ReportGeneratorProps) {
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     if (format === 'csv') {
-        const headers = ['Trip ID', 'Date', 'Time', 'Driver', 'Vehicle', 'Pickup', 'Dropoff', 'Status', 'Amount', 'Distance', 'Duration', 'Efficiency', 'Tips'];
+        const headers = ['Trip ID', 'Date', 'Time', 'Driver', 'Vehicle', 'Pickup', 'Dropoff', 'Status', 'Amount', 'Distance', 'Duration', 'Efficiency', 'Tips', 'Manual Entry'];
         const csvContent = [
             headers.join(','),
             ...trips.map(t => [
@@ -45,7 +45,8 @@ export function ReportGenerator({ trips }: ReportGeneratorProps) {
                 t.distance || 0,
                 t.duration || 0,
                 t.efficiencyScore || 0,
-                t.fareBreakdown?.tips || 0
+                t.fareBreakdown?.tips || 0,
+                t.isManual ? 'Yes' : 'No'
             ].join(','))
         ].join('\n');
 

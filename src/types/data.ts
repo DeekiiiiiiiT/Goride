@@ -1,6 +1,6 @@
 export interface Trip {
   id: string;
-  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Other';
+  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Private' | 'Cash' | 'Other';
   date: string; // ISO date string
   requestTime?: string; // ISO date string
   dropoffTime?: string; // ISO date string
@@ -716,4 +716,28 @@ export interface MonthlyPerformance {
   tripCount: number;
   tier: TierConfig;
   isCurrentMonth: boolean;
+}
+
+// --- Phase 1 Extension: Earning Quota Configuration ---
+export interface QuotaPeriod {
+  enabled: boolean;
+  amount: number;
+  workingDays?: number[];
+}
+
+export interface QuotaConfig {
+  daily: QuotaPeriod;
+  weekly: QuotaPeriod;
+  monthly: QuotaPeriod;
+}
+
+export interface DriverGoal {
+  current: number;
+  target: number;
+}
+
+export interface DriverGoals {
+  daily: DriverGoal;
+  weekly: DriverGoal;
+  monthly: DriverGoal;
 }
