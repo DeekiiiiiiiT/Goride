@@ -1,3 +1,5 @@
+import { RoutePoint } from './tripSession';
+
 export interface Trip {
   id: string;
   platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Private' | 'Cash' | 'Other';
@@ -41,6 +43,7 @@ export interface Trip {
   pickupArea?: string;  // Extracted from address
   dropoffArea?: string; // Extracted from address
   efficiency?: number;  // Amount / Distance
+  route?: RoutePoint[]; // Phase 2: Live Trip Route Data
   
   // Phase 1 (Trip Logs Enhancement): Enhanced Data Fields
   requestTime?: string; // ISO date string

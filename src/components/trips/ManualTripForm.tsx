@@ -21,8 +21,10 @@ import { Textarea } from "../ui/textarea";
 import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car } from "lucide-react";
 import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
+import { RoutePoint } from '../../types/tripSession';
 import { LocationInput } from '../ui/LocationInput';
 import { calculateRouteDistance } from '../../utils/locationService';
+import { LeafletMap } from '../maps/LeafletMap';
 import { toast } from 'sonner@2.0.3';
 
 interface ManualTripFormProps {
@@ -34,6 +36,17 @@ interface ManualTripFormProps {
   vehicles?: { id: string; plate: string }[];
   currentDriverId?: string; // For Admin to default select
   defaultVehicleId?: string;
+  initialData?: {
+    date?: string;
+    time?: string;
+    endTime?: string;
+    duration?: number;
+    pickupLocation?: string;
+    pickupCoords?: { lat: number; lon: number };
+    endLocation?: string;
+    endCoords?: { lat: number; lon: number };
+    route?: RoutePoint[];
+  };
 }
 
 export function ManualTripForm({ 
@@ -44,7 +57,8 @@ export function ManualTripForm({
   drivers = [],
   vehicles = [],
   currentDriverId,
-  defaultVehicleId
+  defaultVehicleId,
+  initialData
 }: ManualTripFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ManualTripInput>({
@@ -56,7 +70,8 @@ export function ManualTripForm({
     dropoffLocation: '',
     notes: '',
     distance: 0,
-    vehicleId: defaultVehicleId || ''
+    vehicleId: defaultVehicleId || '',
+    route: []
   });
   
   const [selectedDriverId, setSelectedDriverId] = useState<string>(currentDriverId || '');
@@ -69,22 +84,51 @@ export function ManualTripForm({
   // Reset form when opened
   useEffect(() => {
     if (open) {
-      setFormData({
-        date: format(new Date(), 'yyyy-MM-dd'),
-        time: format(new Date(), 'HH:mm'),
-        amount: 0,
-        platform: 'Cash',
-        pickupLocation: '',
-        dropoffLocation: '',
-        notes: '',
-        distance: 0,
-        vehicleId: defaultVehicleId || ''
-      });
-      setPickupCoords(null);
-      setDropoffCoords(null);
+      if (initialData) {
+        setFormData({
+          date: initialData.date || format(new Date(), 'yyyy-MM-dd'),
+          time: initialData.time || format(new Date(), 'HH:mm'),
+          endTime: initialData.endTime,
+          duration: initialData.duration,
+          amount: 0,
+          platform: 'Cash',
+          pickupLocation: initialData.pickupLocation || '',
+          dropoffLocation: initialData.endLocation || '',
+          notes: '',
+          distance: 0,
+          vehicleId: defaultVehicleId || '',
+          route: initialData.route || []
+        });
+        if (initialData.pickupCoords) {
+          setPickupCoords(initialData.pickupCoords);
+        } else {
+          setPickupCoords(null);
+        }
+        if (initialData.endCoords) {
+          setDropoffCoords(initialData.endCoords);
+        } else {
+          setDropoffCoords(null);
+        }
+      } else {
+        setFormData({
+          date: format(new Date(), 'yyyy-MM-dd'),
+          time: format(new Date(), 'HH:mm'),
+          amount: 0,
+          platform: 'Cash',
+          pickupLocation: '',
+          dropoffLocation: '',
+          notes: '',
+          distance: 0,
+          vehicleId: defaultVehicleId || '',
+          route: []
+        });
+        setPickupCoords(null);
+        setDropoffCoords(null);
+      }
+      
       if (currentDriverId) setSelectedDriverId(currentDriverId);
     }
-  }, [open, currentDriverId, defaultVehicleId]);
+  }, [open, currentDriverId, defaultVehicleId, initialData]);
 
   // Auto-calculate distance when both coords are set
   useEffect(() => {
@@ -163,6 +207,21 @@ export function ManualTripForm({
             </div>
           )}
 
+          {/* Route Map Visualization (if available) */}
+          {formData.route && formData.route.length > 0 && (
+             <div className="space-y-2">
+               <Label>Recorded Route</Label>
+               <div className="rounded-md overflow-hidden border border-slate-200">
+                 <LeafletMap 
+                   route={formData.route} 
+                   startMarker={pickupCoords || undefined}
+                   endMarker={dropoffCoords || undefined}
+                   height="200px"
+                 />
+               </div>
+             </div>
+          )}
+
           {/* Date & Time Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -190,6 +249,11 @@ export function ManualTripForm({
                   required
                 />
               </div>
+              {formData.duration && (
+                <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
+                  ⏱ Duration: {Math.round(formData.duration)} min
+                </p>
+              )}
             </div>
           </div>
 

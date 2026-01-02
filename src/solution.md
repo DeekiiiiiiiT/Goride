@@ -1,57 +1,72 @@
-# Live Trip Timer Implementation
+# Trip Route Visualization Implementation Plan
 
-## Phase 1: Setup and Definitions
-- [ ] Define the `TripSession` interface to track the state of an active trip.
-  - Properties: `isActive` (boolean), `startTime` (number | null), `startLocation` (string | null), `startCoords` ({ lat, lon } | null).
-- [ ] Update `ManualTripInput` interface if needed, or ensure the component can handle "initial values" separately from "form state".
+We are upgrading the "Live Trip" system to continuously track the driver's location (breadcrumbs) and visualize the route.
 
-## Phase 2: TripTimer Component (UI & Logic)
-- [ ] Create `components/trips/TripTimer.tsx`.
-- [ ] Implement `useTripTimer` hook to handle the stopwatch logic (setInterval).
-- [ ] Implement `startTrip` function:
-  - Sets `startTime` to `Date.now()`.
-  - Sets `isActive` to `true`.
-  - Saves state to `localStorage` (key: `current_trip_session`).
-- [ ] Implement `stopTrip` function:
-  - Calculates duration.
-  - Clears `localStorage`.
-  - Calls `onComplete(tripData)` prop.
-- [ ] Implement UI for "Idle" state (Start Button).
-- [ ] Implement UI for "Active" state (Stopwatch + Complete Button).
-- [ ] Add "Resume" logic: `useEffect` on mount to check `localStorage` and resume timer if valid.
+## Phase 1: Location Tracking Engine
+**Goal:** Implement the logic to continuously capture, filter, and persist GPS coordinates during an active trip.
 
-## Phase 3: GPS Integration
-- [ ] Import `getCurrentPosition` and `reverseGeocode` from `utils/locationService`.
-- [ ] Update `startTrip` to:
-  - Set loading state.
-  - Call `getCurrentPosition`.
-  - Call `reverseGeocode` to get the address.
-  - Store `startLocation` and `startCoords` in state and `localStorage`.
-- [ ] Handle errors: If GPS fails, start the timer anyway but leave location empty (user can fill it later).
+- [ ] **Step 1.1: Define Data Structures**
+    - Define `RoutePoint` interface (lat, lon, timestamp, accuracy, speed).
+    - Update `TripSession` interface to include `route: RoutePoint[]`.
+- [ ] **Step 1.2: Create `useTripTracker` Hook**
+    - Implement `useTripTracker` to wrap `navigator.geolocation.watchPosition`.
+    - Implement a filtering algorithm (e.g., only record points if distance > 10m from last point) to reduce noise and data size.
+    - Handle permission errors and GPS dropouts gracefully.
+- [ ] **Step 1.3: Integrate with `TripTimer`**
+    - Update `TripTimer.tsx` to use the hook.
+    - Start tracking when the user clicks "Start Trip".
+    - Stop tracking when the user clicks "Complete Trip".
+- [ ] **Step 1.4: Persistence Strategy**
+    - Update the `localStorage` logic in `TripTimer` to save the accumulating `route` array.
+    - Ensure the route is restored correctly if the page is reloaded.
 
-## Phase 4: Enhancing ManualTripForm
-- [ ] Update `ManualTripForm` props to accept optional `initialData`:
-  - `initialStartTime` (string HH:mm)
-  - `initialEndTime` (string HH:mm)
-  - `initialDuration` (number minutes)
-  - `initialPickupLocation` (string)
-  - `initialPickupCoords` ({ lat, lon })
-- [ ] Update `ManualTripForm` logic:
-  - If `initialData` is present, populate the form fields on mount.
-  - Ensure the "Duration" logic respects the passed value (maybe display it prominently).
-  - Pre-fill `pickupLocation` and set `pickupCoords` state so distance calculation works later when drop-off is entered.
+## Phase 2: Active Trip Visualization (Live Map)
+**Goal:** Provide visual feedback to the driver that their route is being recorded.
 
-## Phase 5: Integration with DriverDashboard
-- [ ] Import `TripTimer` in `components/driver-portal/DriverDashboard.tsx`.
-- [ ] Create a handler `handleTripComplete(data)` in Dashboard:
-  - Sets `manualTripFormOpen` to true.
-  - Sets a new state `tripInitialData` with the results from the timer.
-- [ ] Pass `tripInitialData` to `ManualTripForm`.
-- [ ] Replace the "Log Trip" button in the Quick Actions section with the new `TripTimer` widget (or place it above Quick Actions for visibility).
+- [ ] **Step 2.1: Setup Map Library**
+    - Install/Import `react-leaflet` and `leaflet` (and their CSS).
+    - Create a reusable `LeafletMap` component that can accept a route and markers.
+- [ ] **Step 2.2: Integrate Map into `TripTimer`**
+    - Add a "Show Map" toggle or expandable section in `TripTimer`.
+    - Render the `LeafletMap` displaying the current `route` as a Polyline.
+    - Show a marker for the "Current Location".
 
-## Phase 6: Testing & Refinement
-- [ ] Verify "Browser Refresh": Start trip -> Refresh page -> Timer should continue from correct time.
-- [ ] Verify "GPS Flow": Start trip -> Wait for location -> Location appears -> Complete -> Form opens with Address.
-- [ ] Verify "End to End": Save the form -> Trip appears in list with correct duration and distance (once dropoff entered).
-- [ ] UX Polish: Ensure the timer is large and easy to read.
+## Phase 3: Data Handoff Integration
+**Goal:** Pass the captured route data from the timer to the dashboard and form.
 
+- [ ] **Step 3.1: Update Callback Signatures**
+    - Update `TripTimer`'s `onComplete` prop to include the `route` array.
+    - Update `DriverDashboard` state `tripInitialData` to store the route.
+- [ ] **Step 3.2: Update Form Props**
+    - Update `ManualTripForm` props (`initialData`) to accept the `route`.
+    - Update `ManualTripInput` type definition to potentially hold route data (or keep it separate until submission).
+
+## Phase 4: Route Visualization in ManualTripForm
+**Goal:** Display the recorded route in the completion form so the driver can verify it.
+
+- [ ] **Step 4.1: Create `TripRouteMap` Component**
+    - A specialized version of the map component designed for the form (static/read-only view).
+    - Auto-fit the map bounds to show the entire route.
+- [ ] **Step 4.2: Embed in `ManualTripForm`**
+    - Insert the map component into the `ManualTripForm` layout (likely between locations and stats).
+    - Visualize the Start Point (Green Marker), End Point (Red Marker), and the path (Blue Line).
+
+## Phase 5: Backend Persistence
+**Goal:** Save the recorded route data to the database.
+
+- [ ] **Step 5.1: Update Data Models**
+    - Update the `Trip` interface in `types/data.ts` to include a `route` or `path` field (JSON type).
+    - Update `ManualTripInput` in `utils/tripFactory.ts` to accept the route.
+- [ ] **Step 5.2: Update Factory Logic**
+    - Modify `createManualTrip` to attach the `route` data to the generated Trip object.
+- [ ] **Step 5.3: Verify API Payload**
+    - Ensure `api.saveTrips` transmits the new field correctly to Supabase.
+
+## Phase 6: History & Summary Visualization
+**Goal:** Allow drivers to see the route of their past trips.
+
+- [ ] **Step 6.1: Update `DriverHistory`**
+    - Add a "View Route" button or modal to the history items.
+- [ ] **Step 6.2: Render Historical Routes**
+    - Use the map component to display the saved route data for completed trips.
+    - Handle cases where older trips do not have route data (graceful fallback).

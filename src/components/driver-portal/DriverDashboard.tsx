@@ -14,10 +14,12 @@ import {
   Trophy
 } from "lucide-react";
 import { Trip, FuelLog, ServiceRequest, DriverMetric, TierConfig, FinancialTransaction, QuotaConfig, DriverGoals } from '../../types/data';
+import { RoutePoint } from '../../types/tripSession';
 import { toast } from 'sonner@2.0.3';
 import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
 import { ManualTripForm } from '../trips/ManualTripForm';
+import { TripTimer } from '../trips/TripTimer';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
@@ -47,6 +49,19 @@ export function DriverDashboard() {
   const [unclaimedTripIds, setUnclaimedTripIds] = useState<string[]>([]);
   const [isFixing, setIsFixing] = useState<string | null>(null);
   const [history, setHistory] = useState<any[]>([]);
+
+  // Trip Timer State
+  const [tripInitialData, setTripInitialData] = useState<{
+    startTime: string;
+    endTime: string;
+    duration: number;
+    startDate: string;
+    startLocation?: string;
+    startCoords?: { lat: number; lon: number };
+    endLocation?: string;
+    endCoords?: { lat: number; lon: number };
+    route?: RoutePoint[];
+  } | undefined>(undefined);
 
   // Phase 2: Tier State
   const [tierState, setTierState] = useState<{
@@ -191,12 +206,40 @@ export function DriverDashboard() {
     } else if (action === 'Service Request' || action === 'Issue Report') {
         setServiceFormOpen(true);
     } else if (action === 'Log Trip') {
+        setTripInitialData(undefined); // Clear any previous timer data
         setManualTripFormOpen(true);
     } else {
         toast.success(`${action} flow started`, {
             description: "This feature is coming soon."
         });
     }
+  };
+
+  const handleTripComplete = (data: {
+    startTime: string;
+    endTime: string;
+    duration: number;
+    startDate: string;
+    startLocation?: string;
+    startCoords?: { lat: number; lon: number };
+    endLocation?: string;
+    endCoords?: { lat: number; lon: number };
+    route?: RoutePoint[];
+  }) => {
+    setTripInitialData({
+      startTime: data.startTime,
+      endTime: data.endTime,
+      duration: data.duration,
+      startDate: data.startDate, // Rename for form mapping
+      date: data.startDate, // Add date field for ManualTripForm mapping
+      time: data.startTime, // Add time field for ManualTripForm mapping
+      pickupLocation: data.startLocation,
+      pickupCoords: data.startCoords,
+      endLocation: data.endLocation, // Pass through
+      endCoords: data.endCoords, // Pass through
+      route: data.route
+    } as any);
+    setManualTripFormOpen(true);
   };
 
   const handleManualTripSubmit = async (data: ManualTripInput) => {
@@ -211,11 +254,6 @@ export function DriverDashboard() {
       });
       
       // Force refresh data
-      // We can achieve this by triggering the useEffect dependency or manually recalling logic.
-      // For simplicity, we'll reload the page or we could extract fetch logic.
-      // Ideally, extract fetch logic, but for now let's just use window.location.reload() 
-      // or duplicate the state update if simple.
-      // Since Dashboard logic is complex, a reload is safest until refactor.
       setTimeout(() => window.location.reload(), 1000);
       
     } catch (e: any) {
@@ -318,20 +356,24 @@ export function DriverDashboard() {
         </TabsList>
         
         <TabsContent value="overview">
-          <DriverOverview 
-            tierState={tierState}
-            metrics={metrics}
-            todayEarnings={todayEarnings}
-            goals={goals}
-            recentTrip={recentTrip}
-            driverRecord={driverRecord}
-            loading={loading}
-            unclaimedTripIds={unclaimedTripIds}
-            debugDrivers={debugDrivers}
-            isFixing={isFixing}
-            onClaimId={handleClaimId}
-            onAction={handleAction}
-          />
+          <div className="space-y-6">
+            <TripTimer onComplete={handleTripComplete} />
+            
+            <DriverOverview 
+              tierState={tierState}
+              metrics={metrics}
+              todayEarnings={todayEarnings}
+              goals={goals}
+              recentTrip={recentTrip}
+              driverRecord={driverRecord}
+              loading={loading}
+              unclaimedTripIds={unclaimedTripIds}
+              debugDrivers={debugDrivers}
+              isFixing={isFixing}
+              onClaimId={handleClaimId}
+              onAction={handleAction}
+            />
+          </div>
         </TabsContent>
         
         <TabsContent value="history">
@@ -357,6 +399,7 @@ export function DriverDashboard() {
         onSubmit={handleManualTripSubmit}
         isAdmin={false}
         defaultVehicleId={driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle}
+        initialData={tripInitialData}
       />
     </div>
   );
