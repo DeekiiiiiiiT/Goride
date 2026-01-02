@@ -18,9 +18,12 @@ import {
   SelectValue 
 } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { CalendarIcon, Clock, DollarSign, MapPin, Loader2 } from "lucide-react";
+import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car } from "lucide-react";
 import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
+import { LocationInput } from '../ui/LocationInput';
+import { calculateRouteDistance } from '../../utils/locationService';
+import { toast } from 'sonner@2.0.3';
 
 interface ManualTripFormProps {
   open: boolean;
@@ -28,7 +31,9 @@ interface ManualTripFormProps {
   onSubmit: (data: ManualTripInput, driverId?: string) => Promise<void>;
   isAdmin?: boolean;
   drivers?: { id: string; name: string }[];
+  vehicles?: { id: string; plate: string }[];
   currentDriverId?: string; // For Admin to default select
+  defaultVehicleId?: string;
 }
 
 export function ManualTripForm({ 
@@ -37,7 +42,9 @@ export function ManualTripForm({
   onSubmit, 
   isAdmin = false,
   drivers = [],
-  currentDriverId
+  vehicles = [],
+  currentDriverId,
+  defaultVehicleId
 }: ManualTripFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ManualTripInput>({
@@ -48,10 +55,16 @@ export function ManualTripForm({
     pickupLocation: '',
     dropoffLocation: '',
     notes: '',
-    distance: 0
+    distance: 0,
+    vehicleId: defaultVehicleId || ''
   });
   
   const [selectedDriverId, setSelectedDriverId] = useState<string>(currentDriverId || '');
+  
+  // Coordinates for distance calculation
+  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [dropoffCoords, setDropoffCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
 
   // Reset form when opened
   useEffect(() => {
@@ -64,11 +77,36 @@ export function ManualTripForm({
         pickupLocation: '',
         dropoffLocation: '',
         notes: '',
-        distance: 0
+        distance: 0,
+        vehicleId: defaultVehicleId || ''
       });
+      setPickupCoords(null);
+      setDropoffCoords(null);
       if (currentDriverId) setSelectedDriverId(currentDriverId);
     }
-  }, [open, currentDriverId]);
+  }, [open, currentDriverId, defaultVehicleId]);
+
+  // Auto-calculate distance when both coords are set
+  useEffect(() => {
+    const calculateDistance = async () => {
+      if (pickupCoords && dropoffCoords) {
+        setIsCalculatingDistance(true);
+        try {
+          const dist = await calculateRouteDistance(pickupCoords, dropoffCoords);
+          if (dist !== null) {
+            setFormData(prev => ({ ...prev, distance: parseFloat(dist.toFixed(1)) }));
+            toast.success(`Distance calculated: ${dist.toFixed(1)} km`);
+          }
+        } catch (error) {
+          console.error("Failed to calculate distance", error);
+        } finally {
+          setIsCalculatingDistance(false);
+        }
+      }
+    };
+
+    calculateDistance();
+  }, [pickupCoords, dropoffCoords]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +126,12 @@ export function ManualTripForm({
 
   const handleInputChange = (field: keyof ManualTripInput, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleOpenNavigation = () => {
+    if (!formData.dropoffLocation) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(formData.dropoffLocation)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -149,6 +193,62 @@ export function ManualTripForm({
             </div>
           </div>
 
+          {/* Vehicle & Distance Row */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Show Vehicle Selector ONLY if Admin, or if defaultVehicleId is not set but we want to show current status */}
+            {/* Since we want to hide it for drivers as per instructions: */}
+            {isAdmin ? (
+               <div className="space-y-2">
+                 <Label>Vehicle</Label>
+                 <Select 
+                   value={formData.vehicleId} 
+                   onValueChange={(val) => handleInputChange('vehicleId', val)}
+                 >
+                   <SelectTrigger>
+                     <div className="flex items-center gap-2">
+                        <Car className="h-4 w-4 text-slate-500" />
+                        <SelectValue placeholder="Select Vehicle" />
+                     </div>
+                   </SelectTrigger>
+                   <SelectContent>
+                     {vehicles.length > 0 ? (
+                       vehicles.map(v => (
+                         <SelectItem key={v.id} value={v.id}>{v.plate}</SelectItem>
+                       ))
+                     ) : (
+                       <SelectItem value="none" disabled>No vehicles available</SelectItem>
+                     )}
+                   </SelectContent>
+                 </Select>
+               </div>
+            ) : (
+               /* Hidden field for layout balance, or just span 2 cols? Let's just render the Distance input. */
+               /* Actually, we need to show Distance. If Vehicle is hidden, Distance can take full width or 1/2 width. */
+               /* Let's make Distance take full width if Vehicle is hidden, or 1/2 width with empty space. */
+               /* Better UX: Just show Distance. */
+               <></>
+            )}
+
+            <div className={isAdmin ? "space-y-2" : "space-y-2 col-span-2"}>
+              <Label className="flex items-center gap-2">
+                 Distance (km)
+                 {isCalculatingDistance && <Loader2 className="h-3 w-3 animate-spin text-indigo-600" />}
+              </Label>
+              <div className="relative">
+                <Route className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                <Input 
+                  type="number" 
+                  min="0" 
+                  step="0.1"
+                  className="pl-9"
+                  placeholder="0.0"
+                  value={formData.distance || ''}
+                  onChange={(e) => handleInputChange('distance', parseFloat(e.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Amount & Platform Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -193,21 +293,32 @@ export function ManualTripForm({
             <Label>Locations (Optional)</Label>
             <div className="grid grid-cols-1 gap-2">
               <div className="relative">
-                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500" />
-                 <Input 
+                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500 z-10" />
+                 <LocationInput 
                     placeholder="Pickup Location" 
                     className="pl-9 text-sm"
                     value={formData.pickupLocation}
                     onChange={(e) => handleInputChange('pickupLocation', e.target.value)}
+                    onAddressSelect={(addr, lat, lon) => {
+                      handleInputChange('pickupLocation', addr);
+                      if (lat && lon) setPickupCoords({ lat, lon });
+                    }}
+                    showLocationButton={true}
                  />
               </div>
               <div className="relative">
-                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-rose-500" />
-                 <Input 
+                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-rose-500 z-10" />
+                 <LocationInput 
                     placeholder="Dropoff Location" 
                     className="pl-9 text-sm"
                     value={formData.dropoffLocation}
                     onChange={(e) => handleInputChange('dropoffLocation', e.target.value)}
+                    onAddressSelect={(addr, lat, lon) => {
+                      handleInputChange('dropoffLocation', addr);
+                      if (lat && lon) setDropoffCoords({ lat, lon });
+                    }}
+                    showNavigationButton={!!formData.dropoffLocation}
+                    onNavigateClick={handleOpenNavigation}
                  />
               </div>
             </div>

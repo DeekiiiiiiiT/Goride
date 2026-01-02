@@ -148,6 +148,17 @@ app.delete("/make-server-37f42386/trips", async (c) => {
   }
 });
 
+app.delete("/make-server-37f42386/trips/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`trip:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.error(`Error deleting trip ${id}:`, e);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
+  }
+});
+
 // Driver Metrics Endpoints
 app.post("/make-server-37f42386/driver-metrics", async (c) => {
   try {

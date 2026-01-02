@@ -3608,6 +3608,10 @@
     padding-right: calc(var(--spacing) * 8);
   }
 
+  .pr-10 {
+    padding-right: calc(var(--spacing) * 10);
+  }
+
   .pb-0 {
     padding-bottom: calc(var(--spacing) * 0);
   }
@@ -5108,6 +5112,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:bg-blue-50:hover {
+      background-color: var(--color-blue-50);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-blue-100:hover {
       background-color: var(--color-blue-100);
     }
@@ -5194,6 +5204,12 @@
   @media (hover: hover) {
     .hover\:bg-emerald-700:hover {
       background-color: var(--color-emerald-700);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-green-50:hover {
+      background-color: var(--color-green-50);
     }
   }
 
@@ -5546,6 +5562,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:text-blue-700:hover {
+      color: var(--color-blue-700);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:text-destructive:hover {
       color: var(--destructive);
     }
@@ -5560,6 +5582,12 @@
   @media (hover: hover) {
     .hover\:text-emerald-700:hover {
       color: var(--color-emerald-700);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-green-700:hover {
+      color: var(--color-green-700);
     }
   }
 
@@ -5775,6 +5803,10 @@
 
   .focus\:text-rose-600:focus {
     color: var(--color-rose-600);
+  }
+
+  .focus\:text-rose-700:focus {
+    color: var(--color-rose-700);
   }
 
   .focus\:ring-0:focus {

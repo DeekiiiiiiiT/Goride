@@ -22,6 +22,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { toast } from "sonner";
@@ -49,6 +59,7 @@ export function TripLogsPage() {
   const [viewMode, setViewMode] = useState<'details' | 'map' | 'issue' | null>(null);
   const [issueReason, setIssueReason] = useState('');
   const [isManualTripOpen, setIsManualTripOpen] = useState(false);
+  const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [filters, setFilters] = useState<TripFilterState>({
     status: 'all',
     driverId: 'all',
@@ -225,6 +236,25 @@ export function TripLogsPage() {
 
   const handleContactDriver = (trip: Trip) => {
       toast.success(`Contact request sent to ${trip.driverName || 'driver'}`);
+  };
+
+  const handleDeleteTrip = async (trip: Trip) => {
+      setTripToDelete(trip);
+  };
+  
+  const confirmDeleteTrip = async () => {
+      if (!tripToDelete) return;
+
+      try {
+          await api.deleteTrip(tripToDelete.id);
+          setTrips(prev => prev.filter(t => t.id !== tripToDelete.id));
+          toast.success("Trip deleted successfully");
+      } catch (err: any) {
+          console.error("Failed to delete trip", err);
+          toast.error("Failed to delete trip");
+      } finally {
+          setTripToDelete(null);
+      }
   };
 
   const submitIssue = () => {
@@ -518,6 +548,17 @@ ${selectedTrip.fareBreakdown ? Object.entries(selectedTrip.fareBreakdown).map(([
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => handleContactDriver(trip)}>Contact Driver</DropdownMenuItem>
                                 <DropdownMenuItem className="text-rose-600" onClick={() => handleAction(trip, 'issue')}>Flag Issue</DropdownMenuItem>
+                                {trip.isManual && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem 
+                                            className="text-rose-600 focus:text-rose-700 focus:bg-rose-50" 
+                                            onClick={() => handleDeleteTrip(trip)}
+                                        >
+                                            Delete Trip
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -579,6 +620,22 @@ ${selectedTrip.fareBreakdown ? Object.entries(selectedTrip.fareBreakdown).map(([
       </Tabs>
 
       {/* Action Dialogs */}
+      <AlertDialog open={!!tripToDelete} onOpenChange={(open) => !open && setTripToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    This will permanently delete the manual trip entry for {tripToDelete?.driverName} on {tripToDelete?.date ? new Date(tripToDelete.date).toLocaleDateString() : 'that date'}.
+                    This action cannot be undone.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmDeleteTrip} className="bg-rose-600 hover:bg-rose-700">Delete</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={!!selectedTrip && !!viewMode} onOpenChange={(open) => !open && setViewMode(null)}>
         <DialogContent className={`sm:max-w-[600px] ${viewMode === 'map' ? 'sm:max-w-[900px]' : ''}`}>
           <DialogHeader>

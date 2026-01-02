@@ -109,6 +109,15 @@ export const api = {
     return response.json();
   },
 
+  async deleteTrip(id: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/trips/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete trip");
+    return response.json();
+  },
+
   async saveDriverMetrics(metrics: DriverMetrics[]) {
       const response = await fetchWithRetry(`${BASE_URL}/driver-metrics`, {
         method: 'POST',

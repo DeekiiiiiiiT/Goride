@@ -356,6 +356,7 @@ export function DriverDashboard() {
         onOpenChange={setManualTripFormOpen}
         onSubmit={handleManualTripSubmit}
         isAdmin={false}
+        defaultVehicleId={driverRecord?.vehicle}
       />
     </div>
   );

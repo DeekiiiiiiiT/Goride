@@ -1,91 +1,65 @@
-# Implementation Plan: Manual Trip Entry System
+# Location Intelligence Implementation Plan
 
-This document outlines the step-by-step implementation plan to allow both Drivers and Admins to manually log trips into the system.
+## Goal
+Enhance the Manual Trip Entry form with "Uber-like" location features:
+1. One-click "Current Location" capture.
+2. Address Autocomplete/Search.
+3. Integration with external navigation apps.
 
-## Phase 1: Foundation & Data Structure
-**Goal:** Prepare the data types and utility functions to ensure consistent data entry.
-1.  **Review `Trip` Interface:** Verify `types/data.ts` accommodates manual entries (specifically `platform` enums and status).
-2.  **Create Factory Function:** Create a helper utility `utils/tripFactory.ts`.
-    *   **Step:** Export a function `createManualTrip(data: ManualTripInput, driverId: string): Trip`.
-    *   **Step:** Ensure it generates a unique UUID (using `crypto.randomUUID()`).
-    *   **Step:** Set default fields: `status: 'Completed'`, `platform: 'Other'`, `source: 'Manual'`.
-    *   **Step:** Handle timestamp formatting (combining Date and Time inputs into ISO string).
+## Strategy
+We will replace standard text inputs with a smart `LocationInput` component backed by OpenStreetMap (Nominatim) services.
 
-## Phase 2: Shared Form Component (UI Layout)
-**Goal:** Create the visual interface for the form without binding logic yet.
-1.  **Create Component File:** Create `components/trips/ManualTripForm.tsx`.
-2.  **Define Props:** `isOpen`, `onClose`, `onSubmit`, `isAdmin`, `drivers` (optional list).
-3.  **Scaffold Dialog/Drawer:**
-    *   **Step:** Use `Dialog` component for the container (responsive).
-    *   **Step:** Add `DialogHeader`, `DialogTitle` ("Log Manual Trip").
-4.  **Add Form Fields (Visuals):**
-    *   **Step:** Date Picker (or Input type="date") & Time Input.
-    *   **Step:** Amount Input (Number, prefix "$").
-    *   **Step:** Platform Select (Uber, Lyft, Bolt, Private, Cash, Other).
-    *   **Step:** Driver Select (Select component, conditionally rendered if `isAdmin` is true).
-    *   **Step:** Notes Textarea.
+---
 
-## Phase 3: Form Logic & Validation
-**Goal:** Make the form functional and robust.
-1.  **State Management:**
-    *   **Step:** Add local state for `formData` (date, time, amount, platform, driverId, notes).
-    *   **Step:** Default `date` to today, `time` to current time.
-2.  **Validation:**
-    *   **Step:** Ensure `amount` is positive.
-    *   **Step:** Ensure `driverId` is selected (if Admin).
-    *   **Step:** Disable "Submit" button if form is invalid.
-3.  **Submission Handler:**
-    *   **Step:** Construct the payload.
-    *   **Step:** Call `onSubmit(payload)`.
-    *   **Step:** Handle loading state (spinner on button).
+### Phase 1: Geolocation & Reverse Geocoding Utilities
+**Objective:** Build the core logic to get GPS coordinates and convert them to human-readable addresses.
+- [ ] **Step 1.1:** Create `utils/locationService.ts`.
+- [ ] **Step 1.2:** Implement `getCurrentPosition()` wrapper around `navigator.geolocation` to handle permissions and Promise-based responses.
+- [ ] **Step 1.3:** Implement `reverseGeocode(lat, lon)` function that calls OpenStreetMap Nominatim API (`https://nominatim.openstreetmap.org/reverse`).
+- [ ] **Step 1.4:** Define TypeScript interfaces for the API responses to ensure type safety.
 
-## Phase 4: Driver Portal Integration
-**Goal:** Enable drivers to log their own trips.
-1.  **Update `DriverOverview.tsx`:**
-    *   **Step:** Import `ManualTripForm`.
-    *   **Step:** Add state `isManualTripOpen`.
-2.  **Add Trigger Button:**
-    *   **Step:** In the "Quick Actions" grid (or Action Drawer), add a new item: "Log Trip".
-    *   **Step:** Use `MapPin` or `PlusCircle` icon.
-    *   **Step:** `onClick` sets `isManualTripOpen(true)`.
-3.  **Implement Handler:**
-    *   **Step:** Create `handleTripSubmit`.
-    *   **Step:** Use `createManualTrip` utility with `user.id`.
-    *   **Step:** Call `api.saveTrips`.
-    *   **Step:** On success, close modal and trigger data refresh (if applicable).
+### Phase 2: Address Search (Autocomplete) Logic
+**Objective:** Build the logic to search for addresses based on user text input.
+- [ ] **Step 2.1:** Update `utils/locationService.ts`.
+- [ ] **Step 2.2:** Implement `searchAddress(query)` function calling OpenStreetMap API (`https://nominatim.openstreetmap.org/search`).
+- [ ] **Step 2.3:** Implement a `debounce` utility to prevent API rate limiting (only search after user stops typing for 300-500ms).
+- [ ] **Step 2.4:** Test the API search manually to verify response format.
 
-## Phase 5: Admin Portal Integration
-**Goal:** Enable admins to log trips for any driver.
-1.  **Update `TripLogsPage.tsx`:**
-    *   **Step:** Import `ManualTripForm`.
-    *   **Step:** Add state `isManualTripOpen`.
-2.  **Add Trigger Button:**
-    *   **Step:** In the page header (next to "Export" or "Filter"), add button "Add Manual Trip".
-3.  **Driver List Logic:**
-    *   **Step:** Ensure the existing `uniqueDrivers` list is passed to the form component.
-4.  **Implement Handler:**
-    *   **Step:** Create `handleAdminTripSubmit`.
-    *   **Step:** Use `createManualTrip` utility with the *selected* `driverId` from the form.
-    *   **Step:** Call `api.saveTrips`.
-    *   **Step:** Refresh the trips table.
+### Phase 3: Smart Location Input Component (UI Skeleton)
+**Objective:** Create the reusable UI component that will replace the simple text boxes.
+- [ ] **Step 3.1:** Create `components/ui/LocationInput.tsx`.
+- [ ] **Step 3.2:** Design the component layout: An input field with a specific "Right Side" area for action icons.
+- [ ] **Step 3.3:** Add the "Green Map Pin" icon trigger for the Current Location feature.
+- [ ] **Step 3.4:** Add the visual container for the Autocomplete Dropdown (initially hidden).
+- [ ] **Step 3.5:** Ensure it accepts standard props (`value`, `onChange`, `placeholder`) to be compatible with the existing form.
 
-## Phase 6: API Integration & Feedback Loop
-**Goal:** Ensure data is saved and UI updates immediately.
-1.  **API Verification:**
-    *   **Step:** Verify `api.saveTrips` accepts single-item arrays.
-    *   **Step:** Ensure backend (Supabase) allows these inserts (RLS policies should allow auth users to insert trips).
-2.  **Toast Notifications:**
-    *   **Step:** Add `toast.success` with trip details (Amount, Date) upon success.
-    *   **Step:** Add `toast.error` if API fails.
-3.  **Refetching:**
-    *   **Step:** In `DriverDashboard`, ensure `fetchData` is called after submission to update Earnings cards.
-    *   **Step:** In `TripLogsPage`, ensure `fetchTrips` is called to add the new row to the table.
+### Phase 4: Integrating "Current Location" Feature
+**Objective:** Make the Green Map Pin functional.
+- [ ] **Step 4.1:** Import utilities from Phase 1 into `LocationInput.tsx`.
+- [ ] **Step 4.2:** Implement specific `handleUseCurrentLocation` function:
+    - Set loading state (spinner icon).
+    - Call `getCurrentPosition`.
+    - Call `reverseGeocode`.
+    - Update the input value with the result.
+- [ ] **Step 4.3:** Add error handling (e.g., Toast notification if GPS is denied).
 
-## Phase 7: Mobile Optimization & Testing
-**Goal:** Ensure the feature works on small screens (Driver context).
-1.  **Responsive Check:**
-    *   **Step:** Ensure the Dialog scales down to a full-screen or bottom-sheet on mobile.
-    *   **Step:** Verify touch targets for inputs.
-2.  **Edge Case Testing:**
-    *   **Step:** Test entering a trip for a past date.
-    *   **Step:** Test entering a trip with $0 amount (should act as record only).
+### Phase 5: Integrating Autocomplete Feature
+**Objective:** Enable type-ahead address searching.
+- [ ] **Step 5.1:** Connect the Input `onChange` to the `searchAddress` utility from Phase 2.
+- [ ] **Step 5.2:** Manage state for `suggestions` (array of results) and `isLoading`.
+- [ ] **Step 5.3:** Render the suggestions in the Dropdown container created in Phase 3.
+- [ ] **Step 5.4:** Implement `handleSelectAddress(address)`:
+    - Update input value.
+    - Clear suggestions.
+    - Close dropdown.
+- [ ] **Step 5.5:** Implement "Click Outside" logic to close the dropdown if the user clicks away.
+
+### Phase 6: Final Integration & Navigation Handoff
+**Objective:** Plug the new component into the main form and add the "Navigate" button.
+- [ ] **Step 6.1:** Open `components/trips/ManualTripForm.tsx`.
+- [ ] **Step 6.2:** Replace the standard `Input` fields for "Pickup" and "Dropoff" with the new `LocationInput` component.
+- [ ] **Step 6.3:** Add a "Navigate" button (Arrow icon) next to the Dropoff field.
+- [ ] **Step 6.4:** Implement `openNavigationApp(address)` function:
+    - Constructs a Universal Link for Google Maps (`https://www.google.com/maps/dir/?api=1&destination=...`).
+    - Opens in a new tab/window.
+- [ ] **Step 6.5:** Verify the entire flow: Locate -> Auto-fill -> Submit.
