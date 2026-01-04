@@ -1566,6 +1566,10 @@
     width: 80px;
   }
 
+  .w-\[88px\] {
+    width: 88px;
+  }
+
   .w-\[100px\] {
     width: 100px;
   }
@@ -1732,6 +1736,10 @@
 
   .min-w-\[8rem\] {
     min-width: 8rem;
+  }
+
+  .min-w-\[80px\] {
+    min-width: 80px;
   }
 
   .min-w-\[120px\] {
@@ -5004,8 +5012,20 @@
     top: calc(var(--spacing) * 1);
   }
 
+  .peer-data-\[state\=checked\]\:border-amber-500:is(:where(.peer)[data-state="checked"] ~ *) {
+    border-color: var(--color-amber-500);
+  }
+
+  .peer-data-\[state\=checked\]\:border-emerald-500:is(:where(.peer)[data-state="checked"] ~ *) {
+    border-color: var(--color-emerald-500);
+  }
+
   .peer-data-\[state\=checked\]\:border-primary:is(:where(.peer)[data-state="checked"] ~ *) {
     border-color: var(--primary);
+  }
+
+  .peer-data-\[state\=checked\]\:border-slate-500:is(:where(.peer)[data-state="checked"] ~ *) {
+    border-color: var(--color-slate-500);
   }
 
   .selection\:bg-primary ::selection, .selection\:bg-primary::selection {
@@ -6726,6 +6746,12 @@
   }
 
   @media (width >= 40rem) {
+    .sm\:grid-cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (width >= 40rem) {
     .sm\:flex-row {
       flex-direction: row;
     }
@@ -6750,10 +6776,22 @@
   }
 
   @media (width >= 40rem) {
+    .sm\:gap-8 {
+      gap: calc(var(--spacing) * 8);
+    }
+  }
+
+  @media (width >= 40rem) {
     :where(.sm\:space-x-2 > :not(:last-child)) {
       --tw-space-x-reverse: 0;
       margin-inline-start: calc(calc(var(--spacing) * 2) * var(--tw-space-x-reverse));
       margin-inline-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-x-reverse)));
+    }
+  }
+
+  @media (width >= 40rem) {
+    .sm\:p-6 {
+      padding: calc(var(--spacing) * 6);
     }
   }
 
@@ -7607,8 +7645,20 @@
     border-bottom-right-radius: calc(var(--radius)  - 2px);
   }
 
+  .\[\&\:has\(\[data-state\=checked\]\)\]\:border-amber-500:has([data-state="checked"]) {
+    border-color: var(--color-amber-500);
+  }
+
+  .\[\&\:has\(\[data-state\=checked\]\)\]\:border-emerald-500:has([data-state="checked"]) {
+    border-color: var(--color-emerald-500);
+  }
+
   .\[\&\:has\(\[data-state\=checked\]\)\]\:border-primary:has([data-state="checked"]) {
     border-color: var(--primary);
+  }
+
+  .\[\&\:has\(\[data-state\=checked\]\)\]\:border-slate-500:has([data-state="checked"]) {
+    border-color: var(--color-slate-500);
   }
 
   .\[\&\:has\(\[role\=checkbox\]\)\]\:pr-0:has([role="checkbox"]) {

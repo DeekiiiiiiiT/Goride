@@ -28,8 +28,11 @@ import {
   Info,
   Fuel,
   CreditCard as CreditCardIcon,
+  Wallet,
+  Landmark,
+  Trash2,
   Car as CarIcon
-} from 'lucide-react';
+} from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { 
@@ -71,6 +74,7 @@ import { Calendar } from "../ui/calendar";
 import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
+import { WeeklySettlementView } from './WeeklySettlementView';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
@@ -79,6 +83,16 @@ import { TierConfig } from '../../types/data';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 interface DriverDocument {
   id: string;
@@ -119,7 +133,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [tripPage, setTripPage] = useState(1);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentModalState, setPaymentModalState] = useState<{
+      isOpen: boolean;
+      initialWorkPeriodStart?: string;
+      initialWorkPeriodEnd?: string;
+      initialAmount?: number;
+  }>({ isOpen: false });
+  const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
@@ -159,22 +179,110 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       loadTransactions();
   }, [driverId, driver]);
 
-  const handleSavePayment = async (payment: { amount: number; date: string; notes: string }) => {
+  const handleSavePayment = async (payment: { 
+    amount: number; 
+    date: string; 
+    notes: string;
+    paymentMethod: string;
+    referenceNumber?: string;
+    transactionType: 'payment' | 'float' | 'adjustment';
+    workPeriodStart?: string;
+    workPeriodEnd?: string;
+  }) => {
+      // Determine fields based on transaction type
+      let category = "Cash Collection";
+      let type: any = "Revenue";
+      let amount = payment.amount;
+
+      if (payment.transactionType === 'float') {
+        category = "Float Issue";
+        type = "Float_Given";
+        // Float increases debt. logic: netOutstanding = (TotalOwed - CashReceived).
+        // To increase netOutstanding, CashReceived must decrease. So amount is negative.
+        amount = -Math.abs(payment.amount); 
+      } else if (payment.transactionType === 'adjustment') {
+        category = "Adjustment";
+        type = "Adjustment";
+        // Assuming positive adjustment reduces debt (like a payment)
+      } else {
+         // Payment
+         category = "Cash Collection";
+         type = "Payment_Received";
+         amount = Math.abs(payment.amount);
+      }
+
+      // Determine Status
+      // Cash is always completed immediately.
+      // Non-cash payments (Bank Transfer, etc.) are Pending until verified.
+      // Outflows (Float) or Adjustments are assumed Completed (Admin action).
+      const isCash = payment.paymentMethod === 'Cash';
+      const isIncomingPayment = payment.transactionType === 'payment';
+      const initialStatus = (isIncomingPayment && !isCash) ? 'Pending' : 'Completed';
+
+      const metadata: any = {};
+      if (payment.workPeriodStart && payment.workPeriodEnd) {
+          metadata.workPeriodStart = payment.workPeriodStart;
+          metadata.workPeriodEnd = payment.workPeriodEnd;
+      }
+
       const newTx: Partial<FinancialTransaction> = {
           driverId,
-          amount: payment.amount, // Positive for inflow
+          amount: amount,
           date: payment.date,
-          description: payment.notes || "Cash Payment from Driver",
-          category: "Cash Collection",
-          type: "Revenue",
-          paymentMethod: "Cash",
-          status: "Completed",
-          isReconciled: true,
-          time: new Date().toLocaleTimeString()
+          description: payment.notes || (payment.transactionType === 'float' ? "Cash Float Issued" : "Cash Payment from Driver"),
+          category: category,
+          type: type,
+          paymentMethod: payment.paymentMethod as any,
+          referenceNumber: payment.referenceNumber,
+          status: initialStatus as any,
+          isReconciled: initialStatus === 'Completed',
+          time: new Date().toLocaleTimeString(),
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined
       };
       
       const saved = await api.saveTransaction(newTx);
       setTransactions(prev => [saved.data, ...prev]);
+  };
+
+  const handleVerifyTransaction = async (id: string) => {
+      const tx = transactions.find(t => t.id === id);
+      if (!tx) return;
+
+      try {
+          // Optimistic update
+          const updatedTx = { ...tx, status: 'Verified' as const };
+          setTransactions(prev => prev.map(t => t.id === id ? updatedTx : t));
+
+          // Persist
+          await api.saveTransaction(updatedTx);
+          toast.success("Transaction verified");
+      } catch (e) {
+          console.error("Failed to verify transaction", e);
+          toast.error("Failed to verify transaction");
+          // Revert on failure
+          setTransactions(prev => prev.map(t => t.id === id ? tx : t));
+      }
+  };
+
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+
+  const confirmDeleteTransaction = async () => {
+      if (!transactionToDelete) return;
+
+      try {
+          await api.deleteTransaction(transactionToDelete);
+          setTransactions(prev => prev.filter(t => t.id !== transactionToDelete));
+          toast.success("Transaction deleted");
+      } catch (e) {
+          console.error("Failed to delete transaction", e);
+          toast.error("Failed to delete transaction");
+      } finally {
+          setTransactionToDelete(null);
+      }
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+      setTransactionToDelete(id);
   };
   
   // Merge Real Documents with Mock Documents
@@ -488,6 +596,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      const periodNetChange = cashCollected - periodCashReceived;
 
+     // Wallet State Logic (Phase 5)
+     // Float Held: Total sum of negative transactions categorized as "Float Issue"
+     // Note: In transactions, floats are negative.
+     const floatHeld = Math.abs(transactions
+        .filter(t => t.category === "Float Issue")
+        .reduce((sum, t) => sum + (t.amount || 0), 0));
+
+     // Pending Clearance: Sum of transactions with status "Pending"
+     // Only count positive payments (inflows) as pending clearance, not floats or adjustments unless positive
+     const pendingClearance = transactions
+        .filter(t => t.status === 'Pending' && t.amount > 0)
+        .reduce((sum, t) => sum + t.amount, 0);
+
      // Trip Ratio Logic (from Vehicle Metrics)
      // Solution 1: "The Bridge" - Link Driver to Vehicle via Trips
      const activePlates = new Set<string>();
@@ -559,6 +680,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         netOutstanding,
         periodCashReceived, // New
         periodNetChange,    // New
+        floatHeld,          // Phase 5
+        pendingClearance,   // Phase 5
         weeklyEarningsData,
         earningsBreakdownData,
         hourlyActivityData,
@@ -706,6 +829,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             <TabsTrigger value="operations">Efficiency</TabsTrigger>
             <TabsTrigger value="quality">Service Quality</TabsTrigger>
             <TabsTrigger value="trips">Trip History</TabsTrigger>
+            <TabsTrigger value="wallet">Cash Wallet</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
          </TabsList>
 
@@ -733,7 +857,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                       { label: 'Paid', value: `$${metrics.periodCashReceived.toFixed(2)}`, color: '#10b981' }
                   ]}
                   action={
-                      <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setIsPaymentModalOpen(true)}>
+                      <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setPaymentModalState({ isOpen: true })}>
                           Log Cash Payment
                       </Button>
                   }
@@ -959,7 +1083,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          </TabsContent>
 
          <TabsContent value="financial" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
                <Card>
                   <CardHeader>
                      <CardTitle>Earnings Breakdown</CardTitle>
@@ -985,87 +1109,237 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      </ResponsiveContainer>
                   </CardContent>
                </Card>
-               <Card>
-                  <CardHeader>
-                     <CardTitle>Cash Flow Analysis</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                     <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                           <span className="text-slate-500">Cash Collected</span>
-                           <span className="font-medium">${metrics.cashCollected.toFixed(2)}</span>
-                        </div>
-                        <Progress 
-                            value={metrics.periodEarnings > 0 ? (metrics.cashCollected / metrics.periodEarnings) * 100 : 0} 
-                            className="h-2 bg-slate-100" 
-                            indicatorClassName="bg-amber-500" 
-                        />
-                        <p className="text-xs text-amber-600 font-medium">
-                            {metrics.periodEarnings > 0 ? ((metrics.cashCollected / metrics.periodEarnings) * 100).toFixed(1) : 0}% of earnings (Cash Risk)
-                        </p>
-                        
-                        <div className="pt-2">
-                             <Button variant="outline" size="sm" className="w-full text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={() => setIsTollModalOpen(true)}>
-                                 Log Toll Card Top-up
-                             </Button>
-                        </div>
-                     </div>
-                     <Separator />
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3 bg-slate-50 rounded-lg">
-                           <p className="text-xs text-slate-500">Total Earnings</p>
-                           <p className="text-lg font-semibold">${metrics.periodEarnings.toFixed(2)}</p>
-                        </div>
-                        <div className="p-3 bg-slate-50 rounded-lg">
-                           <p className="text-xs text-slate-500">Net Income</p>
-                           <p className="text-lg font-semibold text-emerald-600">${metrics.periodEarnings.toFixed(2)}</p>
-                        </div>
-                     </div>
-                  </CardContent>
-               </Card>
             </div>
 
             <DriverEarningsHistory driverId={driverId} transactions={transactions} />
+         </TabsContent>
 
-            {/* Transaction Ledger */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Transaction Ledger</CardTitle>
-                    <CardDescription>History of cash payments and adjustments.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Description</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {transactions.length > 0 ? (
-                                transactions.map((tx) => (
-                                    <TableRow key={tx.id}>
-                                        <TableCell>{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
-                                        <TableCell>{tx.description}</TableCell>
-                                        <TableCell><Badge variant="outline">{tx.category}</Badge></TableCell>
-                                        <TableCell className="text-right font-medium text-emerald-600">
-                                            +${tx.amount.toFixed(2)}
+         <TabsContent value="wallet" className="space-y-6">
+             {/* Summary Cards Row (Phase 5) */}
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 {/* Card 1: Net Outstanding */}
+                 <Card className="bg-white">
+                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                         <CardTitle className="text-sm font-medium text-slate-500">Net Outstanding</CardTitle>
+                         <DollarSign className="h-4 w-4 text-slate-500" />
+                     </CardHeader>
+                     <CardContent>
+                         <div className={cn("text-2xl font-bold", metrics.netOutstanding > 0 ? "text-rose-600" : "text-emerald-600")}>
+                             ${metrics.netOutstanding.toFixed(2)}
+                         </div>
+                         <p className="text-xs text-slate-500 mt-1">
+                             {metrics.netOutstanding > 0 ? "Driver owes platform" : "Platform owes driver"}
+                         </p>
+                     </CardContent>
+                 </Card>
+
+                 {/* Card 2: Float Held */}
+                 <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                         <CardTitle className="text-sm font-medium text-slate-500">Float Held</CardTitle>
+                         <Wallet className="h-4 w-4 text-amber-500" />
+                     </CardHeader>
+                     <CardContent>
+                         <div className="text-2xl font-bold text-amber-600">
+                             ${metrics.floatHeld.toFixed(2)}
+                         </div>
+                         <p className="text-xs text-slate-500 mt-1">
+                             Active cash float
+                         </p>
+                     </CardContent>
+                 </Card>
+
+                  {/* Card 3: Pending Clearance */}
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                         <CardTitle className="text-sm font-medium text-slate-500">Pending Clearance</CardTitle>
+                         <Clock className="h-4 w-4 text-blue-500" />
+                     </CardHeader>
+                     <CardContent>
+                         <div className="text-2xl font-bold text-blue-600">
+                             ${metrics.pendingClearance.toFixed(2)}
+                         </div>
+                         <p className="text-xs text-slate-500 mt-1">
+                             Unverified bank transfers
+                         </p>
+                     </CardContent>
+                 </Card>
+             </div>
+
+             <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-slate-900">Financial Records</h3>
+                <div className="flex p-1 bg-slate-100 rounded-lg">
+                    <button 
+                       className={cn("px-3 py-1.5 text-sm font-medium rounded-md transition-all", walletView === 'settlements' ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900")}
+                       onClick={() => setWalletView('settlements')}
+                    >
+                       Weekly Settlements
+                    </button>
+                    <button 
+                       className={cn("px-3 py-1.5 text-sm font-medium rounded-md transition-all", walletView === 'ledger' ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900")}
+                       onClick={() => setWalletView('ledger')}
+                    >
+                       Transaction Ledger
+                    </button>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                    {walletView === 'settlements' ? (
+                        <WeeklySettlementView 
+                            trips={trips}
+                            transactions={transactions}
+                            csvMetrics={csvMetrics}
+                            onLogPayment={(start, end, amount) => setPaymentModalState({
+                                isOpen: true,
+                                initialWorkPeriodStart: start.toISOString(),
+                                initialWorkPeriodEnd: end.toISOString(),
+                                initialAmount: amount
+                            })}
+                        />
+                    ) : (
+                        <Card>
+
+                    <CardHeader>
+                        <CardTitle>Transaction Ledger</CardTitle>
+                        <CardDescription>History of cash payments and adjustments.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Description</TableHead>
+                                    <TableHead>Method</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Amount</TableHead>
+                                    <TableHead className="w-[50px]"></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                        {transactions.length > 0 ? (
+                                            transactions.map((tx) => (
+                                                <TableRow key={tx.id}>
+                                                    <TableCell className="font-medium text-slate-600">{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium text-slate-900">{tx.description}</span>
+                                                            {tx.referenceNumber && (
+                                                                <span className="text-xs text-slate-500 font-mono mt-0.5">
+                                                                    Ref: {tx.referenceNumber}
+                                                                </span>
+                                                            )}
+                                                            {tx.metadata?.workPeriodStart && tx.metadata?.workPeriodEnd && (
+                                                                <span className="text-xs text-indigo-500 font-medium mt-0.5 flex items-center gap-1">
+                                                                     <CalendarIcon className="h-3 w-3" />
+                                                                     {format(new Date(tx.metadata.workPeriodStart), 'MMM d')} - {format(new Date(tx.metadata.workPeriodEnd), 'MMM d')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2 text-slate-600">
+                                                            {tx.paymentMethod === 'Cash' && <DollarSign className="h-3 w-3" />}
+                                                            {tx.paymentMethod === 'Bank Transfer' && <Landmark className="h-3 w-3" />}
+                                                            {tx.paymentMethod === 'Mobile Money' && <Wallet className="h-3 w-3" />}
+                                                            {tx.paymentMethod === 'Check' && <FileText className="h-3 w-3" />}
+                                                            <span className="text-sm">{tx.paymentMethod || 'Cash'}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell><Badge variant="outline" className="bg-slate-50">{tx.category}</Badge></TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="secondary" className={cn(
+                                                            "font-normal",
+                                                            tx.status === 'Completed' && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+                                                            tx.status === 'Verified' && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+                                                            tx.status === 'Pending' && "bg-amber-100 text-amber-700 hover:bg-amber-100",
+                                                            tx.status === 'Failed' && "bg-red-100 text-red-700 hover:bg-red-100",
+                                                            tx.status === 'Reconciled' && "bg-blue-100 text-blue-700 hover:bg-blue-100"
+                                                        )}>
+                                                            {tx.status}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className={cn("text-right font-bold font-mono", tx.amount > 0 ? "text-emerald-600" : "text-amber-600")}>
+                                                        {tx.amount > 0 ? "+" : ""}${tx.amount.toFixed(2)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-1 justify-end">
+                                                            {tx.status === 'Pending' && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-amber-600 hover:text-emerald-600 hover:bg-emerald-50"
+                                                                    onClick={() => handleVerifyTransaction(tx.id)}
+                                                                    title="Verify Transaction"
+                                                                >
+                                                                    <CheckCircle2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-muted-foreground hover:text-red-500 opacity-50 hover:opacity-100"
+                                                                onClick={() => handleDeleteTransaction(tx.id)}
+                                                                title="Delete transaction"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                                            No transactions recorded.
                                         </TableCell>
                                     </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center text-slate-500">
-                                        No transactions recorded.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+                    )}
+                </div>
+
+                {/* Right Column: Actions & Risk */}
+                <div className="space-y-6">
+                     {/* Cash Risk Card */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium">Cash Risk Analysis</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                             <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                   <span className="text-slate-500">Cash Collected</span>
+                                   <span className="font-medium">${metrics.cashCollected.toFixed(2)}</span>
+                                </div>
+                                <Progress 
+                                    value={metrics.periodEarnings > 0 ? (metrics.cashCollected / metrics.periodEarnings) * 100 : 0} 
+                                    className="h-2 bg-slate-100" 
+                                    indicatorClassName="bg-amber-500" 
+                                />
+                                <p className="text-xs text-amber-600 font-medium">
+                                    {metrics.periodEarnings > 0 ? ((metrics.cashCollected / metrics.periodEarnings) * 100).toFixed(1) : 0}% of earnings
+                                </p>
+                             </div>
+                             <div className="pt-2">
+                                <div className="p-3 bg-slate-50 rounded-lg space-y-1">
+                                    <p className="text-xs text-slate-500">Total Period Earnings</p>
+                                    <p className="text-sm font-semibold">${metrics.periodEarnings.toFixed(2)}</p>
+                                </div>
+                             </div>
+                             <Separator />
+                             <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setPaymentModalState({ isOpen: true })}>
+                                 Log Cash Payment
+                             </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
          </TabsContent>
 
          <TabsContent value="operations" className="space-y-6">
@@ -1688,12 +1962,30 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       </Dialog>
 
       <LogCashPaymentModal 
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
+        isOpen={paymentModalState.isOpen}
+        onClose={() => setPaymentModalState({ isOpen: false })}
         onSave={handleSavePayment}
         driverName={driverName}
         cashOwed={metrics.netOutstanding} // Use calculated net outstanding
+        initialWorkPeriodStart={paymentModalState.initialWorkPeriodStart}
+        initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}
+        initialAmount={paymentModalState.initialAmount}
       />
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Are you sure you want to delete this transaction? This action cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmDeleteTransaction} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>
   );
 }

@@ -380,7 +380,7 @@ export interface ServiceRequest {
 
 // --- Phase 1: Enhanced Transaction Data Structure (Transactions Tab Enhancement) ---
 
-export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment';
+export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment' | 'Float_Given' | 'Payment_Received';
 
 export type TransactionCategory = 
   // Revenue
@@ -388,11 +388,13 @@ export type TransactionCategory =
   // Expenses
   | 'Fuel' | 'Maintenance' | 'Insurance' | 'Registration' | 'Tolls' | 'Driver Payouts' | 'Cash Collection Fees' | 'Bank Charges' | 'Office Expenses' | 'Software/Subscription' | 'Marketing' | 'Other Expenses'
   // Payouts
-  | 'Vehicle Payment' | 'Supplier Payment' | 'Tax Payment';
+  | 'Vehicle Payment' | 'Supplier Payment' | 'Tax Payment'
+  // Wallet
+  | 'Cash Collection' | 'Float Issue';
 
-export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card';
+export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card' | 'Mobile Money' | 'Check' | 'Other';
 
-export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled' | 'Void';
+export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled' | 'Void' | 'Verified';
 
 export interface FinancialTransaction {
   id: string; // Transaction UUID
@@ -440,6 +442,9 @@ export interface FinancialTransaction {
   // Import/Source Tracking
   batchId?: string;
   batchName?: string;
+  
+  // New Fields for Cash Wallet
+  metadata?: Record<string, any>;
 }
 
 export interface BankReconciliationRecord {

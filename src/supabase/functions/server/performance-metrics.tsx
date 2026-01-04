@@ -15,6 +15,8 @@ interface Driver {
   id: string;
   name: string;
   driverId?: string; // Legacy ID
+  uberDriverId?: string;
+  inDriveDriverId?: string;
 }
 
 interface QuotaConfig {
@@ -66,17 +68,32 @@ export function generatePerformanceReport(
   const end = startOfDay(parseISO(endDateStr));
   const dayCount = differenceInDays(end, start) + 1;
   
-  // 1. Group Trips by Driver
-  const tripsByDriver: Record<string, Trip[]> = {};
-  trips.forEach(t => {
-    // Normalize Driver ID (handle legacy IDs if needed, but assuming ID match for now)
-    // In real app, we might need to map t.driverId to d.id using the drivers array
-    // For now, we use t.driverId as key
-    if (!tripsByDriver[t.driverId]) tripsByDriver[t.driverId] = [];
-    tripsByDriver[t.driverId].push(t);
+  // 1. Create a Lookup Map for Driver IDs (handle aliases)
+  const driverLookup = new Map<string, string>(); // alias -> mainId
+  drivers.forEach(d => {
+    driverLookup.set(d.id, d.id);
+    if (d.driverId) driverLookup.set(d.driverId, d.id);
+    // Add support for platform-specific IDs if they exist on the driver record
+    if (d.uberDriverId) driverLookup.set(d.uberDriverId, d.id);
+    if (d.inDriveDriverId) driverLookup.set(d.inDriveDriverId, d.id);
   });
 
-  // 2. Process each driver
+  // 2. Group Trips by Driver
+  const tripsByDriver: Record<string, Trip[]> = {};
+  trips.forEach(t => {
+    // Resolve trip's driverId to the main driver ID
+    const mainId = driverLookup.get(t.driverId);
+    
+    // If resolved, add to group. If not, we might be missing the driver or it's an unknown ID.
+    // We fall back to using t.driverId as the key if no match found (to at least show data),
+    // but ideally we want to group under the canonical ID.
+    const key = mainId || t.driverId;
+    
+    if (!tripsByDriver[key]) tripsByDriver[key] = [];
+    tripsByDriver[key].push(t);
+  });
+
+  // 3. Process each driver
   const report: DriverPerformanceSummary[] = [];
 
   // Iterate over known drivers to ensure we capture 0-trip drivers too?
@@ -90,15 +107,20 @@ export function generatePerformanceReport(
     const statsByDate: Record<string, { earnings: number; trips: number }> = {};
     
     driverTrips.forEach(t => {
+      // Use date slice (UTC) to key trips. 
+      // Note: This might cause slight mismatches with client-side local time logic 
+      // if trips happen near midnight UTC, but consistency is improved by using standard IDs.
       const dateKey = t.date.split('T')[0];
       if (!statsByDate[dateKey]) statsByDate[dateKey] = { earnings: 0, trips: 0 };
       
-      const amount = t.netPayout !== undefined ? t.netPayout : t.amount;
-      statsByDate[dateKey].earnings += (amount || 0);
+      // FIX: Use Gross Amount (t.amount) instead of Net Payout to match "Period Earnings" on Driver Detail page.
+      // The user expects "Total Revenue" to represent the Gross Bookings/Earnings.
+      const amount = t.amount || 0;
+      statsByDate[dateKey].earnings += amount;
       statsByDate[dateKey].trips += 1;
     });
 
-    // 3. Build History & Calculate Stats
+    // 4. Build History & Calculate Stats
     const history: DailyPerformance[] = [];
     let daysMet = 0;
     let totalEarnings = 0;

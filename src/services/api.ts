@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics } from '../types/data';
+import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
 
 const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
@@ -378,7 +378,7 @@ export const api = {
     return response.json();
   },
 
-  async saveTransaction(transaction: any) {
+  async saveTransaction(transaction: Partial<FinancialTransaction>) {
     const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
         method: 'POST',
         headers: {
