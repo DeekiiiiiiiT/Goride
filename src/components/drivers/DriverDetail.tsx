@@ -31,7 +31,8 @@ import {
   Wallet,
   Landmark,
   Trash2,
-  Car as CarIcon
+  Car as CarIcon,
+  Pencil
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -49,6 +50,13 @@ import { Progress } from "../ui/progress";
 import { Separator } from "../ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "../ui/dropdown-menu";
 import { 
   BarChart, 
   Bar, 
@@ -138,6 +146,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       initialWorkPeriodStart?: string;
       initialWorkPeriodEnd?: string;
       initialAmount?: number;
+      editingTransaction?: FinancialTransaction;
   }>({ isOpen: false });
   const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
@@ -180,6 +189,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   }, [driverId, driver]);
 
   const handleSavePayment = async (payment: { 
+    id?: string;
     amount: number; 
     date: string; 
     notes: string;
@@ -240,8 +250,22 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined
       };
       
-      const saved = await api.saveTransaction(newTx);
-      setTransactions(prev => [saved.data, ...prev]);
+      if (payment.id) {
+          const updatedTx = { ...newTx, id: payment.id };
+          await api.saveTransaction(updatedTx);
+          setTransactions(prev => prev.map(t => t.id === payment.id ? { ...t, ...updatedTx } as FinancialTransaction : t));
+          toast.success("Transaction updated");
+      } else {
+          const saved = await api.saveTransaction(newTx);
+          setTransactions(prev => [saved.data, ...prev]);
+      }
+  };
+
+  const handleEditTransaction = (tx: FinancialTransaction) => {
+      setPaymentModalState({
+          isOpen: true,
+          editingTransaction: tx
+      });
   };
 
   const handleVerifyTransaction = async (id: string) => {
@@ -1277,15 +1301,25 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                     <CheckCircle2 className="h-4 w-4" />
                                                                 </Button>
                                                             )}
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 text-muted-foreground hover:text-red-500 opacity-50 hover:opacity-100"
-                                                                onClick={() => handleDeleteTransaction(tx.id)}
-                                                                title="Delete transaction"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                        <span className="sr-only">Open menu</span>
+                                                                        <MoreHorizontal className="h-4 w-4" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
+                                                                        <Pencil className="mr-2 h-4 w-4" />
+                                                                        Edit
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem onClick={() => handleDeleteTransaction(tx.id)} className="text-red-600 focus:text-red-600">
+                                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                                        Delete
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
                                                         </div>
                                                     </TableCell>
                                         </TableRow>
@@ -1970,6 +2004,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         initialWorkPeriodStart={paymentModalState.initialWorkPeriodStart}
         initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}
         initialAmount={paymentModalState.initialAmount}
+        initialTransaction={paymentModalState.editingTransaction}
       />
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>

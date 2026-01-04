@@ -50,119 +50,145 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
         const start = startOfWeek(minDate, { weekStartsOn: 1 });
         const end = endOfWeek(maxDate, { weekStartsOn: 1 });
 
-        // Generate Weeks
+        // Generate Weeks (Oldest to Newest)
         const weekIntervals = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 });
 
-        // Process each week
-        return weekIntervals.map(weekStart => {
+        // Phase 1: Calculate Basics (Owed, Allocated Payments)
+        const weeksData = weekIntervals.map(weekStart => {
             const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
             
-            // 1. Calculate Owed (Cash Collected in this week)
-            // Strategy: Check if there's a CSV report that fully covers this week or mostly covers it
-            // We use areIntervalsOverlapping for robustness against timezone shifts
+            // --- Calculate Owed ---
             const relevantCsvMetrics = csvMetrics.filter(m => {
                 const mStart = parseISO(m.periodStart);
                 const mEnd = parseISO(m.periodEnd);
-                
-                // Check if they overlap at all
-                const overlaps = areIntervalsOverlapping(
-                    { start: mStart, end: mEnd },
-                    { start: weekStart, end: weekEnd }
-                );
-                
+                const overlaps = areIntervalsOverlapping({ start: mStart, end: mEnd }, { start: weekStart, end: weekEnd });
                 if (!overlaps) return false;
-
-                // Ensure the overlap is significant (e.g. > 1 day) to avoid edge cases
-                // where a report ends at 00:00 on Monday and overlaps by 1 second.
                 const overlapStart = mStart > weekStart ? mStart : weekStart;
                 const overlapEnd = mEnd < weekEnd ? mEnd : weekEnd;
                 const overlapDuration = overlapEnd.getTime() - overlapStart.getTime();
                 const oneDay = 24 * 60 * 60 * 1000;
-                
-                return overlapDuration > (oneDay * 0.5); // at least half a day
+                return overlapDuration > (oneDay * 0.5);
             });
 
-            // Sum up CSV cash if available
-            // If multiple reports overlap the same week, we sum them? 
-            // Or maybe take the one with the best fit.
-            // Usually reports are mutually exclusive, so summing is safe.
             const csvCash = relevantCsvMetrics.reduce((sum, m) => sum + (m.cashCollected || 0), 0);
 
-            const weekTrips = trips.filter(t => {
-                const d = new Date(t.date);
-                return isWithinInterval(d, { start: weekStart, end: weekEnd });
-            });
+            const weekTrips = trips.filter(t => isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd }));
 
             const tripCalculatedCash = weekTrips.reduce((sum, t) => {
-                // Priority 1: Use explicit cashCollected field if present (from CSV import)
-                // Handle both number and string types, and negative values
                 const cash = Number(t.cashCollected || 0);
-                if (Math.abs(cash) > 0) {
-                    return sum + Math.abs(cash);
-                }
-                
-                // Priority 2: If platform implies cash (InDrive/Bolt are usually cash-only in this context)
-                // or if explicitly marked as Cash payment method
+                if (Math.abs(cash) > 0) return sum + Math.abs(cash);
                 const platform = (t.platform || '').toLowerCase();
                 const isCashPlatform = ['indrive', 'bolt', 'cash'].includes(platform);
                 const isCashMethod = t['paymentMethod'] === 'Cash';
-                
-                if (isCashPlatform || isCashMethod) {
-                    return sum + Number(t.amount || 0);
-                }
+                if (isCashPlatform || isCashMethod) return sum + Number(t.amount || 0);
                 return sum;
             }, 0);
 
-            // Use the greater of the two.
             const amountOwed = Math.max(csvCash, tripCalculatedCash);
             const isFromCsv = csvCash > tripCalculatedCash;
 
-            // 2. Calculate Paid (Transactions linked to this week)
-            // Strategy: Look for transactions with metadata.workPeriodStart matching this weekStart
-            // OR strictly falling within this week if no metadata is present? 
-            // The user wants strict tracking, so we prioritize metadata.
-            // If we include non-metadata payments based on date, it might double count if they later add metadata.
-            // Let's stick to Metadata strictly for "Settled" status, but maybe show "Unallocated" payments separately.
-            // Actually, for a "Period View", we only care about payments explicitly for this period.
-            
-            const linkedPayments = transactions.filter(t => {
+            // --- Calculate Allocated Paid (Strict Metadata Only) ---
+            const allocatedPayments = transactions.filter(t => {
                 if (t.metadata?.workPeriodStart) {
-                    // Check if metadata start date falls in this week (or matches start)
-                    // Robustness: Compare dates ignoring time
-                    const periodStart = new Date(t.metadata.workPeriodStart);
-                    return isSameDay(periodStart, weekStart) || isWithinInterval(periodStart, { start: weekStart, end: weekEnd }); 
-                    // Note: Usually periodStart should match weekStart exactly if using weekly cycles, but let's be flexible.
+                    const payStart = parseISO(t.metadata.workPeriodStart);
+                    const payEnd = t.metadata.workPeriodEnd ? parseISO(t.metadata.workPeriodEnd) : payStart;
+                    return areIntervalsOverlapping({ start: payStart, end: payEnd }, { start: weekStart, end: weekEnd });
                 }
                 return false;
             });
 
-            const amountPaid = linkedPayments.reduce((sum, t) => sum + (t.amount || 0), 0);
-            
-            // Status
-            let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' = 'Unpaid';
-            if (amountOwed === 0 && amountPaid === 0) status = 'Paid'; // No activity
-            else if (amountPaid >= amountOwed - 0.01) status = 'Paid'; // Tolerance for float
-            else if (amountPaid > 0) status = 'Partial';
-            
-            if (amountPaid > amountOwed + 1) status = 'Overpaid';
+            const allocatedPaid = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0);
 
             return {
                 start: weekStart,
                 end: weekEnd,
                 amountOwed,
+                allocatedPaid,
+                weekTrips,
+                isFromCsv,
+                debtPaid: 0,    // Will be filled in Phase 2
+                surplusPaid: 0  // Will be filled in Phase 2
+            };
+        });
+
+        // Phase 2: Distribute Unallocated Payments (FIFO)
+        // 1. Identify Unallocated Transactions
+        // Exclude floats/adjustments if they are not payments. Assuming 'type' check or just no metadata.
+        const unallocatedTransactions = transactions.filter(t => !t.metadata?.workPeriodStart && t.category !== 'Float Issue');
+        
+        let totalUnallocatedPool = unallocatedTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+        
+        // 2. Pay off Debt (Oldest Week First)
+        weeksData.forEach(week => {
+            const deficit = week.amountOwed - week.allocatedPaid;
+            if (deficit > 0 && totalUnallocatedPool > 0) {
+                const payment = Math.min(deficit, totalUnallocatedPool);
+                week.debtPaid = payment;
+                totalUnallocatedPool -= payment;
+            }
+        });
+
+        // 3. Distribute Surplus (If any pool remains)
+        // We assign remaining pool back to the weeks where the transactions originated (Newest first preference)
+        if (totalUnallocatedPool > 0) {
+            // Sort unallocated transactions Newest First to attribute surplus to latest payments
+            const sortedTx = [...unallocatedTransactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            
+            for (const tx of sortedTx) {
+                if (totalUnallocatedPool <= 0) break;
+                
+                // How much of this transaction is still "available" as surplus?
+                // We assume the pool is fungible, but visually we want to attach surplus to this transaction's week.
+                // We can take up to tx.amount.
+                const amountToAssign = Math.min(tx.amount || 0, totalUnallocatedPool);
+                
+                // Find the week this transaction belongs to
+                const txDate = new Date(tx.date);
+                const targetWeek = weeksData.find(w => isWithinInterval(txDate, { start: w.start, end: w.end }));
+                
+                if (targetWeek) {
+                    targetWeek.surplusPaid += amountToAssign;
+                } else {
+                    // Transaction is outside range (e.g. future date)? 
+                    if (weeksData.length > 0) {
+                        weeksData[weeksData.length - 1].surplusPaid += amountToAssign;
+                    }
+                }
+                
+                totalUnallocatedPool -= amountToAssign;
+            }
+        }
+
+        // Phase 3: Final Assembly
+        return weeksData.map(week => {
+            const amountPaid = week.allocatedPaid + week.debtPaid + week.surplusPaid;
+            
+            const cashTripCount = week.weekTrips.filter(t => {
+                const cash = Number(t.cashCollected || 0);
+                const platform = (t.platform || '').toLowerCase();
+                const isCashPlatform = ['indrive', 'bolt', 'cash'].includes(platform);
+                const isCashMethod = t['paymentMethod'] === 'Cash';
+                return Math.abs(cash) > 0 || isCashPlatform || isCashMethod;
+            }).length;
+
+            // Status Logic
+            let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' = 'Unpaid';
+            if (week.amountOwed === 0 && amountPaid === 0) status = 'Paid';
+            else if (amountPaid >= week.amountOwed - 0.01) status = 'Paid';
+            else if (amountPaid > 0) status = 'Partial';
+            
+            if (amountPaid > week.amountOwed + 1) status = 'Overpaid';
+
+            return {
+                start: week.start,
+                end: week.end,
+                amountOwed: week.amountOwed,
                 amountPaid,
-                balance: amountOwed - amountPaid,
+                balance: week.amountOwed - amountPaid,
                 status,
-                tripCount: weekTrips.length,
-                cashTripCount: weekTrips.filter(t => {
-                    const cash = Number(t.cashCollected || 0);
-                    const platform = (t.platform || '').toLowerCase();
-                    const isCashPlatform = ['indrive', 'bolt', 'cash'].includes(platform);
-                    const isCashMethod = t['paymentMethod'] === 'Cash';
-                    
-                    return Math.abs(cash) > 0 || isCashPlatform || isCashMethod;
-                }).length,
-                isFromCsv
+                tripCount: week.weekTrips.length,
+                cashTripCount,
+                isFromCsv: week.isFromCsv
             };
         }).reverse(); // Most recent first
     }, [trips, transactions, csvMetrics]);

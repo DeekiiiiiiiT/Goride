@@ -21,6 +21,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { toast } from "sonner@2.0.3";
 import { Loader2, DollarSign, Wallet, ArrowRightLeft } from "lucide-react";
+import { FinancialTransaction } from '../../types/data';
 
 interface LogCashPaymentModalProps {
   isOpen: boolean;
@@ -28,7 +29,9 @@ interface LogCashPaymentModalProps {
   initialWorkPeriodStart?: string;
   initialWorkPeriodEnd?: string;
   initialAmount?: number;
+  initialTransaction?: FinancialTransaction;
   onSave: (payment: { 
+    id?: string;
     amount: number; 
     date: string; 
     notes: string;
@@ -50,7 +53,8 @@ export function LogCashPaymentModal({
     cashOwed, 
     initialWorkPeriodStart, 
     initialWorkPeriodEnd,
-    initialAmount 
+    initialAmount,
+    initialTransaction
 }: LogCashPaymentModalProps) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -65,16 +69,49 @@ export function LogCashPaymentModal({
   // Reset form when opened
   useEffect(() => {
     if (isOpen) {
-      setAmount(initialAmount ? initialAmount.toFixed(2) : '');
-      setDate(new Date().toISOString().split('T')[0]);
-      setNotes('');
-      setPaymentMethod('Cash');
-      setTransactionType('payment');
-      setReferenceNumber('');
-      setWorkPeriodStart(initialWorkPeriodStart ? initialWorkPeriodStart.split('T')[0] : '');
-      setWorkPeriodEnd(initialWorkPeriodEnd ? initialWorkPeriodEnd.split('T')[0] : '');
+      if (initialTransaction) {
+        // Edit Mode
+        setAmount(Math.abs(initialTransaction.amount).toFixed(2));
+        setDate(new Date(initialTransaction.date).toISOString().split('T')[0]);
+        setNotes(initialTransaction.description || '');
+        setPaymentMethod(initialTransaction.paymentMethod || 'Cash');
+        
+        // Infer transaction type
+        if (initialTransaction.category === 'Float Issue') {
+            setTransactionType('float');
+        } else if (initialTransaction.category === 'Adjustment') {
+            setTransactionType('adjustment');
+        } else {
+            setTransactionType('payment');
+        }
+
+        setReferenceNumber(initialTransaction.referenceNumber || '');
+        
+        if (initialTransaction.metadata?.workPeriodStart) {
+            setWorkPeriodStart(initialTransaction.metadata.workPeriodStart.split('T')[0]);
+        } else {
+            setWorkPeriodStart('');
+        }
+        
+        if (initialTransaction.metadata?.workPeriodEnd) {
+            setWorkPeriodEnd(initialTransaction.metadata.workPeriodEnd.split('T')[0]);
+        } else {
+            setWorkPeriodEnd('');
+        }
+
+      } else {
+        // Create Mode
+        setAmount(initialAmount ? initialAmount.toFixed(2) : '');
+        setDate(new Date().toISOString().split('T')[0]);
+        setNotes('');
+        setPaymentMethod('Cash');
+        setTransactionType('payment');
+        setReferenceNumber('');
+        setWorkPeriodStart(initialWorkPeriodStart ? initialWorkPeriodStart.split('T')[0] : '');
+        setWorkPeriodEnd(initialWorkPeriodEnd ? initialWorkPeriodEnd.split('T')[0] : '');
+      }
     }
-  }, [isOpen, initialWorkPeriodStart, initialWorkPeriodEnd, initialAmount]);
+  }, [isOpen, initialWorkPeriodStart, initialWorkPeriodEnd, initialAmount, initialTransaction]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +139,7 @@ export function LogCashPaymentModal({
     setIsSubmitting(true);
     try {
       await onSave({
+        id: initialTransaction?.id,
         amount: parseFloat(amount),
         date: new Date(date).toISOString(),
         notes,
@@ -111,10 +149,10 @@ export function LogCashPaymentModal({
         workPeriodStart: workPeriodStart ? new Date(workPeriodStart).toISOString() : undefined,
         workPeriodEnd: workPeriodEnd ? new Date(workPeriodEnd).toISOString() : undefined,
       });
-      toast.success("Transaction recorded successfully");
+      toast.success(initialTransaction ? "Transaction updated successfully" : "Transaction recorded successfully");
       onClose();
     } catch (error) {
-      toast.error("Failed to record transaction");
+      toast.error(initialTransaction ? "Failed to update transaction" : "Failed to record transaction");
       console.error(error);
     } finally {
       setIsSubmitting(false);
@@ -134,9 +172,9 @@ export function LogCashPaymentModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Log Transaction</DialogTitle>
+          <DialogTitle>{initialTransaction ? 'Edit Transaction' : 'Log Transaction'}</DialogTitle>
           <DialogDescription>
-            Record a financial transaction for {driverName}.
+            {initialTransaction ? 'Update financial transaction details.' : `Record a financial transaction for ${driverName}.`}
           </DialogDescription>
         </DialogHeader>
         
@@ -302,7 +340,7 @@ export function LogCashPaymentModal({
                   Saving...
                 </>
               ) : (
-                transactionType === 'payment' ? 'Confirm Payment' : 'Confirm Transaction'
+                initialTransaction ? 'Update Transaction' : (transactionType === 'payment' ? 'Confirm Payment' : 'Confirm Transaction')
               )}
             </Button>
           </DialogFooter>
