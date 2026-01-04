@@ -11,12 +11,13 @@ import {
   Download, 
   Loader2,
   Calendar as CalendarIcon,
-  Trophy
+  Trophy,
+  Wallet
 } from "lucide-react";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { Trip, TierConfig, FinancialTransaction } from '../../types/data';
+import { Trip, TierConfig, FinancialTransaction, DriverMetrics } from '../../types/data';
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { Calendar } from "../ui/calendar";
@@ -26,6 +27,15 @@ import { startOfDay, endOfDay, format, subDays, differenceInDays } from "date-fn
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { api } from '../../services/api';
+import { WeeklySettlementView } from '../drivers/WeeklySettlementView';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "../ui/sheet";
 
 export function DriverEarnings() {
   const { user } = useAuth();
@@ -33,6 +43,7 @@ export function DriverEarnings() {
   const [loading, setLoading] = useState(true);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [metrics, setMetrics] = useState<DriverMetrics[]>([]);
   const [filteredTrips, setFilteredTrips] = useState<Trip[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<FinancialTransaction[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
@@ -84,9 +95,10 @@ export function DriverEarnings() {
              'Authorization': `Bearer ${publicAnonKey}`
         };
 
-        const [allTrips, txData] = await Promise.all([
+        const [allTrips, txData, metricsData] = await Promise.all([
              api.getTrips(),
-             api.getTransactions()
+             api.getTransactions(),
+             api.getDriverMetrics()
         ]);
 
         if (allTrips) {
@@ -107,6 +119,18 @@ export function DriverEarnings() {
             );
             setTransactions(myTx);
             setFilteredTransactions(myTx);
+        }
+
+        if (metricsData) {
+            // Filter metrics for this driver
+            // Assuming metrics have driverId which links to... something.
+            // Usually internal ID or UUID.
+            const myMetrics = metricsData.filter((m: any) => 
+                 m.driverId === user.id || 
+                 (driverRecord?.id && m.driverId === driverRecord.id) ||
+                 (driverRecord?.driverId && m.driverId === driverRecord.driverId)
+            );
+            setMetrics(myMetrics);
         }
 
       } catch (error) {
@@ -411,6 +435,32 @@ export function DriverEarnings() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Earnings</h2>
         <div className="flex items-center gap-2">
+            <Sheet>
+                <SheetTrigger asChild>
+                    <Button 
+                        size="sm" 
+                        className="gap-2 bg-gradient-to-r from-orange-400 to-amber-600 text-white hover:from-orange-500 hover:to-amber-700 shadow-md border-0"
+                    >
+                        <Wallet className="h-4 w-4" />
+                        Cash Wallet
+                    </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[85vh] sm:h-[90vh] overflow-y-auto">
+                    <SheetHeader className="mb-6">
+                        <SheetTitle>Cash Wallet</SheetTitle>
+                        <SheetDescription>
+                            Review your cash collection history and outstanding balance.
+                        </SheetDescription>
+                    </SheetHeader>
+                    <WeeklySettlementView 
+                        trips={trips}
+                        transactions={transactions}
+                        csvMetrics={metrics}
+                        readOnly={true}
+                    />
+                </SheetContent>
+            </Sheet>
+
            <Popover>
               <PopoverTrigger asChild>
                   <Button 

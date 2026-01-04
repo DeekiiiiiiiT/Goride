@@ -26,10 +26,11 @@ interface WeeklySettlementViewProps {
     trips: Trip[];
     transactions: FinancialTransaction[];
     csvMetrics: DriverMetrics[];
-    onLogPayment: (periodStart: Date, periodEnd: Date, amountOwed: number) => void;
+    onLogPayment?: (periodStart: Date, periodEnd: Date, amountOwed: number) => void;
+    readOnly?: boolean;
 }
 
-export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onLogPayment }: WeeklySettlementViewProps) {
+export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onLogPayment, readOnly = false }: WeeklySettlementViewProps) {
     
     const weeks = useMemo(() => {
         // If we have CSV metrics but no trips, we should still show something
@@ -254,7 +255,7 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                                 </div>
 
                                 {/* Action */}
-                                {week.status !== 'Paid' && week.status !== 'Overpaid' && week.amountOwed > 0 && (
+                                {!readOnly && week.status !== 'Paid' && week.status !== 'Overpaid' && week.amountOwed > 0 && onLogPayment && (
                                     <Button 
                                         size="sm" 
                                         className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
@@ -264,9 +265,9 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                                         Settle
                                     </Button>
                                 )}
-                                {week.amountOwed === 0 && week.amountPaid === 0 && (
+                                {(!readOnly && week.amountOwed === 0 && week.amountPaid === 0) || (readOnly) ? (
                                      <div className="w-[88px]"></div> // Spacer
-                                )}
+                                ) : null}
                             </div>
                             
                             {/* Progress Bar for Partial */}
