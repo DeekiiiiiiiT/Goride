@@ -706,7 +706,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             <TabsTrigger value="operations">Efficiency</TabsTrigger>
             <TabsTrigger value="quality">Service Quality</TabsTrigger>
             <TabsTrigger value="trips">Trip History</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
          </TabsList>
 
          <TabsContent value="overview" className="space-y-6">
@@ -1409,67 +1409,155 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             </Card>
          </TabsContent>
 
-         <TabsContent value="documents" className="space-y-6">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Driver Documents</CardTitle>
-                        <CardDescription>Manage licenses, insurance, and permits.</CardDescription>
-                    </div>
-                    <Button size="sm"><Upload className="h-4 w-4 mr-2" /> Upload Document</Button>
-                </CardHeader>
-                <CardContent>
-                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Document Name</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Expiry Date</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {documents.map((doc) => (
-                                <TableRow key={doc.id}>
-                                    <TableCell className="font-medium">
-                                        <div className="flex items-center gap-2">
-                                            <FileText className="h-4 w-4 text-slate-400" />
-                                            {doc.name}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>{doc.type}</TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className={
-                                            doc.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                            doc.status === 'Expired' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                                            doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                            'bg-slate-50 text-slate-700'
-                                        }>
-                                            {doc.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className={
-                                        new Date(doc.expiryDate) < new Date() ? 'text-rose-600 font-medium' : ''
-                                    }>
-                                        {format(new Date(doc.expiryDate), 'MMM d, yyyy')}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-8 w-8 hover:bg-slate-100"
-                                            onClick={() => setSelectedDocument(doc)}
-                                        >
-                                            <Eye className="h-4 w-4 text-slate-500 hover:text-indigo-600" />
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                     </Table>
-                </CardContent>
-            </Card>
+         <TabsContent value="profile" className="space-y-6">
+            <Tabs defaultValue="documents" className="w-full">
+                <TabsList className="w-full justify-start border-b rounded-none bg-transparent h-auto p-0 mb-6">
+                   <TabsTrigger 
+                     value="documents"
+                     className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 rounded-none pb-2 px-4 text-slate-500 data-[state=active]:text-indigo-600"
+                   >
+                     Documents
+                   </TabsTrigger>
+                   <TabsTrigger 
+                     value="personal-info"
+                     className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 rounded-none pb-2 px-4 text-slate-500 data-[state=active]:text-indigo-600"
+                   >
+                     Personal Information
+                   </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="documents">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>Driver Documents</CardTitle>
+                                <CardDescription>Manage licenses, insurance, and permits.</CardDescription>
+                            </div>
+                            <Button size="sm"><Upload className="h-4 w-4 mr-2" /> Upload Document</Button>
+                        </CardHeader>
+                        <CardContent>
+                             <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Document Name</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Expiry Date</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {documents.map((doc) => (
+                                        <TableRow key={doc.id}>
+                                            <TableCell className="font-medium">
+                                                <div className="flex items-center gap-2">
+                                                    <FileText className="h-4 w-4 text-slate-400" />
+                                                    {doc.name}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>{doc.type}</TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className={
+                                                    doc.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                    doc.status === 'Expired' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                                    doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                    'bg-slate-50 text-slate-700'
+                                                }>
+                                                    {doc.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className={
+                                                new Date(doc.expiryDate) < new Date() ? 'text-rose-600 font-medium' : ''
+                                            }>
+                                                {format(new Date(doc.expiryDate), 'MMM d, yyyy')}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-8 w-8 hover:bg-slate-100"
+                                                    onClick={() => setSelectedDocument(doc)}
+                                                >
+                                                    <Eye className="h-4 w-4 text-slate-500 hover:text-indigo-600" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                             </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="personal-info">
+                   <Card>
+                      <CardHeader>
+                          <CardTitle>Personal Information</CardTitle>
+                          <CardDescription>Personal details and contact info.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6 max-w-2xl">
+                          <div className="space-y-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                      <Label>Full Name</Label>
+                                      <Input value={driverName} readOnly className="bg-slate-50" />
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>Email Address</Label>
+                                      <Input value={driver?.email || 'N/A'} readOnly className="bg-slate-50" />
+                                  </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                      <Label>Phone Number</Label>
+                                      <Input value={driver?.phone || 'N/A'} readOnly className="bg-slate-50" />
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>Driver ID</Label>
+                                      <Input value={driverId} readOnly className="bg-slate-50 font-mono" />
+                                  </div>
+                              </div>
+                          </div>
+
+                          <Separator />
+                          
+                          <div className="space-y-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                  <CreditCardIcon className="h-4 w-4 text-slate-500" />
+                                  <h4 className="font-semibold text-slate-900">Bank Account Information</h4>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                      <Label>Name on Account</Label>
+                                      <Input value={driver?.bankInfo?.accountName || ''} readOnly className="bg-slate-50" placeholder="Not set" />
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>Bank Name</Label>
+                                      <Input value={driver?.bankInfo?.bankName || ''} readOnly className="bg-slate-50" placeholder="Not set" />
+                                  </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                      <Label>Branch</Label>
+                                      <Input value={driver?.bankInfo?.branch || ''} readOnly className="bg-slate-50" placeholder="Not set" />
+                                  </div>
+                                  <div className="col-span-2 space-y-2">
+                                      <Label>Account Number</Label>
+                                      <Input value={driver?.bankInfo?.accountNumber || ''} readOnly className="bg-slate-50" placeholder="Not set" />
+                                  </div>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                  <Label>Account Type</Label>
+                                  <Input value={driver?.bankInfo?.accountType || ''} readOnly className="bg-slate-50" placeholder="Not set" />
+                              </div>
+                          </div>
+                      </CardContent>
+                   </Card>
+                </TabsContent>
+            </Tabs>
          </TabsContent>
       </Tabs>
 

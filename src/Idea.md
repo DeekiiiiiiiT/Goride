@@ -1,77 +1,91 @@
-Your approach from the conversation with Figma is **mostly correct**, but there's one critical misunderstanding to address about navigation app integration. Let me analyze both your current system and the technical realities:
+# Driver Performance Report Implementation Plan
 
-## Analysis of Your Current System
+## Phase 1: Backend Data Aggregation
+**Goal:** Create a robust server-side function to transform raw trip data into daily performance metrics.
+- [ ] **Step 1.1: Create Edge Function Structure**
+  - Create `/supabase/functions/server/performance-metrics.tsx`.
+  - Import `Trip` type and helper libraries (`date-fns`).
+- [ ] **Step 1.2: Implement Grouping Logic**
+  - Create a helper function `groupTripsByDriverAndDate(trips: Trip[])`.
+  - It should return a nested object or map: `Record<DriverId, Record<DateString, DailyStats>>`.
+  - `DailyStats` should include: `totalTrips`, `totalEarnings`, `hoursOnline` (if available, otherwise estimate or skip).
+- [ ] **Step 1.3: Apply Quota Logic**
+  - Define default quotas (e.g., $100/day, 5 trips/day).
+  - Iterate through the grouped data.
+  - Calculate `metRideQuota` (boolean) and `metEarningsQuota` (boolean) for each day.
+  - Calculate `successRate` (days met / total days active).
+- [ ] **Step 1.4: Calculate Streaks**
+  - Implement a `calculateStreak(dailyStats[])` function.
+  - Sort days descending.
+  - Count consecutive days where `metQuota` is true.
+- [ ] **Step 1.5: Expose API Endpoint**
+  - Create route `/performance-report` in `index.tsx`.
+  - It should accept `startDate` and `endDate` query params.
+  - Return JSON: `{ drivers: DriverPerformanceSummary[], globalStats: GlobalStats }`.
 
-Looking at your React/Next.js application structure, you have:
-- `ManualTripForm.tsx` with Formik form handling
-- Basic text inputs for `pickUp` and `dropOff` addresses
-- No current geolocation or address autocomplete features
+## Phase 2: Frontend Types & State Management
+**Goal:** set up the data layer in the React application.
+- [ ] **Step 2.1: Define TypeScript Interfaces**
+  - Create `/types/performance.ts`.
+  - Define `DailyPerformance`, `DriverPerformanceSummary`, `PerformanceReport`.
+- [ ] **Step 2.2: Create API Service Method**
+  - Update `/services/api.ts`.
+  - Add `getPerformanceReport(startDate, endDate)`.
+- [ ] **Step 2.3: Create Hook**
+  - Create `/hooks/usePerformanceReport.ts`.
+  - Use `useQuery` pattern (state: data, loading, error).
+  - Implement default date range (Last 30 days).
 
-## What's Correct in Your Approach:
+## Phase 3: "At Risk" & "Top Performer" Business Logic
+**Goal:** specific logic to identify outliers.
+- [ ] **Step 3.1: Implement Filtering Utilities**
+  - Create `/utils/performanceUtils.ts`.
+  - `getTopPerformers(drivers, limit=5)`: Sort by compliance %.
+  - `getAtRiskDrivers(drivers, limit=5)`: Sort by compliance % ascending, filter where active > 7 days.
+- [ ] **Step 3.2: Streak Logic Validation**
+  - Ensure the logic correctly handles weekends or days off (do they break the streak? - Decision: Only days with 1+ trip count towards streak logic, or assume strict daily). *Assumption: Strict daily for now.*
 
-1. **📍 Pickup - Current Location Button**: ✅ **Perfectly feasible**
-   - Browser's Geolocation API works in your React/Next.js setup
-   - Reverse geocoding with OpenStreetMap is the right free approach
-   - Single-click current location capture is exactly how Uber works
+## Phase 4: Dashboard UI - Summary Cards
+**Goal:** Build the high-level metrics view.
+- [ ] **Step 4.1: Create Container Component**
+  - Create `/components/admin/performance/PerformanceDashboard.tsx`.
+  - Add `DateRangePicker` in the header.
+- [ ] **Step 4.2: Build "Top Performers" Card**
+  - Display list of top 5 drivers.
+  - Show Green Progress Bar for score.
+- [ ] **Step 4.3: Build "Needs Attention" Card**
+  - Display list of bottom 5 drivers.
+  - Show Red/Orange Progress Bar.
+- [ ] **Step 4.4: Build "Quick Stats" Card**
+  - Show Total Active Drivers, Avg Fleet Compliance, Total Missed Days.
 
-2. **🚫 The Critical Misunderstanding: Navigation App Integration**
-   - **Web apps CANNOT "pull up" or read from external navigation apps** due to browser security
-   - Your statement: "for the drop off it will pull up whatever navigation app the driver uses and he can search for and add the drop off address" - **This is technically impossible**
-   - External apps (Google Maps, Waze) cannot send data back to your web app
+## Phase 5: Detailed Driver Table
+**Goal:** The main list view for all drivers.
+- [ ] **Step 5.1: Setup Table Columns**
+  - Driver Name, Total Rides, Total Earnings, Quota Hit Rate, Current Streak, Status Badge.
+- [ ] **Step 5.2: Implement Status Badges**
+  - Create `ComplianceBadge.tsx`.
+  - Green (>90%), Yellow (70-90%), Red (<70%).
+- [ ] **Step 5.3: Add Sorting & Pagination**
+  - Allow sorting by Name, Earnings, or Hit Rate.
 
-## The Correct Implementation Flow:
+## Phase 6: Drill-Down Modal & Charts
+**Goal:** Visualize individual performance.
+- [ ] **Step 6.1: Create Detail Modal**
+  - `/components/admin/performance/DriverPerformanceModal.tsx`.
+- [ ] **Step 6.2: Implement Trend Chart**
+  - Use `Recharts` `LineChart`.
+  - X-Axis: Date. Y-Axis: Earnings.
+  - Add a static reference line for the "Daily Quota".
+- [ ] **Step 6.3: Implement Calendar View (Optional/Simplified)**
+  - Show a grid of the last 30 days with Green/Red blocks.
 
-Instead of: `App → Open Navigation App → Search → Return to App`
-
-You must do: `App → Search in App → Select Address → Open Navigation App`
-
-## Recommended Implementation Strategy:
-
-### Phase 1: Pickup Location Capture
-```typescript
-// Exactly as described - green button for current location
-1. Driver clicks green location icon
-2. Browser requests GPS permission
-3. Get coordinates → Reverse geocode via OpenStreetMap
-4. Auto-fill pickup address field
-```
-
-### Phase 2: Drop-off Address Selection
-```typescript
-// NOT external app integration, but IN-APP search
-1. Driver types in drop-off field
-2. Show real-time suggestions from OpenStreetMap
-3. Driver selects address from dropdown
-4. Address auto-fills in form
-```
-
-### Phase 3: Navigation Launch (Optional Enhancement)
-```typescript
-// AFTER address is saved in your app
-1. Add "Navigate" button next to drop-off field
-2. On click, open: `https://www.google.com/maps/dir/?api=1&destination=ADDRESS`
-3. This launches Google Maps/Waze with the address pre-filled
-```
-
-## Technical Feasibility Summary:
-
-✅ **Can Do:**
-- Capture current location with one click
-- Auto-fill address from GPS
-- In-app address search/autocomplete
-- Launch navigation apps with pre-filled addresses
-
-❌ **Cannot Do:**
-- Read/search from external navigation apps
-- Get addresses back from Google Maps/Waze
-- Direct integration with navigation app search
-
-## Best Implementation Order:
-
-1. **First**: Implement current location button for pickup (easiest, high value)
-2. **Second**: Add address autocomplete for drop-off (essential for usability)
-3. **Third**: Add "Navigate" button that opens external apps (nice-to-have)
-
-**Your intuition about the Uber-like experience is right**, but the technical implementation must happen inside your app first, then hand off to navigation apps, not the other way around.
-
-Would you like me to proceed with implementing Phase 1 (current location button) first?
+## Phase 7: Quota Management & Final Integration
+**Goal:** Allow admins to configure the targets.
+- [ ] **Step 7.1: Quota Settings UI**
+  - Add a "Settings" button to the Dashboard.
+  - Allow setting `Global Daily Earnings Target` and `Global Daily Ride Target`.
+- [ ] **Step 7.2: Wire up to Backend**
+  - Pass these settings to the backend calculation engine (or store in DB).
+- [ ] **Step 7.3: Add to Navigation**
+  - Add "Performance" link to the Admin Sidebar.

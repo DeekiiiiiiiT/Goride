@@ -14,7 +14,7 @@ import {
   Trophy
 } from "lucide-react";
 import { Trip, FuelLog, ServiceRequest, DriverMetric, TierConfig, FinancialTransaction, QuotaConfig, DriverGoals } from '../../types/data';
-import { RoutePoint } from '../../types/tripSession';
+import { RoutePoint, TripStop } from '../../types/tripSession';
 import { toast } from 'sonner@2.0.3';
 import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
@@ -41,7 +41,17 @@ export function DriverDashboard() {
   const [manualTripFormOpen, setManualTripFormOpen] = useState(false);
   
   const [metrics, setMetrics] = useState<DriverMetric | null>(null);
-  const [todayEarnings, setTodayEarnings] = useState(0);
+  const [todayEarnings, setTodayEarnings] = useState<{
+    total: number;
+    breakdown: {
+      uber: number;
+      indrive: number;
+      goride: number;
+    };
+  }>({
+    total: 0,
+    breakdown: { uber: 0, indrive: 0, goride: 0 }
+  });
   const [goals, setGoals] = useState<DriverGoals | null>(null);
   const [recentTrip, setRecentTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +71,9 @@ export function DriverDashboard() {
     endLocation?: string;
     endCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
+    stops?: TripStop[];
+    totalWaitTime?: number;
+    distance?: number;
   } | undefined>(undefined);
 
   // Phase 2: Tier State
@@ -130,10 +143,27 @@ export function DriverDashboard() {
             // Calculate Today's Earnings
             const today = new Date().toISOString().split('T')[0];
             const now = new Date();
-            const todaySum = myTrips
-                .filter(t => t.date.startsWith(today))
-                .reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
-            setTodayEarnings(todaySum);
+            
+            const todayTrips = myTrips.filter(t => t.date.startsWith(today));
+            const breakdown = { uber: 0, indrive: 0, goride: 0 };
+            let todaySum = 0;
+
+            todayTrips.forEach(t => {
+                const amount = t.netPayout || t.amount || 0;
+                todaySum += amount;
+                
+                const platform = (t.platform || '').toLowerCase();
+                if (platform === 'uber') {
+                    breakdown.uber += amount;
+                } else if (platform === 'indrive') {
+                    breakdown.indrive += amount;
+                } else {
+                    // GoRide includes Private, Cash, Other, and implicit app trips
+                    breakdown.goride += amount;
+                }
+            });
+
+            setTodayEarnings({ total: todaySum, breakdown });
 
             // Calculate Weekly Earnings
             const weeklySum = myTrips
@@ -225,6 +255,10 @@ export function DriverDashboard() {
     endLocation?: string;
     endCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
+    stops?: TripStop[];
+    totalWaitTime?: number;
+    distance?: number;
+    isOffline?: boolean;
   }) => {
     setTripInitialData({
       startTime: data.startTime,
@@ -237,7 +271,11 @@ export function DriverDashboard() {
       pickupCoords: data.startCoords,
       endLocation: data.endLocation, // Pass through
       endCoords: data.endCoords, // Pass through
-      route: data.route
+      route: data.route,
+      stops: data.stops,
+      totalWaitTime: data.totalWaitTime,
+      distance: data.distance,
+      isOffline: data.isOffline
     } as any);
     setManualTripFormOpen(true);
   };
@@ -357,8 +395,6 @@ export function DriverDashboard() {
         
         <TabsContent value="overview">
           <div className="space-y-6">
-            <TripTimer onComplete={handleTripComplete} />
-            
             <DriverOverview 
               tierState={tierState}
               metrics={metrics}
@@ -373,6 +409,8 @@ export function DriverDashboard() {
               onClaimId={handleClaimId}
               onAction={handleAction}
             />
+            
+            <TripTimer onComplete={handleTripComplete} />
           </div>
         </TabsContent>
         

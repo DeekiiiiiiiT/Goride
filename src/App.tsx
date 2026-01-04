@@ -15,6 +15,7 @@ import { TagInventory } from './pages/TagInventory';
 import { ClaimableLoss } from './pages/ClaimableLoss';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { TierConfigPage } from './components/tiers/TierConfigPage';
+import { PerformanceDashboard } from './components/performance/PerformanceDashboard';
 import { FuelManagement } from './pages/FuelManagement';
 
 // Driver Portal Components
@@ -123,6 +124,7 @@ function AppContent() {
       {currentPage === 'tag-inventory' && <TagInventory />}
       {currentPage === 'claimable-loss' && <ClaimableLoss />}
       {currentPage === 'tier-config' && <TierConfigPage />}
+      {currentPage === 'performance' && <PerformanceDashboard />}
       {currentPage === 'fuel-management' && <FuelManagement />}
       {currentPage === 'user-management' && <UserManagementPage />}
       {currentPage === 'settings' && <SettingsPage />}
@@ -130,10 +132,14 @@ function AppContent() {
   );
 }
 
+import { OfflineProvider } from './components/providers/OfflineProvider';
+
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <OfflineProvider>
+        <AppContent />
+      </OfflineProvider>
     </AuthProvider>
   );
 }

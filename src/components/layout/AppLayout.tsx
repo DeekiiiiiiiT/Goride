@@ -78,7 +78,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
 
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
-  const isDrivingOpen = ['drivers', 'tier-config'].includes(currentPage);
+  const isDrivingOpen = ['drivers', 'tier-config', 'performance'].includes(currentPage);
 
   return (
     <Sidebar className="border-r border-slate-200 dark:border-slate-800">
@@ -127,6 +127,13 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                     <SidebarMenuSubButton asChild isActive={currentPage === 'tier-config'} onClick={() => onNavigate?.('tier-config')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Tier Config</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'performance'} onClick={() => onNavigate?.('performance')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Performance</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

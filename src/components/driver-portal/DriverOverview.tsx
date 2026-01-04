@@ -19,7 +19,8 @@ import {
   User,
   HelpCircle,
   ShieldAlert,
-  PlusCircle
+  PlusCircle,
+  ChevronRight
 } from "lucide-react";
 import { 
   Drawer,
@@ -43,7 +44,14 @@ interface DriverOverviewProps {
     cumulativeEarnings: number;
   };
   metrics: DriverMetric | null;
-  todayEarnings: number;
+  todayEarnings: {
+    total: number;
+    breakdown: {
+      uber: number;
+      indrive: number;
+      goride: number;
+    };
+  };
   goals: DriverGoals | null;
   recentTrip: Trip | null;
   driverRecord: any;
@@ -293,129 +301,44 @@ export function DriverOverview({
           </div>
       )}
 
-      {/* Today's Stats */}
-      <div className="grid grid-cols-1 gap-4">
+      {/* Today's Stats Breakdown */}
+      <div className="grid grid-cols-3 gap-3">
+        {/* GoRide */}
+        <Card className="bg-indigo-50/50 border-indigo-100 dark:bg-indigo-900/10 dark:border-indigo-800">
+           <CardContent className="p-3 py-4 flex flex-col items-center text-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200 mb-1">GoRide</span>
+              <span className="text-xl font-bold text-indigo-700 dark:text-indigo-300">
+                  ${todayEarnings.breakdown.goride.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+           </CardContent>
+        </Card>
+
+        {/* Uber */}
         <Card>
-          <CardContent className="p-4 flex flex-col items-center justify-center text-center">
-             <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
-             </div>
-             <span className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                ${todayEarnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-             </span>
-             <span className="text-xs text-slate-500">Earned Today</span>
-          </CardContent>
+           <CardContent className="p-3 py-4 flex flex-col items-center text-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Uber</span>
+              <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                  ${todayEarnings.breakdown.uber.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+           </CardContent>
+        </Card>
+
+        {/* InDrive */}
+        <Card>
+           <CardContent className="p-3 py-4 flex flex-col items-center text-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">InDrive</span>
+              <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                  ${todayEarnings.breakdown.indrive.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+           </CardContent>
         </Card>
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-4 gap-3">
-         <button 
-           onClick={() => onAction('Fuel Log')}
-           className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
-         >
-            <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center mb-2">
-               <Fuel className="h-5 w-5 text-orange-600" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Fuel</span>
-         </button>
-         <button 
-           onClick={() => onAction('Log Toll')}
-           className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
-         >
-            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center mb-2">
-               <Ticket className="h-5 w-5 text-blue-600" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Toll</span>
-         </button>
-         <button 
-           onClick={() => onAction('Log Trip')}
-           className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
-         >
-            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
-               <PlusCircle className="h-5 w-5 text-emerald-600" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Trip</span>
-         </button>
-         <Drawer>
-           <DrawerTrigger asChild>
-             <button 
-               className="flex flex-col items-center justify-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 transition-transform"
-             >
-                <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center mb-2">
-                   <AlertTriangle className="h-5 w-5 text-rose-600" />
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Report</span>
-             </button>
-           </DrawerTrigger>
-           <DrawerContent>
-             <div className="mx-auto w-full max-w-sm">
-               <DrawerHeader>
-                 <DrawerTitle>Report an Issue</DrawerTitle>
-                 <DrawerDescription>Select the type of issue you want to report.</DrawerDescription>
-               </DrawerHeader>
-               <div className="p-4 grid grid-cols-2 gap-3">
-                 <button onClick={() => onAction('Report: Item Replacement')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-indigo-100 hover:bg-indigo-50 transition-all">
-                    <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
-                        <RefreshCw className="h-6 w-6 text-indigo-600" />
-                    </div>
-                    <span className="font-semibold text-slate-700 text-sm text-center">Item Replacement</span>
-                 </button>
-                 
-                 <button onClick={() => onAction('Report: Accident')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-rose-100 hover:bg-rose-50 transition-all">
-                    <div className="h-12 w-12 rounded-full bg-rose-100 flex items-center justify-center">
-                        <Car className="h-6 w-6 text-rose-600" />
-                    </div>
-                    <span className="font-semibold text-slate-700 text-sm text-center">Had an accident?</span>
-                 </button>
-
-                 <button onClick={() => onAction('Report: Vehicle Stolen')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-100 transition-all">
-                    <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center">
-                        <ShieldAlert className="h-6 w-6 text-slate-600" />
-                    </div>
-                    <span className="font-semibold text-slate-700 text-sm text-center">Vehicle Stolen</span>
-                 </button>
-
-                 <button onClick={() => onAction('Report: Rider Damage')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-orange-100 hover:bg-orange-50 transition-all">
-                    <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
-                        <Users className="h-6 w-6 text-orange-600" />
-                    </div>
-                    <span className="font-semibold text-slate-700 text-sm text-center">Rider Damages</span>
-                 </button>
-
-                 <button onClick={() => onAction('Report: Driver Damage')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-sky-100 hover:bg-sky-50 transition-all">
-                    <div className="h-12 w-12 rounded-full bg-sky-100 flex items-center justify-center">
-                        <User className="h-6 w-6 text-sky-600" />
-                    </div>
-                    <span className="font-semibold text-slate-700 text-sm text-center">Driver Damages</span>
-                 </button>
-
-                 <button onClick={() => onAction('Report: Other')} className="col-span-2 flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50 transition-all">
-                    <HelpCircle className="h-5 w-5 text-slate-400" />
-                    <span className="font-semibold text-slate-600 text-sm">Other</span>
-                 </button>
-               </div>
-               <DrawerFooter>
-                 <DrawerClose asChild>
-                   <Button variant="outline">Cancel</Button>
-                 </DrawerClose>
-               </DrawerFooter>
-             </div>
-           </DrawerContent>
-         </Drawer>
-      </div>
 
 
 
-      {/* Action Banner */}
-      <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg flex items-start gap-3">
-         <ShieldCheck className="h-5 w-5 text-indigo-600 mt-0.5 shrink-0" />
-         <div className="flex-1">
-            <h4 className="font-semibold text-indigo-900 dark:text-indigo-100 text-sm">Vehicle Inspection Due</h4>
-            <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">Your annual vehicle inspection is due in 5 days.</p>
-         </div>
-         <Button size="sm" variant="outline" className="text-xs bg-white h-8" onClick={() => onAction('Service Request')}>View</Button>
-      </div>
+
+
     </div>
   );
 }

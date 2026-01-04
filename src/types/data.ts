@@ -1,4 +1,4 @@
-import { RoutePoint } from './tripSession';
+import { RoutePoint, TripStop } from './tripSession';
 
 export interface Trip {
   id: string;
@@ -44,6 +44,8 @@ export interface Trip {
   dropoffArea?: string; // Extracted from address
   efficiency?: number;  // Amount / Distance
   route?: RoutePoint[]; // Phase 2: Live Trip Route Data
+  stops?: TripStop[];   // Phase 2.1: Multi-Stop Support
+  totalWaitTime?: number; // Phase 2.1: Wait Time Tracking
   
   // Phase 1 (Trip Logs Enhancement): Enhanced Data Fields
   requestTime?: string; // ISO date string

@@ -660,5 +660,17 @@ export const api = {
     // 2. Return updated objects
     // Note: We DO NOT modify the trip's financials.
     return { transaction: txToSave, trip };
+  },
+
+  async getPerformanceReport(startDate: string, endDate: string, options?: { dailyRideTarget?: number, dailyEarningsTarget?: number }): Promise<any[]> {
+    const params = new URLSearchParams({ startDate, endDate });
+    if (options?.dailyRideTarget) params.append('dailyRideTarget', options.dailyRideTarget.toString());
+    if (options?.dailyEarningsTarget) params.append('dailyEarningsTarget', options.dailyEarningsTarget.toString());
+
+    const response = await fetchWithRetry(`${BASE_URL}/performance-report?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch performance report");
+    return response.json();
   }
 };

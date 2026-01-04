@@ -17,8 +17,24 @@ import {
   Moon,
   Globe,
   Download,
-  Loader2
+  Loader2,
+  AlertTriangle,
+  RefreshCw,
+  Users,
+  HelpCircle,
+  CreditCard
 } from "lucide-react";
+import { 
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+  DrawerFooter,
+  DrawerClose,
+} from "../ui/drawer";
+import { toast } from "sonner@2.0.3";
 import { useAuth } from "../auth/AuthContext";
 import { useCurrentDriver } from "../../hooks/useCurrentDriver";
 import { api } from "../../services/api";
@@ -27,6 +43,13 @@ import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Separator } from "../ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 
 interface DriverProfileProps {
     onLogout: () => void;
@@ -42,6 +65,49 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
   const [metrics, setMetrics] = useState<any | null>(null);
   const [activeSetting, setActiveSetting] = useState<SettingView>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  
+  const [bankInfo, setBankInfo] = useState({
+      accountName: '',
+      bankName: '',
+      branch: '',
+      accountNumber: '',
+      accountType: 'Savings'
+  });
+  const [isSavingBankInfo, setIsSavingBankInfo] = useState(false);
+  const [hasSavedBankInfo, setHasSavedBankInfo] = useState(false);
+
+  useEffect(() => {
+      if (driverRecord?.bankInfo) {
+          setBankInfo(driverRecord.bankInfo);
+          // Check if key fields are present to consider it 'saved'
+          if (driverRecord.bankInfo.accountNumber) {
+              setHasSavedBankInfo(true);
+          }
+      }
+  }, [driverRecord]);
+  
+  const handleBankInfoChange = (field: string, value: string) => {
+      setBankInfo(prev => ({ ...prev, [field]: value }));
+  };
+
+  const saveBankInfo = async () => {
+      if (!driverRecord) return;
+      setIsSavingBankInfo(true);
+      try {
+          const updatedDriver = {
+              ...driverRecord,
+              bankInfo
+          };
+          await api.saveDriver(updatedDriver);
+          toast.success("Bank information saved successfully");
+          setHasSavedBankInfo(true);
+      } catch (e) {
+          console.error("Failed to save bank info", e);
+          toast.error("Failed to save bank information");
+      } finally {
+          setIsSavingBankInfo(false);
+      }
+  };
   
   const name = driverRecord?.name || user?.user_metadata?.name || 'Driver';
   const email = driverRecord?.email || user?.email || 'No Email';
@@ -109,6 +175,12 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
   const insuranceStatus = getDocStatus(vehicle?.insuranceExpiry);
   const fitnessStatus = getDocStatus(vehicle?.fitnessExpiry);
   const regStatus = getDocStatus(vehicle?.registrationExpiry);
+
+  const handleAction = (action: string) => {
+     toast.success(`${action} flow started`, {
+        description: "This feature is coming soon."
+     });
+  };
 
   const handleLogoutClick = async () => {
     try {
@@ -222,6 +294,71 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
                  label="Tax Information" 
                  onClick={() => setActiveSetting('tax')}
                />
+               <Drawer>
+                 <DrawerTrigger asChild>
+                    <div className="p-4 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer group">
+                       <div className="text-slate-500 group-hover:text-rose-500 transition-colors">
+                          <AlertTriangle className="h-4 w-4" />
+                       </div>
+                       <span className="flex-1 text-sm font-medium text-slate-900 group-hover:text-rose-600 transition-colors">Report Issue</span>
+                       <ChevronRight className="h-4 w-4 text-slate-300" />
+                    </div>
+                 </DrawerTrigger>
+                 <DrawerContent>
+                   <div className="mx-auto w-full max-w-sm">
+                     <DrawerHeader>
+                       <DrawerTitle>Report an Issue</DrawerTitle>
+                       <DrawerDescription>Select the type of issue you want to report.</DrawerDescription>
+                     </DrawerHeader>
+                     <div className="p-4 grid grid-cols-2 gap-3">
+                       <button onClick={() => handleAction('Report: Item Replacement')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-indigo-100 hover:bg-indigo-50 transition-all">
+                          <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                              <RefreshCw className="h-6 w-6 text-indigo-600" />
+                          </div>
+                          <span className="font-semibold text-slate-700 text-sm text-center">Item Replacement</span>
+                       </button>
+                       
+                       <button onClick={() => handleAction('Report: Accident')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-rose-100 hover:bg-rose-50 transition-all">
+                          <div className="h-12 w-12 rounded-full bg-rose-100 flex items-center justify-center">
+                              <Car className="h-6 w-6 text-rose-600" />
+                          </div>
+                          <span className="font-semibold text-slate-700 text-sm text-center">Had an accident?</span>
+                       </button>
+
+                       <button onClick={() => handleAction('Report: Vehicle Stolen')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-100 transition-all">
+                          <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center">
+                              <ShieldAlert className="h-6 w-6 text-slate-600" />
+                          </div>
+                          <span className="font-semibold text-slate-700 text-sm text-center">Vehicle Stolen</span>
+                       </button>
+
+                       <button onClick={() => handleAction('Report: Rider Damage')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-orange-100 hover:bg-orange-50 transition-all">
+                          <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
+                              <Users className="h-6 w-6 text-orange-600" />
+                          </div>
+                          <span className="font-semibold text-slate-700 text-sm text-center">Rider Damages</span>
+                       </button>
+
+                       <button onClick={() => handleAction('Report: Driver Damage')} className="flex flex-col items-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-sky-100 hover:bg-sky-50 transition-all">
+                          <div className="h-12 w-12 rounded-full bg-sky-100 flex items-center justify-center">
+                              <User className="h-6 w-6 text-sky-600" />
+                          </div>
+                          <span className="font-semibold text-slate-700 text-sm text-center">Driver Damages</span>
+                       </button>
+
+                       <button onClick={() => handleAction('Report: Other')} className="col-span-2 flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50 transition-all">
+                          <HelpCircle className="h-5 w-5 text-slate-400" />
+                          <span className="font-semibold text-slate-600 text-sm">Other</span>
+                       </button>
+                     </div>
+                     <DrawerFooter>
+                       <DrawerClose asChild>
+                         <Button variant="outline">Cancel</Button>
+                       </DrawerClose>
+                     </DrawerFooter>
+                   </div>
+                 </DrawerContent>
+               </Drawer>
             </CardContent>
          </Card>
       </div>
@@ -278,8 +415,102 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
                   <Label>Driver ID</Label>
                   <Input value={idShort} readOnly className="bg-slate-50 font-mono" />
                </div>
-               <Separator />
+               
                <Button variant="outline" className="w-full">Request Change</Button>
+
+               <Separator className="my-4" />
+
+               <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                      <CreditCard className="h-4 w-4 text-slate-500" />
+                      <h4 className="font-semibold text-slate-900">Bank Account Information</h4>
+                  </div>
+                  
+                  <div className="space-y-2">
+                      <Label>Name on Account</Label>
+                      <Input 
+                        placeholder="First Name Last Name"
+                        value={bankInfo.accountName}
+                        onChange={(e) => handleBankInfoChange('accountName', e.target.value)}
+                        readOnly={hasSavedBankInfo}
+                        className={hasSavedBankInfo ? "bg-slate-50" : ""}
+                      />
+                  </div>
+                  
+                  <div className="space-y-2">
+                      <Label>Bank Name</Label>
+                      <Input 
+                        placeholder="e.g. Chase"
+                        value={bankInfo.bankName}
+                        onChange={(e) => handleBankInfoChange('bankName', e.target.value)}
+                        readOnly={hasSavedBankInfo}
+                        className={hasSavedBankInfo ? "bg-slate-50" : ""}
+                      />
+                  </div>
+                  
+                  <div className="space-y-2">
+                      <Label>Branch</Label>
+                      <Input 
+                        placeholder="e.g. Downtown"
+                        value={bankInfo.branch}
+                        onChange={(e) => handleBankInfoChange('branch', e.target.value)}
+                        readOnly={hasSavedBankInfo}
+                        className={hasSavedBankInfo ? "bg-slate-50" : ""}
+                      />
+                  </div>
+                  
+                  <div className="space-y-2">
+                      <Label>Account Number</Label>
+                      <Input 
+                        placeholder="0000000000"
+                        value={bankInfo.accountNumber}
+                        onChange={(e) => handleBankInfoChange('accountNumber', e.target.value)}
+                        readOnly={hasSavedBankInfo}
+                        className={hasSavedBankInfo ? "bg-slate-50" : ""}
+                      />
+                  </div>
+                  
+                  <div className="space-y-2">
+                      <Label>Account Type</Label>
+                      {hasSavedBankInfo ? (
+                          <Input 
+                             value={bankInfo.accountType}
+                             readOnly
+                             className="bg-slate-50"
+                          />
+                      ) : (
+                          <Select 
+                            value={bankInfo.accountType} 
+                            onValueChange={(val) => handleBankInfoChange('accountType', val)}
+                          >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Savings">Savings</SelectItem>
+                                <SelectItem value="Checking">Checking</SelectItem>
+                            </SelectContent>
+                          </Select>
+                      )}
+                  </div>
+
+                  {hasSavedBankInfo ? (
+                     <Button variant="outline" className="w-full" onClick={() => handleAction('Change Bank Info')}>Request Change</Button>
+                  ) : (
+                      <Button 
+                        className="w-full bg-indigo-600 hover:bg-indigo-700" 
+                        onClick={saveBankInfo}
+                        disabled={isSavingBankInfo}
+                      >
+                        {isSavingBankInfo ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Saving...
+                            </>
+                        ) : "Save Bank Information"}
+                      </Button>
+                  )}
+               </div>
             </div>
           )}
 

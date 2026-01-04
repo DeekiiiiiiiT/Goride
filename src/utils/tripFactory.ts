@@ -1,5 +1,5 @@
 import { Trip } from '../types/data';
-import { RoutePoint } from '../types/tripSession';
+import { RoutePoint, TripStop } from '../types/tripSession';
 
 export interface ManualTripInput {
   date: string; // YYYY-MM-DD
@@ -7,13 +7,15 @@ export interface ManualTripInput {
   endTime?: string; // HH:mm
   duration?: number; // minutes
   amount: number;
-  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Private' | 'Cash' | 'Other';
+  platform: 'GoRide' | 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Private' | 'Cash' | 'Other';
   pickupLocation?: string;
   dropoffLocation?: string;
   notes?: string;
   distance?: number;
   vehicleId?: string;
   route?: RoutePoint[];
+  stops?: TripStop[];
+  totalWaitTime?: number; // seconds
 }
 
 export function createManualTrip(data: ManualTripInput, driverId: string, driverName?: string): Trip {
@@ -57,6 +59,8 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     vehicleId: data.vehicleId,
     notes: data.notes || '',
     route: data.route,
+    stops: data.stops,
+    totalWaitTime: data.totalWaitTime,
     
     // Financials
     netPayout: Number(data.amount), // For manual trips, we assume the entered amount is what the driver got

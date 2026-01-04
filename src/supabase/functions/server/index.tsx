@@ -5,6 +5,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
+import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { Buffer } from "node:buffer";
 
 const app = new Hono();
@@ -2476,6 +2477,131 @@ app.delete("/make-server-37f42386/equipment/:vehicleId/:id", async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
+});
+
+// Map Match Endpoint (OSRM Proxy)
+app.post("/make-server-37f42386/map-match", async (c) => {
+  try {
+    const { points } = await c.req.json();
+    if (!Array.isArray(points) || points.length === 0) {
+      return c.json({ error: "Points array is required" }, 400);
+    }
+
+    // Filter valid points
+    const validPoints = points.filter((p: any) => p && !isNaN(p.lat) && !isNaN(p.lon));
+    if (validPoints.length < 2) {
+      return c.json({ error: "At least 2 valid points required" }, 400);
+    }
+
+    // Chunking Logic (80 points per chunk to be safe within 100 limit and URL length)
+    const CHUNK_SIZE = 80;
+    const chunks = [];
+    
+    // Create chunks with 1 point overlap
+    for (let i = 0; i < validPoints.length - 1; i += (CHUNK_SIZE - 1)) {
+        const chunk = validPoints.slice(i, Math.min(i + CHUNK_SIZE, validPoints.length));
+        chunks.push(chunk);
+    }
+    
+    // Edge case: if we have points but loop didn't run (e.g. < 80 points), we need at least one chunk. 
+    // But slice logic above covers it: i=0. i < len-1. 
+    // If len=2, CHUNK=80. slice(0, 80). i becomes 79. Loop ends. Correct.
+    
+    const responses = await Promise.all(chunks.map(async (chunk) => {
+        // Format: lon,lat;lon,lat
+        const coords = chunk.map((p: any) => `${p.lon},${p.lat}`).join(';');
+        const timestamps = chunk.map((p: any) => Math.floor(p.timestamp / 1000)).join(';');
+        
+        // Using public OSRM server. 
+        const url = `https://router.project-osrm.org/match/v1/driving/${coords}?timestamps=${timestamps}&overview=full&geometries=geojson&steps=false&annotations=true`;
+        
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`OSRM Match failed: ${res.statusText}`);
+        }
+        return res.json();
+    }));
+
+    // Result Stitching
+    let totalDistance = 0;
+    let totalDuration = 0;
+    const stitchedCoordinates: any[] = [];
+    let confidence = 0;
+    
+    responses.forEach((res, index) => {
+        if (res.code !== 'Ok' || !res.matchings || res.matchings.length === 0) return;
+        
+        const match = res.matchings[0]; // Take best match
+        
+        totalDistance += match.distance;
+        totalDuration += match.duration;
+        confidence += match.confidence;
+
+        // Geometry Stitching
+        if (match.geometry && match.geometry.coordinates) {
+             const coords = match.geometry.coordinates;
+             // If this is not the first chunk, remove the first coordinate to avoid duplicate vertex at join
+             if (index > 0 && stitchedCoordinates.length > 0) {
+                 stitchedCoordinates.push(...coords.slice(1));
+             } else {
+                 stitchedCoordinates.push(...coords);
+             }
+        }
+    });
+
+    // Normalize confidence
+    if (responses.length > 0) {
+        confidence = confidence / responses.length;
+    }
+
+    return c.json({
+        success: true,
+        data: {
+            snappedRoute: stitchedCoordinates.map((c: any) => ({ lat: c[1], lon: c[0] })), // GeoJSON is [lon, lat]
+            totalDistance, // Meters
+            totalDuration, // Seconds
+            confidence
+        }
+    });
+
+  } catch (e: any) {
+    console.error("Map Matching Error:", e);
+    return c.json({ success: false, error: e.message });
+  }
+});
+
+// Performance Report Endpoint
+app.get("/make-server-37f42386/performance-report", async (c) => {
+    try {
+        const startDate = c.req.query("startDate");
+        const endDate = c.req.query("endDate");
+        
+        if (!startDate || !endDate) {
+            return c.json({ error: "startDate and endDate are required" }, 400);
+        }
+
+        // Fetch Data
+        const trips = await kv.getByPrefix("trip:");
+        const drivers = await kv.getByPrefix("driver:");
+        
+        // Use Defaults or Query Params for Quota
+        // In future phase, fetch from kv_store
+        const dailyRideTarget = parseInt(c.req.query("dailyRideTarget") || "10");
+        const dailyEarningsTarget = parseInt(c.req.query("dailyEarningsTarget") || "0");
+
+        const report = generatePerformanceReport(
+            Array.isArray(trips) ? trips : [], 
+            Array.isArray(drivers) ? drivers : [], 
+            startDate, 
+            endDate,
+            { dailyRideTarget, dailyEarningsTarget }
+        );
+        
+        return c.json(report);
+    } catch (e: any) {
+        console.error("Performance Report Error:", e);
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 Deno.serve(app.fetch);

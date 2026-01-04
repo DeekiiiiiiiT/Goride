@@ -2,11 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, Timer, Clock, MapPin, Loader2, Navigation, Map as MapIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
-import { TripSession, RoutePoint } from '../../types/tripSession';
-import { getCurrentPosition, reverseGeocode } from '../../utils/locationService';
+import { TripSession, RoutePoint, TripStatus, TripStop } from '../../types/tripSession';
+import { getCurrentPosition, reverseGeocode, createStop, calculatePathDistance } from '../../utils/locationService';
 import { useTripTracker } from '../../hooks/useTripTracker';
 import { LeafletMap } from '../maps/LeafletMap';
+import { StopList } from './StopList';
 import { toast } from 'sonner@2.0.3';
+import { mapMatchService } from '../../services/mapMatchService';
+import { useOffline } from '../providers/OfflineProvider';
 
 interface TripTimerProps {
   onComplete: (data: {
@@ -19,22 +22,46 @@ interface TripTimerProps {
     endLocation?: string;
     endCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
+    stops?: TripStop[]; // Phase 2: Multi-Stop Support
+    totalWaitTime?: number; // Phase 2: Wait Time Tracking
+    distance?: number; // Phase 3: Snapped Distance (KM)
+    isOffline?: boolean;
   }) => void;
 }
 
 const STORAGE_KEY = 'current_trip_session';
 
+const formatElapsedTime = (totalSeconds: number) => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const pad = (num: number) => num.toString().padStart(2, '0');
+  
+  if (hours > 0) {
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  }
+  return `${pad(minutes)}:${pad(seconds)}`;
+};
+
 export function TripTimer({ onComplete }: TripTimerProps) {
-  const [isActive, setIsActive] = useState(false);
+  const { isOnline } = useOffline();
+  const [tripStatus, setTripStatus] = useState<TripStatus>('IDLE');
+  const [stops, setStops] = useState<TripStop[]>([]);
+  const [currentStop, setCurrentStop] = useState<TripStop | null>(null);
+  
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false); // New state for stopping loader
   const [showMap, setShowMap] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [waitSeconds, setWaitSeconds] = useState(0);
   const [startLocation, setStartLocation] = useState<string | null>(null);
   const [startCoords, setStartCoords] = useState<{ lat: number; lon: number } | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
+  const isActive = tripStatus !== 'IDLE';
+
   // Tracking Hook
   const { 
     startTracking, 
@@ -50,9 +77,29 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     if (storedSession) {
       try {
         const session: TripSession = JSON.parse(storedSession);
-        if (session.isActive && session.startTime) {
+        
+        // Check for stale session (> 12 hours)
+        const now = Date.now();
+        const ageHours = (now - session.startTime!) / (1000 * 60 * 60);
+        
+        if (ageHours > 12) {
+            console.log("Clearing stale trip session");
+            localStorage.removeItem(STORAGE_KEY);
+            return;
+        }
+
+        const isActiveSession = session.isActive || (session.status && session.status !== 'IDLE');
+
+        if (isActiveSession && session.startTime) {
           setStartTime(session.startTime);
-          setIsActive(true);
+          
+          // Restore status with legacy fallback
+          setTripStatus(session.status || 'DRIVING');
+          
+          // Restore stops data
+          setStops(session.stops || []);
+          setCurrentStop(session.currentStop || null);
+
           setStartLocation(session.startLocation);
           setStartCoords(session.startCoords);
           
@@ -63,7 +110,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
           }
           
           // Calculate elapsed time immediately so we don't start at 0
-          const now = Date.now();
           const seconds = Math.floor((now - session.startTime) / 1000);
           setElapsedSeconds(seconds);
         }
@@ -79,15 +125,18 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     if (isActive && startTime) {
       const session: TripSession = {
         isActive,
+        status: tripStatus,
         startTime,
         startLocation,
         startCoords,
         vehicleId: null,
-        route // Save current route
+        route, // Save current route
+        stops,
+        currentStop
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
     }
-  }, [route, isActive, startTime, startLocation, startCoords]);
+  }, [route, isActive, tripStatus, startTime, startLocation, startCoords, stops, currentStop]);
 
   // Timer interval
   useEffect(() => {
@@ -96,6 +145,12 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         const now = Date.now();
         const seconds = Math.floor((now - startTime) / 1000);
         setElapsedSeconds(seconds);
+        
+        if (tripStatus === 'WAITING' && currentStop) {
+           setWaitSeconds(Math.floor((now - currentStop.arrivalTime) / 1000));
+        } else {
+           setWaitSeconds(0);
+        }
       }, 1000);
     } else {
       if (intervalRef.current) {
@@ -108,7 +163,57 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isActive, startTime]);
+  }, [isActive, startTime, tripStatus, currentStop]);
+
+  // Phase 3: Stop Handlers
+  const handleArriveAtStop = async () => {
+    try {
+      const position = await getCurrentPosition();
+      const address = await reverseGeocode(position.latitude, position.longitude);
+      
+      const stop = createStop(address, { lat: position.latitude, lon: position.longitude });
+      
+      setCurrentStop(stop);
+      setTripStatus('WAITING');
+      toast.info("Arrived at stop. Wait timer started.");
+    } catch (error) {
+      console.error("Failed to record stop:", error);
+      
+      // Fallback logic
+      let fallbackLat = 0;
+      let fallbackLon = 0;
+      
+      if (currentLocation) {
+          fallbackLat = currentLocation.lat;
+          fallbackLon = currentLocation.lng;
+      }
+      
+      const fallbackStop = createStop("Location Unknown", { lat: fallbackLat, lon: fallbackLon });
+      
+      setCurrentStop(fallbackStop);
+      setTripStatus('WAITING');
+      toast.warning("GPS check failed, using approximate location.");
+    }
+  };
+
+  const handleResumeTrip = async () => {
+    if (!currentStop) return;
+
+    const now = Date.now();
+    const durationSeconds = Math.floor((now - currentStop.arrivalTime) / 1000);
+    
+    const finalizedStop: TripStop = {
+        ...currentStop,
+        departureTime: now,
+        durationSeconds: durationSeconds,
+        isOverThreshold: durationSeconds > 120
+    };
+
+    setStops(prev => [...prev, finalizedStop]);
+    setCurrentStop(null);
+    setTripStatus('DRIVING');
+    toast.success(`Stop completed. Duration: ${formatElapsedTime(durationSeconds)}`);
+  };
 
   const startTrip = async () => {
     setIsStarting(true);
@@ -117,11 +222,14 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     // Default session state
     let session: TripSession = {
       isActive: true,
+      status: 'DRIVING',
       startTime: now,
       startLocation: null,
       startCoords: null,
       vehicleId: null,
-      route: []
+      route: [],
+      stops: [],
+      currentStop: null
     };
 
     // Try to get location
@@ -142,8 +250,11 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
     // Start timer logic
     setStartTime(now);
-    setIsActive(true);
+    setTripStatus('DRIVING');
     setElapsedSeconds(0);
+    setWaitSeconds(0);
+    setStops([]);
+    setCurrentStop(null);
     
     // Start tracking
     startTracking();
@@ -153,12 +264,45 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     toast.success("Trip started");
   };
 
+  const cancelTrip = () => {
+    if (confirm("Are you sure you want to cancel this trip?")) {
+        stopTracking();
+        setTripStatus('IDLE');
+        setStartTime(null);
+        setElapsedSeconds(0);
+        setWaitSeconds(0);
+        setStartLocation(null);
+        setStartCoords(null);
+        setRoute([]);
+        setStops([]);
+        setCurrentStop(null);
+        localStorage.removeItem(STORAGE_KEY);
+        setIsStarting(false);
+        setIsStopping(false);
+        toast.info("Trip cancelled");
+    }
+  };
+
   const stopTrip = async () => {
     if (!startTime) return;
 
     setIsStopping(true);
     // Stop tracking first
     stopTracking();
+
+    // Close active stop if waiting
+    let finalStops = [...stops];
+    if (tripStatus === 'WAITING' && currentStop) {
+        const now = Date.now();
+        const durationSeconds = Math.floor((now - currentStop.arrivalTime) / 1000);
+        const finalizedStop: TripStop = {
+            ...currentStop,
+            departureTime: now,
+            durationSeconds: durationSeconds,
+            isOverThreshold: durationSeconds > 120
+        };
+        finalStops.push(finalizedStop);
+    }
 
     const endTimeMs = Date.now();
     const durationMinutes = Math.ceil(elapsedSeconds / 60); // Round up to nearest minute
@@ -179,18 +323,81 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     let endLocationStr: string | undefined = undefined;
     let endCoordsObj: { lat: number; lon: number } | undefined = undefined;
 
+    // Robust Start Location Recovery
+    // If startLocation is missing (e.g. GPS failed at start), try to recover from startCoords or route
+    let finalStartLocation = startLocation;
+    let finalStartCoords = startCoords;
+
+    if (!finalStartLocation) {
+        // Try startCoords first
+        if (finalStartCoords) {
+             try {
+                 finalStartLocation = await reverseGeocode(finalStartCoords.lat, finalStartCoords.lon);
+             } catch (e) {
+                 console.error("Failed to recover start location from coords", e);
+             }
+        } 
+        // Fallback to first route point
+        else if (route.length > 0) {
+            const firstPoint = route[0];
+            finalStartCoords = { lat: firstPoint.lat, lon: firstPoint.lon };
+            try {
+                finalStartLocation = await reverseGeocode(firstPoint.lat, firstPoint.lon);
+            } catch (e) {
+                console.error("Failed to recover start location from route", e);
+            }
+        }
+    }
+
     try {
         const position = await getCurrentPosition();
         endCoordsObj = { lat: position.latitude, lon: position.longitude };
-        const address = await reverseGeocode(position.latitude, position.longitude);
-        endLocationStr = address;
-        toast.success("Dropoff location detected: " + address.split(',')[0]);
+        
+        if (isOnline) {
+          const address = await reverseGeocode(position.latitude, position.longitude);
+          endLocationStr = address;
+          toast.success("Dropoff location detected: " + address.split(',')[0]);
+        } else {
+          endLocationStr = `Lat: ${position.latitude.toFixed(5)}, Lon: ${position.longitude.toFixed(5)}`;
+          toast.info("Offline: Dropoff location recorded");
+        }
     } catch (e) {
         console.error("Failed to get dropoff location", e);
         // Fallback: use last point from route if available
         if (route.length > 0) {
             const lastPoint = route[route.length - 1];
             endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lng };
+            endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${lastPoint.lng.toFixed(5)}`;
+        }
+    }
+
+    // Phase 3: Snap to Road
+    let processedRoute = route;
+    let processedDistanceKm: number | undefined = undefined;
+
+    if (route.length >= 2) {
+        if (isOnline) {
+          try {
+              const result = await mapMatchService.snapToRoad(route);
+              if (result) {
+                  processedRoute = result.snappedRoute.map((pt: any, idx: number) => ({
+                      lat: pt.lat,
+                      lon: pt.lon,
+                      timestamp: route[0]?.timestamp ? route[0].timestamp + (idx * 1000) : Date.now(),
+                      speed: 0,
+                      heading: 0,
+                      accuracy: 0
+                  }));
+                  processedDistanceKm = result.totalDistance / 1000;
+              }
+          } catch (err) {
+              console.error("Snap failed", err);
+              // Fallback
+              processedDistanceKm = calculatePathDistance(route);
+          }
+        } else {
+          // Offline Mode: Use local calculation
+          processedDistanceKm = calculatePathDistance(route);
         }
     }
 
@@ -199,69 +406,54 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       endTime: formatTime(endObj),
       duration: durationMinutes,
       startDate: formatDate(startObj),
-      startLocation: startLocation || undefined,
-      startCoords: startCoords || undefined,
+      startLocation: finalStartLocation || undefined,
+      startCoords: finalStartCoords || undefined,
       endLocation: endLocationStr,
       endCoords: endCoordsObj,
-      route: route // Pass captured route
+      route: processedRoute, // Pass processed route
+      stops: finalStops,
+      totalWaitTime: finalStops.reduce((acc, stop) => acc + stop.durationSeconds, 0),
+      distance: processedDistanceKm,
+      isOffline: !isOnline
     };
 
     // Clean up
-    setIsActive(false);
+    setTripStatus('IDLE');
     setStartTime(null);
     setElapsedSeconds(0);
+    setWaitSeconds(0);
     setStartLocation(null);
     setStartCoords(null);
     setRoute([]); // Clear route state
+    setStops([]);
+    setCurrentStop(null);
     localStorage.removeItem(STORAGE_KEY);
     setIsStopping(false);
 
     onComplete(tripData);
   };
 
-  const formatElapsedTime = (totalSeconds: number) => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    const pad = (num: number) => num.toString().padStart(2, '0');
-    
-    if (hours > 0) {
-      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-    }
-    return `${pad(minutes)}:${pad(seconds)}`;
-  };
-
   if (!isActive) {
     return (
-      <Card className="bg-slate-50 border-dashed">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-              <Timer className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="font-medium text-slate-900">Start Live Trip</h3>
-              <p className="text-sm text-slate-500">Track time and location automatically</p>
-            </div>
+      <Button 
+        onClick={startTrip} 
+        disabled={isStarting}
+        className="w-full h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-500/20 rounded-2xl border-0 transition-all hover:scale-[1.01] active:scale-[0.99]"
+      >
+        {isStarting ? (
+          <div className="flex items-center gap-2 text-lg font-bold">
+            <Loader2 className="h-6 w-6 animate-spin" /> 
+            <span>Starting Engine...</span>
           </div>
-          <Button 
-            onClick={startTrip} 
-            disabled={isStarting}
-            className="gap-2 bg-blue-600 hover:bg-blue-700"
-          >
-            {isStarting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Starting...
-              </>
-            ) : (
-              <>
-                <Play className="h-4 w-4" /> Start Trip
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="flex items-center gap-3 text-xl font-bold tracking-wide">
+            <div className="p-1.5 bg-white/20 rounded-full backdrop-blur-sm">
+                <Play className="h-6 w-6 fill-current pl-1" />
+            </div>
+            <span>START NEW TRIP</span>
+          </div>
+        )}
+      </Button>
     );
   }
 
@@ -270,15 +462,31 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       <CardContent className="p-4 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center animate-pulse text-blue-600 shadow-sm">
+            <div className={`h-12 w-12 rounded-full bg-white flex items-center justify-center animate-pulse shadow-sm ${tripStatus === 'WAITING' ? (waitSeconds > 120 ? 'text-red-600' : 'text-emerald-600') : 'text-blue-600'}`}>
               <Clock className="h-6 w-6" />
             </div>
             <div>
-              <div className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-0.5">Trip in Progress</div>
-              <div className="text-2xl font-mono font-bold text-slate-900 leading-none mb-1">
-                {formatElapsedTime(elapsedSeconds)}
+              <div className={`text-xs font-semibold uppercase tracking-wider mb-0.5 ${tripStatus === 'WAITING' ? (waitSeconds > 120 ? 'text-red-600' : 'text-emerald-600') : 'text-blue-600'}`}>
+                  {tripStatus === 'WAITING' ? (waitSeconds > 120 ? 'Wait Limit Exceeded' : 'Waiting at Stop') : 'Trip in Progress'}
               </div>
-              {startLocation && (
+              
+              {tripStatus === 'WAITING' ? (
+                  <div className={`text-3xl font-mono font-bold leading-none mb-1 ${waitSeconds > 120 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {formatElapsedTime(waitSeconds)}
+                  </div>
+              ) : (
+                  <div className="text-2xl font-mono font-bold text-slate-900 leading-none mb-1">
+                    {formatElapsedTime(elapsedSeconds)}
+                  </div>
+              )}
+              
+              {tripStatus === 'WAITING' && (
+                  <div className="text-xs text-slate-500 font-medium">
+                      Total Trip: {formatElapsedTime(elapsedSeconds)}
+                  </div>
+              )}
+
+              {tripStatus !== 'WAITING' && startLocation && (
                 <div className="flex items-center gap-1 text-xs text-blue-800 max-w-[200px] truncate">
                   <MapPin className="h-3 w-3 shrink-0" />
                   <span className="truncate" title={startLocation}>{startLocation.split(',')[0]}</span>
@@ -288,6 +496,26 @@ export function TripTimer({ onComplete }: TripTimerProps) {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-2">
+            {tripStatus === 'DRIVING' && (
+              <Button 
+                onClick={handleArriveAtStop}
+                className="bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm"
+              >
+                <MapPin className="h-4 w-4" />
+                <span className="hidden sm:inline">Arrive at Stop</span>
+              </Button>
+            )}
+            
+            {tripStatus === 'WAITING' && (
+              <Button 
+                onClick={handleResumeTrip}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm"
+              >
+                <Play className="h-4 w-4" />
+                <span className="hidden sm:inline">Resume Trip</span>
+              </Button>
+            )}
+
             <Button 
               onClick={() => setShowMap(!showMap)} 
               variant="outline" 
@@ -297,6 +525,16 @@ export function TripTimer({ onComplete }: TripTimerProps) {
               <span className="hidden sm:inline">{showMap ? 'Hide Map' : 'Show Map'}</span>
             </Button>
             
+            <Button
+              onClick={cancelTrip}
+              variant="ghost"
+              className="text-red-500 hover:text-red-700 hover:bg-red-50 px-3"
+              title="Cancel Trip"
+            >
+                <span className="sr-only">Cancel</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
+            </Button>
+
             <Button 
               onClick={stopTrip} 
               variant="destructive"
@@ -321,6 +559,8 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             <LeafletMap route={route} currentLocation={currentLocation} height="250px" />
           </div>
         )}
+        
+        <StopList stops={stops} />
       </CardContent>
     </Card>
   );

@@ -1,0 +1,149 @@
+import React, { useMemo } from 'react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer
+} from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
+import { DriverPerformanceSummary } from '../../types/performance';
+import { getTopPerformers } from '../../utils/performanceUtils';
+
+interface PerformanceChartsProps {
+  drivers: DriverPerformanceSummary[];
+}
+
+export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
+  const dailyStats = useMemo(() => {
+    const stats: Record<string, { date: string; earnings: number; trips: number; count: number }> = {};
+    
+    drivers.forEach(d => {
+      d.history.forEach(day => {
+        if (!stats[day.date]) {
+          stats[day.date] = { date: day.date, earnings: 0, trips: 0, count: 0 };
+        }
+        stats[day.date].earnings += day.earnings;
+        stats[day.date].trips += day.trips;
+        stats[day.date].count += 1;
+      });
+    });
+
+    return Object.values(stats)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(d => ({
+        ...d,
+        avgEarnings: Math.round(d.earnings / d.count),
+        dateShort: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+      }));
+  }, [drivers]);
+
+  const topDrivers = useMemo(() => {
+    return getTopPerformers(drivers, 10).map(d => ({
+      name: d.driverName.split(' ')[0], // First name only for chart
+      fullName: d.driverName,
+      successRate: d.successRate,
+      earnings: d.totalEarnings
+    }));
+  }, [drivers]);
+
+  if (drivers.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle>Fleet Daily Revenue</CardTitle>
+          <CardDescription>Total earnings across all drivers over the period.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div style={{ width: '100%', height: '300px', minWidth: '300px', minHeight: '300px', display: 'block', position: 'relative' }}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={300}>
+              <BarChart data={dailyStats}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="dateShort" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                <Tooltip 
+                  cursor={{ fill: '#f4f4f5' }}
+                  content={({ active, payload, label }) => {
+                     if (active && payload && payload.length) {
+                      return (
+                        <div className="rounded-lg border bg-background p-2 shadow-sm">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="flex flex-col">
+                              <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                Date
+                              </span>
+                              <span className="font-bold text-muted-foreground">
+                                {label}
+                              </span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                Revenue
+                              </span>
+                              <span className="font-bold">
+                                ${payload[0].value?.toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                <Bar dataKey="earnings" fill="#0f172a" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle>Top Performers</CardTitle>
+          <CardDescription>Drivers with the highest quota success rates.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div style={{ width: '100%', height: '300px', minWidth: '300px', minHeight: '300px', display: 'block', position: 'relative' }}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={300}>
+              <BarChart data={topDrivers} layout="vertical" margin={{ left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                <XAxis type="number" domain={[0, 100]} unit="%" hide />
+                <YAxis dataKey="name" type="category" width={80} fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip 
+                  cursor={{ fill: '#f4f4f5' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="rounded-lg border bg-background p-2 shadow-sm">
+                          <p className="font-bold mb-1">{data.fullName}</p>
+                          <div className="flex flex-col gap-1">
+                             <div className="flex justify-between gap-4">
+                                <span className="text-xs text-muted-foreground">Success Rate</span>
+                                <span className="text-xs font-medium">{data.successRate.toFixed(1)}%</span>
+                             </div>
+                             <div className="flex justify-between gap-4">
+                                <span className="text-xs text-muted-foreground">Earnings</span>
+                                <span className="text-xs font-medium">${data.earnings.toLocaleString()}</span>
+                             </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar dataKey="successRate" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

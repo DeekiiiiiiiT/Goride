@@ -7,8 +7,21 @@ export interface RoutePoint {
   accuracy?: number | null;
 }
 
+export type TripStatus = 'IDLE' | 'DRIVING' | 'WAITING';
+
+export interface TripStop {
+  id: string;
+  location: string;       // Address
+  coordinates: { lat: number; lon: number };
+  arrivalTime: number;    // Timestamp
+  departureTime?: number; // Timestamp
+  durationSeconds: number;
+  isOverThreshold: boolean; // > 120 seconds
+}
+
 export interface TripSession {
   isActive: boolean;
+  status: TripStatus;
   startTime: number | null; // Timestamp (Date.now())
   startLocation: string | null;
   startCoords: {
@@ -17,4 +30,6 @@ export interface TripSession {
   } | null;
   vehicleId: string | null;
   route: RoutePoint[];
+  stops: TripStop[];
+  currentStop: TripStop | null;
 }

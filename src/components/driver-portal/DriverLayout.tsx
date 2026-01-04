@@ -15,6 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { NotificationCenter } from "../notifications/NotificationCenter";
 import { useAuth } from "../auth/AuthContext";
+import { OfflineStatusIndicator } from "../offline/OfflineStatusIndicator";
+import { useOffline } from "../providers/OfflineProvider";
 
 interface DriverLayoutProps {
   children: React.ReactNode;
@@ -25,21 +27,27 @@ interface DriverLayoutProps {
 
 export function DriverLayout({ children, currentPage, onNavigate, onLogout }: DriverLayoutProps) {
   const { user } = useAuth();
+  const { isOnline } = useOffline();
   const initials = user?.email ? user.email.substring(0, 2).toUpperCase() : 'DR';
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
       {/* Mobile Header */}
-      <header className="sticky top-0 z-30 flex items-center justify-between px-4 h-16 bg-indigo-600 text-white shadow-md">
+      <header className={`sticky top-0 z-30 flex items-center justify-between px-4 h-16 text-white shadow-md transition-all duration-300 ${
+        isOnline 
+          ? 'bg-indigo-600' 
+          : 'bg-slate-800 border-b-2 border-amber-500'
+      }`}>
         <div className="flex items-center gap-2">
-          <Car className="h-6 w-6 text-indigo-100" />
+          <Car className={`h-6 w-6 ${isOnline ? 'text-indigo-100' : 'text-amber-500'}`} />
           <span className="font-bold text-lg">GoRide Driver</span>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="text-indigo-100 hover:bg-indigo-500 hover:text-white rounded-full">
+          <OfflineStatusIndicator />
+          <Button variant="ghost" size="icon" className={`rounded-full ${isOnline ? 'text-indigo-100 hover:bg-indigo-500 hover:text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
             <Bell className="h-5 w-5" />
           </Button>
-          <Avatar className="h-8 w-8 border-2 border-indigo-400">
+          <Avatar className={`h-8 w-8 border-2 ${isOnline ? 'border-indigo-400' : 'border-slate-500'}`}>
             <AvatarImage src={`https://avatar.vercel.sh/${user?.email || 'driver'}`} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>

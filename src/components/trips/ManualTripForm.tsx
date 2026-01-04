@@ -18,14 +18,16 @@ import {
   SelectValue 
 } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car } from "lucide-react";
+import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff } from "lucide-react";
 import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
-import { RoutePoint } from '../../types/tripSession';
+import { RoutePoint, TripStop } from '../../types/tripSession';
 import { LocationInput } from '../ui/LocationInput';
-import { calculateRouteDistance } from '../../utils/locationService';
+import { calculateRouteDistance, calculatePathDistance } from '../../utils/locationService';
 import { LeafletMap } from '../maps/LeafletMap';
+import { StopList } from './StopList';
 import { toast } from 'sonner@2.0.3';
+import { useOffline } from '../providers/OfflineProvider';
 
 interface ManualTripFormProps {
   open: boolean;
@@ -46,6 +48,9 @@ interface ManualTripFormProps {
     endLocation?: string;
     endCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
+    stops?: TripStop[];
+    totalWaitTime?: number;
+    distance?: number;
   };
 }
 
@@ -60,6 +65,7 @@ export function ManualTripForm({
   defaultVehicleId,
   initialData
 }: ManualTripFormProps) {
+  const { isOnline, addToQueue } = useOffline();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ManualTripInput>({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -71,7 +77,9 @@ export function ManualTripForm({
     notes: '',
     distance: 0,
     vehicleId: defaultVehicleId || '',
-    route: []
+    route: [],
+    stops: [],
+    totalWaitTime: 0
   });
   
   const [selectedDriverId, setSelectedDriverId] = useState<string>(currentDriverId || '');
@@ -85,19 +93,30 @@ export function ManualTripForm({
   useEffect(() => {
     if (open) {
       if (initialData) {
+        // Calculate distance from route points if available (more accurate for multi-stop)
+        let routeDistance = 0;
+        
+        if (initialData.distance !== undefined) {
+             routeDistance = initialData.distance;
+        } else if (initialData.route && initialData.route.length > 1) {
+             routeDistance = calculatePathDistance(initialData.route);
+        }
+
         setFormData({
           date: initialData.date || format(new Date(), 'yyyy-MM-dd'),
           time: initialData.time || format(new Date(), 'HH:mm'),
           endTime: initialData.endTime,
           duration: initialData.duration,
           amount: 0,
-          platform: 'Cash',
+          platform: 'GoRide',
           pickupLocation: initialData.pickupLocation || '',
           dropoffLocation: initialData.endLocation || '',
           notes: '',
-          distance: 0,
+          distance: routeDistance,
           vehicleId: defaultVehicleId || '',
-          route: initialData.route || []
+          route: initialData.route || [],
+          stops: initialData.stops || [],
+          totalWaitTime: initialData.totalWaitTime || 0
         });
         if (initialData.pickupCoords) {
           setPickupCoords(initialData.pickupCoords);
@@ -120,7 +139,9 @@ export function ManualTripForm({
           notes: '',
           distance: 0,
           vehicleId: defaultVehicleId || '',
-          route: []
+          route: [],
+          stops: [],
+          totalWaitTime: 0
         });
         setPickupCoords(null);
         setDropoffCoords(null);
@@ -133,6 +154,9 @@ export function ManualTripForm({
   // Auto-calculate distance when both coords are set
   useEffect(() => {
     const calculateDistance = async () => {
+      // Skip if we have a live route (distance already calculated from track)
+      if (initialData?.route && initialData.route.length > 1) return;
+
       if (pickupCoords && dropoffCoords) {
         setIsCalculatingDistance(true);
         try {
@@ -159,10 +183,27 @@ export function ManualTripForm({
 
     try {
       setLoading(true);
-      await onSubmit(formData, selectedDriverId);
-      onOpenChange(false);
+      
+      if (!isOnline) {
+        addToQueue({
+          type: 'SUBMIT_TRIP',
+          payload: {
+            tripData: {}, 
+            formData: formData,
+            rawRoute: formData.route || [],
+            calculatedDistance: formData.distance || 0
+          }
+        });
+        
+        toast.success("Trip saved successfully");
+        onOpenChange(false);
+      } else {
+        await onSubmit(formData, selectedDriverId);
+        onOpenChange(false);
+      }
     } catch (error) {
       console.error("Form submission failed", error);
+      toast.error("Failed to save trip");
     } finally {
       setLoading(false);
     }
@@ -180,11 +221,11 @@ export function ManualTripForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Log Manual Trip</DialogTitle>
+          <DialogTitle>{initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>
           <DialogDescription>
-            Record a trip taken outside of integrated platforms (e.g. Cash, Private Client).
+            {initialData ? 'Review and confirm the details of your recorded trip.' : 'Record a trip taken outside of integrated platforms (e.g. Cash, Private Client).'}
           </DialogDescription>
         </DialogHeader>
 
@@ -205,21 +246,6 @@ export function ManualTripForm({
                 </SelectContent>
               </Select>
             </div>
-          )}
-
-          {/* Route Map Visualization (if available) */}
-          {formData.route && formData.route.length > 0 && (
-             <div className="space-y-2">
-               <Label>Recorded Route</Label>
-               <div className="rounded-md overflow-hidden border border-slate-200">
-                 <LeafletMap 
-                   route={formData.route} 
-                   startMarker={pickupCoords || undefined}
-                   endMarker={dropoffCoords || undefined}
-                   height="200px"
-                 />
-               </div>
-             </div>
           )}
 
           {/* Date & Time Row */}
@@ -315,7 +341,7 @@ export function ManualTripForm({
 
           {/* Amount & Platform Row */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className={initialData ? "space-y-2 col-span-2" : "space-y-2"}>
               <Label>Earnings Amount</Label>
               <div className="relative">
                 <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-600" />
@@ -331,25 +357,30 @@ export function ManualTripForm({
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Source / Platform</Label>
-              <Select 
-                value={formData.platform} 
-                onValueChange={(val: any) => handleInputChange('platform', val)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Cash">Cash Trip</SelectItem>
-                  <SelectItem value="Private">Private Client</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                  <SelectItem value="Uber">Uber (Manual)</SelectItem>
-                  <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
-                  <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            
+            {!initialData && (
+              <div className="space-y-2">
+                <Label>Source / Platform</Label>
+                <Select 
+                  value={formData.platform} 
+                  onValueChange={(val: any) => handleInputChange('platform', val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GoRide">GoRide (Live)</SelectItem>
+                    <SelectItem value="Cash">Cash Trip</SelectItem>
+                    <SelectItem value="Private">Private Client</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                    <SelectItem value="Uber">Uber (Manual)</SelectItem>
+                    <SelectItem value="InDrive">InDrive (Manual)</SelectItem>
+                    <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
+                    <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Locations */}
@@ -387,6 +418,35 @@ export function ManualTripForm({
               </div>
             </div>
           </div>
+
+          {/* Map Visualization */}
+          {((formData.route && formData.route.length > 0) || (pickupCoords && dropoffCoords)) && (
+            <div className="my-2 rounded-lg overflow-hidden border border-slate-200">
+              <LeafletMap 
+                route={formData.route || []} 
+                startMarker={pickupCoords}
+                endMarker={dropoffCoords}
+                height="150px" 
+              />
+            </div>
+          )}
+
+          {/* Stops Summary */}
+          {formData.stops && formData.stops.length > 0 && (
+             <div className="space-y-2">
+                <div className="flex justify-between items-center px-1">
+                  <Label>Trip Summary</Label>
+                  {formData.totalWaitTime !== undefined && formData.totalWaitTime > 0 && (
+                     <div className={`text-xs font-bold px-2 py-0.5 rounded border ${formData.totalWaitTime > 120 ? 'text-red-600 bg-red-50 border-red-100' : 'text-slate-600 bg-slate-50 border-slate-200'}`}>
+                        Wait: {Math.floor(formData.totalWaitTime / 60)}m {formData.totalWaitTime % 60}s
+                     </div>
+                  )}
+                </div>
+                <div className="-mt-2">
+                   <StopList stops={formData.stops} />
+                </div>
+             </div>
+          )}
 
           {/* Notes */}
           <div className="space-y-2">

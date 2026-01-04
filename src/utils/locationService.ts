@@ -1,3 +1,5 @@
+import { TripStop, RoutePoint } from '../types/tripSession';
+
 export interface GeoCoordinates {
   latitude: number;
   longitude: number;
@@ -205,6 +207,75 @@ export const calculateHaversineDistance = (
   return parseFloat((d * 1.3).toFixed(1));
 };
 
+/**
+ * Calculate total distance from a list of route points
+ * Returns distance in kilometers
+ */
+export const calculatePathDistance = (points: { lat: number; lon: number }[]): number => {
+  if (points.length < 2) return 0;
+  
+  let totalDistance = 0;
+  const R = 6371; // km
+  
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i];
+    const end = points[i+1];
+    
+    const dLat = (end.lat - start.lat) * (Math.PI / 180);
+    const dLon = (end.lon - start.lon) * (Math.PI / 180);
+    
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(start.lat * (Math.PI / 180)) *
+      Math.cos(end.lat * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+      
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    totalDistance += R * c;
+  }
+  
+  return parseFloat(totalDistance.toFixed(2));
+};
+
 function deg2rad(deg: number) {
   return deg * (Math.PI / 180);
 }
+
+/**
+ * Create a new TripStop object
+ */
+export const createStop = (
+  location: string, 
+  coordinates: { lat: number; lon: number }
+): TripStop => {
+  return {
+    id: crypto.randomUUID(),
+    location,
+    coordinates,
+    arrivalTime: Date.now(),
+    durationSeconds: 0,
+    isOverThreshold: false
+  };
+};
+
+/**
+ * Format coordinates for OSRM API (lon,lat;lon,lat)
+ */
+export const formatCoordinatesForOSRM = (points: RoutePoint[]): string => {
+  return points
+    .filter(p => p && !isNaN(p.lat) && !isNaN(p.lon))
+    .map(p => `${p.lon},${p.lat}`)
+    .join(';');
+};
+
+/**
+ * Format timestamps for OSRM API (unix timestamps separated by ;)
+ */
+export const formatTimestampsForOSRM = (points: RoutePoint[]): string => {
+  return points
+    .filter(p => p && !isNaN(p.lat) && !isNaN(p.lon))
+    .map(p => Math.floor(p.timestamp / 1000)) // Convert ms to seconds
+    .join(';');
+};
+
