@@ -8,6 +8,7 @@ import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { ReportsPage } from '../components/fuel/ReportsPage';
+import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
 import { ReconciliationTable } from '../components/fuel/ReconciliationTable';
 import { DatePickerWithRange } from '../components/ui/date-range-picker';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
@@ -208,6 +209,9 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   } else if (activeTab === 'reports') {
       pageTitle = "Fuel Reports";
       pageDescription = "View and export detailed fuel consumption reports.";
+  } else if (activeTab === 'configuration') {
+      pageTitle = "Fuel Configuration";
+      pageDescription = "Manage company and driver expense splits for fuel.";
   }
 
   return (
@@ -316,6 +320,10 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
 
       {activeTab === 'reports' && (
           <ReportsPage />
+      )}
+
+      {activeTab === 'configuration' && (
+          <FuelConfiguration />
       )}
 
       {/* Modals */}

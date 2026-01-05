@@ -199,6 +199,13 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-configuration'} onClick={() => onNavigate?.('fuel-configuration')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Configuration</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
                 </SidebarMenuSub>
               </CollapsibleContent>
             </SidebarMenuItem>

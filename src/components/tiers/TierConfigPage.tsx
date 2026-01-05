@@ -258,20 +258,20 @@ export function TierConfigPage() {
                     <div className="flex justify-center p-8">
                       <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
                     </div>
-                 ) : splitRules.length === 0 ? (
+                 ) : splitRules.filter(r => r.category !== 'Fuel').length === 0 ? (
                     <div className="text-center p-8 text-slate-500">
                       No expense categories found.
                     </div>
                  ) : (
-                   <Tabs defaultValue={splitRules[0]?.category} className="w-full">
+                   <Tabs defaultValue={splitRules.find(r => r.category !== 'Fuel')?.category} className="w-full">
                      <TabsList className="w-full justify-start h-auto p-1 bg-slate-100 dark:bg-slate-800">
-                        {splitRules.map(rule => (
+                        {splitRules.filter(r => r.category !== 'Fuel').map(rule => (
                            <TabsTrigger key={rule.id} value={rule.category} className="flex-1">
                               {rule.category}
                            </TabsTrigger>
                         ))}
                      </TabsList>
-                     {splitRules.map(rule => (
+                     {splitRules.filter(r => r.category !== 'Fuel').map(rule => (
                          <TabsContent key={rule.id} value={rule.category} className="mt-6">
                              <div className="border rounded-lg p-6 space-y-6">
                                  <div className="flex justify-between items-start">
