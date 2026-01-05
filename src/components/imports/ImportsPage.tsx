@@ -935,11 +935,8 @@ export function ImportsPage() {
                 {/* CSV Options */}
                 {[
                     { id: 'Uber', icon: 'UB', color: 'bg-black text-white' },
-                    { id: 'Lyft', icon: 'LY', color: 'bg-pink-600 text-white' },
-                    { id: 'Bolt', icon: 'BO', color: 'bg-green-500 text-white' },
                     { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white' },
                     { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white' },
-                    { id: 'Custom', icon: '?', color: 'bg-slate-500 text-white' },
                 ].map(platform => (
                     <Card 
                         key={platform.id}

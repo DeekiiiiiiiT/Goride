@@ -147,7 +147,7 @@ export function DriverOverview({
                                      {/* Tier Badge - High Fidelity */}
                                      <div className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-slate-900 text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-1.5">
                                          <Trophy className="h-3 w-3 fill-slate-900 stroke-none" />
-                                         {tierState.current.name} Tier
+                                         {tierState.current.name}
                                      </div>
                                      <span className="text-sm font-medium text-indigo-200/80 tracking-wide">
                                          {tierState.current.sharePercentage}% Profit Share
@@ -164,9 +164,6 @@ export function DriverOverview({
                                 </span>
                                 <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
                             </div>
-                            <span className="text-[10px] uppercase tracking-wider font-bold text-indigo-200 mt-1 pr-1">
-                                Rating
-                            </span>
                          </div>
                      </div>
 
@@ -174,7 +171,7 @@ export function DriverOverview({
                      <div className="space-y-3 bg-white/5 rounded-2xl p-4 border border-white/10 backdrop-blur-sm">
                          <div className="flex justify-between items-end">
                              <div className="space-y-0.5">
-                                 <span className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Next Monthly Milestone</span>
+                                 <span className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Next Milestone</span>
                                  <div className="flex items-baseline gap-2">
                                     <span className="text-lg font-bold text-white">
                                         {tierState.next?.name || 'Max Level'} Status
@@ -185,7 +182,7 @@ export function DriverOverview({
                                  </div>
                              </div>
                              <div className="text-right">
-                                 <span className="text-xs text-indigo-200 block mb-0.5">Monthly Goal</span>
+                                 <span className="text-xs text-indigo-200 block mb-0.5">Goal</span>
                                  <span className="text-sm font-bold text-white font-mono">
                                     {tierState.next ? TierCalculations.formatCurrency(tierState.next.minEarnings) : 'Goal Reached'}
                                  </span>

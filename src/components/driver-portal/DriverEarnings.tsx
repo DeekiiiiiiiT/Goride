@@ -12,7 +12,8 @@ import {
   Loader2,
   Calendar as CalendarIcon,
   Trophy,
-  Wallet
+  Wallet,
+  Info
 } from "lucide-react";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
@@ -28,6 +29,7 @@ import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { api } from '../../services/api';
 import { WeeklySettlementView } from '../drivers/WeeklySettlementView';
+import { TransactionLedgerView } from '../drivers/TransactionLedgerView';
 import {
   Sheet,
   SheetContent,
@@ -41,6 +43,7 @@ export function DriverEarnings() {
   const { user } = useAuth();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   const [loading, setLoading] = useState(true);
+  const [cashWalletView, setCashWalletView] = useState<'settlements' | 'ledger'>('settlements');
   const [trips, setTrips] = useState<Trip[]>([]);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [metrics, setMetrics] = useState<DriverMetrics[]>([]);
@@ -204,6 +207,28 @@ export function DriverEarnings() {
   // + Reimbursements (Tolls + Adjustments)
   // - Expenses (Tolls + Fuel + Other)
   const netPayout = tierState.projectedPayout + stats.reimbursements - stats.expenses;
+
+  // Calculate Net Outstanding (Lifetime)
+  const netOutstanding = React.useMemo(() => {
+      let totalCash = trips.reduce((sum, t) => sum + (Math.abs(t.cashCollected || 0)), 0);
+      
+      const latestMetric = [...metrics]
+          .sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())
+          .find(m => m.cashCollected !== undefined);
+          
+      if (latestMetric?.cashCollected && latestMetric.cashCollected > totalCash) {
+          totalCash = latestMetric.cashCollected;
+      }
+
+      const totalTolls = trips.reduce((sum, t) => {
+          if (t.tollCharges && !t.cashCollected) return sum + t.tollCharges;
+          return sum;
+      }, 0);
+
+      const totalPaid = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+      return (totalCash - totalPaid) + totalTolls;
+  }, [trips, transactions, metrics]);
 
   const processEarnings = (currentTrips: Trip[], currentTx: FinancialTransaction[]) => {
       // 1. Calculate Stats
@@ -445,19 +470,47 @@ export function DriverEarnings() {
                         Cash Wallet
                     </Button>
                 </SheetTrigger>
-                <SheetContent side="bottom" className="h-[85vh] sm:h-[90vh] overflow-y-auto">
-                    <SheetHeader className="mb-6">
+                <SheetContent side="bottom" className="h-[85vh] sm:h-[90vh] flex flex-col gap-0 p-0">
+                    <SheetHeader className="px-6 py-4 border-b bg-background z-10">
                         <SheetTitle>Cash Wallet</SheetTitle>
                         <SheetDescription>
                             Review your cash collection history and outstanding balance.
                         </SheetDescription>
+                        <div className="flex items-center p-1 bg-slate-100 rounded-lg w-fit mt-4">
+                            <button 
+                                onClick={() => setCashWalletView('settlements')} 
+                                className={cn(
+                                    "px-4 py-1.5 text-sm font-medium rounded-md transition-all", 
+                                    cashWalletView === 'settlements' ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900"
+                                )}
+                            >
+                                Weekly Settlements
+                            </button>
+                            <button 
+                                onClick={() => setCashWalletView('ledger')} 
+                                className={cn(
+                                    "px-4 py-1.5 text-sm font-medium rounded-md transition-all", 
+                                    cashWalletView === 'ledger' ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900"
+                                )}
+                            >
+                                Your Payments
+                            </button>
+                        </div>
                     </SheetHeader>
-                    <WeeklySettlementView 
-                        trips={trips}
-                        transactions={transactions}
-                        csvMetrics={metrics}
-                        readOnly={true}
-                    />
+                    <div className="flex-1 overflow-y-auto p-6">
+                        {cashWalletView === 'settlements' ? (
+                            <WeeklySettlementView 
+                                trips={trips}
+                                transactions={transactions}
+                                csvMetrics={metrics}
+                                readOnly={true}
+                            />
+                        ) : (
+                            <TransactionLedgerView 
+                                transactions={transactions}
+                            />
+                        )}
+                    </div>
                 </SheetContent>
             </Sheet>
 
@@ -495,28 +548,47 @@ export function DriverEarnings() {
                   )}
               </PopoverContent>
            </Popover>
-           <Button variant="outline" size="sm">
-             <Download className="h-4 w-4 mr-2" />
-             Statement
-           </Button>
         </div>
       </div>
 
-      <Card className="bg-slate-900 text-white border-slate-800">
-         <CardContent className="p-6">
-            <span className="text-slate-400 text-sm">
-                {date?.from ? `Estimated Payout (${format(date.from, 'MMM d')}${date.to ? ` - ${format(date.to, 'MMM d')}` : ''})` : 'Estimated Payout (All Time)'}
-            </span>
-            <div className="flex items-end justify-between mt-1 mb-6">
-               <h1 className="text-4xl font-bold">${netPayout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h1>
-               {stats.trend !== null && (
-                   <div className={cn("flex items-center text-sm font-medium mb-1", stats.trend >= 0 ? "text-emerald-400" : "text-rose-400")}>
-                      <TrendingUp className={cn("h-4 w-4 mr-1", stats.trend < 0 && "rotate-180")} />
-                      {stats.trend > 0 ? '+' : ''}{stats.trend.toFixed(1)}%
-                   </div>
-               )}
+      <Card className="bg-slate-900 text-white border-slate-800 overflow-hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 sm:divide-x sm:divide-slate-800">
+            {/* Left: Estimated Payout */}
+            <div className="p-6 flex flex-col items-center justify-center text-center">
+                <span className="text-slate-400 text-sm block mb-1">
+                    {date?.from ? `Estimated Payout (${format(date.from, 'MMM d')}${date.to ? ` - ${format(date.to, 'MMM d')}` : ''})` : 'Estimated Payout (All Time)'}
+                </span>
+                <div className="flex flex-col items-center mt-2">
+                    <h1 className="text-4xl font-bold tracking-tight">${netPayout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h1>
+                    {stats.trend !== null && (
+                        <div className={cn("flex items-center text-sm font-medium mt-1", stats.trend >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                            <TrendingUp className={cn("h-4 w-4 mr-1", stats.trend < 0 && "rotate-180")} />
+                            {stats.trend > 0 ? '+' : ''}{stats.trend.toFixed(1)}%
+                        </div>
+                    )}
+                </div>
             </div>
-         </CardContent>
+
+            {/* Right: Cash Owed */}
+            <div className="p-6 border-t border-slate-800 sm:border-t-0 flex flex-col items-center justify-center text-center">
+                <div className="flex items-center gap-2 mb-1 justify-center">
+                    <span className="text-slate-400 text-sm">Cash Owed</span>
+                    <Popover>
+                        <PopoverTrigger>
+                            <Info className="h-3.5 w-3.5 text-slate-500 hover:text-slate-300 transition-colors" />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 text-xs bg-slate-800 border-slate-700 text-slate-200">
+                            Total amount owed to the platform from cash trips and tolls, minus payments made.
+                        </PopoverContent>
+                    </Popover>
+                </div>
+                <div className="flex flex-col items-center mt-2">
+                    <h1 className="text-4xl font-bold tracking-tight text-orange-500">
+                        ${netOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h1>
+                </div>
+            </div>
+        </div>
       </Card>
 
       <Card>

@@ -173,8 +173,8 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
             }).length;
 
             // Status Logic
-            let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' = 'Unpaid';
-            if (week.amountOwed === 0 && amountPaid === 0) status = 'Paid';
+            let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity' = 'Unpaid';
+            if (week.amountOwed === 0 && amountPaid === 0) status = 'No Activity';
             else if (amountPaid >= week.amountOwed - 0.01) status = 'Paid';
             else if (amountPaid > 0) status = 'Partial';
             
@@ -214,12 +214,13 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                                         <Badge variant={
                                             week.status === 'Paid' ? 'default' : 
                                             week.status === 'Partial' ? 'secondary' : 
-                                            week.status === 'Overpaid' ? 'outline' : 'destructive'
+                                            week.status === 'Overpaid' ? 'outline' : 
+                                            week.status === 'No Activity' ? 'outline' : 'destructive'
                                         } className={cn(
                                             week.status === 'Paid' && "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200",
                                             week.status === 'Partial' && "bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200",
                                             week.status === 'Unpaid' && week.amountOwed > 0 && "bg-red-100 text-red-700 hover:bg-red-200 border-red-200",
-                                            week.status === 'Unpaid' && week.amountOwed === 0 && "bg-slate-100 text-slate-600"
+                                            week.status === 'No Activity' && "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
                                         )}>
                                             {week.status}
                                         </Badge>
@@ -277,7 +278,11 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                                         <span className="text-slate-500">Repayment Progress</span>
                                         <span className="text-slate-700 font-medium">{Math.round((week.amountPaid / week.amountOwed) * 100)}%</span>
                                     </div>
-                                    <Progress value={(week.amountPaid / week.amountOwed) * 100} className="h-2" />
+                                    <Progress 
+                                        value={(week.amountPaid / week.amountOwed) * 100} 
+                                        className="h-2" 
+                                        indicatorClassName="bg-gradient-to-r from-orange-400 to-amber-600"
+                                    />
                                 </div>
                             )}
                         </CardContent>

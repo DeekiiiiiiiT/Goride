@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -10,7 +10,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Badge } from "../ui/badge";
 import { 
   Calendar as CalendarIcon, 
-  Upload, 
   Loader2, 
   Receipt, 
   Fuel, 
@@ -19,7 +18,10 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Plus
+  Plus,
+  Ticket,
+  Camera,
+  X
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../ui/utils";
@@ -40,6 +42,7 @@ function ExpenseLogger() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
 
   // Form State
   const [date, setDate] = useState<Date>(new Date());
@@ -49,6 +52,16 @@ function ExpenseLogger() {
   const [odometer, setOdometer] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+
+  // Parsed Receipt Fields
+  const [merchant, setMerchant] = useState('');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [plaza, setPlaza] = useState('');
+  const [lane, setLane] = useState('');
+  const [vehicleClass, setVehicleClass] = useState('');
+  const [collector, setCollector] = useState('');
+  
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) fetchTransactions();
@@ -60,7 +73,7 @@ function ExpenseLogger() {
       const allTx = await api.getTransactions();
       // Filter for this driver and only Expenses
       const myTx = allTx.filter((t: FinancialTransaction) => 
-        (t.driverId === user?.id || t.driverId === driverRecord?.driverId) && 
+        (t.driverId === user?.id || t.driverId === driverRecord?.id || t.driverId === driverRecord?.driverId) && 
         t.type === 'Expense'
       );
       // Sort by date desc
@@ -73,13 +86,58 @@ function ExpenseLogger() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setReceiptFile(file);
       const reader = new FileReader();
       reader.onload = (e) => setReceiptPreview(e.target?.result as string);
       reader.readAsDataURL(file);
+
+      // AI Scan
+      setIsScanning(true);
+      toast.info("Analyzing receipt...", { duration: 2000 });
+      
+      try {
+        const { data } = await api.scanReceipt(file);
+        
+        if (data) {
+           if (data.amount) setAmount(data.amount.toString());
+           
+           if (data.date) {
+               const parsedDate = new Date(data.date);
+               if (!isNaN(parsedDate.getTime())) {
+                   setDate(parsedDate);
+               }
+           }
+           
+           if (data.type) {
+               const t = data.type.toLowerCase();
+               if (t.includes('fuel')) setCategory('Fuel');
+               else if (t.includes('service') || t.includes('repair') || t.includes('maintenance')) setCategory('Maintenance');
+               else if (t.includes('toll')) setCategory('Tolls');
+               else setCategory('Other Expenses');
+           }
+           
+           // Populate Read-Only Fields
+           setMerchant(data.merchant || '');
+           setPlaza(data.plaza || '');
+           setLane(data.lane || '');
+           setVehicleClass(data.vehicleClass || '');
+           setReferenceNumber(data.receiptNumber || '');
+           setCollector(data.collector || '');
+           
+           // Any extra notes from AI
+           if (data.notes) setNotes(data.notes);
+           
+           toast.success("Receipt details extracted!");
+        }
+      } catch (error) {
+          console.error("Scan error:", error);
+          toast.error("Could not auto-scan receipt. Please enter details manually.");
+      } finally {
+          setIsScanning(false);
+      }
     }
   };
 
@@ -100,19 +158,31 @@ function ExpenseLogger() {
 
       const newTx: Partial<FinancialTransaction> = {
         id: crypto.randomUUID(),
-        driverId: user?.id,
-        driverName: driverRecord?.name || user?.email,
+        driverId: driverRecord?.id || user?.id,
+        driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
+        vehicleId: driverRecord?.assignedVehicleId,
+        vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (driverRecord?.assignedVehicleId ? 'Assigned Vehicle' : undefined),
         date: format(date, 'yyyy-MM-dd'),
-        time: format(new Date(), 'HH:mm:ss'),
+        time: format(date, 'HH:mm:ss'),
         type: 'Expense',
         category: category as TransactionCategory,
         amount: -Math.abs(parseFloat(amount)), // Expenses are negative
-        description: notes || `${category} Expense`,
+        description: notes || `${category} Expense - ${merchant || 'Unknown'}`,
         status: 'Pending', // Needs approval
         paymentMethod: 'Cash', // Default assumption for driver reimbursement, or create a selector
         receiptUrl: receiptUrl,
         odometer: odometer ? parseInt(odometer) : undefined,
-        notes: notes
+        notes: notes,
+        
+        // Structured Data
+        vendor: merchant,
+        referenceNumber: referenceNumber,
+        metadata: {
+            plaza,
+            lane,
+            vehicleClass,
+            collector
+        }
       };
 
       await api.saveTransaction(newTx);
@@ -128,6 +198,12 @@ function ExpenseLogger() {
       setReceiptFile(null);
       setReceiptPreview(null);
       setDate(new Date());
+      setMerchant('');
+      setReferenceNumber('');
+      setPlaza('');
+      setLane('');
+      setVehicleClass('');
+      setCollector('');
 
       fetchTransactions();
 
@@ -158,6 +234,7 @@ function ExpenseLogger() {
     switch(cat) {
       case 'Fuel': return <Fuel className="h-4 w-4 text-orange-500" />;
       case 'Maintenance': return <Wrench className="h-4 w-4 text-blue-500" />;
+      case 'Tolls': return <Ticket className="h-4 w-4 text-purple-500" />;
       default: return <Receipt className="h-4 w-4 text-slate-500" />;
     }
   };
@@ -176,7 +253,7 @@ function ExpenseLogger() {
               
               <div className="grid gap-2">
                 <Label>Expense Type</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div 
                     className={cn(
                       "flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all",
@@ -200,6 +277,16 @@ function ExpenseLogger() {
                   <div 
                     className={cn(
                       "flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all",
+                      category === 'Tolls' ? "border-purple-500 bg-purple-50 text-purple-700" : "border-slate-200 hover:bg-slate-50"
+                    )}
+                    onClick={() => setCategory('Tolls')}
+                  >
+                    <Ticket className="h-6 w-6 mb-1" />
+                    <span className="text-xs font-medium">Toll</span>
+                  </div>
+                  <div 
+                    className={cn(
+                      "flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all",
                       category === 'Other Expenses' ? "border-slate-500 bg-slate-50 text-slate-700" : "border-slate-200 hover:bg-slate-50"
                     )}
                     onClick={() => setCategory('Other Expenses')}
@@ -216,9 +303,10 @@ function ExpenseLogger() {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
+                          disabled={true}
                           variant={"outline"}
                           className={cn(
-                            "w-full justify-start text-left font-normal",
+                            "w-full justify-start text-left font-normal bg-slate-100 cursor-not-allowed opacity-100",
                             !date && "text-muted-foreground"
                           )}
                         >
@@ -244,6 +332,8 @@ function ExpenseLogger() {
                         step="0.01" 
                         min="0"
                         value={amount}
+                        readOnly={true}
+                        className="bg-slate-100 cursor-not-allowed"
                         onChange={e => setAmount(e.target.value)}
                         required
                     />
@@ -264,33 +354,107 @@ function ExpenseLogger() {
 
               <div className="space-y-2">
                  <Label>Receipt / Photo</Label>
-                 <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer relative">
-                    <input 
-                       type="file" 
-                       accept="image/*,.pdf" 
-                       className="absolute inset-0 opacity-0 cursor-pointer"
-                       onChange={handleFileChange}
-                    />
-                    {receiptPreview ? (
-                       <div className="relative w-full h-32">
-                          <img src={receiptPreview} className="h-full w-full object-contain rounded-md" alt="Receipt" />
+                 
+                 {isScanning ? (
+                    <div className="border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-lg p-8 flex flex-col items-center justify-center h-40">
+                        <Loader2 className="h-8 w-8 text-indigo-500 animate-spin mb-3" />
+                        <p className="text-sm text-indigo-700 font-semibold">Analyzing receipt...</p>
+                        <p className="text-xs text-indigo-500 mt-1">Extracting merchant & amount</p>
+                    </div>
+                 ) : receiptPreview ? (
+                    <div className="relative border rounded-lg overflow-hidden bg-slate-100 h-48 group">
+                       <img src={receiptPreview} className="h-full w-full object-contain" alt="Receipt" />
+                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Button 
+                             variant="destructive" 
+                             size="sm" 
+                             onClick={(e) => {
+                                 e.preventDefault();
+                                 setReceiptFile(null);
+                                 setReceiptPreview(null);
+                                 setAmount('');
+                                 setNotes('');
+                                 setMerchant('');
+                                 setReferenceNumber('');
+                                 setPlaza('');
+                                 setLane('');
+                                 setVehicleClass('');
+                                 setCollector('');
+                             }}
+                          >
+                             <X className="h-4 w-4 mr-2" /> Remove
+                          </Button>
                        </div>
-                    ) : (
-                       <>
-                          <Upload className="h-8 w-8 text-slate-400 mb-2" />
-                          <p className="text-sm text-slate-500 font-medium">Click to upload receipt</p>
-                          <p className="text-xs text-slate-400">JPG, PNG, PDF up to 5MB</p>
-                       </>
-                    )}
-                 </div>
+                    </div>
+                 ) : (
+                    <div className="grid grid-cols-1">
+                        <div 
+                            onClick={() => cameraInputRef.current?.click()}
+                            className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer h-32"
+                        >
+                             <Camera className="h-8 w-8 text-slate-400 mb-2" />
+                             <span className="text-sm font-medium text-slate-600">Scan Receipt</span>
+                             <span className="text-[10px] text-slate-400 mt-1">Use Camera</span>
+                        </div>
+
+                        <input 
+                           type="file"
+                           ref={cameraInputRef}
+                           accept="image/*"
+                           capture="environment"
+                           className="hidden"
+                           onChange={handleFileChange}
+                        />
+                    </div>
+                 )}
               </div>
 
+              {receiptPreview && (
+                  <div className="space-y-3 border-t border-slate-100 pt-4">
+                      <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Receipt Details (Read Only)</Label>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                              <Label className="text-xs">Merchant</Label>
+                              <Input value={merchant} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                          </div>
+                          <div className="space-y-1">
+                              <Label className="text-xs">Ref / Invoice</Label>
+                              <Input value={referenceNumber} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                              <Label className="text-xs">Plaza / Location</Label>
+                              <Input value={plaza} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                          </div>
+                          <div className="space-y-1">
+                              <Label className="text-xs">Lane</Label>
+                              <Input value={lane} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                          </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                              <Label className="text-xs">Class</Label>
+                              <Input value={vehicleClass} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                          </div>
+                          <div className="space-y-1">
+                              <Label className="text-xs">Collector</Label>
+                              <Input value={collector} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                          </div>
+                      </div>
+                  </div>
+              )}
+
               <div className="space-y-2">
-                 <Label>Notes</Label>
+                 <Label>Additional Notes</Label>
                  <Textarea 
-                    placeholder="Describe the expense..."
+                    placeholder={isScanning ? "AI is writing details..." : "Describe the expense (or scan receipt to auto-fill)..."}
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
+                    disabled={isScanning}
                  />
               </div>
 
@@ -348,7 +512,8 @@ function ExpenseLogger() {
                            <div className={cn(
                                "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
                                tx.category === 'Fuel' ? "bg-orange-100" : 
-                               tx.category === 'Maintenance' ? "bg-blue-100" : "bg-slate-100"
+                               tx.category === 'Maintenance' ? "bg-blue-100" : 
+                               tx.category === 'Tolls' ? "bg-purple-100" : "bg-slate-100"
                            )}>
                                {getCategoryIcon(tx.category)}
                            </div>

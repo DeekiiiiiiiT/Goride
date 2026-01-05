@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { ArrowRight, Check, X, Clock, DollarSign, MapPin } from "lucide-react";
+import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { format } from "date-fns";
 import { MatchResult } from "../../../utils/tollReconciliation";
@@ -50,9 +50,15 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss }:
             {/* Left: Transaction (The Problem) */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center space-x-2 mb-2">
-                    <Badge variant="outline" className="bg-white border-rose-200 text-rose-700">
-                        Toll Charge
-                    </Badge>
+                    {transaction.receiptUrl ? (
+                         <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">
+                            <Camera className="w-3 h-3 mr-1" /> Manual Scan
+                        </Badge>
+                    ) : (
+                        <Badge variant="outline" className="bg-white border-rose-200 text-rose-700">
+                            Toll Charge
+                        </Badge>
+                    )}
                     <span className="text-sm text-slate-500">
                         {format(new Date(transaction.date), 'MMM d, h:mm a')}
                     </span>

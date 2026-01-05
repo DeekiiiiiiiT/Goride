@@ -61,6 +61,8 @@ export function useCurrentDriver() {
                         );
                         if (assignedVehicle) {
                             match.assignedVehicleId = assignedVehicle.id;
+                            match.assignedVehiclePlate = assignedVehicle.plateNumber || assignedVehicle.licensePlate || 'Unknown Plate';
+                            match.assignedVehicleName = assignedVehicle.vehicleName || `${assignedVehicle.make || ''} ${assignedVehicle.model || ''}`.trim();
                             // Also map 'vehicle' property just in case legacy code uses it
                             match.vehicle = assignedVehicle.id; 
                         }

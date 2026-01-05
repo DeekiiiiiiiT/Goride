@@ -55,6 +55,8 @@ import {
 } from "../ui/alert-dialog";
 import { Separator } from "../ui/separator";
 
+import { DataResetModal } from '../admin/DataResetModal';
+
 export function SettingsPage() {
   return (
     <div className="space-y-6">
@@ -106,8 +108,8 @@ export function SettingsPage() {
 }
 
 function GeneralPanel() {
-  const [isResetting, setIsResetting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [currency, setCurrency] = useState('usd');
   const [timezone, setTimezone] = useState('pst');
   const [darkMode, setDarkMode] = useState(false);
@@ -203,24 +205,6 @@ function GeneralPanel() {
     }
   };
 
-  const handleResetData = async () => {
-    setIsResetting(true);
-    try {
-      const result = await api.clearAllData();
-      
-      // Phase 3: Also clear the locally stored fleet name to ensure a clean slate
-      localStorage.removeItem('fleet_name');
-      window.dispatchEvent(new Event('storage'));
-
-      toast.success(`System reset complete. Cleared ${result.deletedTrips} trips and ${result.deletedTransactions || 0} transactions.`);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to reset system data");
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
   return (
     <div className="grid gap-6">
       <Card>
@@ -292,33 +276,22 @@ function GeneralPanel() {
              <div className="space-y-1">
                 <h4 className="font-medium text-rose-900 dark:text-rose-100">Reset System Data</h4>
                 <p className="text-sm text-rose-700 dark:text-rose-300">
-                  Permanently delete all imported trips, batches, and cached reports. This action cannot be undone.
+                  Permanently delete imported data. Choose between clearing trips, tolls, or a full factory reset.
                 </p>
              </div>
-             <AlertDialog>
-               <AlertDialogTrigger asChild>
-                 <Button variant="destructive">Reset Data</Button>
-               </AlertDialogTrigger>
-               <AlertDialogContent>
-                 <AlertDialogHeader>
-                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                   <AlertDialogDescription>
-                     This action cannot be undone. This will permanently delete all your imported trips
-                     and reset your dashboard metrics to zero.
-                   </AlertDialogDescription>
-                 </AlertDialogHeader>
-                 <AlertDialogFooter>
-                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                   <AlertDialogAction 
-                     onClick={handleResetData}
-                     className="bg-rose-600 hover:bg-rose-700"
-                   >
-                     {isResetting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, Delete Everything"}
-                   </AlertDialogAction>
-                 </AlertDialogFooter>
-               </AlertDialogContent>
-             </AlertDialog>
+             <Button variant="destructive" onClick={() => setIsResetModalOpen(true)}>Reset Data</Button>
           </div>
+          
+          <DataResetModal 
+            isOpen={isResetModalOpen} 
+            onClose={() => setIsResetModalOpen(false)}
+            onSuccess={() => {
+                // Replicate the cleanup logic
+                localStorage.removeItem('fleet_name');
+                window.dispatchEvent(new Event('storage'));
+                setIsResetModalOpen(false);
+            }} 
+          />
         </CardContent>
       </Card>
     </div>

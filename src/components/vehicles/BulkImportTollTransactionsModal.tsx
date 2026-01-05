@@ -33,6 +33,8 @@ interface ParsedTransaction {
   vehicleId?: string; 
   tagId?: string;
   matchedVehicleName?: string;
+  driverId?: string;
+  driverName?: string;
   discount?: number;
   paymentAfterDiscount?: number;
 }
@@ -54,6 +56,7 @@ export function BulkImportTollTransactionsModal({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [targetVehicleId, setTargetVehicleId] = useState<string>(vehicleId || '');
   const [vehicles, setVehicles] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<any[]>([]);
   const [tollTags, setTollTags] = useState<any[]>([]); // Store toll tags for lookup
   
   const [currentBatchId, setCurrentBatchId] = useState<string>('');
@@ -65,12 +68,14 @@ export function BulkImportTollTransactionsModal({
   React.useEffect(() => {
     const fetchData = async () => {
         try {
-            const [vData, tData] = await Promise.all([
+            const [vData, tData, dData] = await Promise.all([
                 api.getVehicles(),
-                api.getTollTags()
+                api.getTollTags(),
+                api.getDrivers()
             ]);
             setVehicles(vData);
             setTollTags(tData);
+            setDrivers(dData);
         } catch (err) {
             console.error("Failed to load init data", err);
         }
@@ -93,6 +98,8 @@ export function BulkImportTollTransactionsModal({
   const matchVehicle = (tagId?: string) => {
       let matchedVehicleId = vehicleId; 
       let matchedVehicleName = vehicleName;
+      let matchedDriverId = '';
+      let matchedDriverName = '';
       let error = '';
 
       if (tagId) {
@@ -110,7 +117,20 @@ export function BulkImportTollTransactionsModal({
       } else if (!matchedVehicleId) {
           error = 'Missing Tag ID for auto-match';
       }
-      return { matchedVehicleId, matchedVehicleName, error };
+
+      // Try to resolve driver from vehicle assignment
+      if (matchedVehicleId) {
+          const vehicle = vehicles.find((v: any) => v.id === matchedVehicleId);
+          if (vehicle && vehicle.currentDriverId) {
+              matchedDriverId = vehicle.currentDriverId;
+              const driver = drivers.find((d: any) => d.id === matchedDriverId);
+              if (driver) {
+                  matchedDriverName = driver.name || driver.driverName || '';
+              }
+          }
+      }
+
+      return { matchedVehicleId, matchedVehicleName, matchedDriverId, matchedDriverName, error };
   };
 
   const parseTransactionsFromText = (text: string): ParsedTransaction[] => {
@@ -215,7 +235,9 @@ export function BulkImportTollTransactionsModal({
             error,
             tagId,
             vehicleId: match.matchedVehicleId,
-            matchedVehicleName: match.matchedVehicleName
+            matchedVehicleName: match.matchedVehicleName,
+            driverId: match.matchedDriverId,
+            driverName: match.matchedDriverName
           };
         });
   };
@@ -297,6 +319,8 @@ export function BulkImportTollTransactionsModal({
                        vehicleId: match.matchedVehicleId,
                        tagId: tx.tagId,
                        matchedVehicleName: match.matchedVehicleName,
+                       driverId: match.matchedDriverId,
+                       driverName: match.matchedDriverName,
                        discount: tx.discount || 0,
                        paymentAfterDiscount: tx.paymentAfterDiscount || 0
                    };
@@ -380,6 +404,8 @@ export function BulkImportTollTransactionsModal({
                 : `${tx.location} ${tx.laneId ? `(${tx.laneId})` : ''}`.trim(),
             vehicleId: tx.vehicleId,
             vehiclePlate: tx.matchedVehicleName || vehicleName || 'Unknown Vehicle',
+            driverId: tx.driverId,
+            driverName: tx.driverName,
             paymentMethod: 'Tag Balance',
             status: 'Completed',
             isReconciled: false,

@@ -415,6 +415,24 @@ export const api = {
     return response.json();
   },
 
+  async scanReceipt(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetchWithRetry(`${BASE_URL}/scan-receipt`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: formData
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to scan receipt");
+    }
+    return response.json();
+  },
+
   async parseDocument(file: File, type: 'license' | 'address' | 'vehicle_registration', backFile?: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -638,7 +656,14 @@ export const api = {
 
   async reconcileTollTransaction(transaction: FinancialTransaction, trip: Trip) {
     // 1. Update Transaction: Link to trip and mark reconciled
-    const updatedTx = { ...transaction, tripId: trip.id, isReconciled: true };
+    // Auto-assign driver from the matched trip to ensure data consistency
+    const updatedTx = { 
+        ...transaction, 
+        tripId: trip.id, 
+        isReconciled: true,
+        driverId: trip.driverId,
+        driverName: trip.driverName
+    };
     await this.saveTransaction(updatedTx);
 
     // 2. Return updated objects

@@ -5,7 +5,7 @@ import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip } from "../../../types/data";
-import { Search, CheckCircle2, Sparkles } from "lucide-react";
+import { Search, CheckCircle2, Sparkles, Camera, Tag } from "lucide-react";
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
@@ -105,6 +105,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips }
                             <TableRow>
                                 <TableHead>Date</TableHead>
                                 <TableHead>Vehicle</TableHead>
+                                <TableHead>Driver</TableHead>
                                 <TableHead>Amount</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead className="text-right">Action</TableHead>
@@ -124,7 +125,20 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips }
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            {tx.vehiclePlate || tx.vehicleId || <span className="text-slate-400">Unknown</span>}
+                                            <div className="flex items-center space-x-2">
+                                                <div className="flex items-center">
+                                                    <Tag className="w-3 h-3 mr-1 text-slate-400" />
+                                                    <span>{tx.vehiclePlate || tx.vehicleId || <span className="text-slate-400">Unknown</span>}</span>
+                                                </div>
+                                                {tx.receiptUrl && (
+                                                    <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">
+                                                        <Camera className="w-3 h-3 mr-1" /> Receipt
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="text-sm font-medium text-slate-700">{tx.driverName || <span className="text-slate-400 font-normal italic">Unassigned</span>}</span>
                                         </TableCell>
                                         <TableCell className="font-medium text-rose-600">
                                             -${Math.abs(tx.amount).toFixed(2)}

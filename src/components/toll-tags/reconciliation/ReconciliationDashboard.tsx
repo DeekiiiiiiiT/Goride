@@ -10,11 +10,9 @@ import { Loader2, RefreshCw, Wand2, Upload, AlertTriangle, TrendingDown, Trendin
 import { Button } from "../../ui/button";
 import { BulkImportTollTransactionsModal } from "../../vehicles/BulkImportTollTransactionsModal";
 import { runScenarioTest } from "../../../utils/testScenario";
-import { DataResetModal } from "../../admin/DataResetModal";
 
 export function ReconciliationDashboard() {
   const [importMode, setImportMode] = React.useState<'usage' | 'topup' | null>(null);
-  const [isResetModalOpen, setIsResetModalOpen] = React.useState(false);
   
   const handleRunTest = () => {
     const result = runScenarioTest();
@@ -113,15 +111,6 @@ export function ReconciliationDashboard() {
             <p className="text-slate-500">Match toll expenses with trip refunds to identify leakage.</p>
         </div>
         <div className="flex space-x-2">
-            <Button 
-                variant="outline" 
-                size="sm" 
-                className="text-rose-600 border-rose-200 hover:bg-rose-50"
-                onClick={() => setIsResetModalOpen(true)}
-            >
-                <AlertTriangle className="h-4 w-4 mr-2" />
-                Data Reset
-            </Button>
             <Button variant="ghost" size="sm" onClick={handleRunTest} className="text-slate-400 hover:text-slate-600">
                 Test
             </Button>
@@ -295,15 +284,6 @@ export function ReconciliationDashboard() {
             onSuccess={refresh}
           />
       )}
-
-      <DataResetModal 
-        isOpen={isResetModalOpen}
-        onClose={() => setIsResetModalOpen(false)}
-        onSuccess={() => {
-            setIsResetModalOpen(false);
-            refresh();
-        }}
-      />
     </div>
     </TooltipProvider>
   );

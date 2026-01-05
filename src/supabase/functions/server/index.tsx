@@ -2604,4 +2604,87 @@ app.get("/make-server-37f42386/performance-report", async (c) => {
     }
 });
 
+// Scan Receipt Endpoint (Gemini)
+app.post("/make-server-37f42386/scan-receipt", async (c) => {
+    try {
+        const body = await c.req.parseBody();
+        const file = body['file'];
+
+        if (!file || !(file instanceof File)) {
+            return c.json({ error: "No file uploaded" }, 400);
+        }
+
+        const apiKey = Deno.env.get("GEMINI_API_KEY");
+        if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 500);
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        const mimeType = file.type;
+
+        const prompt = `Analyze this receipt. Extract the following details in JSON format:
+        - merchant (string, name of the store/service. For tolls, use the Highway name e.g. Highway 2000)
+        - date (YYYY-MM-DD, format correctly)
+        - amount (number, total amount. Remove currency symbols.)
+        - type (string, one of: 'Fuel', 'Service', 'Toll', 'Other'. Infer from context. If it mentions tolls, highway, plaza, etc. use 'Toll'.)
+        - notes (string, brief description of items)
+        
+        If it is a Toll receipt, specifically extract these additional fields if present:
+        - plaza (string, e.g. Portmore East, Angels)
+        - lane (string, e.g. K15)
+        - vehicleClass (string, e.g. 1)
+        - receiptNumber (string, the Ticket No or No)
+        - collector (string, e.g. 613893)
+
+        Return ONLY the JSON object, no markdown.`;
+
+        let result;
+        const imagePart = {
+            inlineData: {
+                data: base64Data,
+                mimeType: mimeType
+            }
+        };
+
+        const modelCandidates = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-pro"];
+        let lastError = null;
+
+        for (const modelName of modelCandidates) {
+            try {
+                const model = genAI.getGenerativeModel({ model: modelName });
+                result = await model.generateContent([prompt, imagePart]);
+                if (result) break;
+            } catch (e: any) {
+                console.warn(`Model ${modelName} failed:`, e.message);
+                lastError = e;
+            }
+        }
+
+        if (!result) {
+            throw new Error(`All Gemini models failed. Last error: ${lastError?.message}`);
+        }
+
+        const response = result.response;
+        const text = response.text();
+        
+        // Clean markdown
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        let data;
+        try {
+            data = JSON.parse(jsonStr);
+        } catch (e) {
+            console.error("Failed to parse JSON from Gemini:", text);
+            return c.json({ error: "Failed to parse receipt data" }, 500);
+        }
+
+        return c.json({ success: true, data });
+
+    } catch (e: any) {
+        console.error("Receipt Scan Error:", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 Deno.serve(app.fetch);
