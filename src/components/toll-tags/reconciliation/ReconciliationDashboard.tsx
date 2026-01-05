@@ -6,14 +6,11 @@ import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
 import { ReconciledTollsList } from "./ReconciledTollsList";
 import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
 import { useClaims } from "../../../hooks/useClaims";
-import { Loader2, RefreshCw, Wand2, Upload, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle } from "lucide-react";
+import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle } from "lucide-react";
 import { Button } from "../../ui/button";
-import { BulkImportTollTransactionsModal } from "../../vehicles/BulkImportTollTransactionsModal";
 import { runScenarioTest } from "../../../utils/testScenario";
 
 export function ReconciliationDashboard() {
-  const [importMode, setImportMode] = React.useState<'usage' | 'topup' | null>(null);
-  
   const handleRunTest = () => {
     const result = runScenarioTest();
     console.log(result);
@@ -113,10 +110,6 @@ export function ReconciliationDashboard() {
         <div className="flex space-x-2">
             <Button variant="ghost" size="sm" onClick={handleRunTest} className="text-slate-400 hover:text-slate-600">
                 Test
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportMode('usage')}>
-                <Upload className="h-4 w-4 mr-2" />
-                Import Usage
             </Button>
             {highConfidenceCount > 0 && (
                 <Button variant="default" size="sm" onClick={autoMatchAll} className="bg-indigo-600 hover:bg-indigo-700">
@@ -273,17 +266,6 @@ export function ReconciliationDashboard() {
             />
         </TabsContent>
       </Tabs>
-
-      {importMode && (
-          <BulkImportTollTransactionsModal
-            isOpen={!!importMode}
-            onClose={() => setImportMode(null)}
-            vehicleId=""
-            vehicleName=""
-            mode={importMode}
-            onSuccess={refresh}
-          />
-      )}
     </div>
     </TooltipProvider>
   );

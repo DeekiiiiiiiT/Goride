@@ -697,5 +697,30 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to fetch performance report");
     return response.json();
+  },
+
+  async resetDataByDate(payload: { 
+    type?: 'upload' | 'record', 
+    startDate?: string, 
+    endDate?: string, 
+    targets?: ('trips' | 'transactions')[],
+    driverId?: string,
+    preview?: boolean,
+    keys?: string[]
+  }) {
+    const response = await fetchWithRetry(`${BASE_URL}/admin/reset-by-date`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+        throw new Error("Failed to reset data by date");
+    }
+    
+    return response.json();
   }
 };

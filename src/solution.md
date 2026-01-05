@@ -1,56 +1,68 @@
-## 🚀 **Recommendations to Enhance Your Current System**
+# Implementation Plan: Granular Driver Data Reset
 
-### **1. Daily/Weekly Settlement Cadence**
-- Set specific days for cash handovers (e.g., every Friday at 5 PM)
-- Create standard notes: "Weekly settlement - Bank transfer ref #XXXX"
+## Phase 1: Backend Granularity Implementation (COMPLETE)
+**Objective:** Update the backend API (`/admin/reset-by-date`) to support distinct targeting of Tolls and Fuel data, rather than deleting all transactions.
 
-### **2. Add These Features to Your Current System**
-```javascript
-// If your system supports custom fields, add:
-1. Payment method tracking (bank transfer vs cash)
-2. Settlement cycle tags (Week 1, Week 2, etc.)
-3. Driver acknowledgment (checkbox for confirmation)
-```
+1.  **Analyze Transaction Categories:**
+    *   Review `types/data.ts` to confirm exact string values for transaction categories (e.g., 'Toll Usage', 'Toll Top-up', 'Fuel').
+    *   Review `types/fuel.ts` to confirm structure of `FuelEntry` and its storage prefix (`fuel_entry:`).
 
-### **3. Use Your Ledger Table Better**
-- **Filter by date range**: See weekly/monthly totals
-- **Export to CSV**: For your own records
-- **Add status column**: "Pending", "Completed", "Verified"
+2.  **Modify `reset-by-date` Endpoint (Search/Preview Logic):**
+    *   Update `supabase/functions/server/index.tsx`.
+    *   **Fuel Logic:** Add a new check: `if (targets.includes('fuel'))`.
+        *   Fetch keys with prefix `fuel_entry:`.
+        *   Filter by date and `driverId`.
+        *   Also fetch keys with prefix `transaction:` where `category === 'Fuel'`.
+    *   **Toll Logic:** Add a new check: `if (targets.includes('tolls'))`.
+        *   Fetch keys with prefix `transaction:` where `category` includes 'Toll'.
+    *   **Refine 'Trips' Logic:** Ensure it remains unchanged.
+    *   **Deprecate 'Transactions' Target:** Remove the broad `transaction:*` fetch that deletes everything.
 
-## 📊 **Best Practices You Can Implement Today**
+3.  **Update Delete Logic:**
+    *   Ensure the `mdel` (multi-delete) function receives the combined list of keys from Trips, Fuel Entries, Fuel Transactions, and Toll Transactions.
 
-### **Weekly Process:**
-```
-Monday-Friday: Drivers accumulate cash trips
-Friday 4 PM: System calculates total owed
-Friday 5 PM: Drivers transfer/hand over cash
-Friday 6 PM: You log payments → Net Outstanding = $0
-```
+## Phase 2: Frontend Selection Logic Update (COMPLETE)
+**Objective:** Update the `DataResetModal` UI to replace the generic "Transactions" checkbox with specific "Toll Data" and "Fuel Logs" options.
 
-### **Discrepancy Handling:**
-1. If CSV report ≠ system calculation → Use CSV amount (smart adjustment)
-2. Note the variance reason: "Uber adjustment: toll missing in logs"
-3. Keep both amounts visible for audit purposes
+1.  **Update State Management:**
+    *   In `components/admin/DataResetModal.tsx`, update the `targets` state definition to allow string values: `'trips' | 'tolls' | 'fuel'`.
+    *   Set default targets for "Reset Driver Data" to `['trips', 'tolls', 'fuel']`.
 
-## 🏆 **What Makes This "Best-in-Class"**
+2.  **Refactor Checkbox UI:**
+    *   Locate the "Data Types to Purge" section.
+    *   Keep **Trips** checkbox.
+    *   Remove **Transactions** checkbox.
+    *   Add **Toll Data** checkbox (Label: "Toll Receipts & Usage").
+    *   Add **Fuel Logs** checkbox (Label: "Fuel Receipts & Logs").
 
-1. **Single Source of Truth**: Your system reconciles automatically
-2. **Driver Transparency**: They can't dispute amounts (tied to actual trips)
-3. **Audit-Ready**: Permanent ledger with dates, amounts, notes
-4. **Flexible**: Works with bank transfers OR cash handovers
-5. **Proactive**: Smart adjustments prevent accounting errors
+3.  **Update Preview Request Payload:**
+    *   Ensure `handleFetchPreview` sends the new specific strings (`['trips', 'tolls', 'fuel']`) instead of the old `['trips', 'transactions']`.
 
-## 💡 **One Missing Piece to Consider**
+## Phase 3: Preview & API Integration (COMPLETE)
+**Objective:** Ensure the Preview screen correctly displays and categorizes the new data types so the user knows exactly what will be deleted.
 
-If you don't already have it, add a **"Cash Float"** tracking for drivers who might need to give change. This would be:
-- Starting cash you give drivers
-- Should be deducted from what they owe you
-- Tracked separately from trip earnings
+1.  **Update Preview Item Interface:**
+    *   In `DataResetModal.tsx`, update the `PreviewItem` interface (or implicit type) to handle `type: 'fuel' | 'toll' | 'trip'`.
 
-**Your current system is actually BETTER than most commercial solutions because:**
-- It's tailored to your exact workflow
-- Automates the complex math
-- Creates audit trails automatically
-- Uses real trip data (not self-reported amounts)
+2.  **Update Preview Rendering:**
+    *   Modify the list render logic to show appropriate icons/labels:
+        *   **Trips:** Show Car icon.
+        *   **Fuel:** Show Fuel Pump icon (use `Lucide` icon).
+        *   **Tolls:** Show Receipt/Ticket icon.
+    *   Verify "Has Receipt" indicator works for Fuel and Tolls (checking `receiptUrl` or `invoiceUrl`).
 
-**The only upgrade needed** is establishing consistent processes around this excellent system you already have!
+3.  **Test Selection Toggling:**
+    *   Ensure unchecking a specific item in the preview correctly removes it from the `keysToDelete` list in the final payload.
+
+## Phase 4: Validation & Receipt Cleanup Refinement
+**Objective:** Verify that file deletion works for the new data types and perform final safety checks.
+
+1.  **Backend Storage Cleanup:**
+    *   Verify that `fuel_entry` records utilize `receiptUrl` (or `invoiceUrl`) and that the backend logic extracts this path for deletion from the `make-37f42386-docs` bucket.
+    *   Verify that Toll transactions with receipt images are also caught by the image deletion logic.
+
+2.  **Safety Verification:**
+    *   Ensure "Salary" or "Payout" transactions are **NOT** included in the deletion list when selecting these options.
+
+3.  **Final Polish:**
+    *   Update success messages to say "Trips, Tolls, and Fuel data deleted" instead of just "Data deleted".

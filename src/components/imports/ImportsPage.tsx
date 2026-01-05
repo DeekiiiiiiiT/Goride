@@ -39,7 +39,9 @@ import {
   ShieldCheck,
   Clock,
   BarChart2,
-  Fuel
+  Fuel,
+  CreditCard,
+  MinusCircle
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
@@ -54,6 +56,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { BulkImportTollTransactionsModal } from '../vehicles/BulkImportTollTransactionsModal';
 
 import { 
     detectFileType, 
@@ -139,6 +142,7 @@ export function ImportsPage() {
   const [manageFieldsOpen, setManageFieldsOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
   const [disabledColumns, setDisabledColumns] = useState<Record<string, string[]>>({});
+  const [tollImportMode, setTollImportMode] = useState<'usage' | 'topup' | null>(null);
 
   // Load Fields
   useEffect(() => {
@@ -937,10 +941,19 @@ export function ImportsPage() {
                     { id: 'Uber', icon: 'UB', color: 'bg-black text-white' },
                     { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white' },
                     { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white' },
+                    { id: 'Toll Top-up', icon: <CreditCard className="h-6 w-6" />, color: 'bg-emerald-600 text-white', action: () => setTollImportMode('topup') },
+                    { id: 'Toll Usage', icon: <MinusCircle className="h-6 w-6" />, color: 'bg-slate-600 text-white', action: () => setTollImportMode('usage') },
                 ].map(platform => (
                     <Card 
                         key={platform.id}
-                        onClick={() => { setSelectedPlatform(platform.id); setStep('upload'); }}
+                        onClick={() => {
+                            if (platform.action) {
+                                platform.action();
+                            } else {
+                                setSelectedPlatform(platform.id); 
+                                setStep('upload'); 
+                            }
+                        }}
                         className="cursor-pointer transition-all duration-200 hover:border-slate-400 hover:shadow-md"
                     >
                         <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
@@ -1867,6 +1880,12 @@ export function ImportsPage() {
         </Card>
       )}
 
+      <BulkImportTollTransactionsModal
+        isOpen={!!tollImportMode}
+        onClose={() => setTollImportMode(null)}
+        mode={tollImportMode || 'usage'}
+        onSuccess={() => setTollImportMode(null)}
+      />
     </div>
   );
 }

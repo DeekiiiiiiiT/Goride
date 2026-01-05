@@ -1168,6 +1168,358 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
   }
 });
 
+// Admin: Preview Data Reset Endpoint
+app.post("/make-server-37f42386/admin/preview-reset", async (c) => {
+  try {
+    const { type, startDate, endDate, targets, driverId } = await c.req.json();
+    
+    if (!type || !startDate || !endDate || !targets) {
+        return c.json({ error: "Missing required parameters" }, 400);
+    }
+    
+    const start = new Date(startDate).getTime(); // Use UTC start of day (00:00) to ensure we catch date-only timestamps and early EST uploads
+    const end = new Date(endDate).getTime() + (30 * 60 * 60 * 1000); // UTC End of Day + 6h buffer (covers full EST day + margin)
+    
+    const items: any[] = [];
+
+    if (type === 'upload') {
+        const batches = await kv.getByPrefix("batch:");
+        const targetBatches = (batches || []).filter((b: any) => {
+            const uploadTime = new Date(b.uploadDate).getTime();
+            return uploadTime >= start && uploadTime < end;
+        });
+
+        const batchIds = targetBatches.map((b: any) => b.id);
+        
+        if (batchIds.length > 0) {
+            const allTrips = await kv.getByPrefix("trip:");
+            const allTxs = await kv.getByPrefix("transaction:");
+            
+            let trips = (allTrips || []).filter((t: any) => batchIds.includes(t.batchId));
+            let txs = (allTxs || []).filter((t: any) => batchIds.includes(t.batchId));
+            
+            if (driverId) {
+                trips = trips.filter((t: any) => t.driverId === driverId);
+                txs = txs.filter((t: any) => t.driverId === driverId);
+            }
+
+            if (targets.includes('trips')) {
+                 trips.forEach((t: any) => items.push({
+                     id: t.id,
+                     key: `trip:${t.id}`,
+                     type: 'Trip',
+                     date: t.date || t.requestTimestamp,
+                     description: `${t.platform} - ${t.distance || 0}km`,
+                     amount: t.amount,
+                     driverName: t.driverName || 'Unknown',
+                     batchId: t.batchId
+                 }));
+            }
+            if (targets.includes('transactions')) {
+                 txs.forEach((t: any) => items.push({
+                     id: t.id,
+                     key: `transaction:${t.id}`,
+                     type: 'Transaction',
+                     date: t.date || t.timestamp,
+                     description: t.description || 'Toll/Expense',
+                     amount: t.amount,
+                     driverName: t.driverName || 'Unknown',
+                     batchId: t.batchId,
+                     receiptUrl: t.receiptUrl
+                 }));
+            }
+        }
+    } else {
+        if (targets.includes('trips')) {
+            let trips = await kv.getByPrefix("trip:");
+            if (driverId) {
+                trips = (trips || []).filter((t: any) => t.driverId === driverId);
+            }
+            (trips || []).forEach((t: any) => {
+                const date = t.date || t.requestTimestamp;
+                const time = new Date(date).getTime();
+                if (time >= start && time < end) {
+                    items.push({
+                         id: t.id,
+                         key: `trip:${t.id}`,
+                         type: 'Trip',
+                         date: date,
+                         description: `${t.platform} - ${t.distance || 0}km`,
+                         amount: t.amount,
+                         driverName: t.driverName || 'Unknown'
+                    });
+                }
+            });
+        }
+        
+        if (targets.includes('transactions')) {
+            let txs = await kv.getByPrefix("transaction:");
+             if (driverId) {
+                txs = (txs || []).filter((t: any) => t.driverId === driverId);
+            }
+            (txs || []).forEach((t: any) => {
+                const date = t.date || t.timestamp;
+                const time = new Date(date).getTime();
+                if (time >= start && time < end) {
+                    items.push({
+                         id: t.id,
+                         key: `transaction:${t.id}`,
+                         type: 'Transaction',
+                         date: date,
+                         description: t.description || 'Toll/Expense',
+                         amount: t.amount,
+                         driverName: t.driverName || 'Unknown',
+                         receiptUrl: t.receiptUrl
+                    });
+                }
+            });
+        }
+    }
+
+    return c.json({ success: true, items });
+
+  } catch (e: any) {
+    console.error("Preview reset error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Admin: Reset Data By Date Endpoint
+app.post("/make-server-37f42386/admin/reset-by-date", async (c) => {
+  try {
+    const { type, startDate, endDate, targets, driverId, preview, keys } = await c.req.json();
+    
+    // Mode 1: Direct Deletion by Keys
+    if (keys && Array.isArray(keys) && keys.length > 0) {
+        // We need to fetch items first to check for receipts to delete
+        // Note: kv.mget returns values. We assume keys correspond to these values.
+        // If we want to be safe, we can just fetch everything.
+        // However, for storage cleanup, we just need the values.
+        
+        // Chunk the read if too large (Supabase limit might be an issue, but usually fine for <1000)
+        // We'll process in chunks of 100 for safety
+        const filesToDelete: string[] = [];
+        const chunkSize = 100;
+        
+        for (let i = 0; i < keys.length; i += chunkSize) {
+            const chunkKeys = keys.slice(i, i + chunkSize);
+            const chunkValues = await kv.mget(chunkKeys);
+            
+            (chunkValues || []).forEach((item: any) => {
+                if (item && item.receiptUrl && typeof item.receiptUrl === 'string') {
+                     if (item.receiptUrl.includes('make-37f42386-docs')) {
+                         const parts = item.receiptUrl.split('make-37f42386-docs/');
+                         if (parts.length > 1) {
+                             const path = parts[1].split('?')[0];
+                             filesToDelete.push(path);
+                         }
+                     }
+                }
+            });
+            
+            // Delete keys
+            await kv.mdel(chunkKeys);
+        }
+
+        // Delete Files
+        if (filesToDelete.length > 0) {
+            const bucketName = "make-37f42386-docs";
+            const fileChunkSize = 50;
+            for (let i = 0; i < filesToDelete.length; i += fileChunkSize) {
+                const chunk = filesToDelete.slice(i, i + fileChunkSize);
+                await supabase.storage.from(bucketName).remove(chunk);
+            }
+        }
+        
+        return c.json({ success: true, deletedCount: keys.length, filesDeletedCount: filesToDelete.length });
+    }
+
+    // Mode 2: Search (Preview or Bulk Delete)
+    if (!type || !startDate || !endDate || !targets) {
+        return c.json({ error: "Missing required parameters" }, 400);
+    }
+    
+    // Timezone Logic
+    let start = new Date(startDate).getTime();
+    let end = new Date(endDate).getTime() + (24 * 60 * 60 * 1000);
+
+    if (type === 'upload') {
+         // Widened window to catch "today" uploads across timezones
+         // Start from 24h before to catch late previous day (UTC) and go 48h after
+         start = start - (24 * 60 * 60 * 1000); 
+         end = end + (24 * 60 * 60 * 1000); 
+    } 
+    
+    const candidates: { key: string, data: any, type: 'trip' | 'transaction' | 'fuel_entry' }[] = [];
+    let batchesDeleted = 0;
+
+    if (type === 'upload') {
+        const batches = await kv.getByPrefix("batch:");
+        const targetBatches = (batches || []).filter((b: any) => {
+            if (!b.uploadDate) return false;
+            const uploadTime = new Date(b.uploadDate).getTime();
+            if (isNaN(uploadTime)) return false;
+            return uploadTime >= start && uploadTime < end;
+        });
+
+        const batchIds = targetBatches.map((b: any) => b.id);
+        
+        if (batchIds.length > 0) {
+            const allTrips = await kv.getByPrefix("trip:");
+            const allTxs = await kv.getByPrefix("transaction:");
+            const allFuel = await kv.getByPrefix("fuel_entry:");
+            
+            let tripsToProcess = (allTrips || []).filter((t: any) => batchIds.includes(t.batchId));
+            let txsToProcess = (allTxs || []).filter((t: any) => batchIds.includes(t.batchId));
+            let fuelToProcess = (allFuel || []).filter((f: any) => batchIds.includes(f.batchId));
+            
+            if (driverId) {
+                tripsToProcess = tripsToProcess.filter((t: any) => t.driverId === driverId);
+                txsToProcess = txsToProcess.filter((t: any) => t.driverId === driverId);
+                fuelToProcess = fuelToProcess.filter((f: any) => f.driverId === driverId);
+            }
+
+            if (targets.includes('trips')) {
+                 tripsToProcess.forEach((t: any) => candidates.push({ key: `trip:${t.id}`, data: t, type: 'trip' }));
+            }
+            if (targets.includes('tolls')) {
+                const tolls = txsToProcess.filter((t: any) => 
+                    (t.category && (t.category.includes('Toll') || t.description?.toLowerCase().includes('toll')))
+                );
+                tolls.forEach((t: any) => candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' }));
+            }
+            if (targets.includes('fuel')) {
+                fuelToProcess.forEach((f: any) => candidates.push({ key: `fuel_entry:${f.id}`, data: f, type: 'fuel_entry' }));
+                const fuelTxs = txsToProcess.filter((t: any) => 
+                    (t.category === 'Fuel' || t.description?.toLowerCase().includes('fuel'))
+                );
+                fuelTxs.forEach((t: any) => candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' }));
+            }
+            if (targets.includes('transactions')) {
+                 txsToProcess.forEach((t: any) => {
+                     if (!candidates.some(c => c.key === `transaction:${t.id}`)) {
+                         candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
+                     }
+                 });
+            }
+        }
+    } else {
+        // Record Date
+        if (targets.includes('trips')) {
+            let trips = await kv.getByPrefix("trip:");
+            if (driverId) {
+                trips = (trips || []).filter((t: any) => t.driverId === driverId);
+            }
+            (trips || []).forEach((t: any) => {
+                const date = t.date || t.requestTimestamp;
+                const time = new Date(date).getTime();
+                if (time >= start && time < end) {
+                    candidates.push({ key: `trip:${t.id}`, data: t, type: 'trip' });
+                }
+            });
+        }
+        
+        if (targets.includes('tolls') || targets.includes('fuel') || targets.includes('transactions')) {
+            let txs = await kv.getByPrefix("transaction:");
+            if (driverId) {
+                txs = (txs || []).filter((t: any) => t.driverId === driverId);
+            }
+            (txs || []).forEach((t: any) => {
+                const date = t.date || t.timestamp;
+                const time = new Date(date).getTime();
+                if (time >= start && time < end) {
+                    const isToll = t.category && (t.category.includes('Toll') || t.description?.toLowerCase().includes('toll'));
+                    const isFuel = t.category === 'Fuel' || t.description?.toLowerCase().includes('fuel');
+                    
+                    if (targets.includes('tolls') && isToll) {
+                         candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
+                    } else if (targets.includes('fuel') && isFuel) {
+                         candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
+                    } else if (targets.includes('transactions')) {
+                        candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
+                    }
+                }
+            });
+        }
+
+        if (targets.includes('fuel')) {
+             let fuelEntries = await kv.getByPrefix("fuel_entry:");
+             if (driverId) {
+                fuelEntries = (fuelEntries || []).filter((f: any) => f.driverId === driverId);
+             }
+             (fuelEntries || []).forEach((f: any) => {
+                const date = f.date;
+                const time = new Date(date).getTime();
+                if (time >= start && time < end) {
+                    candidates.push({ key: `fuel_entry:${f.id}`, data: f, type: 'fuel_entry' });
+                }
+             });
+        }
+    }
+
+    // Return Preview
+    if (preview) {
+        return c.json({
+            success: true,
+            items: candidates.map(c => ({
+                id: c.data.id,
+                key: c.key,
+                type: c.type === 'trip' ? 'Trip' : (c.type === 'fuel_entry' ? 'Fuel Log' : (c.data.category || 'Transaction')),
+                date: c.data.date || c.data.requestTimestamp || c.data.timestamp || c.data.uploadDate,
+                description: c.type === 'trip' 
+                    ? `Trip: ${c.data.pickupLocation || 'Unknown'} -> ${c.data.dropoffLocation || 'Unknown'}` 
+                    : (c.data.description || c.data.category || 'Item'),
+                amount: c.data.amount,
+                driverId: c.data.driverId,
+                driverName: c.data.driverName,
+                receiptUrl: c.data.receiptUrl || c.data.invoiceUrl
+            }))
+        });
+    }
+    // Execute Bulk Deletion (Legacy / Confirm All)
+    const keysToDelete = candidates.map(c => c.key);
+    const filesToDelete: string[] = [];
+    
+    candidates.forEach(c => {
+        const url = c.data.receiptUrl || c.data.invoiceUrl;
+        if (url && typeof url === 'string' && url.includes('make-37f42386-docs')) {
+             const parts = url.split('make-37f42386-docs/');
+             if (parts.length > 1) {
+                 filesToDelete.push(parts[1].split('?')[0]);
+             }
+        }
+    });
+
+    if (keysToDelete.length > 0) {
+        const chunkSize = 100;
+        for (let i = 0; i < keysToDelete.length; i += chunkSize) {
+            const chunk = keysToDelete.slice(i, i + chunkSize);
+            if (chunk.length > 0) await kv.mdel(chunk);
+        }
+    }
+
+    if (filesToDelete.length > 0) {
+        const bucketName = "make-37f42386-docs";
+        const fileChunkSize = 50;
+        for (let i = 0; i < filesToDelete.length; i += fileChunkSize) {
+            const chunk = filesToDelete.slice(i, i + fileChunkSize);
+            await supabase.storage.from(bucketName).remove(chunk);
+        }
+    }
+
+    return c.json({ 
+        success: true, 
+        deletedCount: keysToDelete.length,
+        filesDeletedCount: filesToDelete.length,
+        batchesDeleted: batchesDeleted
+    });
+
+  } catch (e: any) {
+    console.error("Reset by date error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // AI CSV Mapping Endpoint
 app.post("/make-server-37f42386/ai/map-csv", async (c) => {
   try {
@@ -2095,6 +2447,7 @@ app.post("/make-server-37f42386/odometer-history", async (c) => {
 // AI Toll CSV Parsing
 app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
   try {
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const { csvContent } = await c.req.json();
     if (!csvContent) {
         return c.json({ error: "No CSV content provided" }, 400);
@@ -2112,6 +2465,8 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
       Parse the following toll transaction data into a JSON array.
       
       The input is likely a CSV, TSV, or copy-pasted table.
+
+      Current Date Context: ${today}
       
       Output JSON Schema:
       {
@@ -2128,12 +2483,17 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
       }
       
       Rules:
-      1. Detect the date format intelligently. Current year is 2025 unless specified.
-      2. If amount is like "JMD -275.00", parse as -275.00.
-      3. If amount is negative, type is "Usage". If positive, type is usually "Top-up" (unless it's a refund).
-      4. Ignore header rows or irrelevant lines.
-      5. Extract the Tag ID or Serial Number if present in the first few columns.
-      6. Return ONLY the valid JSON object with the "transactions" key.
+      1. DATE FORMAT: The input uses DD/MM/YYYY (Day/Month/Year).
+         - Example: "01/05/2024" is May 1st, 2024 (NOT January 5th).
+         - Example: "10/04/2025" is April 10th, 2025.
+      2. FUTURE DATE CHECK: The Current Date is ${today}.
+         - Do NOT generate dates in the future relative to the Current Date.
+         - If a parsed date (e.g. DD/MM) results in a future date for the current year, assume it belongs to the previous year.
+      3. If amount is like "JMD -275.00", parse as -275.00.
+      4. If amount is negative, type is "Usage". If positive, type is usually "Top-up" (unless it's a refund).
+      5. Ignore header rows or irrelevant lines.
+      6. Extract the Tag ID or Serial Number if present in the first few columns.
+      7. Return ONLY the valid JSON object with the "transactions" key.
       
       Input Data:
       ${csvContent.substring(0, 15000)}
@@ -2162,6 +2522,7 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
 // AI Toll Image Parsing
 app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
   try {
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const body = await c.req.parseBody();
     const file = body['file'];
 
@@ -2192,6 +2553,8 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
       Analyze the provided image of a toll transaction history or top-up history.
       Extract the transaction data into a JSON array.
 
+      Current Date Context: ${today}
+
       Output JSON Schema:
       {
         "transactions": [
@@ -2210,16 +2573,21 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
       }
 
       Rules:
-      1. Detect the date format intelligently. Current year is 2025 unless specified.
-      2. Identify "Payment" or "Top Up Amount" columns.
-      3. If the row indicates "Failure" or "Failed", ignore it or mark status as Failure.
-      4. If "Top Up Amount" is present (e.g. "JMD 2,000.00"), it is a positive amount (Top-up).
-      5. If "Usage" or toll charges are shown, they are negative amounts.
-      6. Extract Tag ID (e.g. "212100286450") if visible in the header or rows.
-      7. Return ONLY the valid JSON object with the "transactions" key.
-      8. If multiple amounts are shown (e.g. "Payment After Discount" and "Topup Amount"), use the "Topup Amount" for the main 'amount' field.
-      9. Extract "Discount / Bonus" if present.
-      10. Extract "Payment After Discount / Bonus" if present.
+      1. DATE FORMAT: The input uses DD/MM/YYYY (Day/Month/Year).
+         - Example: "01/05/2024" is May 1st, 2024 (NOT January 5th).
+         - Example: "10/04/2025" is April 10th, 2025.
+      2. FUTURE DATE CHECK: The Current Date is ${today}.
+         - Do NOT generate dates in the future relative to the Current Date.
+         - If a parsed date (e.g. DD/MM) results in a future date for the current year, assume it belongs to the previous year.
+      3. Identify "Payment" or "Top Up Amount" columns.
+      4. If the row indicates "Failure" or "Failed", ignore it or mark status as Failure.
+      5. If "Top Up Amount" is present (e.g. "JMD 2,000.00"), it is a positive amount (Top-up).
+      6. If "Usage" or toll charges are shown, they are negative amounts.
+      7. Extract Tag ID (e.g. "212100286450") if visible in the header or rows.
+      8. Return ONLY the valid JSON object with the "transactions" key.
+      9. If multiple amounts are shown (e.g. "Payment After Discount" and "Topup Amount"), use the "Topup Amount" for the main 'amount' field.
+      10. Extract "Discount / Bonus" if present.
+      11. Extract "Payment After Discount / Bonus" if present.
     `;
 
     const response = await openai.chat.completions.create({

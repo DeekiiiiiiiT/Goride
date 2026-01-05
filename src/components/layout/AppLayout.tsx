@@ -36,7 +36,9 @@ import {
   Receipt,
   AlertCircle,
   UserCog,
-  Fuel
+  Fuel,
+  CreditCard,
+  FileSpreadsheet
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -78,6 +80,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
 
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
+  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports'].includes(currentPage);
   const isDrivingOpen = ['drivers', 'tier-config', 'performance'].includes(currentPage);
 
   return (
@@ -149,12 +152,57 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             onClick={() => onNavigate?.('vehicles')}
           />
           
-          <NavItem 
-            icon={<Fuel className="h-4 w-4" />} 
-            label="Fuel Management" 
-            active={currentPage === 'fuel-management'}
-            onClick={() => onNavigate?.('fuel-management')}
-          />
+          {/* Fuel Management Section */}
+          <Collapsible defaultOpen={isFuelManagementOpen} className="group/collapsible">
+            <SidebarMenuItem>
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton tooltip="Fuel Management">
+                  <Fuel className="h-4 w-4" />
+                  <span>Fuel Management</span>
+                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-overview' || currentPage === 'fuel-management'} onClick={() => onNavigate?.('fuel-overview')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Overview</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reconciliation'} onClick={() => onNavigate?.('fuel-reconciliation')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Reconciliation</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-cards'} onClick={() => onNavigate?.('fuel-cards')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Fuel Cards</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-logs'} onClick={() => onNavigate?.('fuel-logs')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Logs</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reports'} onClick={() => onNavigate?.('fuel-reports')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Reports</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
 
           {/* Toll Management Section */}
           <Collapsible defaultOpen={isTollManagementOpen} className="group/collapsible">

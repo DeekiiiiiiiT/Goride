@@ -21,9 +21,13 @@ import { toast } from "sonner@2.0.3";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { DateRange } from "react-day-picker";
 
-export function FuelManagement() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  
+export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: string }) {
+  const [activeTab, setActiveTab] = useState(defaultTab);
+
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
+
   // Date Range State (Default: Current Week)
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
       from: startOfWeek(new Date(), { weekStartsOn: 1 }),
@@ -188,10 +192,28 @@ export function FuelManagement() {
   // Calculate Spend
   const weeklySpend = logs.reduce((sum, log) => sum + log.amount, 0);
 
+  // Determine Page Title and Description based on activeTab
+  let pageTitle = "Fuel Management";
+  let pageDescription = "Track consumption, reconcile expenses, and manage gas cards.";
+
+  if (activeTab === 'reconciliation') {
+      pageTitle = "Fuel Reconciliation";
+      pageDescription = "Compare actual gas card charges against estimated operating costs.";
+  } else if (activeTab === 'cards') {
+      pageTitle = "Fuel Card Inventory";
+      pageDescription = "Manage gas cards and their assignments.";
+  } else if (activeTab === 'logs') {
+      pageTitle = "Transaction Logs";
+      pageDescription = "History of all fuel purchases and manual entries.";
+  } else if (activeTab === 'reports') {
+      pageTitle = "Fuel Reports";
+      pageDescription = "View and export detailed fuel consumption reports.";
+  }
+
   return (
     <FuelLayout 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab}
+        title={pageTitle}
+        description={pageDescription}
         onAddTransaction={() => {
             setEditingLog(null);
             setIsLogModalOpen(true);
@@ -228,15 +250,13 @@ export function FuelManagement() {
         <div className="space-y-4">
              <div className="flex justify-between items-start">
                  <div className="space-y-1">
-                    <h2 className="text-lg font-semibold text-slate-900">Fuel Reconciliation</h2>
-                    <p className="text-sm text-slate-500">Compare actual gas card charges against estimated operating costs.</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <DatePickerWithRange date={dateRange} setDate={setDateRange} />
                 </div>
             </div>
             
-            <ReconciliationTable 
+            <ReconciliationTable  
                 vehicles={vehicles}
                 trips={trips}
                 fuelEntries={logs}
@@ -254,8 +274,6 @@ export function FuelManagement() {
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                 <div className="space-y-1">
-                    <h2 className="text-lg font-semibold text-slate-900">Fuel Card Inventory</h2>
-                    <p className="text-sm text-slate-500">Manage gas cards and their assignments.</p>
                 </div>
                 <Button onClick={() => { setEditingCard(null); setIsCardModalOpen(true); }}>
                     <Plus className="h-4 w-4 mr-2" />
@@ -277,8 +295,6 @@ export function FuelManagement() {
         <div className="space-y-4">
              <div className="flex justify-between items-center">
                 <div className="space-y-1">
-                    <h2 className="text-lg font-semibold text-slate-900">Transaction Logs</h2>
-                    <p className="text-sm text-slate-500">History of all fuel purchases and manual entries.</p>
                 </div>
                 <div className="flex gap-2">
                     <Button onClick={() => { setEditingLog(null); setIsLogModalOpen(true); }}>

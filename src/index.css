@@ -1670,6 +1670,10 @@
     max-width: 80%;
   }
 
+  .max-w-\[100px\] {
+    max-width: 100px;
+  }
+
   .max-w-\[120px\] {
     max-width: 120px;
   }
@@ -5060,6 +5064,10 @@
     border-color: var(--color-slate-500);
   }
 
+  .peer-data-\[state\=checked\]\:text-primary:is(:where(.peer)[data-state="checked"] ~ *) {
+    color: var(--primary);
+  }
+
   .selection\:bg-primary ::selection, .selection\:bg-primary::selection {
     background-color: var(--primary);
   }
@@ -5855,6 +5863,12 @@
   @media (hover: hover) {
     .hover\:text-indigo-600:hover {
       color: var(--color-indigo-600);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-indigo-700:hover {
+      color: var(--color-indigo-700);
     }
   }
 
@@ -6980,12 +6994,6 @@
   @media (width >= 48rem) {
     .md\:w-\[300px\] {
       width: 300px;
-    }
-  }
-
-  @media (width >= 48rem) {
-    .md\:w-\[750px\] {
-      width: 750px;
     }
   }
 

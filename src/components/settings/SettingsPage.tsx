@@ -110,8 +110,8 @@ export function SettingsPage() {
 function GeneralPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const [currency, setCurrency] = useState('usd');
-  const [timezone, setTimezone] = useState('pst');
+  const [currency, setCurrency] = useState('jmd');
+  const [timezone, setTimezone] = useState('est-jam');
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -223,10 +223,7 @@ function GeneralPanel() {
                     <SelectValue placeholder="Select currency" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="usd">USD ($)</SelectItem>
                     <SelectItem value="jmd">JMD (J$)</SelectItem>
-                    <SelectItem value="eur">EUR (€)</SelectItem>
-                    <SelectItem value="gbp">GBP (£)</SelectItem>
                   </SelectContent>
                 </Select>
              </div>
@@ -237,10 +234,7 @@ function GeneralPanel() {
                     <SelectValue placeholder="Select timezone" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pst">Pacific Time (PT)</SelectItem>
-                    <SelectItem value="est">Eastern Time (ET)</SelectItem>
                     <SelectItem value="est-jam">Jamaica (EST)</SelectItem>
-                    <SelectItem value="gmt">Greenwich Mean Time (GMT)</SelectItem>
                   </SelectContent>
                 </Select>
              </div>

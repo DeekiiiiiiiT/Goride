@@ -113,7 +113,7 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = ({ vehi
 
     const formatCurrency = (val: number) => {
         const decimals = (viewBasis === 'daily_rate' || viewBasis === 'weekly_rate') ? 2 : 0;
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(val);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'JMD', minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(val);
     };
 
     return (

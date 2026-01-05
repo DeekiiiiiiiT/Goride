@@ -8,7 +8,6 @@ import { format } from 'date-fns';
 import { api } from '../../services/api';
 import { FinancialTransaction, Trip } from '../../types/data';
 import { toast } from "sonner@2.0.3";
-import { BulkImportTollTransactionsModal } from "../vehicles/BulkImportTollTransactionsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +29,6 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [trips, setTrips] = useState<Record<string, Trip>>({});
   const [loading, setLoading] = useState(true);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [internalRefresh, setInternalRefresh] = useState(0);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
@@ -95,12 +93,6 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
     }
   };
 
-  const handleImportSuccess = () => {
-    setInternalRefresh(prev => prev + 1);
-    setIsImportModalOpen(false);
-    onTransactionChange?.();
-  };
-
   if (loading) {
     return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
   }
@@ -113,15 +105,6 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
             <CardTitle>Toll Transaction History</CardTitle>
             <CardDescription>Recent top-ups and charges</CardDescription>
         </div>
-        <Button 
-            size="sm" 
-            variant="outline" 
-            className="bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700"
-            onClick={() => setIsImportModalOpen(true)}
-        >
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Import Top-up
-        </Button>
       </CardHeader>
       <CardContent>
         {transactions.length === 0 ? (
@@ -216,14 +199,6 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
         )}
       </CardContent>
     </Card>
-
-    <BulkImportTollTransactionsModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        vehicleId={vehicleId}
-        mode="topup"
-        onSuccess={handleImportSuccess}
-    />
 
     <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
       <AlertDialogContent>
