@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui
 import { Button } from "../ui/button";
 import { ArrowLeft, Car, Calendar, CreditCard, Tag, Wallet, TrendingDown } from "lucide-react";
 import { Badge } from "../ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { TollTag } from "../../types/vehicle";
 import { TollTopupHistory } from "../vehicles/TollTopupHistory";
 import { api } from "../../services/api";
@@ -17,7 +18,9 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
   const [vehicleName, setVehicleName] = useState(tag.assignedVehicleName || 'Unassigned');
   const [stats, setStats] = useState({
     balance: 0,
-    totalSpent: 0,
+    tagSpent: 0,
+    cashSpent: 0,
+    totalTopUp: 0,
     calculatedBalance: 0,
     loading: true
   });
@@ -44,9 +47,17 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
       );
 
       // Calculate totals
-      const totalSpent = vehicleTx
+      const tagSpent = vehicleTx
         .filter((tx: any) => tx.category === 'Toll Usage')
         .reduce((sum: number, tx: any) => sum + Math.abs(tx.amount), 0);
+
+      const cashSpent = vehicleTx
+        .filter((tx: any) => tx.category === 'Tolls' && tx.amount < 0)
+        .reduce((sum: number, tx: any) => sum + Math.abs(tx.amount), 0);
+
+      const totalTopUp = vehicleTx
+        .filter((tx: any) => tx.amount > 0)
+        .reduce((sum: number, tx: any) => sum + tx.amount, 0);
       
       const calculatedBalance = vehicleTx.reduce((sum: number, tx: any) => sum + tx.amount, 0);
       const currentBalance = vehicle?.tollBalance || 0;
@@ -61,7 +72,9 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
 
       setStats({
         balance: calculatedBalance,
-        totalSpent,
+        tagSpent,
+        cashSpent,
+        totalTopUp,
         calculatedBalance,
         loading: false
       });
@@ -119,9 +132,16 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
               ) : (
                 <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
-                        <div className={`text-2xl font-bold ${stats.balance < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-                        ${stats.balance.toFixed(2)}
-                        </div>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <div className={`text-2xl font-bold ${stats.balance < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                                ${stats.balance.toFixed(2)}
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Current available balance for toll payments</p>
+                            </TooltipContent>
+                        </Tooltip>
                     </div>
                 </div>
               )}
@@ -131,18 +151,57 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
+              <CardTitle className="text-sm font-medium">Activity Summary</CardTitle>
               <TrendingDown className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {stats.loading ? (
                 <div className="h-8 w-24 bg-slate-100 animate-pulse rounded" />
               ) : (
-                <div className="text-2xl font-bold text-slate-900">
-                  ${stats.totalSpent.toFixed(2)}
+                <div className="flex items-center gap-8">
+                    <div>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <div className="text-2xl font-bold text-slate-900">
+                                ${stats.tagSpent.toFixed(2)}
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Total amount deducted automatically from the tag</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <p className="text-xs text-muted-foreground mt-1">Tag Usage</p>
+                    </div>
+                    <div className="w-px h-10 bg-slate-200" />
+                    <div>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <div className="text-2xl font-bold text-slate-900">
+                                ${stats.cashSpent.toFixed(2)}
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Total manual cash payments (receipts)</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <p className="text-xs text-muted-foreground mt-1">Cash (Receipts)</p>
+                    </div>
+                    <div className="w-px h-10 bg-slate-200" />
+                    <div>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <div className="text-2xl font-bold text-emerald-600">
+                                ${stats.totalTopUp.toFixed(2)}
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Total funds added to the tag account</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <p className="text-xs text-muted-foreground mt-1">Total Top Up</p>
+                    </div>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">Lifetime usage</p>
             </CardContent>
           </Card>
         </div>

@@ -19,9 +19,10 @@ interface DisputeModalProps {
   isOpen: boolean;
   onClose: () => void;
   lossItem: { transaction: FinancialTransaction, match: MatchResult } | null;
+  onClaimSuccess?: () => void;
 }
 
-export function DisputeModal({ isOpen, onClose, lossItem }: DisputeModalProps) {
+export function DisputeModal({ isOpen, onClose, lossItem, onClaimSuccess }: DisputeModalProps) {
   const [copied, setCopied] = useState(false);
   const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
   const { createClaim } = useClaims();
@@ -104,6 +105,7 @@ Please adjust the fare to include the missing $${missingAmount.toFixed(2)}.`;
            dropoff: trip.dropoffLocation
         });
         toast.success("Claim sent to driver successfully");
+        if (onClaimSuccess) onClaimSuccess();
         onClose();
     } catch (e) {
         toast.error("Failed to send claim");

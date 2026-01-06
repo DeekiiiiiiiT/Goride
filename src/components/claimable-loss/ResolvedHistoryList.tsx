@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Table, 
   TableBody, 
@@ -8,8 +8,10 @@ import {
   TableRow 
 } from "../ui/table";
 import { Badge } from "../ui/badge";
-import { CheckCircle2, History } from "lucide-react";
+import { CheckCircle2, History, Trash2 } from "lucide-react";
 import { Claim } from "../../types/data";
+import { Checkbox } from "../ui/checkbox";
+import { Button } from "../ui/button";
 
 interface ResolutionStyle {
   badgeClass: string;
@@ -45,9 +47,12 @@ interface ResolvedHistoryListProps {
   claims: Claim[];
   isLoading?: boolean;
   getDriverName?: (id: string) => string;
+  onDelete?: (ids: string[]) => void;
 }
 
-export function ResolvedHistoryList({ claims, isLoading, getDriverName }: ResolvedHistoryListProps) {
+export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete }: ResolvedHistoryListProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading history...</div>;
   }
@@ -64,22 +69,66 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName }: Resolv
     );
   }
 
+  const toggleSelectAll = () => {
+      if (selectedIds.size === claims.length) {
+          setSelectedIds(new Set());
+      } else {
+          setSelectedIds(new Set(claims.map(c => c.id)));
+      }
+  };
+
+  const toggleSelect = (id: string) => {
+      const newSelected = new Set(selectedIds);
+      if (newSelected.has(id)) {
+          newSelected.delete(id);
+      } else {
+          newSelected.add(id);
+      }
+      setSelectedIds(newSelected);
+  };
+
   return (
     <div className="border rounded-md bg-white shadow-sm">
-      <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center">
+      <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center min-h-[72px]">
         <div>
             <h3 className="font-semibold text-slate-900">Resolved History</h3>
             <p className="text-sm text-slate-500">History of closed claims and reimbursements.</p>
         </div>
-        <div className="text-sm font-medium text-slate-600">
-            Total Resolved: <span className="text-emerald-600 font-bold ml-1">
-                ${claims.reduce((sum, c) => sum + c.amount, 0).toFixed(2)}
-            </span>
-        </div>
+        
+        {selectedIds.size > 0 ? (
+            <div className="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
+                 <span className="text-sm text-slate-500 mr-2">{selectedIds.size} selected</span>
+                 <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={() => {
+                        onDelete?.(Array.from(selectedIds));
+                        setSelectedIds(new Set());
+                    }}
+                    className="gap-2 h-8"
+                 >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete Selected
+                 </Button>
+            </div>
+        ) : (
+            <div className="text-sm font-medium text-slate-600">
+                Total Resolved: <span className="text-emerald-600 font-bold ml-1">
+                    ${claims.reduce((sum, c) => sum + c.amount, 0).toFixed(2)}
+                </span>
+            </div>
+        )}
       </div>
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[50px]">
+                <Checkbox 
+                    checked={claims.length > 0 && selectedIds.size === claims.length}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
+                />
+            </TableHead>
             <TableHead>Date Resolved</TableHead>
             <TableHead>Driver</TableHead>
             <TableHead>Location</TableHead>
@@ -91,7 +140,14 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName }: Resolv
           {claims.map((claim) => {
             const styles = getResolutionStyle(claim.resolutionReason);
             return (
-              <TableRow key={claim.id}>
+              <TableRow key={claim.id} className={selectedIds.has(claim.id) ? "bg-slate-50/50" : ""}>
+                <TableCell>
+                    <Checkbox 
+                        checked={selectedIds.has(claim.id)}
+                        onCheckedChange={() => toggleSelect(claim.id)}
+                        aria-label={`Select claim`}
+                    />
+                </TableCell>
                 <TableCell className="font-medium text-slate-700">
                   {new Date(claim.updatedAt || claim.createdAt).toLocaleDateString()}
                   <div className="text-xs text-slate-400">

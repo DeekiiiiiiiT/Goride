@@ -367,114 +367,126 @@ export function BulkImportTollTransactionsModal({
         return;
     }
 
+    // 1. Start Loading State
     setIsSubmitting(true);
     setStep('importing');
     setImportStats({ total: parsedTx.length, success: 0, failed: 0 });
 
-    let successCount = 0;
-    let failCount = 0;
-    
-    // Track balance changes per vehicle: vehicleId -> change amount
-    const vehicleBalanceChanges: Record<string, number> = {};
-
-    for (const tx of parsedTx) {
-      if (!tx.isValid || !tx.vehicleId) {
-          failCount++;
-          continue;
-      }
-
-      // Find tag info if available
-      let txTollTagId = tollTagId; 
-      let txTollTagUuid = tollTagUuid;
-      
-      if (!txTollTagId && tx.tagId) {
-          txTollTagId = tx.tagId;
-          const tag = tollTags.find((t: any) => t.tagNumber === tx.tagId);
-          if (tag) txTollTagUuid = tag.id;
-      }
-
-      try {
-        await api.saveTransaction({
-            date: tx.date.toISOString(),
-            amount: tx.amount, 
-            type: tx.type === 'Usage' ? 'Usage' : 'Expense', 
-            category: tx.type === 'Usage' ? 'Toll Usage' : 'Toll Top-up',
-            description: (tx.type === 'Top-up' && (!tx.location || tx.location === 'Unknown'))
-                ? `Balance Top-up`
-                : `${tx.location} ${tx.laneId ? `(${tx.laneId})` : ''}`.trim(),
-            vehicleId: tx.vehicleId,
-            vehiclePlate: tx.matchedVehicleName || vehicleName || 'Unknown Vehicle',
-            driverId: tx.driverId,
-            driverName: tx.driverName,
-            paymentMethod: 'Tag Balance',
-            status: 'Completed',
-            isReconciled: false,
-            time: tx.date.toLocaleTimeString(),
-            batchId: currentBatchId,
-            batchName: currentBatchName,
-            metadata: {
-                tollTagId: txTollTagId,
-                tollTagUuid: txTollTagUuid,
-                laneId: tx.laneId,
-                imported: true,
-                importDate: new Date().toISOString(),
-                discount: tx.discount,
-                paymentAfterDiscount: tx.paymentAfterDiscount,
-                originalType: tx.type
-            }
-        });
-        
-        // Aggregate balance change
-        vehicleBalanceChanges[tx.vehicleId] = (vehicleBalanceChanges[tx.vehicleId] || 0) + tx.amount;
-        successCount++;
-      } catch (error) {
-        console.error(`Failed to import tx ${tx.date}`, error);
-        failCount++;
-      }
-      
-      setImportStats(prev => ({ ...prev, success: successCount, failed: failCount }));
-    }
-
-    // Update balances for all affected vehicles
+    // 2. Process Transactions
     try {
+        let successCount = 0;
+        let failCount = 0;
+        
+        // Track balance changes per vehicle: vehicleId -> change amount
+        const vehicleBalanceChanges: Record<string, number> = {};
+
+        for (const tx of parsedTx) {
+            if (!tx.isValid || !tx.vehicleId) {
+                failCount++;
+                setImportStats(prev => ({ ...prev, failed: failCount }));
+                continue;
+            }
+
+            // Find tag info if available
+            let txTollTagId = tollTagId; 
+            let txTollTagUuid = tollTagUuid;
+            
+            if (!txTollTagId && tx.tagId) {
+                txTollTagId = tx.tagId;
+                const tag = tollTags.find((t: any) => t.tagNumber === tx.tagId);
+                if (tag) txTollTagUuid = tag.id;
+            }
+
+            try {
+                await api.saveTransaction({
+                    date: tx.date.toISOString(),
+                    amount: tx.amount, 
+                    type: tx.type === 'Usage' ? 'Usage' : 'Expense', 
+                    category: tx.type === 'Usage' ? 'Toll Usage' : 'Toll Top-up',
+                    description: (tx.type === 'Top-up' && (!tx.location || tx.location === 'Unknown'))
+                        ? `Balance Top-up`
+                        : `${tx.location} ${tx.laneId ? `(${tx.laneId})` : ''}`.trim(),
+                    vehicleId: tx.vehicleId,
+                    vehiclePlate: tx.matchedVehicleName || vehicleName || 'Unknown Vehicle',
+                    driverId: tx.driverId,
+                    driverName: tx.driverName,
+                    paymentMethod: 'Tag Balance',
+                    status: 'Completed',
+                    isReconciled: false,
+                    time: tx.date.toLocaleTimeString(),
+                    batchId: currentBatchId,
+                    batchName: currentBatchName,
+                    metadata: {
+                        tollTagId: txTollTagId,
+                        tollTagUuid: txTollTagUuid,
+                        laneId: tx.laneId,
+                        imported: true,
+                        importDate: new Date().toISOString(),
+                        discount: tx.discount,
+                        paymentAfterDiscount: tx.paymentAfterDiscount,
+                        originalType: tx.type
+                    }
+                });
+                
+                // Aggregate balance change
+                vehicleBalanceChanges[tx.vehicleId] = (vehicleBalanceChanges[tx.vehicleId] || 0) + tx.amount;
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to import tx ${tx.date}`, error);
+                failCount++;
+            }
+            
+            setImportStats(prev => ({ ...prev, success: successCount, failed: failCount }));
+        }
+
+        // 3. Update balances for all affected vehicles
         const vehiclesToUpdate = Object.keys(vehicleBalanceChanges);
         if (vehiclesToUpdate.length > 0) {
-            // Re-fetch latest vehicle states to be safe, or use what we have in 'vehicles' state 
-            // but 'vehicles' state might be stale if other updates happened.
-            // Since we are doing bulk updates, let's just use what we loaded or re-fetch.
-            // 'vehicles' from useVehicles might be best but we only have `vehicles` state here.
-            // Let's iterate through our `vehicles` state.
-            
             for (const vId of vehiclesToUpdate) {
-                const vehicle = vehicles.find((v: any) => v.id === vId);
-                if (vehicle) {
-                     const change = vehicleBalanceChanges[vId];
-                     if (change !== 0) {
-                         const newBalance = (vehicle.tollBalance || 0) + change;
-                         await api.saveVehicle({
-                             ...vehicle,
-                             tollBalance: newBalance
-                         });
-                     }
+                try {
+                    const vehicle = vehicles.find((v: any) => v.id === vId);
+                    if (vehicle) {
+                        const change = vehicleBalanceChanges[vId];
+                        if (change !== 0) {
+                            const newBalance = (vehicle.tollBalance || 0) + change;
+                            await api.saveVehicle({
+                                ...vehicle,
+                                tollBalance: newBalance
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error(`Failed to update balance for vehicle ${vId}`, err);
+                    // Don't fail the whole import for this
                 }
             }
         }
-    } catch (err) {
-        console.error("Failed to update vehicle balances", err);
-        toast.error("Transactions imported, but failed to update some balances.");
-    }
 
-    if (successCount === 0 && failCount > 0) {
-        toast.error(`Import failed. ${failCount} transactions failed or were invalid.`);
-    } else {
-        toast.success(`Import complete. ${successCount} imported.`);
-        onSuccess();
-        setTimeout(() => {
+        // 4. Finish
+        if (successCount === 0 && failCount > 0) {
+            toast.error(`Import failed. ${failCount} transactions failed.`);
+            setIsSubmitting(false); // Let user try again or fix
+            setStep('preview');
+        } else {
+            toast.success(`Import complete. ${successCount} imported.`);
+            onSuccess();
+            
+            // Allow animation to finish
+            await new Promise(r => setTimeout(r, 1000));
+            
             onClose();
+            // Reset state
             setStep('input');
             setCsvContent('');
             setParsedTx([]);
-        }, 1500);
+            setIsSubmitting(false);
+        }
+
+    } catch (e) {
+        console.error("Critical error during import", e);
+        toast.error("Import crashed. Check console.");
+        setIsSubmitting(false);
+        setStep('preview');
     }
   };
 

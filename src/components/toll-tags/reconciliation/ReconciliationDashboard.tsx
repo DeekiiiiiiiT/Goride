@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { UnmatchedTollsList } from "./UnmatchedTollsList";
@@ -9,6 +9,9 @@ import { useClaims } from "../../../hooks/useClaims";
 import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle } from "lucide-react";
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
+import { DisputeModal } from "../../claimable-loss/DisputeModal";
+import { FinancialTransaction } from "../../../types/data";
+import { MatchResult } from "../../../utils/tollReconciliation";
 
 export function ReconciliationDashboard() {
   const handleRunTest = () => {
@@ -26,11 +29,66 @@ export function ReconciliationDashboard() {
     suggestions, 
     reconcile, 
     unreconcile,
+    approve,
+    reject,
     autoMatchAll,
     refresh 
   } = useTollReconciliation();
 
-  const { claims, loading: claimsLoading } = useClaims();
+  const { claims, loading: claimsLoading, refresh: refreshClaims } = useClaims();
+
+  const [isDisputeOpen, setIsDisputeOpen] = React.useState(false);
+  const [disputeTarget, setDisputeTarget] = React.useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
+
+  // Create Trip Map for O(1) lookup. MOVED UP before early return to obey Rules of Hooks.
+  const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
+
+  const handleOpenDispute = (transaction: FinancialTransaction, match: MatchResult) => {
+    setDisputeTarget({ transaction, match });
+    setIsDisputeOpen(true);
+  };
+
+  // Phase 4: Action Logic Handlers
+  // These handlers direct the user intent to the correct logical flow.
+  // In Phase 5, we will add the specific API calls (approveExpense, rejectExpense) inside these.
+
+  const handleApprove = async (tx: FinancialTransaction) => {
+      // Case: Cash/Green (Perfect Match)
+      // Action: Reimburse Driver (Fleet owes Driver)
+      // Logic: Link the trip (Reconcile) AND set status to 'Approved'.
+      
+      const match = suggestions.get(tx.id)?.[0];
+      if (match) {
+          // 1. Link the toll to the trip
+          await reconcile(tx, match.trip);
+          // 2. Mark as Approved (Resolved)
+          await approve(tx, "Matched & Approved via Dashboard");
+      }
+  };
+
+  const handleReject = async (tx: FinancialTransaction) => {
+      // Case: Cash/Purple (Personal)
+      // Action: Personal Expense (Driver Liability)
+      // Logic: Set status to 'Rejected'. 
+      
+      const match = suggestions.get(tx.id)?.[0];
+      const reason = match?.matchType === 'PERSONAL_MATCH' ? "Identified as Personal Trip" : "Rejected by Admin";
+      await reject(tx, reason);
+  };
+
+  const handleFlag = async (tx: FinancialTransaction) => {
+      // Case: Cash/Amber (Variance/Partial)
+      // Action: Flag for Claim -> Now just Match & Reconcile
+      // Rationale: These are already surfaced in "Claimable Loss" based on the reconciliation status and variance.
+      // So we just need to confirm the link here.
+      
+      const match = suggestions.get(tx.id)?.[0];
+      if (match) {
+          // Just reconcile directly. 
+          // The variance will automatically make it show up in Claimable Loss if logic allows (it does).
+          await reconcile(tx, match.trip);
+      }
+  };
 
   // Filter out tolls that have an existing claim (Active, Resolved, or Rejected)
   // This ensures we don't double-process a toll or see items we've already handled.
@@ -48,50 +106,58 @@ export function ReconciliationDashboard() {
     );
   }
 
-  // Calculate Financial Aggregates based on Idea 1 Categories
-  let claimableAmount = 0; // Amber
-  let deductibleAmount = 0; // Blue
-  let personalAmount = 0;   // Purple
-  let unknownAmount = 0;    // No match found
+  // Calculate Financial Aggregates
+  let claimableAmount = 0; // Amber: Unreconciled Underpayments
+  let unreconciledPersonal = 0;   // Purple: Unreconciled Personal matches
+  let unknownAmount = 0;    // No match found (Potential Personal)
 
   filteredUnreconciledTolls.forEach(tx => {
     const matches = suggestions.get(tx.id);
     const bestMatch = matches?.[0];
+    const amount = Math.abs(tx.amount);
 
     if (!bestMatch) {
-      unknownAmount += Math.abs(tx.amount);
+      unknownAmount += amount;
       return;
     }
 
-    const amount = Math.abs(tx.amount);
-
     switch (bestMatch.matchType) {
       case 'AMOUNT_VARIANCE': // Amber
-        // The claimable amount is the Variance (Underpayment)
-        // Or should it be the full amount? 
-        // If Uber paid $0, variance is Full Amount.
-        // If Uber paid partial, variance is the gap.
-        // Let's assume we want to know "How much money am I losing?". It's the variance.
         claimableAmount += (bestMatch.varianceAmount || amount);
         break;
-      case 'DEADHEAD_MATCH': // Blue
-        deductibleAmount += amount;
-        break;
       case 'PERSONAL_MATCH': // Purple
-        personalAmount += amount;
+        unreconciledPersonal += amount;
         break;
-      case 'PERFECT_MATCH': // Green (Should be reconciled, but if not auto-matched yet)
-        // No loss, but technically "Pending Reconcile"
+      case 'PERFECT_MATCH': // Green
+        // Will be recovered once reconciled
         break;
       default:
-        // Treat Possible/Unknown as potential personal or deductible
-        // For now, put in Unknown to encourage manual review
         unknownAmount += amount;
     }
   });
 
+  // Calculate Reconciled Stats (History)
+  let reconciledLiability = 0;
+  let recoveredAmount = 0;
+
+  reconciledTolls.forEach(tx => {
+      const trip = tripMap.get(tx.tripId || '');
+      const expense = Math.abs(tx.amount);
+      const reimbursement = trip?.tollCharges || 0;
+      const variance = reimbursement - expense;
+
+      // Recovered: Amount covered by Uber
+      recoveredAmount += Math.min(expense, reimbursement);
+
+      // Liability: Deficit (Driver pays)
+      if (variance < -0.01) {
+          reconciledLiability += Math.abs(variance);
+      }
+  });
+
+  const totalDriverLiability = unreconciledPersonal + reconciledLiability + unknownAmount;
+
   // Yellow: Unclaimed Refunds (Money Uber paid you, but you haven't matched to an expense)
-  // This is effectively "Driver Pay"
   const refundsAmount = unclaimedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
 
   // Count high confidence matches for auto-button
@@ -138,7 +204,7 @@ export function ReconciliationDashboard() {
                                 <HelpCircle className="h-3.5 w-3.5 text-orange-400 hover:text-orange-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Tolls paid during an active trip that were not fully reimbursed. This represents money owed to you.</p>
+                                <p className="max-w-[200px] text-xs">Tolls paid during an active trip that were not fully reimbursed. This represents money owed to you by Uber.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
@@ -149,49 +215,49 @@ export function ReconciliationDashboard() {
             </div>
         </div>
 
-        {/* Card 2: Deductible (Blue) */}
-        <div className="bg-white p-4 rounded-lg border border-blue-200 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-2 h-full bg-blue-400" />
+        {/* Card 2: Recovered (Green) - Replaces Deadhead */}
+        <div className="bg-white p-4 rounded-lg border border-emerald-200 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-2 h-full bg-emerald-400" />
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs font-medium text-blue-600 uppercase tracking-wider">Business Expense</h3>
+                        <h3 className="text-xs font-medium text-emerald-600 uppercase tracking-wider">Recovered</h3>
                         <Tooltip>
                             <TooltipTrigger>
-                                <HelpCircle className="h-3.5 w-3.5 text-blue-400 hover:text-blue-600 transition-colors" />
+                                <HelpCircle className="h-3.5 w-3.5 text-emerald-400 hover:text-emerald-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Tolls paid while approaching a passenger (Deadhead). These are tax deductible but not reimbursed.</p>
+                                <p className="max-w-[200px] text-xs">Total toll expenses successfully covered by Uber reimbursements.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">${deductibleAmount.toFixed(2)}</div>
-                    <div className="text-xs text-slate-500 mt-1">Deadhead (Tax Deductible)</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">${recoveredAmount.toFixed(2)}</div>
+                    <div className="text-xs text-slate-500 mt-1">Paid by Uber</div>
                 </div>
-                <Wallet className="h-5 w-5 text-blue-400" />
+                <TrendingUp className="h-5 w-5 text-emerald-400" />
             </div>
         </div>
 
-        {/* Card 3: Personal (Purple) */}
+        {/* Card 3: Personal/Liability (Purple) */}
         <div className="bg-white p-4 rounded-lg border border-purple-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-purple-400" />
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs font-medium text-purple-600 uppercase tracking-wider">Driver Personal</h3>
+                        <h3 className="text-xs font-medium text-purple-600 uppercase tracking-wider">Driver Liability</h3>
                         <Tooltip>
                             <TooltipTrigger>
                                 <HelpCircle className="h-3.5 w-3.5 text-purple-400 hover:text-purple-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Tolls paid during personal use or outside of any trip context. These are the driver's responsibility.</p>
+                                <p className="max-w-[200px] text-xs">Total liability to be charged to the driver (Unreconciled Personal + Reconciled Deficits).</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">${(personalAmount + unknownAmount).toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">${totalDriverLiability.toFixed(2)}</div>
                     <div className="text-xs text-slate-500 mt-1">Charge to driver</div>
                 </div>
-                <TrendingUp className="h-5 w-5 text-purple-400" />
+                <Wallet className="h-5 w-5 text-purple-400" />
             </div>
         </div>
 
@@ -251,6 +317,10 @@ export function ReconciliationDashboard() {
                 suggestions={suggestions}
                 onReconcile={reconcile}
                 allTrips={trips}
+                onOpenDispute={handleOpenDispute}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onFlag={handleFlag}
             />
         </TabsContent>
         
@@ -266,6 +336,21 @@ export function ReconciliationDashboard() {
             />
         </TabsContent>
       </Tabs>
+
+      <DisputeModal
+        isOpen={isDisputeOpen}
+        onClose={() => setIsDisputeOpen(false)}
+        lossItem={disputeTarget}
+        onClaimSuccess={async () => {
+            if (disputeTarget) {
+                // Link the toll to the trip as we've just created a claim for the variance
+                await reconcile(disputeTarget.transaction, disputeTarget.match.trip);
+                setIsDisputeOpen(false);
+                await refreshClaims();
+                refresh();
+            }
+        }}
+      />
     </div>
     </TooltipProvider>
   );

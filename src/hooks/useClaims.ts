@@ -46,11 +46,22 @@ export function useClaims(driverId?: string) {
       }
   }
 
+  const deleteClaim = async (id: string) => {
+      try {
+          await api.deleteClaim(id);
+          setClaims(prev => prev.filter(c => c.id !== id));
+      } catch (error) {
+          console.error("Failed to delete claim", error);
+          throw error;
+      }
+  }
+
   return {
     claims,
     loading,
     createClaim,
     updateClaim,
+    deleteClaim,
     refresh: fetchClaims
   };
 }

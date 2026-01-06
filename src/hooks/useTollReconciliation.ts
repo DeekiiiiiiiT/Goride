@@ -21,10 +21,24 @@ export function useTollReconciliation() {
 
       // 1. Identify Unreconciled Tolls
       // We check for !isReconciled OR !tripId to catch legacy imports that were auto-marked as reconciled but have no link.
-      const tolls = allTx.filter(tx => 
-        (tx.category === 'Toll Usage' || tx.category === 'Tolls') && 
-        (!tx.isReconciled || !tx.tripId)
-      );
+      // We also include 'Pending' Cash Claims.
+      const tolls = allTx.filter(tx => {
+        const isToll = tx.category === 'Toll Usage' || tx.category === 'Tolls';
+        if (!isToll) return false;
+
+        // Identify Source: Cash Claim vs Tag Import
+        // If it has a receipt or marked as Cash, treat as Driver Claim
+        const isCashClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
+
+        if (isCashClaim) {
+            // For Cash Claims, we only want those explicitly waiting for approval
+            // If it's Approved/Rejected, it shouldn't appear in the "To Reconcile" list
+            return tx.status === 'Pending';
+        }
+
+        // For Tag Imports, we want anything that hasn't been linked/reconciled
+        return !tx.isReconciled || !tx.tripId;
+      });
       
       tolls.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setUnreconciledTolls(tolls);
@@ -157,6 +171,51 @@ export function useTollReconciliation() {
       }
   };
 
+  const approve = async (transaction: FinancialTransaction, notes?: string) => {
+      try {
+          const result = await api.approveExpense(transaction.id, notes);
+          const updatedTx = result.data;
+
+          // Update local state
+          setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
+          setReconciledTolls(prev => [updatedTx, ...prev]);
+          
+          setSuggestions(prev => {
+              const next = new Map(prev);
+              next.delete(transaction.id);
+              return next;
+          });
+          
+          return updatedTx;
+      } catch (error) {
+          console.error("Approve failed", error);
+          throw error;
+      }
+  };
+
+  const reject = async (transaction: FinancialTransaction, reason?: string) => {
+      try {
+          const result = await api.rejectExpense(transaction.id, reason);
+          const updatedTx = result.data;
+
+          // Update local state
+          setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
+          // We add to reconciled list so it appears in history (marked as Rejected)
+          setReconciledTolls(prev => [updatedTx, ...prev]);
+          
+          setSuggestions(prev => {
+              const next = new Map(prev);
+              next.delete(transaction.id);
+              return next;
+          });
+
+          return updatedTx;
+      } catch (error) {
+          console.error("Reject failed", error);
+          throw error;
+      }
+  };
+
   const autoMatchAll = async () => {
     // Filter for high confidence matches
     const highConfidenceMatches: { tx: FinancialTransaction, trip: Trip }[] = [];
@@ -210,6 +269,8 @@ export function useTollReconciliation() {
     suggestions,
     reconcile,
     unreconcile,
+    approve,
+    reject,
     autoMatchAll,
     refresh: fetchData
   };

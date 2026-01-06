@@ -23,7 +23,7 @@ import {
   Camera,
   X
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { cn } from "../ui/utils";
 import { toast } from "sonner@2.0.3";
 import { useAuth } from '../auth/AuthContext';
@@ -46,6 +46,7 @@ function ExpenseLogger() {
 
   // Form State
   const [date, setDate] = useState<Date>(new Date());
+  const [time, setTime] = useState<string>(format(new Date(), 'HH:mm'));
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<string>('Fuel');
   const [notes, setNotes] = useState('');
@@ -60,6 +61,8 @@ function ExpenseLogger() {
   const [lane, setLane] = useState('');
   const [vehicleClass, setVehicleClass] = useState('');
   const [collector, setCollector] = useState('');
+  const [scannedDate, setScannedDate] = useState('');
+  const [scannedTime, setScannedTime] = useState('');
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,10 +108,37 @@ function ExpenseLogger() {
            if (data.amount) setAmount(data.amount.toString());
            
            if (data.date) {
-               const parsedDate = new Date(data.date);
-               if (!isNaN(parsedDate.getTime())) {
-                   setDate(parsedDate);
+               // Handle Date - Parse as local date to avoid timezone shifts
+               // "YYYY-MM-DD" -> [YYYY, MM, DD]
+               const parts = data.date.split('-');
+               if (parts.length === 3) {
+                   const y = parseInt(parts[0]);
+                   const m = parseInt(parts[1]) - 1; // Month is 0-indexed
+                   const d = parseInt(parts[2]);
+                   
+                   // Basic validation to prevent weird years (e.g. 1900) if format is DD-MM-YYYY
+                   // Assume year must be > 2000
+                   if (y > 2000) {
+                        const localDate = new Date(y, m, d);
+                        if (isValid(localDate)) {
+                            setDate(localDate);
+                        }
+                   }
                }
+           }
+
+           if (data.time) {
+                // Handle Time - Expecting HH:MM or HH:MM:SS
+                // We just need HH:MM for the input
+                let timeStr = data.time;
+                if (timeStr.length > 5) {
+                    timeStr = timeStr.substring(0, 5);
+                }
+                setTime(timeStr);
+           } else if (!data.time && data.date) {
+                // If no time is found but date is found, default to 12:00 PM to avoid confusion
+                // or keep current time? Let's default to noon if strictly scanning a receipt.
+                setTime("12:00");
            }
            
            if (data.type) {
@@ -126,6 +156,8 @@ function ExpenseLogger() {
            setVehicleClass(data.vehicleClass || '');
            setReferenceNumber(data.receiptNumber || '');
            setCollector(data.collector || '');
+           setScannedDate(data.date || '');
+           setScannedTime(data.time || '');
            
            // Any extra notes from AI
            if (data.notes) setNotes(data.notes);
@@ -162,8 +194,8 @@ function ExpenseLogger() {
         driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
         vehicleId: driverRecord?.assignedVehicleId,
         vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (driverRecord?.assignedVehicleId ? 'Assigned Vehicle' : undefined),
-        date: format(date, 'yyyy-MM-dd'),
-        time: format(date, 'HH:mm:ss'),
+        date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+        time: time ? `${time}:00` : (isValid(date) ? format(date, 'HH:mm:ss') : format(new Date(), 'HH:mm:ss')), // Use the separate time state
         type: 'Expense',
         category: category as TransactionCategory,
         amount: -Math.abs(parseFloat(amount)), // Expenses are negative
@@ -198,12 +230,15 @@ function ExpenseLogger() {
       setReceiptFile(null);
       setReceiptPreview(null);
       setDate(new Date());
+      setTime(format(new Date(), 'HH:mm'));
       setMerchant('');
       setReferenceNumber('');
       setPlaza('');
       setLane('');
       setVehicleClass('');
       setCollector('');
+      setScannedDate('');
+      setScannedTime('');
 
       fetchTransactions();
 
@@ -299,30 +334,39 @@ function ExpenseLogger() {
 
               <div className="grid grid-cols-2 gap-4">
                  <div className="space-y-2">
-                    <Label>Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          disabled={true}
-                          variant={"outline"}
-                          className={cn(
-                            "w-full justify-start text-left font-normal bg-slate-100 cursor-not-allowed opacity-100",
-                            !date && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {date ? format(date, "PPP") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={date}
-                          onSelect={(d) => d && setDate(d)}
-                          initialFocus
+                    <Label>Date & Time</Label>
+                    <div className="flex gap-2">
+                        <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                            variant={"outline"}
+                            className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !date && "text-muted-foreground"
+                            )}
+                            >
+                            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                            <span className="truncate">
+                                {date ? format(date, "MMM d, yyyy") : "Pick a date"}
+                            </span>
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                            mode="single"
+                            selected={date}
+                            onSelect={(d) => d && setDate(d)}
+                            initialFocus
+                            />
+                        </PopoverContent>
+                        </Popover>
+                        <Input 
+                            type="time" 
+                            className="w-[110px]"
+                            value={time}
+                            onChange={(e) => setTime(e.target.value)}
                         />
-                      </PopoverContent>
-                    </Popover>
+                    </div>
                  </div>
                  <div className="space-y-2">
                     <Label>Amount ($)</Label>
@@ -332,8 +376,6 @@ function ExpenseLogger() {
                         step="0.01" 
                         min="0"
                         value={amount}
-                        readOnly={true}
-                        className="bg-slate-100 cursor-not-allowed"
                         onChange={e => setAmount(e.target.value)}
                         required
                     />
@@ -374,12 +416,15 @@ function ExpenseLogger() {
                                  setReceiptPreview(null);
                                  setAmount('');
                                  setNotes('');
+                                 setTime(format(new Date(), 'HH:mm'));
                                  setMerchant('');
                                  setReferenceNumber('');
                                  setPlaza('');
                                  setLane('');
                                  setVehicleClass('');
                                  setCollector('');
+                                 setScannedDate('');
+                                 setScannedTime('');
                              }}
                           >
                              <X className="h-4 w-4 mr-2" /> Remove
@@ -419,16 +464,28 @@ function ExpenseLogger() {
                               <Input value={merchant} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
                           </div>
                           <div className="space-y-1">
-                              <Label className="text-xs">Ref / Invoice</Label>
-                              <Input value={referenceNumber} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                              <Label className="text-xs">Date / Time</Label>
+                              <Input 
+                                value={scannedDate && scannedTime ? `${scannedDate} ${scannedTime}` : scannedDate || scannedTime || '-'} 
+                                readOnly 
+                                className="bg-slate-50 text-slate-700" 
+                                placeholder="-" 
+                              />
                           </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
+                              <Label className="text-xs">Ref / Invoice</Label>
+                              <Input value={referenceNumber} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
+                          </div>
+                          <div className="space-y-1">
                               <Label className="text-xs">Plaza / Location</Label>
                               <Input value={plaza} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
                           </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                               <Label className="text-xs">Lane</Label>
                               <Input value={lane} readOnly className="bg-slate-50 text-slate-700" placeholder="-" />
@@ -526,7 +583,20 @@ function ExpenseLogger() {
                               </div>
                               <div className="flex items-center justify-between text-xs text-slate-500">
                                  <div className="flex items-center gap-2">
-                                     <span>{format(new Date(tx.date), 'MMM d, yyyy')}</span>
+                                     <span>
+                                     {(() => {
+                                         try {
+                                             const timeStr = tx.time || '12:00:00';
+                                             const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
+                                             const localDate = new Date(`${tx.date}T${cleanTime}`);
+                                             const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
+                                             
+                                             return format(validDate, 'MMM d, yyyy');
+                                         } catch (e) {
+                                             return format(new Date(tx.date), 'MMM d, yyyy');
+                                         }
+                                     })()}
+                                     </span>
                                      {tx.odometer && <span>• {tx.odometer} km</span>}
                                  </div>
                                  {getStatusBadge(tx.status)}

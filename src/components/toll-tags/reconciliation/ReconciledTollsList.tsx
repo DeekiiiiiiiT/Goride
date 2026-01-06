@@ -134,8 +134,23 @@ export function ReconciledTollsList({ tolls, trips, onUnmatch }: ReconciledTolls
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="font-medium">{format(new Date(tx.date), 'MMM d, yyyy')}</span>
-                                            <span className="text-xs text-slate-500">{format(new Date(tx.date), 'h:mm a')}</span>
+                                            {(() => {
+                                                try {
+                                                    const timeStr = tx.time || '12:00:00';
+                                                    const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
+                                                    const localDate = new Date(`${tx.date}T${cleanTime}`);
+                                                    const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
+                                                    
+                                                    return (
+                                                        <>
+                                                            <span className="font-medium">{format(validDate, 'MMM d, yyyy')}</span>
+                                                            <span className="text-xs text-slate-500">{format(validDate, 'h:mm a')}</span>
+                                                        </>
+                                                    );
+                                                } catch (e) {
+                                                    return <span className="font-medium">{tx.date}</span>;
+                                                }
+                                            })()}
                                         </div>
                                     </TableCell>
                                     

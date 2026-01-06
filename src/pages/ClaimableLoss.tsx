@@ -10,7 +10,19 @@ import { api } from "../services/api";
 import { FinancialTransaction, Claim } from "../types/data";
 import { MatchResult } from "../utils/tollReconciliation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Button } from "../components/ui/button";
 import { toast } from "sonner";
+import { Download } from "lucide-react";
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from "../components/ui/alert-dialog";
 
 export function ClaimableLoss() {
   const { 
@@ -19,7 +31,7 @@ export function ClaimableLoss() {
     suggestions 
   } = useTollReconciliation();
 
-  const { claims, loading: loadingClaims, updateClaim, refresh: refreshClaims } = useClaims();
+  const { claims, loading: loadingClaims, updateClaim, deleteClaim, refresh: refreshClaims } = useClaims();
   const [drivers, setDrivers] = useState<any[]>([]);
 
   useEffect(() => {
@@ -33,6 +45,8 @@ export function ClaimableLoss() {
 
   const [selectedLoss, setSelectedLoss] = useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [itemsToDelete, setItemsToDelete] = useState<string[]>([]);
+  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
 
   // 1. Prepare Unmatched Tolls (Losses)
   // We filter out any transaction that already has an active claim associated with it.
@@ -133,6 +147,58 @@ export function ClaimableLoss() {
       }
   };
 
+  const handleDeleteClaims = (ids: string[]) => {
+      setItemsToDelete(ids);
+      setIsDeleteAlertOpen(true);
+  };
+
+  const confirmDelete = async () => {
+      try {
+          await Promise.all(itemsToDelete.map(id => deleteClaim(id)));
+          toast.success(`Successfully deleted ${itemsToDelete.length} claims`);
+          refreshClaims();
+      } catch (e) {
+          toast.error("Failed to delete claims");
+      } finally {
+          setIsDeleteAlertOpen(false);
+          setItemsToDelete([]);
+      }
+  };
+
+  const handleExport = () => {
+    if (pendingClaims.length === 0) {
+        toast.error("No pending claims to export");
+        return;
+    }
+
+    const headers = ['Date', 'Driver', 'Trip ID', 'Amount', 'Pickup', 'Dropoff', 'Status', 'Message'];
+    const csvRows = [headers.join(',')];
+
+    pendingClaims.forEach(claim => {
+        const row = [
+            new Date(claim.createdAt).toLocaleDateString(),
+            `"${getDriverName(claim.driverId)}"`,
+            claim.tripId || '',
+            claim.amount.toFixed(2),
+            `"${claim.pickup || ''}"`,
+            `"${claim.dropoff || ''}"`,
+            claim.status,
+            `"${(claim.message || '').replace(/"/g, '""')}"`
+        ];
+        csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `uber_claims_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -142,6 +208,10 @@ export function ClaimableLoss() {
                 Manage the full lifecycle of toll reimbursements and disputes.
             </p>
         </div>
+        <Button onClick={handleExport} variant="outline" className="gap-2">
+            <Download className="h-4 w-4" />
+            Export CSV
+        </Button>
       </div>
       
       <Tabs defaultValue="unmatched" className="w-full">
@@ -219,6 +289,7 @@ export function ClaimableLoss() {
                 claims={resolvedClaims}
                 isLoading={loadingClaims}
                 getDriverName={getDriverName}
+                onDelete={handleDeleteClaims}
             />
         </TabsContent>
       </Tabs>
@@ -231,6 +302,21 @@ export function ClaimableLoss() {
         }}
         lossItem={selectedLoss}
       />
+
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete {itemsToDelete.length} resolved claims from the history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -394,7 +394,7 @@ export type TransactionCategory =
 
 export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card' | 'Mobile Money' | 'Check' | 'Other';
 
-export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled' | 'Void' | 'Verified';
+export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled' | 'Void' | 'Verified' | 'Approved' | 'Rejected' | 'Flagged';
 
 export interface FinancialTransaction {
   id: string; // Transaction UUID

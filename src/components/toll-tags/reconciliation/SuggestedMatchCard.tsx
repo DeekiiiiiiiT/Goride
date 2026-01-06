@@ -12,10 +12,14 @@ interface SuggestedMatchCardProps {
   match: MatchResult;
   onConfirm: () => void;
   onDismiss: () => void;
+  onApprove?: () => void;
+  onReject?: () => void;
+  onFlag?: () => void;
 }
 
-export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss }: SuggestedMatchCardProps) {
+export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, onApprove, onReject, onFlag }: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount } = match;
+  const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
 
   const getMatchBadge = () => {
     switch (matchType) {
@@ -26,6 +30,9 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss }:
       case 'AMOUNT_VARIANCE':
         return <Badge className="mb-2 bg-orange-500 hover:bg-orange-600">Underpaid</Badge>;
       case 'PERSONAL_MATCH':
+        if (reason?.includes('Approach')) {
+             return <Badge className="mb-2 bg-purple-600 hover:bg-purple-700">Unreimbursed Approach</Badge>;
+        }
         return <Badge className="mb-2 bg-purple-500 hover:bg-purple-600">Personal</Badge>;
       default:
         return <Badge className="mb-2 bg-slate-500 hover:bg-slate-600">Possible Match</Badge>;
@@ -42,6 +49,43 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss }:
     }
   };
 
+  const renderActionButton = () => {
+      // Logic Branching for Driver Claims (Cash/Receipts)
+      if (isClaim) {
+          if (matchType === 'AMOUNT_VARIANCE') {
+              return (
+                  <Button size="sm" onClick={onFlag} className="bg-amber-600 hover:bg-amber-700 w-full lg:w-auto">
+                      <Check className="h-4 w-4 mr-2" /> Flag for Claim
+                  </Button>
+              );
+          }
+          if (matchType === 'PERSONAL_MATCH') {
+              return (
+                  <Button size="sm" onClick={onReject} className="bg-rose-600 hover:bg-rose-700 w-full lg:w-auto">
+                      <X className="h-4 w-4 mr-2" /> Reject Claim
+                  </Button>
+              );
+          }
+          // Default / Perfect Match -> Approve
+          return (
+              <Button size="sm" onClick={onApprove} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
+                  <Check className="h-4 w-4 mr-2" /> Approve Reimbursement
+              </Button>
+          );
+      }
+
+      // Logic for Tag Imports (Fleet Expenses)
+      // For tags, we generally "Link" them. Personal tags mean deducting from driver.
+      // Variance tags might need review, but usually just linking to track the loss.
+      const label = matchType === 'PERSONAL_MATCH' ? 'Mark Personal' : 'Link Trip';
+      
+      return (
+          <Button size="sm" onClick={onConfirm} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
+              <Check className="h-4 w-4 mr-2" /> {label}
+          </Button>
+      );
+  };
+
   return (
     <Card className={`border-l-4 bg-slate-50/50 ${getBorderColor()}`}>
       <CardContent className="p-4">
@@ -51,16 +95,31 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss }:
             <div className="flex-1 min-w-0">
                 <div className="flex items-center space-x-2 mb-2">
                     {transaction.receiptUrl ? (
-                         <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">
-                            <Camera className="w-3 h-3 mr-1" /> Manual Scan
-                        </Badge>
+                         <a href={transaction.receiptUrl} target="_blank" rel="noopener noreferrer" className="cursor-pointer hover:opacity-80 transition-opacity">
+                             <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">
+                                <Camera className="w-3 h-3 mr-1" /> View Receipt
+                            </Badge>
+                         </a>
                     ) : (
                         <Badge variant="outline" className="bg-white border-rose-200 text-rose-700">
                             Toll Charge
                         </Badge>
                     )}
                     <span className="text-sm text-slate-500">
-                        {format(new Date(transaction.date), 'MMM d, h:mm a')}
+                        {(() => {
+                            try {
+                                const timeStr = transaction.time || '12:00:00';
+                                const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
+                                // Force local date by appending time
+                                const localDate = new Date(`${transaction.date}T${cleanTime}`);
+                                if (!isNaN(localDate.getTime())) {
+                                    return format(localDate, 'MMM d, h:mm a');
+                                }
+                                return format(new Date(transaction.date), 'MMM d, h:mm a');
+                            } catch (e) {
+                                return transaction.date;
+                            }
+                        })()}
                     </span>
                 </div>
                 <div className="font-bold text-lg text-rose-600">
@@ -84,6 +143,12 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss }:
                         {timeDifferenceMinutes === 0 ? 'Exact time' : `${Math.abs(timeDifferenceMinutes)} min diff`}
                     </span>
                 </div>
+
+                {reason && (
+                    <div className="text-[10px] text-slate-400 mt-1 max-w-[140px] text-center leading-tight">
+                        {reason}
+                    </div>
+                )}
                 
                 {varianceAmount !== undefined && Math.abs(varianceAmount) > 0.005 && (
                      <div className={`flex items-center text-xs font-bold mt-1 ${varianceAmount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -122,9 +187,8 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss }:
 
             {/* Actions */}
             <div className="flex lg:flex-col gap-2 border-t lg:border-t-0 lg:border-l border-slate-200 pt-4 lg:pt-0 lg:pl-4 mt-4 lg:mt-0 w-full lg:w-auto justify-end">
-                <Button size="sm" onClick={onConfirm} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
-                    <Check className="h-4 w-4 mr-2" /> Match
-                </Button>
+                {renderActionButton()}
+                
                 <Button size="sm" variant="ghost" onClick={onDismiss} className="text-slate-500 w-full lg:w-auto">
                     <X className="h-4 w-4 mr-2" /> Dismiss
                 </Button>

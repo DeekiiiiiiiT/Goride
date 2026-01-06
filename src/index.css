@@ -1418,6 +1418,10 @@
     min-height: calc(var(--spacing) * 16);
   }
 
+  .min-h-\[72px\] {
+    min-height: 72px;
+  }
+
   .min-h-\[100px\] {
     min-height: 100px;
   }
@@ -2800,10 +2804,6 @@
     background-color: var(--color-blue-100);
   }
 
-  .bg-blue-400 {
-    background-color: var(--color-blue-400);
-  }
-
   .bg-blue-500 {
     background-color: var(--color-blue-500);
   }
@@ -2840,6 +2840,10 @@
 
   .bg-emerald-100 {
     background-color: var(--color-emerald-100);
+  }
+
+  .bg-emerald-400 {
+    background-color: var(--color-emerald-400);
   }
 
   .bg-emerald-500 {
@@ -4477,10 +4481,6 @@
     opacity: .9;
   }
 
-  .opacity-100 {
-    opacity: 1;
-  }
-
   .mix-blend-overlay {
     mix-blend-mode: overlay;
   }
@@ -4833,6 +4833,12 @@
 
   .group-focus-within\/menu-item\:opacity-100:is(:where(.group\/menu-item):focus-within *) {
     opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .group-hover\:inline-block:is(:where(.group):hover *) {
+      display: inline-block;
+    }
   }
 
   @media (hover: hover) {

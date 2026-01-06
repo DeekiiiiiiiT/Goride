@@ -364,6 +364,52 @@ app.delete("/make-server-37f42386/transactions/:id", async (c) => {
   }
 });
 
+// Expense Management Endpoints (Phase 5)
+app.post("/make-server-37f42386/expenses/approve", async (c) => {
+  try {
+    const { id, notes } = await c.req.json();
+    if (!id) return c.json({ error: "Transaction ID is required" }, 400);
+
+    const tx = await kv.get(`transaction:${id}`);
+    if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+    tx.status = 'Approved';
+    tx.isReconciled = true; // Approval implies reconciliation usually
+    tx.metadata = { 
+        ...tx.metadata, 
+        approvedAt: new Date().toISOString(), 
+        notes: notes || tx.metadata?.notes 
+    };
+
+    await kv.set(`transaction:${id}`, tx);
+    return c.json({ success: true, data: tx });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/expenses/reject", async (c) => {
+  try {
+    const { id, reason } = await c.req.json();
+    if (!id) return c.json({ error: "Transaction ID is required" }, 400);
+
+    const tx = await kv.get(`transaction:${id}`);
+    if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+    tx.status = 'Rejected';
+    tx.metadata = { 
+        ...tx.metadata, 
+        rejectedAt: new Date().toISOString(), 
+        rejectionReason: reason 
+    };
+
+    await kv.set(`transaction:${id}`, tx);
+    return c.json({ success: true, data: tx });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Maintenance Logs Endpoints
 app.get("/make-server-37f42386/maintenance-logs/:vehicleId", async (c) => {
   try {
@@ -2669,6 +2715,16 @@ app.post("/make-server-37f42386/claims", async (c) => {
   }
 });
 
+app.delete("/make-server-37f42386/claims/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`claim:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Admin: List Users
 app.get("/make-server-37f42386/users", async (c) => {
   try {
@@ -2972,7 +3028,7 @@ app.get("/make-server-37f42386/performance-report", async (c) => {
     }
 });
 
-// Scan Receipt Endpoint (Gemini)
+// Scan Receipt Endpoint (OpenAI)
 app.post("/make-server-37f42386/scan-receipt", async (c) => {
     try {
         const body = await c.req.parseBody();
@@ -2982,70 +3038,57 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
             return c.json({ error: "No file uploaded" }, 400);
         }
 
-        const apiKey = Deno.env.get("GEMINI_API_KEY");
-        if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 500);
+        const apiKey = Deno.env.get("OPENAI_API_KEY");
+        if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 500);
 
-        const genAI = new GoogleGenerativeAI(apiKey);
+        const openai = new OpenAI({ apiKey });
         
         const arrayBuffer = await file.arrayBuffer();
-        const base64Data = Buffer.from(arrayBuffer).toString('base64');
-        const mimeType = file.type;
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = "";
+        const len = bytes.byteLength;
+        const chunkSize = 1024;
+        for (let i = 0; i < len; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
+        }
+        const base64Image = `data:${file.type};base64,${btoa(binary)}`;
 
-        const prompt = `Analyze this receipt. Extract the following details in JSON format:
-        - merchant (string, name of the store/service. For tolls, use the Highway name e.g. Highway 2000)
-        - date (YYYY-MM-DD, format correctly)
+        const prompt = `Analyze this receipt image. It is likely a Jamaican toll receipt. 
+        Extract the following details in JSON format:
+        - merchant (string, name of the store/service. For tolls, use the Highway name e.g. Highway 2000, East-West, North-South)
+        - date (YYYY-MM-DD, format correctly. NOTE: Date format is likely DD/MM/YYYY. Be careful not to confuse Day and Month.)
+        - time (HH:MM:SS, 24-hour format. Look for the time of transaction.)
         - amount (number, total amount. Remove currency symbols.)
         - type (string, one of: 'Fuel', 'Service', 'Toll', 'Other'. Infer from context. If it mentions tolls, highway, plaza, etc. use 'Toll'.)
         - notes (string, brief description of items)
         
         If it is a Toll receipt, specifically extract these additional fields if present:
-        - plaza (string, e.g. Portmore East, Angels)
-        - lane (string, e.g. K15)
-        - vehicleClass (string, e.g. 1)
+        - plaza (string, e.g. Portmore East, Spanish Town, Angels, Vineyards)
+        - lane (string, e.g. K15, M01)
+        - vehicleClass (string, e.g. 1, 2)
         - receiptNumber (string, the Ticket No or No)
         - collector (string, e.g. 613893)
 
         Return ONLY the JSON object, no markdown.`;
 
-        let result;
-        const imagePart = {
-            inlineData: {
-                data: base64Data,
-                mimeType: mimeType
-            }
-        };
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                { role: "system", content: "You are a receipt scanning assistant that outputs strict JSON." },
+                { 
+                  role: "user", 
+                  content: [
+                      { type: "text", text: prompt },
+                      { type: "image_url", image_url: { url: base64Image } }
+                  ] 
+                }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0
+        });
 
-        const modelCandidates = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-pro"];
-        let lastError = null;
-
-        for (const modelName of modelCandidates) {
-            try {
-                const model = genAI.getGenerativeModel({ model: modelName });
-                result = await model.generateContent([prompt, imagePart]);
-                if (result) break;
-            } catch (e: any) {
-                console.warn(`Model ${modelName} failed:`, e.message);
-                lastError = e;
-            }
-        }
-
-        if (!result) {
-            throw new Error(`All Gemini models failed. Last error: ${lastError?.message}`);
-        }
-
-        const response = result.response;
-        const text = response.text();
-        
-        // Clean markdown
-        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        
-        let data;
-        try {
-            data = JSON.parse(jsonStr);
-        } catch (e) {
-            console.error("Failed to parse JSON from Gemini:", text);
-            return c.json({ error: "Failed to parse receipt data" }, 500);
-        }
+        const content = response.choices[0].message.content;
+        const data = JSON.parse(content || "{}");
 
         return c.json({ success: true, data });
 

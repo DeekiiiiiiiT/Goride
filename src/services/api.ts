@@ -370,6 +370,21 @@ export const api = {
     return response.json();
   },
 
+  async fetchPendingTollClaims(): Promise<FinancialTransaction[]> {
+    const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch transactions");
+    const allTx: FinancialTransaction[] = await response.json();
+    
+    // Filter for Cash Tolls that are Pending
+    return allTx.filter(tx => 
+        (tx.category === 'Toll Usage' || tx.category === 'Tolls') && 
+        tx.status === 'Pending' && 
+        (tx.paymentMethod === 'Cash' || !!tx.receiptUrl)
+    );
+  },
+
   async getTransactions() {
     const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -654,6 +669,15 @@ export const api = {
     return response.json();
   },
 
+  async deleteClaim(id: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/claims/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete claim");
+    return response.json();
+  },
+
   async reconcileTollTransaction(transaction: FinancialTransaction, trip: Trip) {
     // 1. Update Transaction: Link to trip and mark reconciled
     // Auto-assign driver from the matched trip to ensure data consistency
@@ -671,6 +695,32 @@ export const api = {
     // The Trip record from the platform (Uber/Lyft) is the Source of Truth for revenue.
     // Linking a toll expense is for verification/audit, not for modifying the Trip invoice.
     return { transaction: updatedTx, trip };
+  },
+
+  async approveExpense(id: string, notes?: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/expenses/approve`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ id, notes })
+    });
+    if (!response.ok) throw new Error("Failed to approve expense");
+    return response.json();
+  },
+
+  async rejectExpense(id: string, reason?: string) {
+    const response = await fetchWithRetry(`${BASE_URL}/expenses/reject`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ id, reason })
+    });
+    if (!response.ok) throw new Error("Failed to reject expense");
+    return response.json();
   },
 
   async unreconcileTollTransaction(transaction: FinancialTransaction, trip: Trip) {

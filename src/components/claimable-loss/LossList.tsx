@@ -74,29 +74,36 @@ export function LossList({ losses, isLoading, onSelectLoss }: LossListProps) {
             const loss = Math.abs(match.varianceAmount || (tollCost - uberRefund));
             const { daysRemaining, status } = calculateDaysRemaining(transaction.date);
 
+            const getExpiryDisplay = (days: number, status: string) => {
+                if (status === 'expired') {
+                    return {
+                        color: "text-red-600 font-bold",
+                        icon: <AlertCircle className="h-3 w-3" />,
+                        text: "Expired"
+                    };
+                }
+                
+                // Cold to Hot Scale (10 days -> 0 days)
+                // Green is the coldest (safest/furthest from expiry)
+                if (days <= 2) return { color: "text-rose-600 font-bold animate-pulse", icon: <Clock className="h-3 w-3" />, text: `${days} days left` }; // Hot
+                if (days <= 4) return { color: "text-orange-600 font-bold", icon: <Clock className="h-3 w-3" />, text: `${days} days left` }; // Warm
+                if (days <= 6) return { color: "text-amber-600 font-medium", icon: <Clock className="h-3 w-3" />, text: `${days} days left` }; // Lukewarm
+                if (days <= 8) return { color: "text-blue-600 font-medium", icon: <Clock className="h-3 w-3" />, text: `${days} days left` }; // Cool
+                return { color: "text-emerald-600 font-medium", icon: <Clock className="h-3 w-3" />, text: `${days} days left` }; // Coldest
+            };
+
+            const expiry = getExpiryDisplay(daysRemaining, status);
+
             return (
               <TableRow key={transaction.id}>
                 <TableCell className="font-medium text-slate-700">
                   {new Date(transaction.date).toLocaleDateString()}
                   <div className="text-xs text-slate-400">{transaction.time}</div>
                   
-                  {status === 'warning' && (
-                    <div className="mt-1 text-xs font-bold text-orange-600 flex items-center gap-1 animate-pulse">
-                        <Clock className="h-3 w-3" />
-                        {daysRemaining} days left
-                    </div>
-                  )}
-                  {status === 'expired' && (
-                    <div className="mt-1 text-xs font-bold text-red-600 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        Expired
-                    </div>
-                  )}
-                  {status === 'active' && daysRemaining <= 10 && (
-                     <div className="mt-1 text-xs text-slate-400">
-                        {daysRemaining} days left
-                     </div>
-                  )}
+                  <div className={`mt-1 text-xs flex items-center gap-1 ${expiry.color}`}>
+                      {expiry.icon}
+                      {expiry.text}
+                  </div>
                 </TableCell>
                 <TableCell>
                     <div className="font-medium">{transaction.description}</div>

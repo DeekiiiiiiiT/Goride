@@ -67,10 +67,11 @@ export function findTollMatches(
 
   const matches: MatchResult[] = [];
 
-  // 1. Filter trips by Vehicle ID (if present)
+  // 1. Filter trips by Vehicle ID or Driver ID
+  // For Driver Expenses, we might match by Driver ID if Vehicle ID is ambiguous
   const vehicleTrips = trips.filter(t => 
-    t.vehicleId === transaction.vehicleId || 
-    (!t.vehicleId && !transaction.vehicleId)
+    (t.vehicleId && transaction.vehicleId && t.vehicleId === transaction.vehicleId) || 
+    (t.driverId && transaction.driverId && t.driverId === transaction.driverId)
   );
 
   for (const trip of vehicleTrips) {
@@ -115,19 +116,27 @@ export function findTollMatches(
         matchType = 'AMOUNT_VARIANCE';
         confidence = 'high';
         varianceAmount = tripRefundAmount - txAmountAbs;
-        reason = `During active trip but underpaid (Diff: ${varianceAmount.toFixed(2)})`;
+        
+        if (tripRefundAmount === 0) {
+             reason = `Valid trip but Uber reimbursement missing (Claimable)`;
+        } else {
+             reason = `During active trip but underpaid (Diff: ${varianceAmount.toFixed(2)})`;
+        }
       }
     }
     // Step B: Approach Window (Request-45 -> Pickup)
     else if (isWithinInterval(txDate, { start: windows.approachStart, end: windows.approachEnd })) {
-      // BLUE: Deadhead
-      matchType = 'DEADHEAD_MATCH';
-      confidence = 'medium'; // It's a "Match" to the trip context, but not a reimbursement match
-      reason = 'During approach (Deadhead) - Tax Deductible';
-      
-      // Note: Even if amounts match (Uber paid for approach?), we classify as Deadhead 
-      // because it's technically Pre-Trip. 
-      // If the user wants to see "Reimbursed", they can look at the Variance (0.00).
+       if (amountsMatch) {
+        // GREEN: Reimbursed Approach (Rare but possible)
+        matchType = 'PERFECT_MATCH';
+        confidence = 'high';
+        reason = 'Approach phase - Reimbursed by Uber';
+       } else {
+        // PURPLE: Driver Liability (Strict Rule: No Passenger = Personal)
+        matchType = 'PERSONAL_MATCH';
+        confidence = 'high'; 
+        reason = 'Unreimbursed Approach - Driver Liability';
+       }
     }
     // Step C: Post-Dropoff Buffer (Dropoff -> Dropoff+15)
     else if (txDate > windows.activeEnd && txDate <= windows.searchEnd) {

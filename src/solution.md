@@ -1,68 +1,106 @@
-# Implementation Plan: Granular Driver Data Reset
+# Driver Performance Dashboard - Toll Reconciliation Solution
 
-## Phase 1: Backend Granularity Implementation (COMPLETE)
-**Objective:** Update the backend API (`/admin/reset-by-date`) to support distinct targeting of Tolls and Fuel data, rather than deleting all transactions.
+## Overview
+This document outlines the implementation plan for the **Unified Reconciliation System**. The goal is to integrate "Driver Cash Receipts" into the existing "Toll Tag" reconciliation workflow. This ensures that driver reimbursements are strictly validated against Uber Trip Data ("Strict Liability" model) before being approved.
 
-1.  **Analyze Transaction Categories:**
-    *   Review `types/data.ts` to confirm exact string values for transaction categories (e.g., 'Toll Usage', 'Toll Top-up', 'Fuel').
-    *   Review `types/fuel.ts` to confirm structure of `FuelEntry` and its storage prefix (`fuel_entry:`).
+## Core Logic (Strict Liability)
+| Scenario | Source | Match Result (Uber Reimbursed?) | Action | Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| **A** | **Tag** | ✅ Yes (Green) | **Reconcile** | No Action (Break-even). |
+| **B** | **Tag** | ❌ No (Purple/Amber) | **Deduct** | Charge Driver (Driver Liability). |
+| **C** | **Cash** | ✅ Yes (Green) | **Approve** | Reimburse Driver (Fleet owes Driver). |
+| **D** | **Cash** | ❌ No (Purple) | **Reject** | Personal Expense (Driver Liability). |
+| **E** | **Cash** | ⚠️ Partial/None (Amber) | **Flag Claim** | Valid Trip but Unpaid. File Claim with Uber. |
 
-2.  **Modify `reset-by-date` Endpoint (Search/Preview Logic):**
-    *   Update `supabase/functions/server/index.tsx`.
-    *   **Fuel Logic:** Add a new check: `if (targets.includes('fuel'))`.
-        *   Fetch keys with prefix `fuel_entry:`.
-        *   Filter by date and `driverId`.
-        *   Also fetch keys with prefix `transaction:` where `category === 'Fuel'`.
-    *   **Toll Logic:** Add a new check: `if (targets.includes('tolls'))`.
-        *   Fetch keys with prefix `transaction:` where `category` includes 'Toll'.
-    *   **Refine 'Trips' Logic:** Ensure it remains unchanged.
-    *   **Deprecate 'Transactions' Target:** Remove the broad `transaction:*` fetch that deletes everything.
+---
 
-3.  **Update Delete Logic:**
-    *   Ensure the `mdel` (multi-delete) function receives the combined list of keys from Trips, Fuel Entries, Fuel Transactions, and Toll Transactions.
+## Phase 1: Data Ingestion & Identification
+**Goal:** Ensure Driver Uploads are accessible to the Reconciliation Dashboard and distinguishable from Tag Imports.
 
-## Phase 2: Frontend Selection Logic Update (COMPLETE)
-**Objective:** Update the `DataResetModal` UI to replace the generic "Transactions" checkbox with specific "Toll Data" and "Fuel Logs" options.
+1.  **Audit `DriverExpenses.tsx` Submission:**
+    *   Verify that `submitExpense` sets `paymentMethod: 'Cash'`, `category: 'Tolls'`, and `status: 'Pending'`.
+    *   *Action:* Check code and ensure consistency.
 
-1.  **Update State Management:**
-    *   In `components/admin/DataResetModal.tsx`, update the `targets` state definition to allow string values: `'trips' | 'tolls' | 'fuel'`.
-    *   Set default targets for "Reset Driver Data" to `['trips', 'tolls', 'fuel']`.
+2.  **Define Source Discriminator:**
+    *   Establish logic to distinguish sources in the frontend.
+    *   Logic: `isCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl`.
+    *   Logic: `isTag = !isCash` (or based on Import Batch ID).
 
-2.  **Refactor Checkbox UI:**
-    *   Locate the "Data Types to Purge" section.
-    *   Keep **Trips** checkbox.
-    *   Remove **Transactions** checkbox.
-    *   Add **Toll Data** checkbox (Label: "Toll Receipts & Usage").
-    *   Add **Fuel Logs** checkbox (Label: "Fuel Receipts & Logs").
+3.  **Update API Layer (`services/api.ts`):**
+    *   Create `fetchPendingTollClaims()`: Should return `FinancialTransaction[]` where `category='Tolls'` and `status='Pending'`.
+    *   Ensure this data structure matches the `FinancialTransaction` interface used by the dashboard.
 
-3.  **Update Preview Request Payload:**
-    *   Ensure `handleFetchPreview` sends the new specific strings (`['trips', 'tolls', 'fuel']`) instead of the old `['trips', 'transactions']`.
+4.  **Dashboard State Management (`ReconciliationDashboard.tsx`):**
+    *   Add state `cashClaims`.
+    *   Fetch `cashClaims` on mount.
+    *   Create a merged list: `allTolls = [...tagTransactions, ...cashClaims]`.
 
-## Phase 3: Preview & API Integration (COMPLETE)
-**Objective:** Ensure the Preview screen correctly displays and categorizes the new data types so the user knows exactly what will be deleted.
+## Phase 2: Reconciliation Engine Upgrade
+**Goal:** Adapt the matching logic to handle "Cash" scenarios and correctly identify "Claimable Losses".
 
-1.  **Update Preview Item Interface:**
-    *   In `DataResetModal.tsx`, update the `PreviewItem` interface (or implicit type) to handle `type: 'fuel' | 'toll' | 'trip'`.
+1.  **Review `findTollMatches` (`utils/tollReconciliation.ts`):**
+    *   Ensure it handles transactions without `vehicleId` (if applicable, though drivers should select vehicle).
+    *   Ensure it gracefully handles mismatched timestamps (drivers might upload late, but the *receipt date* should be the *expense date*).
 
-2.  **Update Preview Rendering:**
-    *   Modify the list render logic to show appropriate icons/labels:
-        *   **Trips:** Show Car icon.
-        *   **Fuel:** Show Fuel Pump icon (use `Lucide` icon).
-        *   **Tolls:** Show Receipt/Ticket icon.
-    *   Verify "Has Receipt" indicator works for Fuel and Tolls (checking `receiptUrl` or `invoiceUrl`).
+2.  **Refine "Amber" Logic (The "Unpaid" Case):**
+    *   Current Logic: `isAmountMatch` checks if `Trip Refund == Transaction Amount`.
+    *   New Logic: Explicitly handle the case where `Trip Refund == 0` but `Transaction Amount > 0`.
+    *   *Action:* Update `reason` text to: "Valid trip but Uber reimbursement missing (Claimable)."
 
-3.  **Test Selection Toggling:**
-    *   Ensure unchecking a specific item in the preview correctly removes it from the `keysToDelete` list in the final payload.
+3.  **Unit Verification:**
+    *   Verify Case: Receipt $5, Trip Refund $5 -> `PERFECT_MATCH` (Green).
+    *   Verify Case: Receipt $5, Trip Refund $0 -> `AMOUNT_VARIANCE` (Amber).
+    *   Verify Case: Receipt $5, No Trip -> `PERSONAL_MATCH` (Purple).
 
-## Phase 4: Validation & Receipt Cleanup Refinement
-**Objective:** Verify that file deletion works for the new data types and perform final safety checks.
+## Phase 3: Unified Dashboard UI
+**Goal:** Display Cash Tolls in the reconciliation list with clear visual distinctions.
 
-1.  **Backend Storage Cleanup:**
-    *   Verify that `fuel_entry` records utilize `receiptUrl` (or `invoiceUrl`) and that the backend logic extracts this path for deletion from the `make-37f42386-docs` bucket.
-    *   Verify that Toll transactions with receipt images are also caught by the image deletion logic.
+1.  **Update `UnmatchedTollsList.tsx`:**
+    *   Add "Source" column or visual indicator.
+    *   Icon mapping: 🏷️ (Tag) vs 🧾 (Cash).
 
-2.  **Safety Verification:**
-    *   Ensure "Salary" or "Payout" transactions are **NOT** included in the deletion list when selecting these options.
+2.  **Receipt Preview:**
+    *   Add a "View Receipt" button/icon for Cash rows.
+    *   Implement a modal/popover to display `tx.receiptUrl`.
 
-3.  **Final Polish:**
-    *   Update success messages to say "Trips, Tolls, and Fuel data deleted" instead of just "Data deleted".
+3.  **Filtering & Sorting:**
+    *   Add Filter Dropdown: "All", "Tag Only", "Cash Claims".
+    *   Ensure sorting by Date mixes both sources correctly.
+
+## Phase 4: Action Logic & UX
+**Goal:** Implement the specific "Approve" vs "Deduct" buttons based on the Source/Match matrix.
+
+1.  **Component Refactor:**
+    *   Extract action button logic into `TollActionMenu` or similar.
+
+2.  **Implement Logic Branching:**
+    *   **Case Cash/Green:** Button "Approve Reimbursement" (Green style).
+    *   **Case Cash/Amber:** Button "Flag for Claim" (Amber style).
+    *   **Case Cash/Purple:** Button "Reject" (Red/Destructive style).
+    *   *Note:* Retain existing logic for Tag (Deduct/Ignore).
+
+3.  **Tooltips:**
+    *   Add tooltips to explain the action (e.g., "Uber reimbursed this toll. Approve driver repayment.").
+
+## Phase 5: Financial Execution (The "Write" Ops)
+**Goal:** Connect the buttons to actual state changes (Reimburse/Reject).
+
+1.  **API Methods:**
+    *   `approveExpense(id)`: Sets status to `Approved`. (Triggers balance update).
+    *   `rejectExpense(id)`: Sets status to `Rejected`.
+    *   `flagExpense(id)`: Sets status to `Claim_Pending`.
+
+2.  **Optimistic UI Updates:**
+    *   Remove item from list (or update status icon) immediately upon click.
+    *   Show Toast notification ("Expense Approved", "Expense Rejected").
+
+## Phase 6: "Claimable Loss" Management
+**Goal:** Provide a way to track and act on the "Amber" items (Uber Underpayments).
+
+1.  **Claims View:**
+    *   Create a "Pending Claims" summary card or modal.
+    *   List all items marked as `Claim_Pending`.
+
+2.  **Export & Resolution:**
+    *   Allow "Export to CSV" (for Uber Support).
+    *   Allow "Mark Resolved" (if Uber pays) or "Write Off".
