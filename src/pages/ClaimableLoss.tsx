@@ -66,18 +66,11 @@ export function ClaimableLoss() {
   const activeTransactionIds = new Set(claims.map(c => c.transactionId));
 
   const losses = React.useMemo(() => {
-      // A. Unreconciled with 'AMOUNT_VARIANCE' suggestions
-      const potentialLosses = unreconciledTolls.map(tx => {
-          const matches = suggestions.get(tx.id);
-          const bestMatch = matches?.[0];
-          
-          if (bestMatch && bestMatch.matchType === 'AMOUNT_VARIANCE') {
-              return { transaction: tx, match: bestMatch };
-          }
-          return null;
-      }).filter((item): item is { transaction: FinancialTransaction, match: MatchResult } => item !== null);
+      // We ONLY show reconciled tolls that have a variance (Underpaid).
+      // We do NOT show unreconciled suggestions here. The user must first "Flag for Claim" 
+      // in the Toll Reconciliation screen to link them.
 
-      // B. Reconciled with Negative Variance (Underpaid)
+      // Reconciled with Negative Variance (Underpaid)
       const confirmedLosses = reconciledTolls.map(tx => {
            if (!tx.tripId) return null;
            const trip = tripMap.get(tx.tripId);
@@ -100,17 +93,14 @@ export function ClaimableLoss() {
            return null;
       }).filter((item): item is { transaction: FinancialTransaction, match: MatchResult } => item !== null);
 
-      // Merge and filter active claims
-      const allLosses = [...potentialLosses, ...confirmedLosses];
-
       // Deduplicate by transaction ID to prevent key errors
-      const uniqueLosses = Array.from(new Map(allLosses.map(item => [item.transaction.id, item])).values());
+      const uniqueLosses = Array.from(new Map(confirmedLosses.map(item => [item.transaction.id, item])).values());
 
       return uniqueLosses
         .filter(item => !activeTransactionIds.has(item.transaction.id))
         .sort((a, b) => new Date(b.transaction.date).getTime() - new Date(a.transaction.date).getTime());
 
-  }, [unreconciledTolls, reconciledTolls, suggestions, tripMap, activeTransactionIds]);
+  }, [reconciledTolls, tripMap, activeTransactionIds]);
 
 
   // 2. Prepare Pending Claims (Submitted to Uber)

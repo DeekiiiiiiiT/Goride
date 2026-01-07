@@ -111,16 +111,20 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
     return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
   }
 
-  const renderTable = (data: FinancialTransaction[]) => (
+  const renderTable = (data: FinancialTransaction[], showReconciliationCols: boolean = true) => (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Date</TableHead>
           <TableHead>Description</TableHead>
           <TableHead>Type</TableHead>
-          <TableHead>Platform</TableHead>
-          <TableHead>Recovered</TableHead>
-          <TableHead>Net Loss</TableHead>
+          {showReconciliationCols && (
+            <>
+              <TableHead>Platform</TableHead>
+              <TableHead>Recovered</TableHead>
+              <TableHead>Net Loss</TableHead>
+            </>
+          )}
           <TableHead className="text-right">Amount</TableHead>
           <TableHead className="w-[50px]"></TableHead>
         </TableRow>
@@ -162,6 +166,8 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
                     </Badge>
                 )}
             </TableCell>
+            {showReconciliationCols && (
+            <>
             <TableCell>
                 {linkedTrip ? (
                     <Badge variant="outline" className="capitalize">
@@ -211,9 +217,15 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
             <TableCell>
                 {tx.category === 'Toll Usage' ? (
                     financials.netLoss > 0 ? (
-                        <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">
-                            -${financials.netLoss.toFixed(2)}
-                        </Badge>
+                        financials.fleetAbsorbed > 0 ? (
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                -${financials.netLoss.toFixed(2)}
+                            </Badge>
+                        ) : (
+                            <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">
+                                -${financials.netLoss.toFixed(2)}
+                            </Badge>
+                        )
                     ) : (
                         <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200">
                             $0.00
@@ -223,6 +235,8 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
                     <span className="text-slate-300">-</span>
                 )}
             </TableCell>
+            </>
+            )}
             <TableCell className={`text-right font-bold ${tx.category === 'Toll Usage' ? 'text-slate-600' : (tx.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}`}>
               {tx.amount < 0 ? '-' : '+'}${Math.abs(tx.amount).toFixed(2)}
             </TableCell>
@@ -283,15 +297,15 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
             </TabsList>
             
             <TabsContent value="all">
-                {renderTable(transactions)}
+                {renderTable(transactions, true)}
             </TabsContent>
             
             <TabsContent value="usage">
-                {renderTable(usage)}
+                {renderTable(usage, true)}
             </TabsContent>
             
             <TabsContent value="topups">
-                {renderTable(topUps)}
+                {renderTable(topUps, false)}
             </TabsContent>
         </Tabs>
         )}

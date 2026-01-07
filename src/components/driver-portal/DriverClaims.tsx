@@ -38,11 +38,42 @@ export function DriverClaims() {
   
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    toast.success("Message copied!");
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleCopy = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      toast.success("Message copied!");
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      // Fallback for environments where Clipboard API is blocked (e.g. Figma iframe)
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        
+        // Ensure it's not visible but part of the DOM
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (successful) {
+            setCopiedId(id);
+            toast.success("Message copied!");
+            setTimeout(() => setCopiedId(null), 2000);
+        } else {
+            throw new Error("Fallback copy failed");
+        }
+      } catch (fallbackErr) {
+        toast.error("Failed to copy text. Please copy manually.");
+        console.error("Clipboard failed:", err, fallbackErr);
+      }
+    }
   };
 
   const handleStatusUpdate = async (claim: Claim, newStatus: 'Submitted_to_Uber' | 'Rejected') => {
@@ -308,8 +339,12 @@ function ClaimCard({ claim, onCopy, copiedId, onUpdateStatus, readonly = false }
             {showActions && (
                 <CardFooter className="bg-slate-50 py-3 flex flex-col gap-2">
                     <div className="flex w-full gap-2">
-                         <Button variant="outline" size="sm" className="flex-1 text-slate-600" onClick={() => window.open('https://help.uber.com/driving-and-delivering/article/please-select-a-trip?nodeId=aa8269e9-13eb-481a-93ab-8c6151aa87e6', '_blank')}>
-                            Open Uber Help
+                         <Button variant="outline" size="sm" className="flex-1 text-slate-600" onClick={() => {
+                             // Force open the app using the custom scheme
+                             // This avoids the browser trying to load the website
+                             window.location.href = 'uberdriver://';
+                         }}>
+                            Open Uber App
                         </Button>
                         <Button size="sm" className="flex-1 gap-2" onClick={() => onCopy(claim.message, claim.id)}>
                             {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
