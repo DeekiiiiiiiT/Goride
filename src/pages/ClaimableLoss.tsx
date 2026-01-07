@@ -185,7 +185,7 @@ export function ClaimableLoss() {
       }
   };
 
-  const handleUpdateStatus = async (claim: Claim, newReason: 'Charge Driver' | 'Write Off') => {
+  const handleUpdateStatus = async (claim: Claim, newReason: 'Charge Driver' | 'Write Off' | 'Reimbursed') => {
       try {
           await updateClaim({ 
               ...claim, 

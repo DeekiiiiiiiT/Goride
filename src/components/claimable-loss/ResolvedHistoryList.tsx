@@ -56,7 +56,7 @@ interface ResolvedHistoryListProps {
   isLoading?: boolean;
   getDriverName?: (id: string) => string;
   onDelete?: (ids: string[]) => void;
-  onUpdateStatus?: (claim: Claim, newReason: 'Charge Driver' | 'Write Off') => void;
+  onUpdateStatus?: (claim: Claim, newReason: 'Charge Driver' | 'Write Off' | 'Reimbursed') => void;
 }
 
 export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete, onUpdateStatus }: ResolvedHistoryListProps) {
@@ -197,17 +197,24 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                         <DropdownMenuLabel>Change Resolution</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
+                            onClick={() => onUpdateStatus?.(claim, 'Reimbursed')}
+                            disabled={claim.resolutionReason === 'Reimbursed'}
+                        >
+                            <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" />
+                            Mark Reimbursed
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
                             onClick={() => onUpdateStatus?.(claim, 'Charge Driver')}
                             disabled={claim.resolutionReason === 'Charge Driver'}
                         >
-                            <UserMinus className="mr-2 h-4 w-4" />
+                            <UserMinus className="mr-2 h-4 w-4 text-orange-600" />
                             Charge Driver
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                             onClick={() => onUpdateStatus?.(claim, 'Write Off')}
                             disabled={claim.resolutionReason === 'Write Off'}
                         >
-                            <FileText className="mr-2 h-4 w-4" />
+                            <FileText className="mr-2 h-4 w-4 text-blue-600" />
                             Write Off (Fleet)
                         </DropdownMenuItem>
                       </DropdownMenuContent>
