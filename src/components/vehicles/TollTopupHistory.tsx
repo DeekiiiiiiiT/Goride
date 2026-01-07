@@ -222,10 +222,16 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
                                 -${financials.netLoss.toFixed(2)}
                             </Badge>
                         ) : (
+                            // Unmatched OR Underpaid (Uber didn't cover it) -> Red
                             <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">
                                 -${financials.netLoss.toFixed(2)}
                             </Badge>
                         )
+                    ) : financials.driverRecovered > 0 ? (
+                         // Fully Recovered via Driver Charge -> Orange
+                         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                            Driver Pd
+                         </Badge>
                     ) : (
                         <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200">
                             $0.00

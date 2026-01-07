@@ -185,6 +185,20 @@ export function ClaimableLoss() {
       }
   };
 
+  const handleUpdateStatus = async (claim: Claim, newReason: 'Charge Driver' | 'Write Off') => {
+      try {
+          await updateClaim({ 
+              ...claim, 
+              resolutionReason: newReason,
+              updatedAt: new Date().toISOString() 
+          });
+          toast.success(`Claim updated to: ${newReason}`);
+          refreshClaims();
+      } catch (e) {
+          toast.error("Failed to update claim status");
+      }
+  };
+
   const handleDeleteClaims = (ids: string[]) => {
       setItemsToDelete(ids);
       setIsDeleteAlertOpen(true);
@@ -328,6 +342,7 @@ export function ClaimableLoss() {
                 isLoading={loadingClaims}
                 getDriverName={getDriverName}
                 onDelete={handleDeleteClaims}
+                onUpdateStatus={handleUpdateStatus}
             />
         </TabsContent>
       </Tabs>

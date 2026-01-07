@@ -8,10 +8,18 @@ import {
   TableRow 
 } from "../ui/table";
 import { Badge } from "../ui/badge";
-import { CheckCircle2, History, Trash2 } from "lucide-react";
+import { CheckCircle2, History, Trash2, MoreHorizontal, FileText, UserMinus } from "lucide-react";
 import { Claim } from "../../types/data";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 interface ResolutionStyle {
   badgeClass: string;
@@ -27,8 +35,8 @@ const getResolutionStyle = (reason?: string): ResolutionStyle => {
       };
     case 'Charge Driver':
       return {
-        badgeClass: "bg-red-50 text-red-700 border-red-200",
-        textClass: "text-red-600"
+        badgeClass: "bg-orange-50 text-orange-700 border-orange-200",
+        textClass: "text-orange-600"
       };
     case 'Write Off':
       return {
@@ -48,9 +56,10 @@ interface ResolvedHistoryListProps {
   isLoading?: boolean;
   getDriverName?: (id: string) => string;
   onDelete?: (ids: string[]) => void;
+  onUpdateStatus?: (claim: Claim, newReason: 'Charge Driver' | 'Write Off') => void;
 }
 
-export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete }: ResolvedHistoryListProps) {
+export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete, onUpdateStatus }: ResolvedHistoryListProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   if (isLoading) {
@@ -168,16 +177,41 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                   ${claim.amount.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge variant="outline" className={`${styles.badgeClass} gap-1`}>
-                       <CheckCircle2 className="h-3 w-3" />
-                       {claim.status}
-                    </Badge>
-                    {claim.resolutionReason && (
-                        <span className={`text-xs font-medium ${styles.textClass}`}>
-                            {claim.resolutionReason}
-                        </span>
-                    )}
+                  <div className="flex flex-col items-end gap-1 group relative">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <div className="cursor-pointer hover:opacity-80 transition-opacity">
+                            <Badge variant="outline" className={`${styles.badgeClass} gap-1`}>
+                               <CheckCircle2 className="h-3 w-3" />
+                               {claim.status}
+                            </Badge>
+                            {claim.resolutionReason && (
+                                <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${styles.textClass}`}>
+                                    {claim.resolutionReason}
+                                    <MoreHorizontal className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                            )}
+                        </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Change Resolution</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                            onClick={() => onUpdateStatus?.(claim, 'Charge Driver')}
+                            disabled={claim.resolutionReason === 'Charge Driver'}
+                        >
+                            <UserMinus className="mr-2 h-4 w-4" />
+                            Charge Driver
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                            onClick={() => onUpdateStatus?.(claim, 'Write Off')}
+                            disabled={claim.resolutionReason === 'Write Off'}
+                        >
+                            <FileText className="mr-2 h-4 w-4" />
+                            Write Off (Fleet)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </TableCell>
               </TableRow>
