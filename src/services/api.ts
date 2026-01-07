@@ -1,8 +1,7 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
-
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
+import { API_ENDPOINTS } from './apiConfig';
 
 export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -24,7 +23,7 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, ret
 
 export const api = {
   async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/odometer-history/${vehicleId}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${vehicleId}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch odometer history");
@@ -32,7 +31,7 @@ export const api = {
   },
 
   async addOdometerReading(reading: Partial<OdometerReading>) {
-    const response = await fetchWithRetry(`${BASE_URL}/odometer-history`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -45,7 +44,7 @@ export const api = {
   },
 
   async deleteOdometerReading(id: string, vehicleId: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/odometer-history/${id}?vehicleId=${vehicleId}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${id}?vehicleId=${vehicleId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -54,7 +53,7 @@ export const api = {
   },
 
   async getBatches(): Promise<ImportBatch[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/batches`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch batches");
@@ -62,7 +61,7 @@ export const api = {
   },
 
   async createBatch(batch: ImportBatch) {
-    const response = await fetchWithRetry(`${BASE_URL}/batches`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -75,7 +74,7 @@ export const api = {
   },
 
   async deleteBatch(id: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/batches/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -84,7 +83,7 @@ export const api = {
   },
 
   async saveTrips(trips: Trip[]) {
-    const response = await fetchWithRetry(`${BASE_URL}/trips`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -110,7 +109,7 @@ export const api = {
   },
 
   async deleteTrip(id: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/trips/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -119,7 +118,7 @@ export const api = {
   },
 
   async saveDriverMetrics(metrics: DriverMetrics[]) {
-      const response = await fetchWithRetry(`${BASE_URL}/driver-metrics`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver-metrics`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -132,7 +131,7 @@ export const api = {
   },
 
   async saveVehicleMetrics(metrics: VehicleMetrics[]) {
-      const response = await fetchWithRetry(`${BASE_URL}/vehicle-metrics`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicle-metrics`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -145,7 +144,7 @@ export const api = {
   },
 
   async getVehicleMetrics(): Promise<VehicleMetrics[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/vehicle-metrics`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicle-metrics`, {
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
         }
@@ -155,7 +154,7 @@ export const api = {
   },
 
   async getDriverMetrics(): Promise<DriverMetrics[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/driver-metrics`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver-metrics`, {
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
         }
@@ -165,7 +164,7 @@ export const api = {
   },
 
   async getTrips(options?: { limit?: number, offset?: number }): Promise<Trip[]> {
-    let url = `${BASE_URL}/trips`;
+    let url = `${API_ENDPOINTS.fleet}/trips`;
     const params = new URLSearchParams();
     if (options?.limit !== undefined) params.append('limit', options.limit.toString());
     if (options?.offset !== undefined) params.append('offset', options.offset.toString());
@@ -188,7 +187,7 @@ export const api = {
   },
 
   async clearAllData() {
-    const response = await fetchWithRetry(`${BASE_URL}/trips`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -201,7 +200,7 @@ export const api = {
   },
 
   async getNotifications(): Promise<Notification[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/notifications`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications`, {
       headers: {
         'Authorization': `Bearer ${publicAnonKey}`
       }
@@ -216,7 +215,7 @@ export const api = {
   },
 
   async markNotificationAsRead(id: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/notifications/${id}/read`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/${id}/read`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${publicAnonKey}`
@@ -231,7 +230,7 @@ export const api = {
   },
 
   async createNotification(notification: Partial<Notification>) {
-    const response = await fetchWithRetry(`${BASE_URL}/notifications`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -248,7 +247,7 @@ export const api = {
   },
 
   async getAlertRules() {
-    const response = await fetchWithRetry(`${BASE_URL}/alert-rules`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch alert rules");
@@ -256,7 +255,7 @@ export const api = {
   },
 
   async saveAlertRule(rule: any) {
-    const response = await fetchWithRetry(`${BASE_URL}/alert-rules`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -269,7 +268,7 @@ export const api = {
   },
 
   async deleteAlertRule(id: string) {
-     const response = await fetchWithRetry(`${BASE_URL}/alert-rules/${id}`, {
+     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -278,7 +277,7 @@ export const api = {
   },
 
   async getIntegrations() {
-    const response = await fetchWithRetry(`${BASE_URL}/settings/integrations`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/integrations`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch integrations");
@@ -286,7 +285,7 @@ export const api = {
   },
 
   async saveIntegration(integration: any) {
-    const response = await fetchWithRetry(`${BASE_URL}/settings/integrations`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/integrations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -299,7 +298,7 @@ export const api = {
   },
 
   async getBudgets() {
-      const response = await fetchWithRetry(`${BASE_URL}/budgets`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/budgets`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       if (!response.ok) throw new Error("Failed to fetch budgets");
@@ -307,7 +306,7 @@ export const api = {
   },
 
   async saveBudget(budget: any) {
-      const response = await fetchWithRetry(`${BASE_URL}/budgets`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/budgets`, {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
@@ -320,7 +319,7 @@ export const api = {
   },
 
   async getVehicles() {
-    const response = await fetchWithRetry(`${BASE_URL}/vehicles`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch vehicles");
@@ -328,7 +327,7 @@ export const api = {
   },
 
   async saveVehicle(vehicle: any) {
-    const response = await fetchWithRetry(`${BASE_URL}/vehicles`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -341,7 +340,7 @@ export const api = {
   },
 
   async deleteVehicle(id: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/vehicles/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -350,7 +349,7 @@ export const api = {
   },
 
   async getDrivers() {
-    const response = await fetchWithRetry(`${BASE_URL}/drivers`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch drivers");
@@ -358,7 +357,7 @@ export const api = {
   },
 
   async saveDriver(driver: any) {
-    const response = await fetchWithRetry(`${BASE_URL}/drivers`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -371,7 +370,7 @@ export const api = {
   },
 
   async fetchPendingTollClaims(): Promise<FinancialTransaction[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch transactions");
@@ -386,7 +385,7 @@ export const api = {
   },
 
   async getTransactions() {
-    const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch transactions");
@@ -394,7 +393,7 @@ export const api = {
   },
 
   async saveTransaction(transaction: Partial<FinancialTransaction>) {
-    const response = await fetchWithRetry(`${BASE_URL}/transactions`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -407,7 +406,7 @@ export const api = {
   },
 
   async deleteTransaction(id: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/transactions/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -419,7 +418,7 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await fetchWithRetry(`${BASE_URL}/upload`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
@@ -434,7 +433,7 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await fetchWithRetry(`${BASE_URL}/scan-receipt`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/scan-receipt`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
@@ -456,7 +455,7 @@ export const api = {
     }
     formData.append('type', type);
     
-    const response = await fetchWithRetry(`${BASE_URL}/parse-document`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-document`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
@@ -473,7 +472,7 @@ export const api = {
   },
 
   async generateVehicleImage(vehicleData: { make: string, model: string, year: string, color: string, bodyType: string, licensePlate?: string }) {
-    const response = await fetchWithRetry(`${BASE_URL}/generate-vehicle-image`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/generate-vehicle-image`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -490,7 +489,7 @@ export const api = {
   },
 
   async getPreferences() {
-    const response = await fetchWithRetry(`${BASE_URL}/settings/preferences`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/preferences`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch preferences");
@@ -498,7 +497,7 @@ export const api = {
   },
 
   async savePreferences(preferences: any) {
-    const response = await fetchWithRetry(`${BASE_URL}/settings/preferences`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/preferences`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -518,7 +517,7 @@ export const api = {
       metadata?: any,
       insights?: any 
   }) {
-      const response = await fetchWithRetry(`${BASE_URL}/fleet/sync`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/sync`, {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
@@ -535,7 +534,7 @@ export const api = {
   },
 
   async getFinancials() {
-      const response = await fetchWithRetry(`${BASE_URL}/financials`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/financials`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       if (!response.ok) throw new Error("Failed to fetch financials");
@@ -543,7 +542,7 @@ export const api = {
   },
 
   async saveFinancials(financials: any) {
-      const response = await fetchWithRetry(`${BASE_URL}/financials`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/financials`, {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
@@ -556,7 +555,7 @@ export const api = {
   },
 
   async getMaintenanceLogs(vehicleId: string) {
-      const response = await fetchWithRetry(`${BASE_URL}/maintenance-logs/${vehicleId}`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs/${vehicleId}`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       if (!response.ok) throw new Error("Failed to fetch maintenance logs");
@@ -564,7 +563,7 @@ export const api = {
   },
 
   async saveMaintenanceLog(log: any) {
-      const response = await fetchWithRetry(`${BASE_URL}/maintenance-logs`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs`, {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
@@ -577,7 +576,7 @@ export const api = {
   },
 
   async getTollTags() {
-    const response = await fetchWithRetry(`${BASE_URL}/toll-tags`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch toll tags");
@@ -585,7 +584,7 @@ export const api = {
   },
 
   async saveTollTag(tag: any) {
-    const response = await fetchWithRetry(`${BASE_URL}/toll-tags`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -598,7 +597,7 @@ export const api = {
   },
 
   async deleteTollTag(id: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/toll-tags/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -607,7 +606,7 @@ export const api = {
   },
 
   async getUsers() {
-    const response = await fetchWithRetry(`${BASE_URL}/users`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/users`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch users");
@@ -615,7 +614,7 @@ export const api = {
   },
 
   async parseTollCsvWithAI(csvContent: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/ai/parse-toll-csv`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-toll-csv`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -631,7 +630,7 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetchWithRetry(`${BASE_URL}/ai/parse-toll-image`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-toll-image`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${publicAnonKey}`
@@ -647,8 +646,8 @@ export const api = {
 
   async getClaims(driverId?: string) {
     const url = driverId 
-        ? `${BASE_URL}/claims?driverId=${driverId}` 
-        : `${BASE_URL}/claims`;
+        ? `${API_ENDPOINTS.financial}/claims?driverId=${driverId}` 
+        : `${API_ENDPOINTS.financial}/claims`;
     const response = await fetchWithRetry(url, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -657,7 +656,7 @@ export const api = {
   },
 
   async saveClaim(claim: any) {
-    const response = await fetchWithRetry(`${BASE_URL}/claims`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/claims`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -670,7 +669,7 @@ export const api = {
   },
 
   async deleteClaim(id: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/claims/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/claims/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -698,7 +697,7 @@ export const api = {
   },
 
   async approveExpense(id: string, notes?: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/expenses/approve`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/expenses/approve`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -711,7 +710,7 @@ export const api = {
   },
 
   async rejectExpense(id: string, reason?: string) {
-    const response = await fetchWithRetry(`${BASE_URL}/expenses/reject`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/expenses/reject`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -742,7 +741,7 @@ export const api = {
     if (options?.dailyRideTarget) params.append('dailyRideTarget', options.dailyRideTarget.toString());
     if (options?.dailyEarningsTarget) params.append('dailyEarningsTarget', options.dailyEarningsTarget.toString());
 
-    const response = await fetchWithRetry(`${BASE_URL}/performance-report?${params.toString()}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/performance-report?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch performance report");
@@ -758,7 +757,7 @@ export const api = {
     preview?: boolean,
     keys?: string[]
   }) {
-    const response = await fetchWithRetry(`${BASE_URL}/admin/reset-by-date`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/reset-by-date`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

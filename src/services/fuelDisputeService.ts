@@ -1,7 +1,6 @@
 import { FuelDispute } from '../types/fuel';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
-
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
+import { API_ENDPOINTS } from './apiConfig';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3): Promise<Response> {
     try {
@@ -28,13 +27,13 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 
 export const FuelDisputeService = {
     async getAllDisputes(): Promise<FuelDispute[]> {
-        const res = await fetchWithRetry(`${BASE_URL}/fuel-disputes`);
+        const res = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-disputes`);
         if (!res.ok) throw new Error('Failed to fetch disputes');
         return res.json();
     },
 
     async createDispute(dispute: FuelDispute): Promise<void> {
-        const res = await fetchWithRetry(`${BASE_URL}/fuel-disputes`, {
+        const res = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-disputes`, {
             method: 'POST',
             body: JSON.stringify(dispute),
         });
@@ -42,7 +41,7 @@ export const FuelDisputeService = {
     },
 
     async updateDispute(dispute: FuelDispute): Promise<void> {
-         const res = await fetchWithRetry(`${BASE_URL}/fuel-disputes`, {
+         const res = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-disputes`, {
             method: 'POST', // UPSERT
             body: JSON.stringify(dispute),
         });
@@ -50,7 +49,7 @@ export const FuelDisputeService = {
     },
 
     async deleteDispute(id: string): Promise<void> {
-        const res = await fetchWithRetry(`${BASE_URL}/fuel-disputes/${id}`, {
+        const res = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-disputes/${id}`, {
             method: 'DELETE',
         });
         if (!res.ok) throw new Error('Failed to delete dispute');

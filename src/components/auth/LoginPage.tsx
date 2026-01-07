@@ -8,6 +8,7 @@ import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { supabase } from '../../utils/supabase/client';
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { API_ENDPOINTS } from '../../services/apiConfig';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -54,7 +55,7 @@ export function LoginPage() {
 
       try {
           // Use the server endpoint to create user with auto-confirm
-          const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/invite-user`, {
+          const res = await fetch(`${API_ENDPOINTS.admin}/users`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',

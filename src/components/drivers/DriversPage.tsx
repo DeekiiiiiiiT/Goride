@@ -51,6 +51,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { API_ENDPOINTS } from '../../services/apiConfig';
 import { toast } from "sonner@2.0.3";
 import {
   Select,
@@ -121,13 +122,11 @@ export function DriversPage() {
     
     setIsDeleting(true);
     try {
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/delete-user`, {
-        method: 'POST',
+      const response = await fetch(`${API_ENDPOINTS.fleet}/drivers/${driverToDelete}`, {
+        method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`
-        },
-        body: JSON.stringify({ userId: driverToDelete })
+        }
       });
       
       const data = await response.json();

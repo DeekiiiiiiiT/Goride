@@ -1,7 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { FuelCard, FuelEntry, MileageAdjustment } from '../types/fuel';
-
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
+import { API_ENDPOINTS } from './apiConfig';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -22,7 +21,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 export const fuelService = {
   // --- Fuel Cards ---
   async getFuelCards(): Promise<FuelCard[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/fuel-cards`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel cards");
@@ -30,7 +29,7 @@ export const fuelService = {
   },
 
   async saveFuelCard(card: FuelCard): Promise<FuelCard> {
-    const response = await fetchWithRetry(`${BASE_URL}/fuel-cards`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -44,7 +43,7 @@ export const fuelService = {
   },
 
   async deleteFuelCard(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${BASE_URL}/fuel-cards/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -53,7 +52,7 @@ export const fuelService = {
 
   // --- Fuel Entries ---
   async getFuelEntries(): Promise<FuelEntry[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/fuel-entries`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
@@ -61,7 +60,7 @@ export const fuelService = {
   },
 
   async saveFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
-    const response = await fetchWithRetry(`${BASE_URL}/fuel-entries`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -75,7 +74,7 @@ export const fuelService = {
   },
 
   async deleteFuelEntry(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${BASE_URL}/fuel-entries/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -84,7 +83,7 @@ export const fuelService = {
 
   // --- Mileage Adjustments ---
   async getMileageAdjustments(): Promise<MileageAdjustment[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/mileage-adjustments`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/mileage-adjustments`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch mileage adjustments");
@@ -92,7 +91,7 @@ export const fuelService = {
   },
 
   async saveMileageAdjustment(adj: MileageAdjustment): Promise<MileageAdjustment> {
-    const response = await fetchWithRetry(`${BASE_URL}/mileage-adjustments`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/mileage-adjustments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -106,7 +105,7 @@ export const fuelService = {
   },
 
   async deleteMileageAdjustment(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${BASE_URL}/mileage-adjustments/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/mileage-adjustments/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

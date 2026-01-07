@@ -45,6 +45,7 @@ import { UserPlus, MoreHorizontal, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { TeamMember } from '../../types/data';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { API_ENDPOINTS } from '../../services/apiConfig';
 import { api } from '../../services/api';
 
 export function UserManagementPage() {
@@ -79,7 +80,7 @@ export function UserManagementPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/invite-user`, {
+      const response = await fetch(`${API_ENDPOINTS.admin}/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

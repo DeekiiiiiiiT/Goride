@@ -36,6 +36,7 @@ import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { API_ENDPOINTS } from '../../services/apiConfig';
 
 // --- Constants ---
 
@@ -203,7 +204,7 @@ export function MaintenanceManager({ vehicleId, logs, maintenanceStatus, onRefre
             const scanFormData = new FormData();
             scanFormData.append('file', file);
             
-            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/parse-invoice`, {
+            const response = await fetch(`${API_ENDPOINTS.ai}/parse-invoice`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${publicAnonKey}` },
                 body: scanFormData

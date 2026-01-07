@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -193,7 +194,7 @@ export function ImportsPage() {
         try {
             setWarning("AI is analyzing file structure... this may take a moment.");
             const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
-            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/ai/map-csv`, {
+            const res = await fetch(`${API_ENDPOINTS.ai}/ai/map-csv`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -343,7 +344,7 @@ export function ImportsPage() {
         const payload = constructAiPayload(filteredFiles);
         const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
         
-        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/analyze-fleet`, {
+        const res = await fetch(`${API_ENDPOINTS.ai}/analyze-fleet`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -694,7 +695,7 @@ export function ImportsPage() {
     const performSync = async () => {
         try {
             const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
-            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/uber/sync`, {
+            const response = await fetch(`${API_ENDPOINTS.fleet}/uber/sync`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${publicAnonKey}`
@@ -755,7 +756,7 @@ export function ImportsPage() {
             const scope = "profile history";
 
             // Get Auth URL
-            const urlRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/uber/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`, {
+            const urlRes = await fetch(`${API_ENDPOINTS.fleet}/uber/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`, {
                 headers: { 'Authorization': `Bearer ${publicAnonKey}` }
             });
             const urlData = await urlRes.json();
@@ -777,7 +778,7 @@ export function ImportsPage() {
                         
                         // Exchange Code
                         try {
-                            const exchangeRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/uber/exchange`, {
+                            const exchangeRes = await fetch(`${API_ENDPOINTS.fleet}/uber/exchange`, {
                                 method: 'POST',
                                 headers: { 
                                     'Authorization': `Bearer ${publicAnonKey}`,

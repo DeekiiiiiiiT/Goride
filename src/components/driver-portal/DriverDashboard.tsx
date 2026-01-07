@@ -24,6 +24,7 @@ import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { API_ENDPOINTS } from '../../services/apiConfig';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
@@ -117,7 +118,7 @@ export function DriverDashboard() {
         };
 
         // 1. Fetch Metrics
-        const metricsRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/driver-metrics`, { headers });
+        const metricsRes = await fetch(`${API_ENDPOINTS.fleet}/driver-metrics`, { headers });
         if (metricsRes.ok) {
             const allMetrics: DriverMetric[] = await metricsRes.json();
             // Filter for current user or resolved driver (checking both ID and legacy driverId)
@@ -130,7 +131,7 @@ export function DriverDashboard() {
         }
 
         // 2. Fetch Trips for Earnings & Recent Activity
-        const tripsRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/trips`, { headers });
+        const tripsRes = await fetch(`${API_ENDPOINTS.fleet}/trips`, { headers });
         if (tripsRes.ok) {
             const allTrips: Trip[] = await tripsRes.json();
             // Filter for current user or resolved driver

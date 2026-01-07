@@ -1,5 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { RoutePoint } from '../types/tripSession';
+import { API_ENDPOINTS } from './apiConfig';
 
 export interface SnappedRouteResult {
   snappedRoute: { lat: number; lon: number }[];
@@ -16,7 +17,7 @@ export const mapMatchService = {
     if (!points || points.length < 2) return null;
 
     try {
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/map-match`, {
+      const response = await fetch(`${API_ENDPOINTS.ai}/map-match`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

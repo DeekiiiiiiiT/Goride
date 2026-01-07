@@ -1,7 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { FixedExpenseConfig } from '../types/expenses';
-
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
+import { API_ENDPOINTS } from './apiConfig';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -25,7 +24,7 @@ export const expenseService = {
    * Fetch all fixed expenses for a specific vehicle.
    */
   async getFixedExpenses(vehicleId: string): Promise<FixedExpenseConfig[]> {
-    const response = await fetchWithRetry(`${BASE_URL}/fixed-expenses/${vehicleId}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fixed-expenses/${vehicleId}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     
@@ -39,7 +38,7 @@ export const expenseService = {
    * Save (create or update) a fixed expense configuration.
    */
   async saveFixedExpense(expense: FixedExpenseConfig): Promise<FixedExpenseConfig> {
-    const response = await fetchWithRetry(`${BASE_URL}/fixed-expenses`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fixed-expenses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -60,7 +59,7 @@ export const expenseService = {
    * Delete a fixed expense configuration.
    */
   async deleteFixedExpense(vehicleId: string, expenseId: string): Promise<void> {
-    const response = await fetchWithRetry(`${BASE_URL}/fixed-expenses/${vehicleId}/${expenseId}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fixed-expenses/${vehicleId}/${expenseId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
