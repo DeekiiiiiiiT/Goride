@@ -32,7 +32,8 @@ import {
   Landmark,
   Trash2,
   Car as CarIcon,
-  Pencil
+  Pencil,
+  Plus
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -135,6 +136,16 @@ interface DriverDetailProps {
   };
 }
 
+// Helper for Toll Ledger Logic (Phase 1 Refactor)
+const getTollTransactionType = (category: string): 'credit' | 'debit' => {
+    // Credit: Reimbursement to driver (Money IN to driver context, or Debt Reduction)
+    // Note: 'Expense' is included here assuming it's a driver expense submitted for reimbursement.
+    if (['Toll Usage', 'Toll', 'Tolls', 'Expense'].includes(category)) return 'credit';
+    // Debit: Charge to driver (Money OUT from driver context, or Debt Increase)
+    // Includes: Adjustment, Claim, Chargeback, etc.
+    return 'debit';
+};
+
 export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, vehicleMetrics, onBack, fleetStats }: DriverDetailProps) {
   const [activeTab, setActiveTab] = useState("overview");
   const [tripSearch, setTripSearch] = useState("");
@@ -149,7 +160,52 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       editingTransaction?: FinancialTransaction;
   }>({ isOpen: false });
   const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
+  const [ledgerView, setLedgerView] = useState<'tolls' | 'payments'>('tolls');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  
+  // Phase 3: Filtered Cash Tolls (Expenses & Adjustments)
+  const cashTollTransactions = useMemo(() => transactions.filter(t => {
+      // Relaxed Status Check: Allow undefined/null or any 'positive' status
+      // If status is explicitly 'Rejected' or 'Void', skip. Otherwise allow.
+      if (t.status === 'Rejected' || t.status === 'Void' || t.status === 'Failed') return false;
+      
+      // 1. Valid Cash Toll Expense (Credit to Driver)
+      const isTollCategory = ['Toll Usage', 'Toll', 'Tolls', 'Expense'].includes(t.category);
+      // For generic 'Expense', ensure it's toll related
+      if (t.category === 'Expense' && !t.description?.toLowerCase().includes('toll')) return false;
+
+      const isCash = t.paymentMethod?.toLowerCase() === 'cash' || !!t.receiptUrl;
+      const isValidExpense = isTollCategory && isCash;
+
+      // 2. Toll Adjustment / Dispute Chargeback (Debit to Driver)
+      const isAdjustment = ['Adjustment', 'Claim', 'Chargeback'].includes(t.category);
+      // Relax description check for explicit Claims/Chargebacks
+      const isExplicitClaim = ['Claim', 'Chargeback'].includes(t.category);
+      const isTollRelated = isExplicitClaim || 
+                            t.description?.toLowerCase().includes('toll') || 
+                            t.description?.toLowerCase().includes('dispute') ||
+                            t.description?.toLowerCase().includes('refund');
+                            
+      const isValidAdjustment = isAdjustment && isTollRelated;
+
+      return isValidExpense || isValidAdjustment;
+  }), [transactions]);
+
+  // Phase 4: Payment Transactions
+  const paymentTransactions = useMemo(() => transactions.filter(t => {
+      // Strict Safety: Never show Tag Balance operations in Payment Log
+      if (t.paymentMethod === 'Tag Balance') return false;
+      if (t.description?.toLowerCase().includes('top-up')) return false;
+
+      // Exclude tolls just in case
+      const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
+      if (isToll) return false;
+
+      // Strict Payment Logic
+      const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
+      return isPayment && t.amount > 0;
+  }), [transactions]);
+
   const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterCashOnly, setFilterCashOnly] = useState<boolean>(false);
@@ -608,13 +664,50 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          cashCollected = Math.max(cashCollected, csvPeriodCash);
      }
 
-     const cashReceived = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-     const netOutstanding = (totalCashCollected - cashReceived) + lifetimeTolls;
+     // --- Phase 1: STRICT Cash Liability Logic ---
+     
+     // 1. Calculate Float Issued (Cash given to driver)
+     // In transactions, floats are negative (money leaving fleet). We need the absolute value.
+     const totalFloatIssued = Math.abs(transactions
+        .filter(t => t.category === "Float Issue")
+        .reduce((sum, t) => sum + (t.amount || 0), 0));
+
+     // 2. Calculate Payments Received (Cash returned to fleet)
+     // Strictly look for 'Payment_Received' type or 'Cash Collection' category.
+     // These are positive values (money entering fleet).
+     const totalPaymentsReceived = transactions
+        .filter(t => {
+            // Strict Safety: Never include Tag Balance operations as Driver Payments
+            if (t.paymentMethod === 'Tag Balance') return false;
+            
+            return (t.type === 'Payment_Received' || t.category === 'Cash Collection') && t.amount > 0;
+        })
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+     // 3. Calculate Approved Cash Toll Expenses (Valid expenses paid by driver)
+     // These must be CASH payments (receipts) that are RESOLVED (Reimbursed/Written Off).
+     // These reduce the liability.
+     const approvedCashTollExpenses = transactions
+        .filter(t => {
+            const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
+            const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl; // Assumption: Receipts imply cash/personal payment
+            const isResolved = t.status === 'Resolved'; // Only count if approved
+            return isToll && isCash && isResolved;
+        })
+        .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+
+     // 4. Final Net Outstanding Calculation
+     // (Cash They Took) - (Cash They Gave Back) - (Valid Expenses They Paid)
+     // Note: totalCashCollected is Lifetime, calculated earlier in the loop.
+     const netOutstanding = (totalCashCollected + totalFloatIssued) - (totalPaymentsReceived + approvedCashTollExpenses);
+
+     const cashReceived = totalPaymentsReceived; // Alias for backward compatibility if needed, but we used refined logic above.
 
      const periodCashReceived = transactions
         .filter(t => {
             const d = new Date(t.date);
-            return isWithinInterval(d, { start, end });
+            if (t.paymentMethod === 'Tag Balance') return false;
+            return isWithinInterval(d, { start, end }) && (t.type === 'Payment_Received' || t.category === 'Cash Collection');
         })
         .reduce((sum, t) => sum + (t.amount || 0), 0);
      
@@ -1173,10 +1266,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      </CardContent>
                  </Card>
 
-                  {/* Card 3: Pending Clearance */}
+                  {/* Card 3: Unverified Payments */}
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Pending Clearance</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Unverified Payments</CardTitle>
                          <Clock className="h-4 w-4 text-blue-500" />
                      </CardHeader>
                      <CardContent>
@@ -1184,7 +1277,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                              ${metrics.pendingClearance.toFixed(2)}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                             Unverified bank transfers
+                             Pending bank transfers
                          </p>
                      </CardContent>
                  </Card>
@@ -1224,117 +1317,243 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                         />
                     ) : (
                         <Card>
-
-                    <CardHeader>
-                        <CardTitle>Transaction Ledger</CardTitle>
-                        <CardDescription>History of cash payments and adjustments.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Method</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Amount</TableHead>
-                                    <TableHead className="w-[50px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                        {transactions.length > 0 ? (
-                                            transactions.map((tx) => (
-                                                <TableRow key={tx.id}>
-                                                    <TableCell className="font-medium text-slate-600">{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-medium text-slate-900">{tx.description}</span>
-                                                            {tx.referenceNumber && (
-                                                                <span className="text-xs text-slate-500 font-mono mt-0.5">
-                                                                    Ref: {tx.referenceNumber}
-                                                                </span>
-                                                            )}
-                                                            {tx.metadata?.workPeriodStart && tx.metadata?.workPeriodEnd && (
-                                                                <span className="text-xs text-indigo-500 font-medium mt-0.5 flex items-center gap-1">
-                                                                     <CalendarIcon className="h-3 w-3" />
-                                                                     {format(new Date(tx.metadata.workPeriodStart), 'MMM d')} - {format(new Date(tx.metadata.workPeriodEnd), 'MMM d')}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-2 text-slate-600">
-                                                            {tx.paymentMethod === 'Cash' && <DollarSign className="h-3 w-3" />}
-                                                            {tx.paymentMethod === 'Bank Transfer' && <Landmark className="h-3 w-3" />}
-                                                            {tx.paymentMethod === 'Mobile Money' && <Wallet className="h-3 w-3" />}
-                                                            {tx.paymentMethod === 'Check' && <FileText className="h-3 w-3" />}
-                                                            <span className="text-sm">{tx.paymentMethod || 'Cash'}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell><Badge variant="outline" className="bg-slate-50">{tx.category}</Badge></TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="secondary" className={cn(
-                                                            "font-normal",
-                                                            tx.status === 'Completed' && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-                                                            tx.status === 'Verified' && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-                                                            tx.status === 'Pending' && "bg-amber-100 text-amber-700 hover:bg-amber-100",
-                                                            tx.status === 'Failed' && "bg-red-100 text-red-700 hover:bg-red-100",
-                                                            tx.status === 'Reconciled' && "bg-blue-100 text-blue-700 hover:bg-blue-100"
-                                                        )}>
-                                                            {tx.status}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className={cn("text-right font-bold font-mono", tx.amount > 0 ? "text-emerald-600" : "text-amber-600")}>
-                                                        {tx.amount > 0 ? "+" : ""}${tx.amount.toFixed(2)}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-1 justify-end">
-                                                            {tx.status === 'Pending' && (
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-8 w-8 text-amber-600 hover:text-emerald-600 hover:bg-emerald-50"
-                                                                    onClick={() => handleVerifyTransaction(tx.id)}
-                                                                    title="Verify Transaction"
-                                                                >
-                                                                    <CheckCircle2 className="h-4 w-4" />
-                                                                </Button>
-                                                            )}
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                                        <span className="sr-only">Open menu</span>
-                                                                        <MoreHorizontal className="h-4 w-4" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end">
-                                                                    <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
-                                                                        <Pencil className="mr-2 h-4 w-4" />
-                                                                        Edit
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuSeparator />
-                                                                    <DropdownMenuItem onClick={() => handleDeleteTransaction(tx.id)} className="text-red-600 focus:text-red-600">
-                                                                        <Trash2 className="mr-2 h-4 w-4" />
-                                                                        Delete
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </div>
-                                                    </TableCell>
-                                        </TableRow>
-                                    ))
+                            <CardHeader>
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div>
+                                        <CardTitle>Transaction Ledger</CardTitle>
+                                        <CardDescription>History of cash payments and adjustments.</CardDescription>
+                                    </div>
+                                    <div className="flex p-1 bg-slate-100 rounded-lg shrink-0">
+                                        <button 
+                                            className={cn(
+                                                "px-3 py-1.5 text-xs font-medium rounded-md transition-all", 
+                                                ledgerView === 'tolls' ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900"
+                                            )}
+                                            onClick={() => setLedgerView('tolls')}
+                                        >
+                                            Toll Activity
+                                        </button>
+                                        <button 
+                                            className={cn(
+                                                "px-3 py-1.5 text-xs font-medium rounded-md transition-all", 
+                                                ledgerView === 'payments' ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900"
+                                            )}
+                                            onClick={() => setLedgerView('payments')}
+                                        >
+                                            Payments Log
+                                        </button>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {ledgerView === 'tolls' ? (
+                                    <div className="space-y-4">
+                                        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-lg flex items-center justify-between">
+                                            <div>
+                                                <h4 className="text-sm font-medium text-emerald-900">Net Toll Reimbursement</h4>
+                                                <p className="text-xs text-emerald-700 mt-1">Approved toll expenses minus dispute chargebacks.</p>
+                                            </div>
+                                            <div className="text-xl font-bold text-emerald-700">
+                                                ${cashTollTransactions.reduce((sum, t) => {
+                                                    const type = getTollTransactionType(t.category);
+                                                    return type === 'credit' ? sum + Math.abs(t.amount) : sum - Math.abs(t.amount);
+                                                }, 0).toFixed(2)}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="rounded-md border border-slate-200 overflow-x-auto">
+                                            <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Date</TableHead>
+                                                    <TableHead>Description</TableHead>
+                                                    <TableHead>Status</TableHead>
+                                                    <TableHead className="text-right text-red-700">Debit (Charge)</TableHead>
+                                                    <TableHead className="text-right text-emerald-700">Credit (Reimbursement)</TableHead>
+                                                    <TableHead className="w-[50px]"></TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {cashTollTransactions.length > 0 ? (
+                                                    cashTollTransactions.map((tx) => {
+                                                        const type = getTollTransactionType(tx.category);
+                                                        const isCredit = type === 'credit';
+                                                        return (
+                                                        <TableRow key={tx.id}>
+                                                            <TableCell className="font-medium text-slate-600">{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
+                                                            <TableCell>
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-medium text-slate-900">{tx.description}</span>
+                                                                    {tx.receiptUrl && (
+                                                                        <a href={tx.receiptUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-0.5">
+                                                                            <FileText className="h-3 w-3" />
+                                                                            View Receipt
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="secondary" className={cn(
+                                                                    "hover:bg-opacity-80",
+                                                                    isCredit ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                                                                )}>
+                                                                    {tx.status || 'Completed'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono">
+                                                                {!isCredit ? (
+                                                                    <span className="text-red-600 font-bold">${Math.abs(tx.amount).toFixed(2)}</span>
+                                                                ) : (
+                                                                    <span className="text-slate-300">-</span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono">
+                                                                {isCredit ? (
+                                                                    <span className="text-emerald-600 font-bold">${Math.abs(tx.amount).toFixed(2)}</span>
+                                                                ) : (
+                                                                    <span className="text-slate-300">-</span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                            <span className="sr-only">Open menu</span>
+                                                                            <MoreHorizontal className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end">
+                                                                        <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
+                                                                            <Pencil className="mr-2 h-4 w-4" />
+                                                                            Edit
+                                                                        </DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )})
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                                            No toll activity found.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                        </div>
+                                    </div>
                                 ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                                            No transactions recorded.
-                                        </TableCell>
-                                    </TableRow>
+                                    <div className="space-y-4">
+                                        <div className="flex justify-end">
+                                            <Button 
+                                                size="sm"
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                onClick={() => setPaymentModalState({ isOpen: true })}
+                                            >
+                                                <Plus className="mr-2 h-4 w-4" />
+                                                Log New Payment
+                                            </Button>
+                                        </div>
+
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Date</TableHead>
+                                                    <TableHead>Description</TableHead>
+                                                    <TableHead>Method</TableHead>
+                                                    <TableHead>Status</TableHead>
+                                                    <TableHead className="text-right">Amount</TableHead>
+                                                    <TableHead className="w-[50px]"></TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {paymentTransactions.length > 0 ? (
+                                                    paymentTransactions.map((tx) => (
+                                                        <TableRow key={tx.id}>
+                                                            <TableCell className="font-medium text-slate-600">{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
+                                                            <TableCell>
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-medium text-slate-900">{tx.description}</span>
+                                                                    {tx.referenceNumber && (
+                                                                        <span className="text-xs text-slate-500 font-mono mt-0.5">
+                                                                            Ref: {tx.referenceNumber}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-2 text-slate-600">
+                                                                    {tx.paymentMethod === 'Cash' && <DollarSign className="h-3 w-3" />}
+                                                                    {tx.paymentMethod === 'Bank Transfer' && <Landmark className="h-3 w-3" />}
+                                                                    {tx.paymentMethod === 'Mobile Money' && <Wallet className="h-3 w-3" />}
+                                                                    {tx.paymentMethod === 'Check' && <FileText className="h-3 w-3" />}
+                                                                    <span className="text-sm">{tx.paymentMethod || 'Cash'}</span>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="secondary" className={cn(
+                                                                    "font-normal",
+                                                                    tx.status === 'Completed' && "bg-emerald-100 text-emerald-700",
+                                                                    tx.status === 'Verified' && "bg-emerald-100 text-emerald-700",
+                                                                    tx.status === 'Pending' && "bg-amber-100 text-amber-700",
+                                                                    tx.status === 'Failed' && "bg-red-100 text-red-700"
+                                                                )}>
+                                                                    {tx.status}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-bold font-mono text-emerald-600">
+                                                                +${tx.amount.toFixed(2)}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-1 justify-end">
+                                                                    {tx.status === 'Pending' && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-8 w-8 text-amber-600 hover:text-emerald-600 hover:bg-emerald-50"
+                                                                            onClick={() => handleVerifyTransaction(tx.id)}
+                                                                            title="Verify Transaction"
+                                                                        >
+                                                                            <CheckCircle2 className="h-4 w-4" />
+                                                                        </Button>
+                                                                    )}
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                                <span className="sr-only">Open menu</span>
+                                                                                <MoreHorizontal className="h-4 w-4" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="end">
+                                                                            <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
+                                                                                <Pencil className="mr-2 h-4 w-4" />
+                                                                                Edit
+                                                                            </DropdownMenuItem>
+                                                                            <DropdownMenuSeparator />
+                                                                            <DropdownMenuItem onClick={() => handleDeleteTransaction(tx.id)} className="text-red-600 focus:text-red-600">
+                                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                                Delete
+                                                                            </DropdownMenuItem>
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                                            No payments recorded.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
 

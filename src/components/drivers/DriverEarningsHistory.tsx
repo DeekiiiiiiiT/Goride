@@ -78,14 +78,14 @@ export function DriverEarningsHistory({ driverId, transactions }: DriverEarnings
         });
         
         const cumulative = pastTx
-            .filter(t => t.type === 'Revenue' || (t.type === 'Adjustment' && t.amount > 0)) // Only earnings count for Tier? Usually just Revenue.
+            .filter(t => (t.type === 'Revenue' || (t.type === 'Adjustment' && t.amount > 0)) && t.paymentMethod !== 'Tag Balance')
             .reduce((sum, t) => sum + (t.amount > 0 ? t.amount : 0), 0);
             
         const currentTier = TierCalculations.getTierForEarnings(cumulative, tiers);
 
         // Week Stats
         const grossRevenue = weekTx
-            .filter(t => t.type === 'Revenue' || (t.type === 'Adjustment' && t.amount > 0))
+            .filter(t => (t.type === 'Revenue' || (t.type === 'Adjustment' && t.amount > 0)) && t.paymentMethod !== 'Tag Balance')
             .reduce((sum, t) => sum + t.amount, 0);
             
         const expenses = weekTx

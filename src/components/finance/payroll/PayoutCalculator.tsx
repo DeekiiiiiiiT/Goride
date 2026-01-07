@@ -29,6 +29,7 @@ export function PayoutCalculator({ transactions, configs, onGenerate }: PayoutCa
   const calculations = useMemo(() => {
     // 1. Filter Revenue Transactions in Date Range
     const periodRevenue = transactions.filter(t => 
+        t.paymentMethod !== 'Tag Balance' &&
         t.type === 'Revenue' && 
         t.driverId &&
         isWithinInterval(new Date(t.date), { 

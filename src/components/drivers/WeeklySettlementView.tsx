@@ -54,11 +54,11 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
         // Generate Weeks (Oldest to Newest)
         const weekIntervals = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 });
 
-        // Phase 1: Calculate Basics (Owed, Allocated Payments)
+        // Phase 1: Calculate Basics (Owed, Allocated Payments, Expenses)
         const weeksData = weekIntervals.map(weekStart => {
             const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
             
-            // --- Calculate Owed ---
+            // --- Calculate Owed (Cash Collected + Float Issued) ---
             const relevantCsvMetrics = csvMetrics.filter(m => {
                 const mStart = parseISO(m.periodStart);
                 const mEnd = parseISO(m.periodEnd);
@@ -85,10 +85,20 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                 return sum;
             }, 0);
 
-            const amountOwed = Math.max(csvCash, tripCalculatedCash);
+            // Float Issued in this week (Increases Debt)
+            const weeklyFloat = transactions
+                .filter(t => {
+                    const tDate = new Date(t.date);
+                    return t.category === 'Float Issue' && isWithinInterval(tDate, { start: weekStart, end: weekEnd });
+                })
+                .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+
+            const amountOwed = Math.max(csvCash, tripCalculatedCash) + weeklyFloat;
             const isFromCsv = csvCash > tripCalculatedCash;
 
-            // --- Calculate Allocated Paid (Strict Metadata Only) ---
+            // --- Calculate Credits (Allocated Payments + Approved Cash Tolls) ---
+            
+            // 1. Allocated Payments (Metadata based)
             const allocatedPayments = transactions.filter(t => {
                 if (t.metadata?.workPeriodStart) {
                     const payStart = parseISO(t.metadata.workPeriodStart);
@@ -98,7 +108,18 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                 return false;
             });
 
-            const allocatedPaid = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0);
+            // 2. Approved Cash Toll Expenses (Treated as Credit/Payment)
+            const weeklyExpenses = transactions
+                .filter(t => {
+                    const tDate = new Date(t.date);
+                    const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
+                    const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl;
+                    const isResolved = t.status === 'Resolved';
+                    return isToll && isCash && isResolved && isWithinInterval(tDate, { start: weekStart, end: weekEnd });
+                })
+                .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+
+            const allocatedPaid = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0) + weeklyExpenses;
 
             return {
                 start: weekStart,
@@ -114,8 +135,28 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
 
         // Phase 2: Distribute Unallocated Payments (FIFO)
         // 1. Identify Unallocated Transactions
-        // Exclude floats/adjustments if they are not payments. Assuming 'type' check or just no metadata.
-        const unallocatedTransactions = transactions.filter(t => !t.metadata?.workPeriodStart && t.category !== 'Float Issue');
+        // Exclude floats, expenses, and allocated payments
+        const unallocatedTransactions = transactions.filter(t => {
+             // Exclude Float Issue (Debt)
+             if (t.category === 'Float Issue') return false;
+             
+             // Strict Safety: Never include Tag Balance operations as Driver Credits
+             if (t.paymentMethod === 'Tag Balance') return false;
+             if (t.description?.toLowerCase().includes('top-up')) return false;
+
+             // Exclude Tolls (Expenses)
+             const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
+             if (isToll) return false;
+
+             // Exclude Allocated (Metadata)
+             if (t.metadata?.workPeriodStart) return false;
+
+             // STRICT PAYMENT LOGIC: Only count explicit Cash Collections or Payment Received types
+             // This excludes random positive adjustments or vehicle-linked credits
+             const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
+
+             return isPayment && (t.amount || 0) > 0;
+        });
         
         let totalUnallocatedPool = unallocatedTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
         
@@ -139,8 +180,6 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                 if (totalUnallocatedPool <= 0) break;
                 
                 // How much of this transaction is still "available" as surplus?
-                // We assume the pool is fungible, but visually we want to attach surplus to this transaction's week.
-                // We can take up to tx.amount.
                 const amountToAssign = Math.min(tx.amount || 0, totalUnallocatedPool);
                 
                 // Find the week this transaction belongs to

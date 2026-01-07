@@ -219,7 +219,7 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
                 )}
             </TableCell>
             <TableCell>
-                {tx.category === 'Toll Usage' ? (
+                {(tx.category === 'Toll Usage' || tx.category === 'Toll' || tx.category === 'Tolls') ? (
                     financials.netLoss > 0 ? (
                         financials.fleetAbsorbed > 0 ? (
                             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
