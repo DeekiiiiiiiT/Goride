@@ -12,6 +12,7 @@ import { runScenarioTest } from "../../../utils/testScenario";
 import { DisputeModal } from "../../claimable-loss/DisputeModal";
 import { FinancialTransaction } from "../../../types/data";
 import { MatchResult, calculateTollFinancials } from "../../../utils/tollReconciliation";
+import { toast } from "sonner@2.0.3";
 
 export function ReconciliationDashboard() {
   const handleRunTest = () => {
@@ -35,7 +36,7 @@ export function ReconciliationDashboard() {
     refresh 
   } = useTollReconciliation();
 
-  const { claims, loading: claimsLoading, refresh: refreshClaims } = useClaims();
+  const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim } = useClaims();
 
   const [isDisputeOpen, setIsDisputeOpen] = React.useState(false);
   const [disputeTarget, setDisputeTarget] = React.useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
@@ -87,6 +88,54 @@ export function ReconciliationDashboard() {
           // Just reconcile directly. 
           // The variance will automatically make it show up in Claimable Loss if logic allows (it does).
           await reconcile(tx, match.trip);
+      }
+  };
+
+  const handleManualResolve = async (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => {
+      try {
+          const commonData = {
+              transactionId: tx.id,
+              amount: Math.abs(tx.amount),
+              status: 'Resolved' as const,
+              type: 'Toll_Refund' as const,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+          };
+
+          if (type === 'Personal') {
+              await createClaim({
+                  ...commonData,
+                  driverId: tx.driverId || 'unknown',
+                  resolutionReason: 'Charge Driver',
+                  subject: 'Unmatched Toll - Personal Use',
+                  message: 'This toll was identified as personal usage and charged to your account.'
+              });
+              toast.success("Marked as Personal (Driver Liability)");
+          } else if (type === 'WriteOff') {
+               await createClaim({
+                  ...commonData,
+                  driverId: tx.driverId || 'fleet',
+                  resolutionReason: 'Write Off',
+                  subject: 'Unmatched Toll - Write Off',
+                  message: 'Fleet wrote off this expense.'
+              });
+              toast.success("Written off as Fleet Loss");
+          } else if (type === 'Business') {
+               await createClaim({
+                  ...commonData,
+                  driverId: tx.driverId || 'fleet',
+                  resolutionReason: 'Write Off', // Effectively a fleet absorption
+                  subject: 'Business Expense',
+                  message: 'Legitimate business expense (e.g. maintenance).'
+              });
+              toast.success("Marked as Business Expense");
+          }
+          
+          // Refresh both datasets to update UI
+          await Promise.all([refresh(), refreshClaims()]);
+      } catch (error) {
+          console.error("Manual resolution failed", error);
+          toast.error("Failed to resolve transaction");
       }
   };
 
@@ -177,6 +226,43 @@ export function ReconciliationDashboard() {
   const highConfidenceCount = Array.from(suggestions.values())
     .filter(matches => matches[0]?.confidence === 'high')
     .length;
+
+  const handleSmartReconcile = async (tx: FinancialTransaction, trip: Trip) => {
+      // Check if this is a personal match
+      const match = suggestions.get(tx.id)?.find(m => m.trip.id === trip.id);
+      
+      if (match?.matchType === 'PERSONAL_MATCH') {
+          try {
+              // 1. Link the trip (Reconcile)
+              await reconcile(tx, trip);
+              
+              // 2. Create the "Charge Driver" claim automatically
+              await createClaim({
+                  transactionId: tx.id,
+                  driverId: trip.driverId || tx.driverId || 'unknown',
+                  amount: Math.abs(tx.amount),
+                  status: 'Resolved',
+                  type: 'Toll_Refund',
+                  resolutionReason: 'Charge Driver',
+                  subject: 'Unmatched Toll - Personal Use',
+                  message: `System identified this toll as personal usage during trip ${trip.id}.`,
+                  tripId: trip.id,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+              });
+              
+              toast.success("Linked to Trip & Charged to Driver");
+              refreshClaims();
+          } catch (e) {
+              console.error(e);
+              toast.error("Failed to process Personal Match");
+          }
+      } else {
+          // Standard reconcile for other types
+          await reconcile(tx, trip);
+          toast.success("Transaction Linked Successfully");
+      }
+  };
 
   return (
     <TooltipProvider>
@@ -328,12 +414,13 @@ export function ReconciliationDashboard() {
             <UnmatchedTollsList 
                 tolls={filteredUnreconciledTolls} 
                 suggestions={suggestions}
-                onReconcile={reconcile}
+                onReconcile={handleSmartReconcile}
                 allTrips={trips}
                 onOpenDispute={handleOpenDispute}
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onFlag={handleFlag}
+                onManualResolve={handleManualResolve}
             />
         </TabsContent>
         

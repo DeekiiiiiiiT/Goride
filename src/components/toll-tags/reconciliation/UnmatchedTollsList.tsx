@@ -6,10 +6,18 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from ".
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip } from "../../../types/data";
-import { Search, CheckCircle2, Sparkles, Camera, Tag, User } from "lucide-react";
+import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus } from "lucide-react";
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../ui/dropdown-menu";
 
 interface UnmatchedTollsListProps {
   tolls: FinancialTransaction[];
@@ -21,9 +29,10 @@ interface UnmatchedTollsListProps {
   onApprove?: (tx: FinancialTransaction) => void;
   onReject?: (tx: FinancialTransaction) => void;
   onFlag?: (tx: FinancialTransaction) => void;
+  onManualResolve?: (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => void;
 }
 
-export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag }: UnmatchedTollsListProps) {
+export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag, onManualResolve }: UnmatchedTollsListProps) {
     const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
@@ -81,10 +90,38 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
         
         if (!match) {
+             // Use Dropdown for Unmatched items
              return (
-                <Button size="sm" variant="outline" onClick={() => setSelectedTxForManual(tx)}>
-                    <Search className="h-4 w-4 mr-1" /> Find
-                </Button>
+                <div className="flex items-center justify-end gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="gap-2">
+                            Resolve <MoreHorizontal className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Manual Resolution</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setSelectedTxForManual(tx)}>
+                            <Search className="mr-2 h-4 w-4" />
+                            Find Match...
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'Personal')}>
+                            <UserMinus className="mr-2 h-4 w-4 text-orange-600" />
+                            Personal (Driver Pays)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'WriteOff')}>
+                            <FileText className="mr-2 h-4 w-4 text-blue-600" />
+                            Write Off (Fleet Pays)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'Business')}>
+                            <Briefcase className="mr-2 h-4 w-4 text-slate-600" />
+                            Business Expense
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             );
         }
 

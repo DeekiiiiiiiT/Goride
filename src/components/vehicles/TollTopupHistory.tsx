@@ -156,6 +156,10 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
                     <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
                          <ArrowDownLeft className="h-3 w-3 mr-1" /> Top-up (Credit)
                     </Badge>
+                ) : (tx.receiptUrl || tx.paymentMethod === 'Cash' || tx.description?.toLowerCase().includes('receipt')) ? (
+                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                         <FileText className="h-3 w-3 mr-1" /> Cash Receipt
+                    </Badge>
                 ) : tx.amount < 0 ? (
                     <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
                          <ArrowUpRight className="h-3 w-3 mr-1" /> Expense
