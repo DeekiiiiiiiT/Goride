@@ -11,7 +11,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { AlertCircle, ArrowRight, Clock } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../types/data";
-import { MatchResult } from "../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials } from "../../utils/tollReconciliation";
 import { calculateDaysRemaining } from "../../utils/timeUtils";
 
 interface LossItem {
@@ -69,9 +69,10 @@ export function LossList({ losses, isLoading, onSelectLoss }: LossListProps) {
         </TableHeader>
         <TableBody>
           {losses.map(({ transaction, match }) => {
-            const tollCost = Math.abs(transaction.amount);
-            const uberRefund = match.trip.tollCharges || 0;
-            const loss = Math.abs(match.varianceAmount || (tollCost - uberRefund));
+            const financials = calculateTollFinancials(transaction, match.trip);
+            const tollCost = financials.cost;
+            const uberRefund = financials.platformRefund;
+            const loss = financials.netLoss;
             const { daysRemaining, status } = calculateDaysRemaining(transaction.date);
 
             const getExpiryDisplay = (days: number, status: string) => {

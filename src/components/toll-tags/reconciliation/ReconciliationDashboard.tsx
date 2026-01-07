@@ -11,7 +11,7 @@ import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { DisputeModal } from "../../claimable-loss/DisputeModal";
 import { FinancialTransaction } from "../../../types/data";
-import { MatchResult } from "../../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials } from "../../../utils/tollReconciliation";
 
 export function ReconciliationDashboard() {
   const handleRunTest = () => {
@@ -142,17 +142,30 @@ export function ReconciliationDashboard() {
 
   reconciledTolls.forEach(tx => {
       const trip = tripMap.get(tx.tripId || '');
-      const expense = Math.abs(tx.amount);
-      const reimbursement = trip?.tollCharges || 0;
-      const variance = reimbursement - expense;
+      const claim = claims.find(c => c.transactionId === tx.id);
+      
+      const financials = calculateTollFinancials(tx, trip, claim);
 
-      // Recovered: Amount covered by Uber
-      recoveredAmount += Math.min(expense, reimbursement);
+      // Recovered: Platform + Driver
+      recoveredAmount += financials.totalRecovered;
 
-      // Liability: Deficit (Driver pays)
-      if (variance < -0.01) {
-          reconciledLiability += Math.abs(variance);
-      }
+      // Liability: Net Loss (what the fleet actually paid)
+      // NOTE: "Driver Liability" card traditionally means "What we need to charge the driver"
+      // But now that we have claims, "Driver Liability" should essentially be:
+      // 1. Unreconciled Personal (Needs to be charged)
+      // 2. Net Loss (Deficit that hasn't been charged yet?)
+      // Wait, let's stick to the definition:
+      // If it's recovered via Driver Charge (Claim), it's not a liability anymore, it's Recovered.
+      // So Liability should track UNRECOVERED personal usage or deficits.
+      
+      // If financials.netLoss > 0, that is money the fleet lost.
+      // Is it driver liability? Only if it SHOULD have been charged.
+      // For now, let's map "Net Loss" to the liability bucket if we assume strict fleet controls.
+      // However, the previous logic was: variance < -0.01 -> add to liability.
+      
+      // New Logic: 
+      // If netLoss > 0, it contributes to fleet loss (which might be driver liability if we pursue it).
+      reconciledLiability += financials.netLoss;
   });
 
   const totalDriverLiability = unreconciledPersonal + reconciledLiability + unknownAmount;
@@ -332,6 +345,7 @@ export function ReconciliationDashboard() {
             <ReconciledTollsList 
                 tolls={reconciledTolls} 
                 trips={trips}
+                claims={claims}
                 onUnmatch={unreconcile}
             />
         </TabsContent>

@@ -11,7 +11,7 @@ import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { Copy, Check, ExternalLink, Send } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../types/data";
-import { MatchResult } from "../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials } from "../../utils/tollReconciliation";
 import { toast } from "sonner";
 import { useClaims } from "../../hooks/useClaims";
 
@@ -33,9 +33,10 @@ export function DisputeModal({ isOpen, onClose, lossItem, onClaimSuccess }: Disp
   const { transaction, match } = lossItem;
   const { trip, varianceAmount } = match;
   
-  const tollCost = Math.abs(transaction.amount);
-  const uberRefund = trip.tollCharges || 0;
-  const missingAmount = Math.abs(varianceAmount || (tollCost - uberRefund));
+  const financials = calculateTollFinancials(transaction, trip);
+  const tollCost = financials.cost;
+  const uberRefund = financials.platformRefund;
+  const missingAmount = financials.netLoss;
 
   // Generate the dispute message
   const tripDate = new Date(trip.requestTime || trip.date);

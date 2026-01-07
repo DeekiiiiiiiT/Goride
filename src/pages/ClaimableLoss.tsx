@@ -27,7 +27,9 @@ import {
 export function ClaimableLoss() {
   const { 
     loading: loadingTolls, 
-    unreconciledTolls, 
+    unreconciledTolls,
+    reconciledTolls,
+    trips,
     suggestions 
   } = useTollReconciliation();
 
@@ -39,8 +41,16 @@ export function ClaimableLoss() {
   }, []);
 
   const getDriverName = (driverId: string) => {
+    // 1. Try Drivers List
     const driver = drivers.find(d => d.id === driverId || d.uberDriverId === driverId || d.inDriveDriverId === driverId);
-    return driver ? driver.name : driverId;
+    if (driver) return driver.name;
+
+    // 2. Try Trips List (Fallback)
+    // We search specifically for a trip with this driverId that has a name
+    const trip = trips.find(t => t.driverId === driverId && t.driverName);
+    if (trip && trip.driverName) return trip.driverName;
+
+    return driverId;
   };
 
   const [selectedLoss, setSelectedLoss] = useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
@@ -48,22 +58,60 @@ export function ClaimableLoss() {
   const [itemsToDelete, setItemsToDelete] = useState<string[]>([]);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
 
-  // 1. Prepare Unmatched Tolls (Losses)
+  // Create Trip Map for O(1) lookup
+  const tripMap = React.useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
+
+  // 1. Prepare Underpaid Tolls (Losses)
   // We filter out any transaction that already has an active claim associated with it.
   const activeTransactionIds = new Set(claims.map(c => c.transactionId));
 
-  const losses = unreconciledTolls.map(tx => {
-      const matches = suggestions.get(tx.id);
-      const bestMatch = matches?.[0];
-      
-      // We only care about "AMOUNT_VARIANCE" which means it matched a trip but the amount was wrong (Underpaid)
-      if (bestMatch && bestMatch.matchType === 'AMOUNT_VARIANCE') {
-          return { transaction: tx, match: bestMatch };
-      }
-      return null;
-  }).filter((item): item is { transaction: FinancialTransaction, match: MatchResult } => 
-      item !== null && !activeTransactionIds.has(item.transaction.id)
-  );
+  const losses = React.useMemo(() => {
+      // A. Unreconciled with 'AMOUNT_VARIANCE' suggestions
+      const potentialLosses = unreconciledTolls.map(tx => {
+          const matches = suggestions.get(tx.id);
+          const bestMatch = matches?.[0];
+          
+          if (bestMatch && bestMatch.matchType === 'AMOUNT_VARIANCE') {
+              return { transaction: tx, match: bestMatch };
+          }
+          return null;
+      }).filter((item): item is { transaction: FinancialTransaction, match: MatchResult } => item !== null);
+
+      // B. Reconciled with Negative Variance (Underpaid)
+      const confirmedLosses = reconciledTolls.map(tx => {
+           if (!tx.tripId) return null;
+           const trip = tripMap.get(tx.tripId);
+           if (!trip) return null;
+
+           const tollCost = Math.abs(tx.amount);
+           const uberRefund = trip.tollCharges || 0;
+           // If refund is less than cost (allow small float diff)
+           if (uberRefund < tollCost - 0.05) {
+               return {
+                   transaction: tx,
+                   match: {
+                       trip: trip,
+                       matchType: 'AMOUNT_VARIANCE' as const,
+                       confidence: 'high',
+                       varianceAmount: uberRefund - tollCost
+                   }
+               };
+           }
+           return null;
+      }).filter((item): item is { transaction: FinancialTransaction, match: MatchResult } => item !== null);
+
+      // Merge and filter active claims
+      const allLosses = [...potentialLosses, ...confirmedLosses];
+
+      // Deduplicate by transaction ID to prevent key errors
+      const uniqueLosses = Array.from(new Map(allLosses.map(item => [item.transaction.id, item])).values());
+
+      return uniqueLosses
+        .filter(item => !activeTransactionIds.has(item.transaction.id))
+        .sort((a, b) => new Date(b.transaction.date).getTime() - new Date(a.transaction.date).getTime());
+
+  }, [unreconciledTolls, reconciledTolls, suggestions, tripMap, activeTransactionIds]);
+
 
   // 2. Prepare Pending Claims (Submitted to Uber)
   const pendingClaims = claims.filter(c => c.status === 'Submitted_to_Uber');
@@ -217,7 +265,7 @@ export function ClaimableLoss() {
       <Tabs defaultValue="unmatched" className="w-full">
         <TabsList className="grid w-full grid-cols-5 lg:w-[1000px]">
           <TabsTrigger value="unmatched">
-            Unmatched Tolls 
+            Underpaid Tolls 
             {losses.length > 0 && <span className="ml-2 bg-slate-200 text-slate-700 px-1.5 rounded-full text-xs">{losses.length}</span>}
           </TabsTrigger>
           <TabsTrigger value="awaiting">

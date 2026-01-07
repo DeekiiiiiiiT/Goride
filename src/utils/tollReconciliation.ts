@@ -1,4 +1,4 @@
-import { FinancialTransaction, Trip } from '../types/data';
+import { FinancialTransaction, Trip, Claim } from '../types/data';
 import { isWithinInterval, differenceInMinutes } from 'date-fns';
 import { calculateTripTimes, getTripWindows } from './timeUtils';
 
@@ -174,4 +174,75 @@ export function findTollMatches(
     if (scoreA !== scoreB) return scoreB - scoreA;
     return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
   });
+}
+
+/**
+ * Calculates the full financial picture of a toll transaction, 
+ * accounting for Platform Reimbursement and Driver Recoveries.
+ */
+export interface TollFinancials {
+    cost: number;              // The original toll cost (absolute value)
+    platformRefund: number;    // Amount reimbursed by Uber/Lyft
+    driverRecovered: number;   // Amount charged to driver via Claims
+    fleetAbsorbed: number;     // Amount explicitly written off
+    totalRecovered: number;    // platformRefund + driverRecovered
+    netLoss: number;           // cost - totalRecovered
+    status: 'Recovered' | 'Partial Loss' | 'Full Loss';
+}
+
+export function calculateTollFinancials(
+    transaction: FinancialTransaction,
+    trip?: Trip,
+    claim?: Claim
+): TollFinancials {
+    const cost = Math.abs(transaction.amount);
+    
+    // 1. Platform Reimbursement (Source A)
+    // Only if a trip is linked (either passed in or via transaction.tripId)
+    // We prioritize the passed trip object as it might be fresher
+    const platformRefund = trip?.tollCharges || 0;
+
+    // 2. Driver Recovery (Source B)
+    // Only if a resolved claim exists and was charged to the driver
+    let driverRecovered = 0;
+    let fleetAbsorbed = 0;
+
+    if (claim && claim.status === 'Resolved') {
+        if (claim.resolutionReason === 'Charge Driver') {
+            driverRecovered = claim.amount; // The claim amount is the missing portion
+        } else if (claim.resolutionReason === 'Write Off') {
+            fleetAbsorbed = claim.amount;
+        }
+    }
+
+    const totalRecovered = platformRefund + driverRecovered;
+    
+    // Net Loss Calculation
+    // We use Math.round to avoid floating point artifacts (e.g. 0.00000001)
+    let netLoss = Math.round((cost - totalRecovered) * 100) / 100;
+    
+    // Determine Status
+    let status: TollFinancials['status'] = 'Full Loss';
+    
+    // If netLoss is negative (profit), we treat it as Recovered (0 loss) for status purposes
+    // but we return the actual netLoss value (which might be negative)? 
+    // No, usually "Loss" implies a non-negative number in this context. 
+    // If we made a profit, Net Loss is 0.
+    
+    if (netLoss <= 0) {
+        netLoss = 0;
+        status = 'Recovered';
+    } else if (totalRecovered > 0) {
+        status = 'Partial Loss';
+    }
+
+    return {
+        cost,
+        platformRefund,
+        driverRecovered,
+        fleetAbsorbed,
+        totalRecovered,
+        netLoss,
+        status
+    };
 }

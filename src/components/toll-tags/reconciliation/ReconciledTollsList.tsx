@@ -4,17 +4,20 @@ import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Checkbox } from "../../ui/checkbox";
 import { format } from "date-fns";
-import { FinancialTransaction, Trip } from "../../../types/data";
-import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
+import { FinancialTransaction, Trip, Claim } from "../../../types/data";
+import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info } from "lucide-react";
 import { Badge } from "../../ui/badge";
+import { calculateTollFinancials } from "../../../utils/tollReconciliation";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 
 interface ReconciledTollsListProps {
   tolls: FinancialTransaction[];
   trips: Trip[];
+  claims: Claim[];
   onUnmatch: (tx: FinancialTransaction) => Promise<any> | void;
 }
 
-export function ReconciledTollsList({ tolls, trips, onUnmatch }: ReconciledTollsListProps) {
+export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: ReconciledTollsListProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkUnmatching, setIsBulkUnmatching] = useState(false);
 
@@ -101,28 +104,20 @@ export function ReconciledTollsList({ tolls, trips, onUnmatch }: ReconciledTolls
                                 />
                             </TableHead>
                             <TableHead>Toll Date</TableHead>
-                            <TableHead>Linked Trip (Reimbursement)</TableHead>
-                            <TableHead>Actual Cost</TableHead>
-                            <TableHead>Variance</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Platform</TableHead>
+                            <TableHead>Recovered</TableHead>
+                            <TableHead>Net Loss</TableHead>
                             <TableHead className="text-right">Action</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {tolls.map(tx => {
                             const trip = trips.find(t => t.id === tx.tripId);
+                            const claim = claims.find(c => c.transactionId === tx.id);
                             const isSelected = selectedIds.has(tx.id);
                             
-                            // Variance Calculation
-                            // Expense (tx.amount) is negative, e.g. -5.00
-                            // Reimbursement (trip.tollCharges) is positive, e.g. 5.00
-                            const expense = Math.abs(tx.amount);
-                            const reimbursement = trip?.tollCharges || 0;
-                            const variance = reimbursement - expense;
-                            
-                            // Determine status
-                            const isProfit = variance > 0.01;
-                            const isLoss = variance < -0.01;
-                            const isNeutral = !isProfit && !isLoss;
+                            const financials = calculateTollFinancials(tx, trip, claim);
 
                             return (
                                 <TableRow key={tx.id} data-state={isSelected ? "selected" : undefined}>
@@ -155,42 +150,75 @@ export function ReconciledTollsList({ tolls, trips, onUnmatch }: ReconciledTolls
                                     </TableCell>
                                     
                                     <TableCell>
+                                        <div className="flex flex-col">
+                                             <span className="font-medium text-slate-700">${financials.cost.toFixed(2)}</span>
+                                             <span className="text-xs text-slate-500 truncate max-w-[150px]" title={tx.description}>
+                                                {tx.description || 'Toll Charge'}
+                                             </span>
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
                                         {trip ? (
                                             <div className="flex flex-col">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium capitalize">{trip.platform} Trip</span>
-                                                    <span className="text-emerald-600 font-semibold text-xs bg-emerald-50 px-1.5 py-0.5 rounded">
-                                                        +${reimbursement.toFixed(2)}
-                                                    </span>
-                                                </div>
+                                                <Badge variant="outline" className="w-fit capitalize mb-1">
+                                                    {trip.platform}
+                                                </Badge>
                                                 <span className="text-xs text-slate-500">
                                                     {trip.requestTime ? format(new Date(trip.requestTime), 'MMM d, h:mm a') : 'Unknown Date'}
                                                 </span>
                                             </div>
                                         ) : (
-                                            <span className="text-slate-400 italic">Trip not found</span>
+                                            <Badge variant="secondary" className="bg-slate-100 text-slate-500 font-normal">
+                                                Unmatched
+                                            </Badge>
                                         )}
                                     </TableCell>
 
-                                    <TableCell className="font-medium text-slate-700">
-                                        <div className="flex items-center gap-2">
-                                            <span>${expense.toFixed(2)}</span>
-                                            <Badge variant="outline" className="text-[10px] text-slate-500 font-normal">
-                                                {tx.description?.substring(0, 15) || 'Toll'}
-                                            </Badge>
-                                        </div>
+                                    <TableCell>
+                                        {financials.totalRecovered > 0 ? (
+                                            <Tooltip>
+                                                <TooltipTrigger>
+                                                    <div className="flex items-center gap-1 text-emerald-600 font-medium cursor-help">
+                                                        +${financials.totalRecovered.toFixed(2)}
+                                                        <Info className="h-3 w-3 opacity-50" />
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <div className="space-y-1 text-xs">
+                                                        <div className="font-semibold">Recovery Breakdown</div>
+                                                        <div className="flex justify-between gap-4">
+                                                            <span>Platform Refund:</span>
+                                                            <span>${financials.platformRefund.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between gap-4">
+                                                            <span>Driver Charge:</span>
+                                                            <span>${financials.driverRecovered.toFixed(2)}</span>
+                                                        </div>
+                                                        {financials.fleetAbsorbed > 0 && (
+                                                            <div className="flex justify-between gap-4 text-amber-600">
+                                                                <span>Fleet Absorbed:</span>
+                                                                <span>${financials.fleetAbsorbed.toFixed(2)}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        ) : (
+                                            <span className="text-slate-300">-</span>
+                                        )}
                                     </TableCell>
 
                                     <TableCell>
-                                        <div className={`flex items-center gap-1.5 font-bold ${
-                                            isProfit ? 'text-emerald-600' : isLoss ? 'text-rose-600' : 'text-slate-400'
-                                        }`}>
-                                            {isProfit && <TrendingUp className="h-4 w-4" />}
-                                            {isLoss && <TrendingDown className="h-4 w-4" />}
-                                            {isNeutral && <div className="h-1.5 w-1.5 rounded-full bg-slate-300" />}
-                                            
-                                            {variance > 0 ? '+' : ''}{variance.toFixed(2)}
-                                        </div>
+                                         {financials.netLoss > 0 ? (
+                                            <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">
+                                                -${financials.netLoss.toFixed(2)}
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200">
+                                                $0.00
+                                            </Badge>
+                                        )}
                                     </TableCell>
 
                                     <TableCell className="text-right">

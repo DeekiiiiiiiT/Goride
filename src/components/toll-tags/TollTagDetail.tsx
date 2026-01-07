@@ -5,9 +5,11 @@ import { ArrowLeft, Car, Calendar, CreditCard, Tag, Wallet, TrendingDown } from 
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { TollTag } from "../../types/vehicle";
+import { Claim, Trip } from "../../types/data";
 import { TollTopupHistory } from "../vehicles/TollTopupHistory";
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
+import { calculateTollFinancials } from "../../utils/tollReconciliation";
 
 interface TollTagDetailProps {
   tag: TollTag;
@@ -21,8 +23,11 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
     tagSpent: 0,
     cashSpent: 0,
     totalTopUp: 0,
+    totalRecovered: 0,
+    netLoss: 0,
     calculatedBalance: 0,
-    loading: true
+    loading: true,
+    claims: [] as Claim[]
   });
 
   const fetchStats = async () => {
@@ -33,9 +38,11 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
 
     try {
       setStats(prev => ({ ...prev, loading: true }));
-      const [vehicles, transactions] = await Promise.all([
+      const [vehicles, transactions, claims, trips] = await Promise.all([
         api.getVehicles(),
-        api.getTransactions()
+        api.getTransactions(),
+        api.getClaims(),
+        api.getTrips()
       ]);
 
       const vehicle = vehicles.find((v: any) => v.id === tag.assignedVehicleId);
@@ -58,8 +65,25 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
       const totalTopUp = vehicleTx
         .filter((tx: any) => tx.amount > 0)
         .reduce((sum: number, tx: any) => sum + tx.amount, 0);
+
+      // Calculate Recovered & Net Loss
+      let totalRecovered = 0;
+      let totalNetLoss = 0;
+
+      vehicleTx.forEach((tx: any) => {
+          if (tx.amount < 0) {
+              const trip = trips.find((t: any) => t.id === tx.tripId);
+              const claim = claims.find((c: any) => c.transactionId === tx.id);
+              const financials = calculateTollFinancials(tx, trip, claim);
+              totalRecovered += financials.totalRecovered;
+              totalNetLoss += financials.netLoss;
+          }
+      });
       
-      const calculatedBalance = vehicleTx.reduce((sum: number, tx: any) => sum + tx.amount, 0);
+      // Only include Top-ups and Tag Usage (exclude cash receipts) for the Tag Balance
+      const calculatedBalance = vehicleTx
+        .filter((tx: any) => tx.category === 'Toll Usage' || tx.category === 'Toll Top-up')
+        .reduce((sum: number, tx: any) => sum + tx.amount, 0);
       const currentBalance = vehicle?.tollBalance || 0;
 
       // Auto-Sync if mismatch detected
@@ -75,8 +99,11 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
         tagSpent,
         cashSpent,
         totalTopUp,
+        totalRecovered,
+        netLoss: totalNetLoss,
         calculatedBalance,
-        loading: false
+        loading: false,
+        claims: claims
       });
 
     } catch (error) {
@@ -158,47 +185,81 @@ export function TollTagDetail({ tag, onBack }: TollTagDetailProps) {
               {stats.loading ? (
                 <div className="h-8 w-24 bg-slate-100 animate-pulse rounded" />
               ) : (
-                <div className="flex items-center gap-8">
-                    <div>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <div className="text-2xl font-bold text-slate-900">
-                                ${stats.tagSpent.toFixed(2)}
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Total amount deducted automatically from the tag</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        <p className="text-xs text-muted-foreground mt-1">Tag Usage</p>
+                <div className="flex flex-col gap-6">
+                    <div className="flex items-center gap-8">
+                        <div>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <div className="text-2xl font-bold text-slate-900">
+                                    ${stats.tagSpent.toFixed(2)}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Total amount deducted automatically from the tag</p>
+                                </TooltipContent>
+                            </Tooltip>
+                            <p className="text-xs text-muted-foreground mt-1">Tag Usage</p>
+                        </div>
+                        <div className="w-px h-10 bg-slate-200" />
+                        <div>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <div className="text-2xl font-bold text-slate-900">
+                                    ${stats.cashSpent.toFixed(2)}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Total manual cash payments (receipts)</p>
+                                </TooltipContent>
+                            </Tooltip>
+                            <p className="text-xs text-muted-foreground mt-1">Cash (Receipts)</p>
+                        </div>
+                        <div className="w-px h-10 bg-slate-200" />
+                        <div>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <div className="text-2xl font-bold text-emerald-600">
+                                    ${stats.totalTopUp.toFixed(2)}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Total funds added to the tag account</p>
+                                </TooltipContent>
+                            </Tooltip>
+                            <p className="text-xs text-muted-foreground mt-1">Total Top Up</p>
+                        </div>
                     </div>
-                    <div className="w-px h-10 bg-slate-200" />
-                    <div>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <div className="text-2xl font-bold text-slate-900">
-                                ${stats.cashSpent.toFixed(2)}
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Total manual cash payments (receipts)</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        <p className="text-xs text-muted-foreground mt-1">Cash (Receipts)</p>
-                    </div>
-                    <div className="w-px h-10 bg-slate-200" />
-                    <div>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <div className="text-2xl font-bold text-emerald-600">
-                                ${stats.totalTopUp.toFixed(2)}
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Total funds added to the tag account</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        <p className="text-xs text-muted-foreground mt-1">Total Top Up</p>
+                    
+                    <div className="h-px w-full bg-slate-100" />
+
+                    <div className="flex items-center gap-8">
+                        <div>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <div className="text-2xl font-bold text-emerald-600">
+                                    ${stats.totalRecovered.toFixed(2)}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Total amount recovered from Platform or Drivers</p>
+                                </TooltipContent>
+                            </Tooltip>
+                            <p className="text-xs text-muted-foreground mt-1">Recovered</p>
+                        </div>
+                        <div className="w-px h-10 bg-slate-200" />
+                        <div>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <div className={`text-2xl font-bold ${stats.netLoss > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                                    ${stats.netLoss.toFixed(2)}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Total unrecovered cost (Fleet Expense)</p>
+                                </TooltipContent>
+                            </Tooltip>
+                            <p className="text-xs text-muted-foreground mt-1">Net Loss</p>
+                        </div>
                     </div>
                 </div>
               )}

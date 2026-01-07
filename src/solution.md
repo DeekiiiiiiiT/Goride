@@ -1,106 +1,90 @@
-# Driver Performance Dashboard - Toll Reconciliation Solution
+# Driver Performance Dashboard - Solution Plan
 
-## Overview
-This document outlines the implementation plan for the **Unified Reconciliation System**. The goal is to integrate "Driver Cash Receipts" into the existing "Toll Tag" reconciliation workflow. This ensures that driver reimbursements are strictly validated against Uber Trip Data ("Strict Liability" model) before being approved.
+## Current Focus: Toll Reconciliation & Claimable Loss
 
-## Core Logic (Strict Liability)
-| Scenario | Source | Match Result (Uber Reimbursed?) | Action | Outcome |
-| :--- | :--- | :--- | :--- | :--- |
-| **A** | **Tag** | ✅ Yes (Green) | **Reconcile** | No Action (Break-even). |
-| **B** | **Tag** | ❌ No (Purple/Amber) | **Deduct** | Charge Driver (Driver Liability). |
-| **C** | **Cash** | ✅ Yes (Green) | **Approve** | Reimburse Driver (Fleet owes Driver). |
-| **D** | **Cash** | ❌ No (Purple) | **Reject** | Personal Expense (Driver Liability). |
-| **E** | **Cash** | ⚠️ Partial/None (Amber) | **Flag Claim** | Valid Trip but Unpaid. File Claim with Uber. |
+The goal is to accurately reflect the financial status of toll transactions, specifically accounting for "Recovered" amounts (from both Uber/Platform and Driver Charges) and "Net Loss" (what the fleet ultimately pays).
 
 ---
 
-## Phase 1: Data Ingestion & Identification
-**Goal:** Ensure Driver Uploads are accessible to the Reconciliation Dashboard and distinguishable from Tag Imports.
+## Implementation Plan: Enhanced Toll Financials
 
-1.  **Audit `DriverExpenses.tsx` Submission:**
-    *   Verify that `submitExpense` sets `paymentMethod: 'Cash'`, `category: 'Tolls'`, and `status: 'Pending'`.
-    *   *Action:* Check code and ensure consistency.
+We will break this down into 6 detailed phases to minimize errors and ensure data consistency.
 
-2.  **Define Source Discriminator:**
-    *   Establish logic to distinguish sources in the frontend.
-    *   Logic: `isCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl`.
-    *   Logic: `isTag = !isCash` (or based on Import Batch ID).
+### Phase 1: Shared Logic & Data Structure
+**Goal:** Establish a single source of truth for calculating "Recovered" and "Net Loss" amounts so the logic is consistent across the dashboard.
 
-3.  **Update API Layer (`services/api.ts`):**
-    *   Create `fetchPendingTollClaims()`: Should return `FinancialTransaction[]` where `category='Tolls'` and `status='Pending'`.
-    *   Ensure this data structure matches the `FinancialTransaction` interface used by the dashboard.
+1.  **Create Utility Function `calculateTollFinancials` in `utils/tollReconciliation.ts`:**
+    *   **Inputs:** `Transaction`, `Trip` (optional), `Claim` (optional).
+    *   **Outputs:**
+        *   `cost`: Absolute value of the transaction amount.
+        *   `platformRefund`: `trip.tollCharges` (if matched).
+        *   `driverRecovered`: `claim.amount` IF `claim.status === 'Resolved'` AND `claim.resolutionReason === 'Charge Driver'`.
+        *   `fleetAbsorbed`: `claim.amount` IF `claim.status === 'Resolved'` AND `claim.resolutionReason === 'Write Off'`.
+        *   `totalRecovered`: `platformRefund` + `driverRecovered`.
+        *   `netLoss`: `cost` - `totalRecovered`. (If positive, it's a loss. If zero, fully recovered).
+    *   **Test Cases:**
+        *   Matched, Full Refund: Cost $5, Refund $5, Net $0.
+        *   Unmatched, Charged Driver: Cost $5, Refund $0, Driver $5, Net $0.
+        *   Unmatched, Written Off: Cost $5, Refund $0, Absorbed $5, Net $5.
+        *   Underpaid, Charged Diff: Cost $5, Refund $3, Driver $2, Net $0.
 
-4.  **Dashboard State Management (`ReconciliationDashboard.tsx`):**
-    *   Add state `cashClaims`.
-    *   Fetch `cashClaims` on mount.
-    *   Create a merged list: `allTolls = [...tagTransactions, ...cashClaims]`.
+### Phase 2: Data Fetching Updates
+**Goal:** Ensure `TollTopupHistory` and `TollTagDetail` have access to the `Claims` data required for the calculations.
 
-## Phase 2: Reconciliation Engine Upgrade
-**Goal:** Adapt the matching logic to handle "Cash" scenarios and correctly identify "Claimable Losses".
+1.  **Update `TollTopupHistory.tsx`:**
+    *   Add `claims` to the state: `const [claims, setClaims] = useState<Record<string, Claim>>({})`.
+    *   Update `fetchHistory` to call `api.getClaims()`.
+    *   Index claims by `transactionId` for O(1) lookup: `claimsMap[c.transactionId] = c`.
+    *   **Validation:** Ensure the API call doesn't slow down the page significantly (parallelize with Promise.all).
 
-1.  **Review `findTollMatches` (`utils/tollReconciliation.ts`):**
-    *   Ensure it handles transactions without `vehicleId` (if applicable, though drivers should select vehicle).
-    *   Ensure it gracefully handles mismatched timestamps (drivers might upload late, but the *receipt date* should be the *expense date*).
+2.  **Update `TollTagDetail.tsx`:**
+    *   Similarly, fetch claims in `fetchStats` to prepare for Phase 5 (Summary Cards).
 
-2.  **Refine "Amber" Logic (The "Unpaid" Case):**
-    *   Current Logic: `isAmountMatch` checks if `Trip Refund == Transaction Amount`.
-    *   New Logic: Explicitly handle the case where `Trip Refund == 0` but `Transaction Amount > 0`.
-    *   *Action:* Update `reason` text to: "Valid trip but Uber reimbursement missing (Claimable)."
+### Phase 3: "Recovered" Column Implementation
+**Goal:** Replace the simple "Refund" column with a comprehensive "Recovered" column.
 
-3.  **Unit Verification:**
-    *   Verify Case: Receipt $5, Trip Refund $5 -> `PERFECT_MATCH` (Green).
-    *   Verify Case: Receipt $5, Trip Refund $0 -> `AMOUNT_VARIANCE` (Amber).
-    *   Verify Case: Receipt $5, No Trip -> `PERSONAL_MATCH` (Purple).
+1.  **Modify Table Header:** Rename "Refund" to "Recovered".
+2.  **Modify Table Cell Logic:**
+    *   For each transaction, retrieve the linked Trip and linked Claim.
+    *   Call `calculateTollFinancials`.
+3.  **Visual Implementation:**
+    *   Display `totalRecovered`.
+    *   **Breakdown:** If `totalRecovered` > 0, show source details (maybe icons or small text badges):
+        *   "Platform": If `platformRefund` > 0.
+        *   "Driver": If `driverRecovered` > 0.
+    *   **Tooltip:** Add a tooltip showing the exact math: "Platform: $X.XX + Driver: $Y.YY".
 
-## Phase 3: Unified Dashboard UI
-**Goal:** Display Cash Tolls in the reconciliation list with clear visual distinctions.
+### Phase 4: "Net Loss" Column Implementation
+**Goal:** Add the new column to show the bottom-line cost to the fleet.
 
-1.  **Update `UnmatchedTollsList.tsx`:**
-    *   Add "Source" column or visual indicator.
-    *   Icon mapping: 🏷️ (Tag) vs 🧾 (Cash).
+1.  **Add Table Header:** "Net Loss".
+2.  **Add Table Cell Logic:**
+    *   Use `netLoss` from `calculateTollFinancials`.
+3.  **Visual Implementation:**
+    *   **Value:** Display `-$X.XX`.
+    *   **Styling:**
+        *   **$0.00:** Light gray (Neutral/Good).
+        *   **> $0.00 (Loss):** Red text (Attention needed).
+        *   **Absorbed:** If `fleetAbsorbed` > 0, maybe add a specific "Written Off" badge or style to indicate this was an intentional loss.
 
-2.  **Receipt Preview:**
-    *   Add a "View Receipt" button/icon for Cash rows.
-    *   Implement a modal/popover to display `tx.receiptUrl`.
+### Phase 5: Tag Inventory Summary Cards
+**Goal:** Update the high-level stats on the Tag Detail page to reflect these new recoveries.
 
-3.  **Filtering & Sorting:**
-    *   Add Filter Dropdown: "All", "Tag Only", "Cash Claims".
-    *   Ensure sorting by Date mixes both sources correctly.
+1.  **Update `TollTagDetail.tsx` Stats:**
+    *   Calculate `totalNetLoss` across all transactions for the vehicle.
+    *   Calculate `totalDriverRecovered` across all transactions.
+2.  **Add/Update Summary Cards:**
+    *   **New Card:** "Net Fleet Cost" (or modify "Tag Spent").
+    *   **Logic:** `Total Tag Usage` - (`Uber Refunds` + `Driver Charges`).
+    *   **Display:** Show the true cost of operating the tag after reimbursements.
 
-## Phase 4: Action Logic & UX
-**Goal:** Implement the specific "Approve" vs "Deduct" buttons based on the Source/Match matrix.
+### Phase 6: Final Verification & Cleanup
+**Goal:** Ensure the system works as expected.
 
-1.  **Component Refactor:**
-    *   Extract action button logic into `TollActionMenu` or similar.
+1.  **Walkthrough Scenarios:**
+    *   Verify a standard Uber trip with full refund shows Net Loss $0.
+    *   Verify an unmatched trip charged to driver shows Net Loss $0 and "Recovered (Driver)".
+    *   Verify a written-off trip shows Net Loss = Cost.
+2.  **Code Cleanup:** Remove any unused "refund" logic that was replaced by the new utility.
 
-2.  **Implement Logic Branching:**
-    *   **Case Cash/Green:** Button "Approve Reimbursement" (Green style).
-    *   **Case Cash/Amber:** Button "Flag for Claim" (Amber style).
-    *   **Case Cash/Purple:** Button "Reject" (Red/Destructive style).
-    *   *Note:* Retain existing logic for Tag (Deduct/Ignore).
-
-3.  **Tooltips:**
-    *   Add tooltips to explain the action (e.g., "Uber reimbursed this toll. Approve driver repayment.").
-
-## Phase 5: Financial Execution (The "Write" Ops)
-**Goal:** Connect the buttons to actual state changes (Reimburse/Reject).
-
-1.  **API Methods:**
-    *   `approveExpense(id)`: Sets status to `Approved`. (Triggers balance update).
-    *   `rejectExpense(id)`: Sets status to `Rejected`.
-    *   `flagExpense(id)`: Sets status to `Claim_Pending`.
-
-2.  **Optimistic UI Updates:**
-    *   Remove item from list (or update status icon) immediately upon click.
-    *   Show Toast notification ("Expense Approved", "Expense Rejected").
-
-## Phase 6: "Claimable Loss" Management
-**Goal:** Provide a way to track and act on the "Amber" items (Uber Underpayments).
-
-1.  **Claims View:**
-    *   Create a "Pending Claims" summary card or modal.
-    *   List all items marked as `Claim_Pending`.
-
-2.  **Export & Resolution:**
-    *   Allow "Export to CSV" (for Uber Support).
-    *   Allow "Mark Resolved" (if Uber pays) or "Write Off".
+---
