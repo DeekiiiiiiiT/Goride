@@ -1444,7 +1444,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                     <TableHead>Description</TableHead>
                                                     <TableHead>Status</TableHead>
                                                     <TableHead className="text-right text-red-700">Debit (Charge)</TableHead>
-                                                    <TableHead className="text-right text-emerald-700">Credit (Reimbursement)</TableHead>
+                                                    <TableHead className="text-right text-emerald-700">Credit (Reimburse)</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
