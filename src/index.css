@@ -2666,6 +2666,10 @@
     border-left-color: var(--color-rose-500);
   }
 
+  .border-l-slate-200 {
+    border-left-color: var(--color-slate-200);
+  }
+
   .border-l-slate-300 {
     border-left-color: var(--color-slate-300);
   }
@@ -3801,10 +3805,6 @@
 
   .pl-9 {
     padding-left: calc(var(--spacing) * 9);
-  }
-
-  .pl-10 {
-    padding-left: calc(var(--spacing) * 10);
   }
 
   .pl-12 {
