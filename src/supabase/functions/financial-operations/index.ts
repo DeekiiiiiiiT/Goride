@@ -2,6 +2,8 @@ import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { Buffer } from "node:buffer";
 import * as kv from "./kv_store.tsx";
 
 const app = new Hono();
@@ -24,6 +26,62 @@ app.use(
 );
 
 app.get("/financial-operations/health", (c) => c.json({ status: "ok" }));
+
+app.post("/financial-operations/scan-receipt", async (c) => {
+  try {
+    const body = await c.req.parseBody();
+    const file = body['file'];
+    
+    if (!file || !(file instanceof File)) {
+        return c.json({ error: "File upload required" }, 400);
+    }
+
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 503);
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(arrayBuffer).toString('base64');
+
+    const prompt = `
+      You are an OCR assistant for a driver expense portal. 
+      Parse the receipt or invoice image. It might be a general receipt, fuel receipt, or toll receipt.
+      
+      Return a valid JSON object with these EXACT fields:
+      - type (string): "Fuel", "Toll", "Maintenance", or "Other"
+      - merchant (string): Name of the merchant or agency (e.g. "Highway 2000", "Total Gas")
+      - amount (number): Total amount paid (number only)
+      - date (string): Date in YYYY-MM-DD format
+      - time (string): Time in HH:MM format (24h)
+      - receiptNumber (string): Invoice, ticket, or reference number
+      - plaza (string): Plaza name (for tolls)
+      - lane (string): Lane number (for tolls)
+      - vehicleClass (string): Vehicle class (for tolls)
+      - collector (string): Collector name/ID
+      - notes (string): Brief description
+      
+      If specific fields are missing, return null. 
+      Output only valid JSON. Do not use markdown code blocks.
+    `;
+
+    const result = await model.generateContent([
+        prompt,
+        { inlineData: { data: base64Data, mimeType: file.type } }
+    ]);
+
+    const text = result.response.text();
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(cleanText);
+
+    return c.json({ success: true, data });
+
+  } catch (e: any) {
+    console.error("Scan Receipt Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
 
 // --- TRANSACTIONS ---
 app.get("/financial-operations/transactions", async (c) => {

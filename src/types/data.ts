@@ -670,6 +670,7 @@ export interface Claim {
   driverId: string;
   tripId?: string; // Links to the Uber trip
   transactionId?: string; // Links to the financial transaction (Toll Tag charge)
+  resolutionTransactionId?: string; // Links to the generated adjustment transaction (for "Charge Driver" outcome)
   
   // Financials
   amount: number; // The amount to be claimed (Missing Amount)

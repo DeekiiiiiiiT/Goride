@@ -33,7 +33,10 @@ import {
   Trash2,
   Car as CarIcon,
   Pencil,
-  Plus
+  Plus,
+  ChevronDown,
+  ChevronRight,
+  CornerDownRight
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -162,6 +165,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
   const [ledgerView, setLedgerView] = useState<'tolls' | 'payments'>('tolls');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [claims, setClaims] = useState<any[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
   // Phase 3: Filtered Cash Tolls (Expenses & Adjustments)
   const cashTollTransactions = useMemo(() => transactions.filter(t => {
@@ -225,11 +230,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       return { monthlyEarnings: mEarnings, currentTier: cTier };
   }, [trips, tiers]);
 
-  // Fetch Transactions
+  // Fetch Transactions & Claims
   React.useEffect(() => {
-      const loadTransactions = async () => {
+      const loadData = async () => {
           try {
-              const allTx = await api.getTransactions();
+              const [allTx, allClaims] = await Promise.all([
+                  api.getTransactions(),
+                  api.getClaims() // Fetch ALL claims to ensure we find links even if driverId filter is tricky
+              ]);
+
               // Filter for this driver
               const driverTx = allTx.filter((t: any) => 
                   t.driverId === driverId || 
@@ -237,12 +246,78 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   (driver?.inDriveDriverId && t.driverId === driver.inDriveDriverId)
               );
               setTransactions(driverTx);
+              
+              // Filter claims locally if needed, or just use all for linking (safer)
+              setClaims(allClaims || []);
           } catch (e) {
-              console.error("Failed to load transactions", e);
+              console.error("Failed to load data", e);
           }
       };
-      loadTransactions();
+      loadData();
   }, [driverId, driver]);
+
+  // Grouped Transactions Logic (Parent-Child via Claims)
+  const groupedTollTransactions = useMemo(() => {
+      const groups: { parent: FinancialTransaction, children: FinancialTransaction[] }[] = [];
+      const childIds = new Set<string>();
+      
+      // 1. Map resolution (child) -> original (parent) via claims
+      const parentToResolutions = new Map<string, string[]>(); // parentId -> childIds[]
+
+      claims.forEach(c => {
+          if (c.transactionId && c.resolutionTransactionId) {
+              const current = parentToResolutions.get(c.transactionId) || [];
+              current.push(c.resolutionTransactionId);
+              parentToResolutions.set(c.transactionId, current);
+              
+              childIds.add(c.resolutionTransactionId);
+          }
+      });
+
+      // 2. Build Groups
+      const txMap = new Map(cashTollTransactions.map(t => [t.id, t]));
+
+      cashTollTransactions.forEach(tx => {
+          if (childIds.has(tx.id)) return; // Skip children, they are handled by parents
+
+          const childrenIds = parentToResolutions.get(tx.id);
+          const children: FinancialTransaction[] = [];
+          
+          if (childrenIds) {
+              childrenIds.forEach(childId => {
+                  const childTx = txMap.get(childId);
+                  if (childTx) children.push(childTx);
+              });
+          }
+          
+          groups.push({
+              parent: tx,
+              children: children
+          });
+      });
+
+      // Sort by most recent activity (Parent Date OR Newest Child Date)
+      // This ensures that if an old receipt gets a new dispute charge, it bubbles up to the top.
+      return groups.sort((a, b) => {
+          const getLatestDate = (group: { parent: FinancialTransaction, children: FinancialTransaction[] }) => {
+              const dates = [new Date(group.parent.date).getTime()];
+              group.children.forEach(c => dates.push(new Date(c.date).getTime()));
+              return Math.max(...dates);
+          };
+          
+          return getLatestDate(b) - getLatestDate(a);
+      });
+  }, [cashTollTransactions, claims]);
+
+  const toggleRow = (id: string) => {
+      const newSet = new Set(expandedRows);
+      if (newSet.has(id)) {
+          newSet.delete(id);
+      } else {
+          newSet.add(id);
+      }
+      setExpandedRows(newSet);
+  };
 
   const handleSavePayment = async (payment: { 
     id?: string;
@@ -1370,71 +1445,110 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                     <TableHead>Status</TableHead>
                                                     <TableHead className="text-right text-red-700">Debit (Charge)</TableHead>
                                                     <TableHead className="text-right text-emerald-700">Credit (Reimbursement)</TableHead>
-                                                    <TableHead className="w-[50px]"></TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {cashTollTransactions.length > 0 ? (
-                                                    cashTollTransactions.map((tx) => {
-                                                        const type = getTollTransactionType(tx.category);
+                                                {groupedTollTransactions.length > 0 ? (
+                                                    groupedTollTransactions.map(({ parent, children }) => {
+                                                        const type = getTollTransactionType(parent.category);
                                                         const isCredit = type === 'credit';
+                                                        const hasChildren = children.length > 0;
+                                                        const isExpanded = expandedRows.has(parent.id);
+
                                                         return (
-                                                        <TableRow key={tx.id}>
-                                                            <TableCell className="font-medium text-slate-600">{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
-                                                            <TableCell>
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-medium text-slate-900">{tx.description}</span>
-                                                                    {tx.receiptUrl && (
-                                                                        <a href={tx.receiptUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-0.5">
-                                                                            <FileText className="h-3 w-3" />
-                                                                            View Receipt
-                                                                        </a>
-                                                                    )}
-                                                                </div>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <Badge variant="secondary" className={cn(
-                                                                    "hover:bg-opacity-80",
-                                                                    isCredit ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                                                                )}>
-                                                                    {tx.status || 'Completed'}
-                                                                </Badge>
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono">
-                                                                {!isCredit ? (
-                                                                    <span className="text-red-600 font-bold">${Math.abs(tx.amount).toFixed(2)}</span>
-                                                                ) : (
-                                                                    <span className="text-slate-300">-</span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono">
-                                                                {isCredit ? (
-                                                                    <span className="text-emerald-600 font-bold">${Math.abs(tx.amount).toFixed(2)}</span>
-                                                                ) : (
-                                                                    <span className="text-slate-300">-</span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <DropdownMenu>
-                                                                    <DropdownMenuTrigger asChild>
-                                                                        <Button variant="ghost" className="h-8 w-8 p-0">
-                                                                            <span className="sr-only">Open menu</span>
-                                                                            <MoreHorizontal className="h-4 w-4" />
-                                                                        </Button>
-                                                                    </DropdownMenuTrigger>
-                                                                    <DropdownMenuContent align="end">
-                                                                        <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
-                                                                            <Pencil className="mr-2 h-4 w-4" />
-                                                                            Edit
-                                                                        </DropdownMenuItem>
-                                                                    </DropdownMenuContent>
-                                                                </DropdownMenu>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    )})
+                                                            <React.Fragment key={parent.id}>
+                                                                <TableRow 
+                                                                    className={cn("transition-colors", hasChildren && "cursor-pointer hover:bg-slate-50")}
+                                                                    onClick={() => hasChildren && toggleRow(parent.id)}
+                                                                >
+                                                                    <TableCell className="font-medium text-slate-600">
+                                                                        <div className="flex items-center gap-2">
+                                                                            {hasChildren && (
+                                                                                <div className="text-slate-400">
+                                                                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                                                </div>
+                                                                            )}
+                                                                            {format(new Date(parent.date), 'MMM d, yyyy')}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-medium text-slate-900">{parent.description}</span>
+                                                                            {parent.receiptUrl && (
+                                                                                <a 
+                                                                                    href={parent.receiptUrl} 
+                                                                                    target="_blank" 
+                                                                                    rel="noreferrer" 
+                                                                                    className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-0.5"
+                                                                                    onClick={(e) => e.stopPropagation()}
+                                                                                >
+                                                                                    <FileText className="h-3 w-3" />
+                                                                                    View Receipt
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Badge variant="secondary" className={cn(
+                                                                            "hover:bg-opacity-80",
+                                                                            isCredit ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                                                                        )}>
+                                                                            {parent.status || 'Completed'}
+                                                                        </Badge>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right font-mono">
+                                                                        {!isCredit ? (
+                                                                            <span className="text-red-600 font-bold">${Math.abs(parent.amount).toFixed(2)}</span>
+                                                                        ) : (
+                                                                            <span className="text-slate-300">-</span>
+                                                                        )}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right font-mono">
+                                                                        {isCredit ? (
+                                                                            <span className="text-emerald-600 font-bold">${Math.abs(parent.amount).toFixed(2)}</span>
+                                                                        ) : (
+                                                                            <span className="text-slate-300">-</span>
+                                                                        )}
+                                                                    </TableCell>
+                                                                </TableRow>
+
+                                                                {/* Child Rows (Dispute Charges) */}
+                                                                {hasChildren && isExpanded && children.map(child => (
+                                                                    <TableRow key={child.id} className="bg-slate-50/50 hover:bg-slate-50">
+                                                                        <TableCell className="pl-10 relative">
+                                                                            <div className="absolute left-6 top-0 bottom-1/2 w-px bg-slate-200"></div>
+                                                                            <div className="absolute left-6 top-1/2 w-3 h-px bg-slate-200"></div>
+                                                                            <span className="text-slate-500 text-xs">
+                                                                                {format(new Date(child.date), 'MMM d')}
+                                                                            </span>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <CornerDownRight className="h-3 w-3 text-slate-400" />
+                                                                                <span className="text-sm text-slate-600">{child.description}</span>
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <Badge variant="outline" className="text-xs text-slate-500 border-slate-200">
+                                                                                {child.status}
+                                                                            </Badge>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono">
+                                                                            <span className="text-red-600 text-sm font-medium">
+                                                                                ${Math.abs(child.amount).toFixed(2)}
+                                                                            </span>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono">
+                                                                            <span className="text-slate-300">-</span>
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </React.Fragment>
+                                                        );
+                                                    })
                                                 ) : (
                                                     <TableRow>
-                                                        <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                                        <TableCell colSpan={5} className="h-24 text-center text-slate-500">
                                                             No toll activity found.
                                                         </TableCell>
                                                     </TableRow>

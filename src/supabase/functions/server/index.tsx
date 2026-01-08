@@ -365,6 +365,70 @@ app.delete("/make-server-37f42386/transactions/:id", async (c) => {
 });
 
 // Expense Management Endpoints (Phase 5)
+app.post("/make-server-37f42386/scan-receipt", async (c) => {
+  try {
+    const body = await c.req.parseBody();
+    const file = body['file'];
+    
+    if (!file || !(file instanceof File)) {
+        return c.json({ error: "File upload required" }, 400);
+    }
+
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+
+    const openai = new OpenAI({ apiKey });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(arrayBuffer).toString('base64');
+    const dataUrl = `data:${file.type};base64,${base64Data}`;
+
+    const prompt = `
+      You are an OCR assistant for a driver expense portal. 
+      Parse the receipt or invoice image. It might be a general receipt, fuel receipt, or toll receipt.
+      
+      Return a valid JSON object with these EXACT fields:
+      - type (string): "Fuel", "Toll", "Maintenance", or "Other"
+      - merchant (string): Name of the merchant or agency (e.g. "Highway 2000", "Total Gas")
+      - amount (number): Total amount paid (number only)
+      - date (string): Date in YYYY-MM-DD format. IMPORTANT: Verify the date format based on locale context (e.g., JMD currency implies DD/MM/YYYY). If ambiguous (like 02/01/2026), prefer Day/Month/Year (Jan 2nd) over Month/Day/Year (Feb 1st).
+      - time (string): Time in HH:MM format (24h)
+      - receiptNumber (string): Invoice, ticket, or reference number
+      - plaza (string): Plaza name (for tolls)
+      - lane (string): Lane number (for tolls)
+      - vehicleClass (string): Vehicle class (for tolls)
+      - collector (string): Collector name/ID
+      - notes (string): Brief description
+      
+      If specific fields are missing, return null. 
+      Output only valid JSON. Do not use markdown code blocks.
+    `;
+
+    const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+            {
+                role: "user",
+                content: [
+                    { type: "text", text: prompt },
+                    { type: "image_url", image_url: { url: dataUrl } }
+                ]
+            }
+        ],
+        response_format: { type: "json_object" }
+    });
+
+    const text = response.choices[0].message.content || "{}";
+    const data = JSON.parse(text);
+
+    return c.json({ success: true, data });
+
+  } catch (e: any) {
+    console.error("Scan Receipt Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 app.post("/make-server-37f42386/expenses/approve", async (c) => {
   try {
     const { id, notes } = await c.req.json();
@@ -498,242 +562,225 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
   try {
     const body = await c.req.parseBody();
     const file = body['file'];
-    const backFile = body['backFile'];
-    const type = body['type'] as string; // 'license' | 'address'
+    const type = body['type'] as string;
 
-    if (!file || !(file instanceof File)) {
-      return c.json({ error: "No file provided" }, 400);
-    }
-
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-         return c.json({ error: "Only image files (JPEG, PNG, WEBP, GIF) and PDFs are supported." }, 400);
-    }
+    if (!file || !(file instanceof File)) return c.json({ error: "No file provided" }, 400);
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!apiKey) {
-      return c.json({ error: "AI Service not configured" }, 503);
-    }
+    if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
 
     const openai = new OpenAI({ apiKey });
 
-    let prompt = "";
+    let prompt = `Extract information from this ${type} document into valid JSON. Do not use markdown.`;
+    
     if (type === 'license') {
-      prompt = `
-        Extract the following details from this Driver's License (checking both Front and Back images) in JSON format.
-        
-        For Names:
-        - distinct "Surname" or "Last Name" field -> lastName
-        - "Christian Names", "Given Names", or "First Name" field often contains First + Middle.
-        - Split "Christian Names" into firstName (the first word) and middleName (all subsequent words).
-        - If there are multiple middle names, combine them into the middleName field.
-
-        For Phone/Country:
-        - nationality (e.g. "JAMAICAN", "USA").
-        - countryCode: Infer strictly from the Nationality or Address country.
-          - "JAMAICAN" or "JAMAICA" -> "+1" (specifically +1 876 but +1 is the code)
-          - "USA" -> "+1"
-          - "UK" or "BRITISH" -> "+44"
-          - Default to "+1" if unsure but try to match nationality.
-
-        Other Fields:
-        - licenseNumber (alphanumeric)
-        - expirationDate (YYYY-MM-DD)
-        - dateOfBirth (YYYY-MM-DD)
-        - address (full string)
-        - class (e.g. "Private", "General", "C", "D" - check Back of card)
-        - licenseToDrive (e.g. "Motor Cars", "Motorcycles" - check Back of card)
-        - controlNumber (alphanumeric - check Back or Front)
-      `;
-    } else if (type === 'address') {
-       prompt = `
-        Extract the address from this utility bill or document in JSON format:
-        - address (full address string)
-       `;
-    } else if (type === 'fitness_certificate') {
-       prompt = `
-        Extract the following details from this Certificate of Fitness in JSON format.
-        Look for specific Jamaican vehicle document fields:
-
-        - make (Vehicle Make)
-        - model (Vehicle Model)
-        - year (Year of Manufacture)
-        - color (Colour)
-        - bodyType (Body Type)
-        - engineNumber (Motor or Engine No.)
-        - ccRating (CC Rating)
-        - issueDate (Issue Date, format: YYYY-MM-DD)
-        - expirationDate (Expiry Date, format: YYYY-MM-DD)
-       `;
+        prompt += `
+        For 'license':
+        - firstName, lastName, middleName
+        - licenseNumber, expirationDate (YYYY-MM-DD), dob (YYYY-MM-DD)
+        - state, countryCode, address
+        - class, licenseToDrive
+        `;
     } else if (type === 'vehicle_registration') {
-       prompt = `
-        Extract the following details from this Motor Vehicle Registration Certificate in JSON format.
-        Look for specific Jamaican vehicle document fields:
-        
-        - laNumber (L.A. Number / Licence Authority No.)
-        - plate (Reg. Plate No.)
-        - mvid (MVID / Motor Vehicle ID)
-        - vin (VIN / Vehicle Chassis No.)
-        - controlNumber (Control Number)
-        - issueDate (Date Issued, format: YYYY-MM-DD)
-        - expirationDate (Expiry date, format: YYYY-MM-DD)
-       `;
-    } else if (type === 'valuation_report') {
-       prompt = `
-        Extract the following details from this Motor Vehicle Valuation Report in JSON format.
-        
-        - valuationDate (Date of Valuation, format: YYYY-MM-DD)
-        - marketValue (Market Value amount, remove currency symbols, e.g. "2,100,000")
-        - forcedSaleValue (Forced Sale Value amount, remove currency symbols)
-        - chassisNumber (Chassis No.)
-        - engineNumber (Engine No.)
-        - color (Colour)
-        - odometer (Odometer Reading)
-        - modelYear (Year of Manufacture)
-       `;
-    } else if (type === 'insurance_policy') {
-       prompt = `
-        Extract the following details from this Motor Vehicle Insurance Certificate / Policy in JSON format.
-        
-        - idv (Insured Declared Value or Sum Insured, remove currency symbols)
-        - policyPremium (Policy Premium, remove currency symbols)
-        - excessDeductible (Excess or Deductible amount)
-        - depreciationRate (Depreciation Rate percentage)
-        - policyExpiryDate (Policy Expiry Date, format: YYYY-MM-DD)
-        - authorizedDrivers (Authorized Drivers - list or description)
-        - limitationsUse (Limitations as to Use)
-        - policyNumber (Certificate or Policy Number)
-       `;
-    } else {
-      return c.json({ error: "Invalid document type" }, 400);
+        prompt += `
+        For 'vehicle_registration':
+        - ownerName, plateNumber, vin, make, model, year
+        - expirationDate (YYYY-MM-DD), issueDate (YYYY-MM-DD)
+        - chassisNumber, engineNumber
+        `;
     }
 
-    const userContent: any[] = [
-        { type: "text", text: prompt }
-    ];
-
-    if (file.type === 'application/pdf') {
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            let buffer = Buffer.from(arrayBuffer);
-            
-            // Dynamic Imports for PDF libraries to prevent server startup crashes
-            const { default: PDFParser } = await import("npm:pdf2json");
-            const { PDFDocument } = await import("npm:pdf-lib");
-            const pdfjsLib = await import("https://esm.sh/pdfjs-dist@3.11.174");
-            
-            // Helper to parse buffer with pdf2json
-            const parsePdfBuffer = (b: Buffer) => new Promise<string>((resolve, reject) => {
-                const parser = new PDFParser(null, 1);
-                parser.on("pdfParser_dataError", (errData: any) => reject(new Error(errData.parserError)));
-                parser.on("pdfParser_dataReady", () => {
-                   resolve(parser.getRawTextContent());
-                });
-                parser.parseBuffer(b);
-            });
-
-            let pdfText = "";
-            try {
-                pdfText = await parsePdfBuffer(buffer);
-            } catch (e: any) {
-                 console.log("Initial PDF parse failed. Attempting repair/fallback...", e.message);
-                 try {
-                    // Try pdf-lib repair
-                    const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
-                    const savedBytes = await pdfDoc.save();
-                    buffer = Buffer.from(savedBytes);
-                    pdfText = await parsePdfBuffer(buffer);
-                 } catch (repairError: any) {
-                    console.error("PDF Repair failed:", repairError);
-                    
-                    // Try PDF.js fallback
-                    console.log("Attempting fallback to PDF.js...");
-                    try {
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-                        const loadingTask = pdfjsLib.getDocument({ 
-                            data: new Uint8Array(arrayBuffer),
-                            useSystemFonts: true,
-                            disableFontFace: true
-                        });
-                        const pdf = await loadingTask.promise;
-                        let fullText = "";
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const content = await page.getTextContent();
-                            const strings = content.items.map((item: any) => item.str);
-                            fullText += strings.join(" ") + "\n";
-                        }
-                        pdfText = fullText;
-                    } catch (pdfJsError) {
-                         console.error("PDF.js fallback failed:", pdfJsError);
-                         
-                         if (repairError.message && repairError.message.toLowerCase().includes("encrypted")) {
-                            throw new Error("PDF is encrypted or password protected. Please upload an unlocked PDF or an image.");
-                         }
-                         throw repairError;
-                    }
-                 }
-            }
-
-            if (!pdfText || pdfText.trim().length < 10) {
-                 return c.json({ error: "Could not extract text from this PDF. It appears to be a scanned image (no text layer found). Please upload a JPEG/PNG image of the document so the AI can read it." }, 400);
-            }
-            userContent.push({ type: "text", text: `Document Content:\n${pdfText}` });
-        } catch (e: any) {
-            console.error("PDF Parse Error:", e);
-            return c.json({ error: `Failed to read PDF file: ${e.message}. Please try uploading an image.` }, 400);
-        }
-    } else {
-        // Helper to convert file to base64
-        const fileToBase64 = async (f: File) => {
-            const arrayBuffer = await f.arrayBuffer();
-            const bytes = new Uint8Array(arrayBuffer);
-            let binary = "";
-            const len = bytes.byteLength;
-            const chunkSize = 1024;
-            for (let i = 0; i < len; i += chunkSize) {
-              binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
-            }
-            return `data:${f.type};base64,${btoa(binary)}`;
-        };
-
-        const dataUrl = await fileToBase64(file);
-        userContent.push({ type: "image_url", image_url: { url: dataUrl } });
-
-        if (backFile && backFile instanceof File) {
-            const backDataUrl = await fileToBase64(backFile);
-            userContent.push({ type: "image_url", image_url: { url: backDataUrl } });
-        }
-    }
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(arrayBuffer).toString('base64');
+    const dataUrl = `data:${file.type};base64,${base64Data}`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "You are a helpful assistant that extracts data from documents into valid JSON. Do not include markdown formatting."
-        },
-        {
-          role: "user",
-          content: userContent
-        }
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 500,
+        model: "gpt-4o",
+        messages: [
+            {
+                role: "user",
+                content: [
+                    { type: "text", text: prompt },
+                    { type: "image_url", image_url: { url: dataUrl } }
+                ]
+            }
+        ],
+        response_format: { type: "json_object" }
     });
-
-    const content = response.choices[0].message.content;
-    const json = JSON.parse(content || "{}");
-
-    return c.json({ success: true, data: json });
+    
+    const text = response.choices[0].message.content || "{}";
+    return c.json({ success: true, data: JSON.parse(text) });
 
   } catch (e: any) {
-    console.error("AI Parse Error:", e);
     return c.json({ error: e.message }, 500);
   }
 });
 
+app.post("/make-server-37f42386/ai/map-csv", async (c) => {
+  try {
+    const { headers, sample, targetFields } = await c.req.json();
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+    
+    const openai = new OpenAI({ apiKey });
+    
+    const prompt = `Map CSV headers ${JSON.stringify(headers)} (Sample: ${JSON.stringify(sample.slice(0,3))}) to target fields: ${JSON.stringify(targetFields)}. Return JSON object { Header: TargetField }. Do not use markdown.`;
+    
+    const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+    });
+    
+    const text = response.choices[0].message.content || "{}";
+    
+    return c.json({ success: true, mapping: JSON.parse(text) });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
+    try {
+        const { csvContent } = await c.req.json();
+        const apiKey = Deno.env.get("OPENAI_API_KEY");
+        if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+
+        const openai = new OpenAI({ apiKey });
+
+        const prompt = `Parse this toll CSV content into a JSON object with a 'transactions' array (date, tagId, location, laneId, amount, type). Ignore headers. CSV:\n${csvContent.substring(0, 30000)}`;
+        
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+        });
+
+        const text = response.choices[0].message.content || "{}";
+        return c.json({ success: true, data: JSON.parse(text).transactions || [] });
+    } catch(e: any) { return c.json({ error: e.message }, 500); }
+});
+
+app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
+    try {
+        const body = await c.req.parseBody();
+        const file = body['file'];
+        if (!file || !(file instanceof File)) return c.json({ error: "No file" }, 400);
+        
+        const apiKey = Deno.env.get("OPENAI_API_KEY");
+        if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+        
+        const openai = new OpenAI({ apiKey });
+
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        const dataUrl = `data:${file.type};base64,${base64Data}`;
+        
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: "Extract toll transactions from this image into a JSON object with a 'transactions' array." },
+                        { type: "image_url", image_url: { url: dataUrl } }
+                    ]
+                }
+            ],
+            response_format: { type: "json_object" }
+        });
+
+        const text = response.choices[0].message.content || "{}";
+        return c.json({ success: true, data: JSON.parse(text).transactions || [] });
+    } catch(e: any) { return c.json({ error: e.message }, 500); }
+});
+
+app.post("/make-server-37f42386/analyze-fleet", async (c) => {
+    try {
+        const { payload } = await c.req.json();
+        const apiKey = Deno.env.get("OPENAI_API_KEY");
+        if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+        const openai = new OpenAI({ apiKey });
+        const prompt = `Analyze fleet CSV data and return SINGLE JSON object with keys: metadata, drivers, vehicles, financials, insights. \nDATA: ${payload}`;
+        
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+        });
+
+        const text = response.choices[0].message.content || "{}";
+        return c.json({ success: true, data: JSON.parse(text) });
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 // Fuel Cards Endpoints
+app.post("/make-server-37f42386/parse-invoice", async (c) => {
+    try {
+        const body = await c.req.parseBody();
+        const file = body['file'];
+        if (!file || !(file instanceof File)) return c.json({ error: "No file" }, 400);
+        const apiKey = Deno.env.get("OPENAI_API_KEY");
+        if (!apiKey) return c.json({ error: "No API Key" }, 500);
+        const openai = new OpenAI({ apiKey });
+
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        const dataUrl = `data:${file.type};base64,${base64Data}`;
+
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: `Analyze invoice. Return JSON: date, type (oil/tires/etc), cost, odometer, notes.` },
+                        { type: "image_url", image_url: { url: dataUrl } }
+                    ]
+                }
+            ],
+            response_format: { type: "json_object" }
+        });
+        
+        const text = response.choices[0].message.content || "{}";
+        return c.json({ success: true, data: JSON.parse(text) });
+    } catch(e: any) { return c.json({ error: e.message }, 500); }
+});
+
+app.post("/make-server-37f42386/parse-inspection", async (c) => {
+    try {
+        const body = await c.req.parseBody();
+        const file = body['file'];
+        if (!file || !(file instanceof File)) return c.json({ error: "No file" }, 400);
+        const apiKey = Deno.env.get("OPENAI_API_KEY");
+        if (!apiKey) return c.json({ error: "No API Key" }, 500);
+        const openai = new OpenAI({ apiKey });
+
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        const dataUrl = `data:${file.type};base64,${base64Data}`;
+
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: `Analyze inspection report. Return JSON: issues (array of strings), notes (summary).` },
+                        { type: "image_url", image_url: { url: dataUrl } }
+                    ]
+                }
+            ],
+            response_format: { type: "json_object" }
+        });
+        
+        const text = response.choices[0].message.content || "{}";
+        return c.json({ success: true, data: JSON.parse(text) });
+    } catch(e: any) { return c.json({ error: e.message }, 500); }
+});
+
 app.get("/make-server-37f42386/fuel-cards", async (c) => {
   try {
     const cards = await kv.getByPrefix("fuel_card:");
@@ -850,92 +897,37 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
   try {
     const { make, model, year, color, bodyType, licensePlate } = await c.req.json();
     
-    // Switch to Gemini API Key as requested
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    // Switch to OpenAI API Key as requested
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) {
-        return c.json({ error: "Gemini API Key not configured" }, 503);
+        return c.json({ error: "OpenAI API Key not configured" }, 503);
     }
-
-    // Using Google's Imagen 3/4 models via Generative Language API
-    // We prioritize the new Imagen 4.0 Ultra models found in your account, then fall back to standard 4.0, then Flash.
-    const modelCandidates = [
-        "imagen-4.0-ultra-generate-001",
-        "imagen-4.0-generate-001",
-        "gemini-2.0-flash-exp-image-generation"
-    ];
+    const openai = new OpenAI({ apiKey });
 
     const prompt = `A hyper-realistic, professional automotive studio photo of a ${year} ${color} ${make} ${model} ${bodyType}. The vehicle is parked on a pristine, high-gloss white showroom floor with distinct reflections beneath the car. The background is a clean, seamless white studio environment. Use a front 3/4 view angle, zoomed in to fill the frame. 8k resolution, soft studio lighting, sharp focus. The vehicle should have no front license plate.`;
 
     let imageB64 = null;
     let lastError = null;
 
-    // Try candidates in order
-    for (const modelName of modelCandidates) {
-        try {
-            console.log(`Attempting image generation with model: ${modelName}`);
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict?key=${apiKey}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    instances: [
-                        { prompt: prompt }
-                    ],
-                    parameters: {
-                        sampleCount: 1,
-                        aspectRatio: "4:3"
-                    }
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                imageB64 = data.predictions?.[0]?.bytesBase64Encoded;
-                if (imageB64) break; // Success!
-            } else {
-                const errText = await response.text();
-                console.warn(`Model ${modelName} failed with status ${response.status}: ${errText}`);
-                lastError = `${response.status} - ${errText}`;
-            }
-        } catch (e) {
-            console.error(`Error calling model ${modelName}:`, e);
-            lastError = e.toString();
-        }
+    try {
+        const dalleResponse = await openai.images.generate({
+          model: "dall-e-3",
+          prompt: prompt,
+          n: 1,
+          size: "1024x1024",
+          quality: "standard",
+          response_format: "b64_json"
+        });
+        imageB64 = dalleResponse.data[0].b64_json;
+    } catch (e: any) {
+        lastError = e.message;
+        console.error("OpenAI DALL-E 3 Failed:", e);
     }
 
     if (!imageB64) {
-         console.warn("All Gemini Image models failed. Reason:", lastError);
-
-         console.log("Attempting Fallback to OpenAI DALL-E 3...");
-         
-         // FALLBACK: Try OpenAI DALL-E 3
-         try {
-             const openaiKey = Deno.env.get("OPENAI_API_KEY");
-             if (openaiKey) {
-                const openai = new OpenAI({ apiKey: openaiKey });
-                const dalleResponse = await openai.images.generate({
-                  model: "dall-e-3",
-                  prompt: prompt,
-                  n: 1,
-                  size: "1024x1024",
-                  quality: "standard",
-                  response_format: "b64_json"
-                });
-                imageB64 = dalleResponse.data[0].b64_json;
-                console.log("Fallback to DALL-E 3 Successful");
-             } else {
-                 console.error("No OpenAI Key for fallback.");
-             }
-         } catch (openaiError) {
-             console.error("OpenAI Fallback Failed:", openaiError);
-         }
-
-         if (!imageB64) {
-            return c.json({ 
-                error: `All Image Generation attempts (Google & OpenAI) failed. Google Error: ${lastError}` 
-            }, 500);
-         }
+         return c.json({ 
+             error: `Image Generation failed: ${lastError}` 
+         }, 500);
     }
     
     // Convert Base64 to Buffer for Upload
@@ -1215,7 +1207,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
 });
 
 // Admin: Preview Data Reset Endpoint
-app.post("/make-server-37f42386/admin/preview-reset", async (c) => {
+app.post("/make-server-37f42386/preview-reset", async (c) => {
   try {
     const { type, startDate, endDate, targets, driverId } = await c.req.json();
     
@@ -1331,7 +1323,7 @@ app.post("/make-server-37f42386/admin/preview-reset", async (c) => {
 });
 
 // Admin: Reset Data By Date Endpoint
-app.post("/make-server-37f42386/admin/reset-by-date", async (c) => {
+app.post("/make-server-37f42386/reset-by-date", async (c) => {
   try {
     const { type, startDate, endDate, targets, driverId, preview, keys } = await c.req.json();
     
@@ -2708,6 +2700,31 @@ app.post("/make-server-37f42386/claims", async (c) => {
     }
     claim.updatedAt = new Date().toISOString();
     
+    // Auto-create Financial Transaction for "Charge Driver" resolution
+    // This ensures the $10 charge appears in the driver's transaction ledger
+    if (claim.status === 'Resolved' && claim.resolutionReason === 'Charge Driver' && !claim.resolutionTransactionId) {
+        const txId = crypto.randomUUID();
+        const transaction = {
+            id: txId,
+            driverId: claim.driverId,
+            date: new Date().toISOString(),
+            // Ensure description contains 'Toll' so it's picked up by DriverDetail filter
+            description: `Toll Dispute Charge - ${claim.subject || 'Resolution'}`, 
+            category: 'Adjustment',
+            type: 'Adjustment',
+            amount: Math.abs(claim.amount || 0), // Positive magnitude; ledger logic subtracts it
+            status: 'Completed',
+            paymentMethod: 'Cash', // Affects Cash Wallet
+            metadata: {
+                claimId: claim.id,
+                source: 'claim_resolution'
+            }
+        };
+        
+        await kv.set(`transaction:${txId}`, transaction);
+        claim.resolutionTransactionId = txId; // Link it to prevent duplicates
+    }
+    
     await kv.set(`claim:${claim.id}`, claim);
     return c.json({ success: true, data: claim });
   } catch (e: any) {
@@ -2911,14 +2928,17 @@ app.post("/make-server-37f42386/map-match", async (c) => {
       return c.json({ error: "Points array is required" }, 400);
     }
 
-    // Filter valid points
-    const validPoints = points.filter((p: any) => p && !isNaN(p.lat) && !isNaN(p.lon));
+    // Filter valid points with timestamps and sort them
+    const validPoints = points
+        .filter((p: any) => p && !isNaN(Number(p.lat)) && !isNaN(Number(p.lon)) && !isNaN(Number(p.timestamp)))
+        .sort((a: any, b: any) => Number(a.timestamp) - Number(b.timestamp));
+
     if (validPoints.length < 2) {
-      return c.json({ error: "At least 2 valid points required" }, 400);
+      return c.json({ error: "At least 2 valid points with timestamps required" }, 400);
     }
 
-    // Chunking Logic (80 points per chunk to be safe within 100 limit and URL length)
-    const CHUNK_SIZE = 80;
+    // Chunking Logic (60 points per chunk to be safe within 100 limit and URL length)
+    const CHUNK_SIZE = 60;
     const chunks = [];
     
     // Create chunks with 1 point overlap

@@ -15,7 +15,7 @@ import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import OpenAI from "npm:openai";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 
 // --- KV STORE LOGIC (Included Inline) ---
 const client = () => createClient(
@@ -138,7 +138,7 @@ const deleteTransaction = async (c: any) => {
 };
 deleteRoute("/transactions/:id", deleteTransaction);
 
-// --- SCAN RECEIPT (OCR with OpenAI) ---
+// --- SCAN RECEIPT (Gemini 1.5 Flash) ---
 const scanReceipt = async (c: any) => {
     try {
         const body = await c.req.parseBody();
@@ -151,48 +151,66 @@ const scanReceipt = async (c: any) => {
         // Convert file to base64
         const buffer = await file.arrayBuffer();
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-        const dataUrl = `data:${file.type};base64,${base64}`;
-
-        const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
-
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-                {
-                    role: "system",
-                    content: `You are an OCR assistant. Parse the receipt image and return a valid JSON object with these fields:
-                    - merchant (string): Name of the merchant
-                    - date (string): Date in ISO 8601 format (YYYY-MM-DD), or null if not found
-                    - total (number): Total amount
-                    - items (array): List of items with 'description' and 'amount'
-                    
-                    If specific fields are missing, make a best guess or return null.`
-                },
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: "Parse this receipt." },
-                        { type: "image_url", image_url: { url: dataUrl } }
-                    ]
-                }
-            ],
-            response_format: { type: "json_object" }
-        });
-
-        const result = JSON.parse(completion.choices[0].message.content || "{}");
         
-        // Ensure defaults if AI fails
+        // Initialize Gemini
+        const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
+        // Use 1.5 Flash - it is faster and cheaper, excellent for OCR
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const prompt = `
+          You are an OCR assistant for a driver expense portal. 
+          Parse the receipt or invoice image. It might be a general receipt, fuel receipt, or toll receipt.
+          
+          Return a valid JSON object with these EXACT fields:
+          - type (string): "Fuel", "Toll", "Maintenance", or "Other"
+          - merchant (string): Name of the merchant or agency (e.g. "Highway 2000", "Total Gas")
+          - amount (number): Total amount paid (number only)
+          - date (string): Date in YYYY-MM-DD format
+          - time (string): Time in HH:MM format (24h)
+          - receiptNumber (string): Invoice, ticket, or reference number
+          - plaza (string): Plaza name, location, or station name (especially for tolls)
+          - lane (string): Lane number (if toll)
+          - vehicleClass (string): Vehicle class (if toll)
+          - collector (string): Collector name/ID (if toll)
+          - notes (string): Brief description of items or relevant details
+          
+          If specific fields are missing, return null. 
+          Output only valid JSON. Do not use markdown code blocks.
+        `;
+
+        const imagePart = {
+          inlineData: {
+            data: base64,
+            mimeType: file.type
+          }
+        };
+
+        const result = await model.generateContent([prompt, imagePart]);
+        const responseText = result.response.text();
+
+        // Clean up markdown if present
+        const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsedResult = JSON.parse(cleanText);
+        
+        // Ensure defaults
         const finalData = {
-            merchant: result.merchant || "Unknown Merchant",
-            date: result.date || new Date().toISOString(),
-            total: result.total || 0,
-            items: result.items || []
+            type: parsedResult.type || "Other",
+            merchant: parsedResult.merchant || "",
+            amount: parsedResult.amount || 0,
+            date: parsedResult.date || new Date().toISOString().split('T')[0],
+            time: parsedResult.time || "",
+            receiptNumber: parsedResult.receiptNumber || "",
+            plaza: parsedResult.plaza || "",
+            lane: parsedResult.lane || "",
+            vehicleClass: parsedResult.vehicleClass || "",
+            collector: parsedResult.collector || "",
+            notes: parsedResult.notes || ""
         };
 
         return c.json({ success: true, data: finalData });
 
     } catch (e: any) {
-        console.error("OCR Error:", e);
+        console.error("Gemini OCR Error:", e);
         return c.json({ error: e.message }, 500);
     }
 };

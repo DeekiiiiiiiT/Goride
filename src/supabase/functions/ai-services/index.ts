@@ -36,106 +36,46 @@ app.post("/ai-services/parse-document", async (c) => {
   try {
     const body = await c.req.parseBody();
     const file = body['file'];
-    const backFile = body['backFile'];
     const type = body['type'] as string;
 
-    if (!file || !(file instanceof File)) {
-      return c.json({ error: "No file provided" }, 400);
-    }
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-         return c.json({ error: "Only image files (JPEG, PNG, WEBP, GIF) and PDFs are supported." }, 400);
-    }
-    const apiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!apiKey) return c.json({ error: "AI Service not configured" }, 503);
-    const openai = new OpenAI({ apiKey });
+    if (!file || !(file instanceof File)) return c.json({ error: "No file provided" }, 400);
 
-    let prompt = "";
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 503);
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    let prompt = `Extract information from this ${type} document into valid JSON. Do not use markdown.`;
+    
     if (type === 'license') {
-      prompt = `Extract Driver's License details (Front/Back) in JSON. Fields: lastName, firstName, middleName, nationality, countryCode (+1 for Jamaica/USA, +44 UK), licenseNumber, expirationDate, dateOfBirth, address, class, licenseToDrive, controlNumber.`;
-    } else if (type === 'address') {
-       prompt = `Extract address from utility bill in JSON: address (full string).`;
-    } else if (type === 'fitness_certificate') {
-       prompt = `Extract Certificate of Fitness details in JSON: make, model, year, color, bodyType, engineNumber, ccRating, issueDate, expirationDate.`;
+        prompt += `
+        For 'license':
+        - firstName, lastName, middleName
+        - licenseNumber, expirationDate (YYYY-MM-DD), dob (YYYY-MM-DD)
+        - state, countryCode, address
+        - class, licenseToDrive
+        `;
     } else if (type === 'vehicle_registration') {
-       prompt = `Extract Motor Vehicle Registration details in JSON: laNumber, plate, mvid, vin, controlNumber, issueDate, expirationDate.`;
-    } else if (type === 'valuation_report') {
-       prompt = `Extract Valuation Report details in JSON: valuationDate, marketValue, forcedSaleValue, chassisNumber, engineNumber, color, odometer, modelYear.`;
-    } else if (type === 'insurance_policy') {
-       prompt = `Extract Insurance Policy details in JSON: idv, policyPremium, excessDeductible, depreciationRate, policyExpiryDate, authorizedDrivers, limitationsUse, policyNumber.`;
-    } else {
-      return c.json({ error: "Invalid document type" }, 400);
+        prompt += `
+        For 'vehicle_registration':
+        - ownerName, plateNumber, vin, make, model, year
+        - expirationDate (YYYY-MM-DD), issueDate (YYYY-MM-DD)
+        - chassisNumber, engineNumber
+        `;
     }
 
-    const userContent: any[] = [{ type: "text", text: prompt }];
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    if (file.type === 'application/pdf') {
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            let buffer = Buffer.from(arrayBuffer);
-            const { default: PDFParser } = await import("npm:pdf2json");
-            const { PDFDocument } = await import("npm:pdf-lib");
-            const pdfjsLib = await import("https://esm.sh/pdfjs-dist@3.11.174");
-            
-            const parsePdfBuffer = (b: Buffer) => new Promise<string>((resolve, reject) => {
-                const parser = new PDFParser(null, 1);
-                parser.on("pdfParser_dataError", (errData: any) => reject(new Error(errData.parserError)));
-                parser.on("pdfParser_dataReady", () => resolve(parser.getRawTextContent()));
-                parser.parseBuffer(b);
-            });
+    const result = await model.generateContent([
+        prompt,
+        { inlineData: { data: base64Data, mimeType: file.type } }
+    ]);
+    
+    const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    return c.json({ success: true, data: JSON.parse(text) });
 
-            let pdfText = "";
-            try {
-                pdfText = await parsePdfBuffer(buffer);
-            } catch (e: any) {
-                 try {
-                    const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
-                    const savedBytes = await pdfDoc.save();
-                    buffer = Buffer.from(savedBytes);
-                    pdfText = await parsePdfBuffer(buffer);
-                 } catch (repairError: any) {
-                    try {
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-                        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer), useSystemFonts: true, disableFontFace: true });
-                        const pdf = await loadingTask.promise;
-                        let fullText = "";
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const content = await page.getTextContent();
-                            fullText += content.items.map((item: any) => item.str).join(" ") + "\n";
-                        }
-                        pdfText = fullText;
-                    } catch (pdfJsError) { throw repairError; }
-                 }
-            }
-            if (!pdfText || pdfText.trim().length < 10) return c.json({ error: "Could not extract text from PDF (scanned?). Use Image." }, 400);
-            userContent.push({ type: "text", text: `Document Content:\n${pdfText}` });
-        } catch (e: any) {
-            return c.json({ error: `Failed to read PDF: ${e.message}` }, 400);
-        }
-    } else {
-        const fileToBase64 = async (f: File) => {
-            const arrayBuffer = await f.arrayBuffer();
-            return `data:${f.type};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
-        };
-        const dataUrl = await fileToBase64(file);
-        userContent.push({ type: "image_url", image_url: { url: dataUrl } });
-        if (backFile && backFile instanceof File) {
-            const backDataUrl = await fileToBase64(backFile);
-            userContent.push({ type: "image_url", image_url: { url: backDataUrl } });
-        }
-    }
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are a helpful assistant that extracts data from documents into valid JSON." },
-        { role: "user", content: userContent }
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 500,
-    });
-    return c.json({ success: true, data: JSON.parse(response.choices[0].message.content || "{}") });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -202,16 +142,18 @@ app.post("/ai-services/generate-vehicle-image", async (c) => {
 app.post("/ai-services/ai/map-csv", async (c) => {
   try {
     const { headers, sample, targetFields } = await c.req.json();
-    const apiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!apiKey) return c.json({ error: "AI Service not configured" }, 503);
-    const openai = new OpenAI({ apiKey });
-    const prompt = `Map CSV headers ${JSON.stringify(headers)} (Sample: ${JSON.stringify(sample.slice(0,3))}) to target fields: ${JSON.stringify(targetFields)}. Return JSON object { Header: TargetField }.`;
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "system", content: "JSON mapping assistant." }, { role: "user", content: prompt }],
-      response_format: { type: "json_object" }, temperature: 0
-    });
-    return c.json({ success: true, mapping: JSON.parse(response.choices[0].message.content || "{}") });
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 503);
+    
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    const prompt = `Map CSV headers ${JSON.stringify(headers)} (Sample: ${JSON.stringify(sample.slice(0,3))}) to target fields: ${JSON.stringify(targetFields)}. Return JSON object { Header: TargetField }. Do not use markdown.`;
+    
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    return c.json({ success: true, mapping: JSON.parse(text) });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -281,14 +223,17 @@ app.post("/ai-services/parse-inspection", async (c) => {
 app.post("/ai-services/ai/parse-toll-csv", async (c) => {
     try {
         const { csvContent } = await c.req.json();
-        const apiKey = Deno.env.get("OPENAI_API_KEY");
-        if (!apiKey) return c.json({ error: "No API Key" }, 503);
-        const openai = new OpenAI({ apiKey });
-        const prompt = `Parse toll CSV to JSON array 'transactions' (date, tagId, location, laneId, amount, type). Date context: ${new Date().toDateString()}. Input: ${csvContent.substring(0, 10000)}`;
-        const response = await openai.chat.completions.create({
-             model: "gpt-4o", messages: [{ role: "user", content: prompt }], response_format: { type: "json_object" }
-        });
-        return c.json({ success: true, data: JSON.parse(response.choices[0].message.content || "{}").transactions || [] });
+        const apiKey = Deno.env.get("GEMINI_API_KEY");
+        if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 503);
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const prompt = `Parse this toll CSV content into a JSON object with a 'transactions' array (date, tagId, location, laneId, amount, type). Ignore headers. CSV:\n${csvContent.substring(0, 30000)}`;
+        
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        return c.json({ success: true, data: JSON.parse(text).transactions || [] });
     } catch(e: any) { return c.json({ error: e.message }, 500); }
 });
 
@@ -297,18 +242,23 @@ app.post("/ai-services/ai/parse-toll-image", async (c) => {
         const body = await c.req.parseBody();
         const file = body['file'];
         if (!file || !(file instanceof File)) return c.json({ error: "No file" }, 400);
-        const apiKey = Deno.env.get("OPENAI_API_KEY");
-        if (!apiKey) return c.json({ error: "No API Key" }, 503);
-        const openai = new OpenAI({ apiKey });
+        
+        const apiKey = Deno.env.get("GEMINI_API_KEY");
+        if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 503);
+        
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
         const arrayBuffer = await file.arrayBuffer();
-        const base64Image = `data:${file.type};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
-        const prompt = `Extract toll transactions from image to JSON array 'transactions'.`;
-        const response = await openai.chat.completions.create({
-             model: "gpt-4o",
-             messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: base64Image } }] }],
-             response_format: { type: "json_object" }
-        });
-        return c.json({ success: true, data: JSON.parse(response.choices[0].message.content || "{}").transactions || [] });
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        
+        const result = await model.generateContent([
+            "Extract toll transactions from this image into a JSON object with a 'transactions' array.",
+            { inlineData: { data: base64Data, mimeType: file.type } }
+        ]);
+
+        const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        return c.json({ success: true, data: JSON.parse(text).transactions || [] });
     } catch(e: any) { return c.json({ error: e.message }, 500); }
 });
 
