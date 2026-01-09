@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useClaims } from '../../hooks/useClaims';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "../ui/card";
@@ -18,7 +18,11 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 
-export function DriverClaims() {
+interface DriverClaimsProps {
+  defaultTab?: string;
+}
+
+export function DriverClaims({ defaultTab = 'tolls' }: DriverClaimsProps) {
   const { user } = useAuth();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   
@@ -37,6 +41,12 @@ export function DriverClaims() {
   const loading = driverLoading || claimsLoading;
   
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(defaultTab);
+
+  // Sync activeTab with defaultTab prop changes
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
 
   const handleCopy = async (text: string, id: string) => {
     try {
@@ -115,7 +125,7 @@ export function DriverClaims() {
         <p className="text-muted-foreground">Review and submit reimbursement requests to Uber.</p>
       </div>
 
-      <Tabs defaultValue="tolls" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="tolls">Toll Refunds</TabsTrigger>
           <TabsTrigger value="wait">Wait Time</TabsTrigger>

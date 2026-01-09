@@ -1,6 +1,7 @@
 import React from 'react';
 import { 
   LayoutDashboard, 
+  LayoutGrid,
   DollarSign, 
   FileText, 
   User, 
@@ -77,8 +78,8 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
             onClick={() => onNavigate('earnings')}
           />
           <NavButton 
-            icon={<Receipt className="h-5 w-5" />} 
-            label="Expenses" 
+            icon={<LayoutGrid className="h-5 w-5" />} 
+            label="Menu" 
             active={currentPage === 'expenses'} 
             onClick={() => onNavigate('expenses')}
           />

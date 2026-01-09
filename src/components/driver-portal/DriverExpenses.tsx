@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -14,7 +13,6 @@ import {
   Receipt, 
   Fuel, 
   Wrench, 
-  AlertCircle,
   CheckCircle2,
   Clock,
   XCircle,
@@ -30,10 +28,11 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
-import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { DriverClaims } from './DriverClaims';
 import { DriverFuelStats } from './DriverFuelStats';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { PortalHome } from './views/PortalHome';
+import { ReimbursementMenu } from './views/ReimbursementMenu';
+import { DriverHeader } from './ui/DriverHeader';
 
 function ExpenseLogger() {
   const { user } = useAuth();
@@ -451,7 +450,8 @@ function ExpenseLogger() {
                            onChange={handleFileChange}
                         />
                     </div>
-                 )}
+                 )
+                }
               </div>
 
               {receiptPreview && (
@@ -617,27 +617,81 @@ function ExpenseLogger() {
 }
 
 export function DriverExpenses() {
+  const [currentView, setCurrentView] = useState('home');
+  const [history, setHistory] = useState<string[]>(['home']);
+
+  const navigateTo = (view: string) => {
+    setCurrentView(view);
+    setHistory(prev => [...prev, view]);
+  };
+
+  const handleBack = () => {
+    if (history.length > 1) {
+      const newHistory = [...history];
+      newHistory.pop(); // Remove current
+      const previous = newHistory[newHistory.length - 1];
+      setHistory(newHistory);
+      setCurrentView(previous);
+    }
+  };
+
+  // Determine Title & Header State
+  let title = "GoRide";
+  let showBack = currentView !== 'home';
+
+  if (currentView === 'menu-reimbursements') title = "Reimbursements";
+  else if (currentView === 'feature-expenses') title = "Expenses";
+  else if (currentView === 'feature-fuel') title = "Fuel & MPG";
+  else if (currentView === 'claim-tolls') title = "Toll Refunds";
+  else if (currentView === 'claim-wait') title = "Wait Time Disputes";
+  else if (currentView === 'claim-cleaning') title = "Cleaning Fees";
+  else if (currentView === 'claim-history' || currentView === 'menu-history') title = "History";
+
   return (
-    <div className="space-y-4">
-      <Tabs defaultValue="claims" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-4 bg-slate-100 p-1 rounded-xl">
-          <TabsTrigger value="claims" className="rounded-lg">Refund Claims</TabsTrigger>
-          <TabsTrigger value="expenses" className="rounded-lg">My Expenses</TabsTrigger>
-          <TabsTrigger value="fuel" className="rounded-lg">Fuel & MPG</TabsTrigger>
-        </TabsList>
+    <div className="flex flex-col min-h-[calc(100vh-8rem)]">
+      
+      {/* Dynamic Header - Only show on sub-pages */}
+      {currentView !== 'home' && (
+        <DriverHeader 
+          title={title}
+          onBack={handleBack}
+          showProfile={false}
+        />
+      )}
 
-        <TabsContent value="expenses" className="mt-0">
-          <ExpenseLogger />
-        </TabsContent>
+      <div className="flex-1">
+        {currentView === 'home' && <PortalHome onNavigate={navigateTo} />}
+        
+        {currentView === 'menu-reimbursements' && <ReimbursementMenu onNavigate={navigateTo} />}
+        
+        {currentView === 'feature-expenses' && (
+          <div className="p-4">
+            <ExpenseLogger />
+          </div>
+        )}
 
-        <TabsContent value="claims" className="mt-0">
-           <DriverClaims />
-        </TabsContent>
+        {currentView === 'feature-fuel' && (
+           <div className="p-4">
+             <DriverFuelStats />
+           </div>
+        )}
 
-        <TabsContent value="fuel" className="mt-0">
-           <DriverFuelStats />
-        </TabsContent>
-      </Tabs>
+        {/* Claims Deep Linking - Passed as "defaultTab" props in Phase 5 */}
+        {(currentView === 'claim-tolls' || currentView === 'claim-wait' || currentView === 'claim-cleaning' || currentView === 'claim-history' || currentView === 'menu-history') && (
+           <div className="p-4">
+             <DriverClaims 
+               defaultTab={
+                 currentView === 'claim-tolls' ? 'tolls' : 
+                 currentView === 'claim-wait' ? 'wait' : 
+                 currentView === 'claim-cleaning' ? 'cleaning' : 
+                 currentView === 'claim-history' || currentView === 'menu-history' ? 'history' : 
+                 'tolls'
+               }
+             /> 
+           </div>
+        )}
+
+      </div>
     </div>
   );
 }

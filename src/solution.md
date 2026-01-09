@@ -1,49 +1,78 @@
-# Implementation Plan: Active Pipeline Metrics for Claimable Loss
+# Driver Portal Redesign Plan
 
-This plan adds "Active Pipeline" metrics to the dashboard to complement the existing "Resolved History" metrics.
+This plan outlines the transformation of the Driver Portal from a simple Tab-based interface to a high-fidelity, mobile-first navigation experience with colorful gradient menus and deep-linking capabilities.
 
-### Phase 1: Calculate Active Financial Metrics
-**Goal:** Compute the real-time financial values for unclaimed losses, pending recoveries, and at-risk disputes.
-- [ ] **Step 1:** In `/pages/ClaimableLoss.tsx`, inside the existing `ClaimableLoss` component, locate the `losses` `useMemo` hook.
-- [ ] **Step 2:** Create a new `useMemo` block specifically for "Active Metrics".
-- [ ] **Step 3:** Calculate `unclaimedTotal`: Iterate through the `losses` array and sum the `match.varianceAmount` (ensure to handle potential nulls safely).
-- [ ] **Step 4:** Calculate `pendingTotal`: Sum the amounts of `pendingClaims` (Submitted to Uber) and `awaitingDriverClaims` (Sent to Driver).
-- [ ] **Step 5:** Calculate `atRiskTotal`: Sum the amounts of `lostClaims` (Rejected/Dispute Lost).
-- [ ] **Step 6:** Return these three values from the hook.
+### Phase 1: Component Architecture & Design System
+**Goal:** Create the reusable UI building blocks (cards, headers, icons) to ensure a consistent "High Fidelity" look.
+- [ ] **Step 1:** Create `components/driver-portal/ui/DriverGradientCard.tsx`.
+    -   **Props:** `title`, `subtitle`, `icon` (Lucide), `gradient` (string class), `onClick`.
+    -   **Style:** Large rounded corners (`rounded-2xl`), shadow-lg, white text on colorful gradient backgrounds.
+    -   **Layout:** Flex column, icon top-left (large), text bottom-left.
+- [ ] **Step 2:** Create `components/driver-portal/ui/DriverHeader.tsx`.
+    -   **Props:** `title`, `onBack` (optional function), `showProfile` (boolean).
+    -   **Style:** Minimalist, sticky top, transparent backdrop blur.
+    -   **Logic:** If `onBack` is present, show a ChevronLeft icon. If not, show the standard menu/profile trigger.
+- [ ] **Step 3:** Define a "Theme Configuration" object in a new file `components/driver-portal/theme.ts`.
+    -   **Content:** Define specific Tailwind gradient strings for each category (e.g., Claims = Purple/Pink, Expenses = Blue/Cyan, Fuel = Orange/Amber).
 
-### Phase 2: Enhance StatCard Component Types
-**Goal:** Update the reusable `StatCard` to support new visual states (Warning for risk, Info for pending, Slate for potential).
-- [ ] **Step 1:** Open `/components/claimable-loss/StatCard.tsx`.
-- [ ] **Step 2:** Update the `StatCardProps` interface to include new `type` options: `'warning'` (Amber) and `'info'` (Blue).
-- [ ] **Step 3:** Inside the component logic, add a condition for `type === 'warning'`. Set `colorClass` to amber/orange variants and `bgClass` to amber-50.
-- [ ] **Step 4:** Add a condition for `type === 'info'`. Set `colorClass` to blue variants and `bgClass` to blue-50.
-- [ ] **Step 5:** Verify the 'neutral' or default styling works for the "Unclaimed" card (likely Slate/Gray).
+### Phase 2: Main Menu Implementation (Home Screen)
+**Goal:** Build the top-level landing screen that replaces the current Tabs.
+- [ ] **Step 1:** Create `components/driver-portal/views/PortalHome.tsx`.
+    -   **Props:** `onNavigate(view: string)`.
+- [ ] **Step 2:** Implement the Grid Layout.
+    -   **Container:** `div` with `grid grid-cols-2 gap-4 p-4`.
+- [ ] **Step 3:** Add the primary navigation cards using `DriverGradientCard`.
+    -   **Card 1:** "Reimbursements" (Gradient: Violet/Purple) -> Triggers `onNavigate('menu-reimbursements')`.
+    -   **Card 2:** "My Expenses" (Gradient: Blue/Cyan) -> Triggers `onNavigate('feature-expenses')`.
+    -   **Card 3:** "Fuel & MPG" (Gradient: Amber/Orange) -> Triggers `onNavigate('feature-fuel')`.
+    -   **Card 4:** "History" (Gradient: Emerald/Teal) -> Triggers `onNavigate('menu-history')`.
 
-### Phase 3: Implement Active Pipeline Grid
-**Goal:** Render the new top-level grid displaying the active financial pipeline.
-- [ ] **Step 1:** In `/pages/ClaimableLoss.tsx`, import necessary icons from `lucide-react`: `AlertCircle` (At Risk), `Timer` (Pending), and `Banknote` (Unclaimed).
-- [ ] **Step 2:** Create a wrapper `div` above the existing stats grid. Give it a label/header "Active Pipeline".
-- [ ] **Step 3:** Inside this wrapper, render a `div` with `grid grid-cols-1 md:grid-cols-3 gap-4`.
-- [ ] **Step 4:** Render 3 `StatCard` components:
-    - **Unclaimed Potential:** `amount={unclaimedTotal}`, `type="neutral"`, `icon={Banknote}`.
-    - **Pending Recovery:** `amount={pendingTotal}`, `type="info"`, `icon={Timer}`.
-    - **Action Required:** `amount={atRiskTotal}`, `type="warning"`, `icon={AlertCircle}`.
+### Phase 3: Sub-Menu Implementation (Reimbursements)
+**Goal:** Create the specific sub-menu for Claims (Tolls, Wait Time, etc.) seen in "Screenshot 2".
+- [ ] **Step 1:** Create `components/driver-portal/views/ReimbursementMenu.tsx`.
+    -   **Props:** `onNavigate(view: string)`.
+- [ ] **Step 2:** Implement a List/Grid layout tailored for sub-options.
+    -   **Layout:** `grid grid-cols-1 gap-3 p-4`.
+- [ ] **Step 3:** Add detailed navigation cards.
+    -   **Item 1:** "Toll Refunds" (Icon: Ticket) -> `onNavigate('claim-tolls')`.
+    -   **Item 2:** "Wait Time" (Icon: Clock) -> `onNavigate('claim-wait')`.
+    -   **Item 3:** "Cleaning Fee" (Icon: Sparkles) -> `onNavigate('claim-cleaning')`.
+    -   **Item 4:** "My Claims History" (Icon: FileText) -> `onNavigate('claim-history')`.
 
-### Phase 4: Reorganize Resolved History Grid
-**Goal:** Visually distinguish the existing "Net Result" grid as a separate "Historical Performance" section.
-- [ ] **Step 1:** In `/pages/ClaimableLoss.tsx`, wrap the existing 4-tile grid in a new container `div`.
-- [ ] **Step 2:** Add a label/header above this grid: "Resolved Performance".
-- [ ] **Step 3:** Ensure the gap between the "Active Pipeline" section and the "Resolved Performance" section is sufficient (e.g., `gap-8` or `my-6`).
-- [ ] **Step 4:** (Optional) Add a visual separator (`<hr>` or border) if the sections feel too crowded.
+### Phase 4: Navigation State Orchestration
+**Goal:** Refactor the main container to handle switching between these new views.
+- [ ] **Step 1:** Open `components/driver-portal/DriverExpenses.tsx`.
+- [ ] **Step 2:** Refactor the component to use a robust state machine instead of Tabs.
+    -   **State:** `const [currentView, setCurrentView] = useState('home')`.
+- [ ] **Step 3:** Implement the render logic.
+    -   Create a function `renderContent()` that switches on `currentView`.
+    -   Case `'home'`: Render `<PortalHome />`.
+    -   Case `'menu-reimbursements'`: Render `<ReimbursementMenu />`.
+    -   Case `'feature-expenses'`: Render `<ExpenseLogger />`.
+    -   Case `'feature-fuel'`: Render `<DriverFuelStats />`.
+- [ ] **Step 4:** Implement the `DriverHeader` integration.
+    -   Calculate `title` and `onBack` logic dynamically based on `currentView`.
+    -   Example: If `currentView === 'home'`, `onBack` is undefined. Else, `onBack` sets view to previous parent.
 
-### Phase 5: Responsive Layout & Mobile Optimization
-**Goal:** Ensure the dual-grid layout stacks correctly and looks good on smaller screens.
-- [ ] **Step 1:** Review the grid classes (`grid-cols-1 md:grid-cols-X`).
-- [ ] **Step 2:** Ensure the "Active Pipeline" uses `md:grid-cols-3` (since there are 3 tiles) and the "Resolved" section uses `md:grid-cols-4` (4 tiles).
-- [ ] **Step 3:** Check padding and text sizes for mobile breakpoints.
+### Phase 5: Deep-Linking Claims Components
+**Goal:** Modify the existing `DriverClaims.tsx` to support opening directly to a specific tab without showing the tab bar.
+- [ ] **Step 1:** Open `components/driver-portal/DriverClaims.tsx`.
+- [ ] **Step 2:** Add props: `interface DriverClaimsProps { initialTab?: string; hideTabs?: boolean; }`.
+- [ ] **Step 3:** Update the `Tabs` component usage.
+    -   If `hideTabs` is true, do not render `<TabsList>`.
+    -   Set `defaultValue` to `initialTab`.
+- [ ] **Step 4:** Update `DriverExpenses.tsx` render logic.
+    -   Case `'claim-tolls'`: Render `<DriverClaims initialTab="tolls" hideTabs={true} />`.
+    -   Case `'claim-wait'`: Render `<DriverClaims initialTab="wait" hideTabs={true} />`.
 
-### Phase 6: Final Polish and Code Cleanup
-**Goal:** Remove any temporary logs, unused imports, and ensure strict type safety.
-- [ ] **Step 1:** Scan `/pages/ClaimableLoss.tsx` for unused variables.
-- [ ] **Step 2:** Verify that `match.varianceAmount` is being accessed correctly with type safety (it's part of the `MatchResult` in `losses`).
-- [ ] **Step 3:** Ensure the dollar sign formatting is consistent across all new tiles.
+### Phase 6: Final Polish & Visual Refinements
+**Goal:** Ensure the app looks "High Fidelity" and colorful as requested.
+- [ ] **Step 1:** Add "Glassmorphism" effects to the Header.
+    -   `bg-white/80 backdrop-blur-md border-b border-slate-100`.
+- [ ] **Step 2:** Implement animation transitions between views.
+    -   Use `framer-motion` (Motion) for slide-in/slide-out effects if available, or simple CSS transitions.
+- [ ] **Step 3:** Verify Mobile Responsiveness.
+    -   Ensure touch targets are at least 44px.
+    -   Check padding on iPhone SE/small screens.
+- [ ] **Step 4:** Clean up unused code.
+    -   Remove the old Tabs implementation from `DriverExpenses.tsx`.
