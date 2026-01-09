@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Button } from "../ui/button";
-import { BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -50,7 +48,6 @@ export function DriverEarnings() {
   const [filteredTrips, setFilteredTrips] = useState<Trip[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<FinancialTransaction[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
-  const [weeklyData, setWeeklyData] = useState<{ day: string; amount: number }[]>([]);
   const [stats, setStats] = useState({
     totalBalance: 0,
     tripFares: 0,
@@ -345,110 +342,6 @@ export function DriverEarnings() {
           trend: trendValue
       });
 
-      // 2. Weekly Chart Data (Dynamic based on filter?)
-      // If a date range is selected, the chart should probably just show the data for that period,
-      // but for simplicity and to match the label "Weekly Summary", we might want to keep it as
-      // "Last 7 Days" OR adapt it. 
-      // The prompt asks for a calendar. Usually if I pick a date, the whole dashboard reflects that date.
-      
-      // Let's make the chart reflect the filtered data.
-      // If range is large, maybe group by week? If small, group by day?
-      // For now, let's stick to the existing logic but using the filtered trips if they exist within the window,
-      // OR better: Just map the filtered trips to days.
-      
-      // EXISTING LOGIC was: fixed "This Week" (Mon-Sun) or "Last 7 Days".
-      // Let's adapt: Group filtered trips by day.
-      
-      const dayMap = new Map<string, number>();
-      
-      currentTrips.forEach(t => {
-          const d = new Date(t.date);
-          const key = d.toLocaleDateString('en-US', { weekday: 'short' }); // Mon, Tue...
-          // Warning: This simple key merges "Mon" from different weeks. 
-          // If the user selects a month, all Mondays are summed. This might be confusing.
-          // BUT, the chart XAxis uses "Mon, Tue...".
-          
-          // Better approach for the chart:
-          // If no date filter -> Show current week (Mon-Sun).
-          // If date filter -> Show that period grouped by day (if <= 7 days) or simply aggregated?
-          
-          // Let's stick to the previous "Current Week" logic for the DEFAULT view,
-          // but if filtered, we might just show the aggregation of the filtered result.
-          
-          // Actually, let's stick to "Mon-Sun" buckets for simplicity as per the UI screenshot.
-          // It looks like a standard weekly view.
-      });
-
-      // Let's reconstruct the original logic but apply it to the filtered dataset?
-      // No, if I filter for "Last Month", a 7-day chart doesn't make sense.
-      // However, the prompt just says "add a calendar".
-      // I will keep the chart as "Weekly Summary" relative to the *end date* of the selection, 
-      // or just the standard "Current Week" if no selection.
-      
-      // Let's do this:
-      // If date is selected, use that range for the "Total Earnings" and "Breakdown".
-      // For the Chart, if the range is small (<= 7 days), show those days.
-      // If not, maybe just show the last 7 days of the selection?
-      
-      // Let's stick to the original implementation for the chart which was "This Week" (Mon-Sun),
-      // BUT calculated from the filtered trips? No, that would hide trips outside this week.
-      
-      // New Strategy:
-      // 1. "Total Earnings" and "Breakdown" -> Strict reflection of `filteredTrips`.
-      // 2. "Weekly Summary" Chart -> Always shows the days involved in `filteredTrips`?
-      //    Or just keeps showing the current week?
-      //    The user provided an image of "Earnings" with "Weekly Summary".
-      //    Usually "Weekly Summary" implies a specific week.
-      
-      // Let's default to:
-      // If no filter -> Show Current Week (Mon-Sun) trips.
-      // Wait, the previous code filtered `trips` by `monday`...`sunday` loop.
-      
-      // Let's rewrite the chart logic to be dynamic.
-      // Create a map of Date -> Amount.
-      // If range <= 7 days, show each day.
-      // If range > 7 days, maybe show start-end or just first 7 days?
-      // Let's simplify: The chart always shows "Mon" through "Sun" of the *current week* 
-      // UNLESS a filter is applied, in which case it attempts to plot the data provided.
-      
-      // Actually, looking at the previous code:
-      // It generated `chartData` for the CURRENT WEEK (Mon-Sun) regardless of the data.
-      // `const dailySum = trips.filter(...)` -> This `trips` was ALL trips.
-      
-      // I will preserve this behavior for the chart (showing current week context),
-      // UNLESS the user explicitly filters.
-      // If user filters, I should probably update the chart to show that data distribution.
-      
-      // Let's stick to the "Current Week" logic for the chart for now to minimize regression,
-      // but ensure "Total Earnings" respects the filter.
-      // Actually, if I filter for "Last Month", showing "Current Week" chart is weird.
-      
-      // Let's make the chart data reflect the `currentTrips`.
-      // We will create buckets for Mon-Sun based on the trips found.
-      // If the trips span multiple weeks, this bar chart (Mon-Sun) will sum up all Mondays, etc.
-      // This is a common pattern in simple dashboards.
-      
-      const chartData = [];
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const daySums = { 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0, 'Sun': 0 };
-
-      currentTrips.forEach(t => {
-          const d = new Date(t.date);
-          const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-          if (daySums[dayName as keyof typeof daySums] !== undefined) {
-              daySums[dayName as keyof typeof daySums] += (t.netPayout || 0);
-          }
-      });
-
-      // Transform to array
-      days.forEach(day => {
-          chartData.push({
-              day,
-              amount: daySums[day as keyof typeof daySums]
-          });
-      });
-      
-      setWeeklyData(chartData);
   };
 
   if (loading) {
@@ -591,33 +484,6 @@ export function DriverEarnings() {
         </div>
       </Card>
 
-      <Card>
-         <CardHeader>
-            <CardTitle className="text-base">Weekly Summary</CardTitle>
-         </CardHeader>
-         <CardContent>
-            <div className="h-[200px] w-full">
-               <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={weeklyData}>
-                     <XAxis 
-                        dataKey="day" 
-                        fontSize={12} 
-                        tickLine={false} 
-                        axisLine={false}
-                        stroke="#888888"
-                     />
-                     <Tooltip 
-                        cursor={{ fill: 'transparent' }}
-                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: number) => [`$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Earnings']}
-                     />
-                     <Bar dataKey="amount" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-               </ResponsiveContainer>
-            </div>
-         </CardContent>
-      </Card>
-
       {tierState.current && (
          <Card className="border-indigo-100 bg-indigo-50/50">
              <CardHeader className="pb-2">
@@ -641,78 +507,91 @@ export function DriverEarnings() {
       )}
 
       <Card>
-         <CardHeader>
-            <CardTitle className="text-base">Breakdown</CardTitle>
-         </CardHeader>
-         <CardContent className="space-y-4">
-            <Row label="Tips" value={`$${stats.tips.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-            
-            <Collapsible>
-                <CollapsibleTrigger className="flex justify-between items-center w-full group py-1">
-                    <div className="flex items-center gap-1">
-                       <span className="text-sm text-slate-500">Reimbursements</span>
-                       <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                    </div>
-                    <span className="text-sm text-slate-900">${stats.reimbursements.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+         <Collapsible>
+             <CardHeader className="py-4">
+                <CollapsibleTrigger className="flex items-center justify-between w-full group">
+                    <CardTitle className="text-base">Breakdown</CardTitle>
+                    <ChevronDown className="h-4 w-4 text-slate-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-2 mt-2 pl-3 border-l-2 border-slate-100 ml-1.5">
-                    {stats.reimbursementBreakdown.length > 0 ? (
-                        stats.reimbursementBreakdown.map((item, index) => (
-                            <Row key={index} label={item.label} value={`$${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                        ))
-                    ) : (
-                        <div className="text-xs text-slate-400 italic py-1">No detailed records</div>
-                    )}
-                </CollapsibleContent>
-            </Collapsible>
-
-            <Collapsible>
-                <CollapsibleTrigger className="flex justify-between items-center w-full group py-1">
-                    <div className="flex items-center gap-1">
-                        <span className="text-sm text-slate-500">Expenses</span>
-                        <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                    </div>
-                    <span className="text-sm text-slate-900">-${stats.expenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-2 mt-2 pl-3 border-l-2 border-slate-100 ml-1.5">
-                    <Row label="Tolls" value={`-$${stats.expenseDetailed.tolls.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+             </CardHeader>
+             <CollapsibleContent>
+                 <CardContent className="space-y-4 pt-0">
+                    <Row label="Tips" value={`$${stats.tips.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                     
                     <Collapsible>
-                        <CollapsibleTrigger className="flex justify-between items-center w-full group/fuel py-1">
+                        <CollapsibleTrigger className="flex justify-between items-center w-full group py-1">
                             <div className="flex items-center gap-1">
-                                <span className="text-sm text-slate-500">Fuel</span>
-                                <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                               <span className="text-sm text-slate-500">Reimbursements</span>
+                               <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                             </div>
-                            <span className="text-sm text-slate-900">-${stats.expenseDetailed.fuel.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="text-sm text-slate-900">${stats.reimbursements.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </CollapsibleTrigger>
-                        <CollapsibleContent className="space-y-1 mt-1 pl-3 border-l-2 border-slate-100 ml-1.5">
-                            {stats.expenseDetailed.fuel.breakdown.length > 0 ? (
-                                stats.expenseDetailed.fuel.breakdown.map((item, index) => (
-                                    <Row key={index} label={item.label} value={`-$${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                        <CollapsibleContent className="space-y-2 mt-2 pl-3 border-l-2 border-slate-100 ml-1.5">
+                            {stats.reimbursementBreakdown.length > 0 ? (
+                                stats.reimbursementBreakdown.map((item, index) => (
+                                    <Row key={index} label={item.label} value={`$${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                                 ))
                             ) : (
-                                <div className="text-xs text-slate-400 italic py-1">No fuel records</div>
+                                <div className="text-xs text-slate-400 italic py-1">No detailed records</div>
                             )}
                         </CollapsibleContent>
                     </Collapsible>
 
-                    <Row label="Other" value={`-$${stats.expenseDetailed.other.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                </CollapsibleContent>
-            </Collapsible>
+                    <Collapsible>
+                        <CollapsibleTrigger className="flex justify-between items-center w-full group py-1">
+                            <div className="flex items-center gap-1">
+                                <span className="text-sm text-slate-500">Expenses</span>
+                                <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                            </div>
+                            <span className="text-sm text-slate-900">-${stats.expenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-2 mt-2 pl-3 border-l-2 border-slate-100 ml-1.5">
+                            <Row label="Tolls" value={`-$${stats.expenseDetailed.tolls.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                            
+                            <Collapsible>
+                                <CollapsibleTrigger className="flex justify-between items-center w-full group/fuel py-1">
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-sm text-slate-500">Fuel</span>
+                                        <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                    </div>
+                                    <span className="text-sm text-slate-900">-${stats.expenseDetailed.fuel.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="space-y-1 mt-1 pl-3 border-l-2 border-slate-100 ml-1.5">
+                                    {stats.expenseDetailed.fuel.breakdown.length > 0 ? (
+                                        stats.expenseDetailed.fuel.breakdown.map((item, index) => (
+                                            <Row key={index} label={item.label} value={`-$${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                                        ))
+                                    ) : (
+                                        <div className="text-xs text-slate-400 italic py-1">No fuel records</div>
+                                    )}
+                                </CollapsibleContent>
+                            </Collapsible>
 
-            <Row label="Cash Collected" value={`$${stats.cashCollected.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-         </CardContent>
+                            <Row label="Other" value={`-$${stats.expenseDetailed.other.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                        </CollapsibleContent>
+                    </Collapsible>
+
+                    <Row label="Cash Collected" value={`$${stats.cashCollected.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                 </CardContent>
+             </CollapsibleContent>
+         </Collapsible>
       </Card>
 
-      {/* Placeholder for payouts */}
-      <div className="space-y-2">
-         <h3 className="font-semibold text-slate-900 dark:text-slate-100 px-1">Recent Payouts</h3>
-         <div className="bg-white dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
-             <div className="p-4 text-center text-sm text-slate-500">
-                 No payout history available yet.
-             </div>
-         </div>
-      </div>
+      <Card>
+         <Collapsible>
+             <CardHeader className="py-4">
+                <CollapsibleTrigger className="flex items-center justify-between w-full group">
+                    <CardTitle className="text-base">Recent Payouts</CardTitle>
+                    <ChevronDown className="h-4 w-4 text-slate-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+             </CardHeader>
+             <CollapsibleContent>
+                 <CardContent className="pt-0 text-center pb-6">
+                     <p className="text-sm text-slate-500">No payout history available yet.</p>
+                 </CardContent>
+             </CollapsibleContent>
+         </Collapsible>
+      </Card>
     </div>
   );
 }

@@ -141,35 +141,36 @@ export function DriverDashboard() {
                 (driverRecord?.driverId && t.driverId === driverRecord.driverId)
             );
             
-            // Calculate Today's Earnings
+            // Calculate Today's Earnings (for Goals)
             const today = new Date().toISOString().split('T')[0];
             const now = new Date();
             
             const todayTrips = myTrips.filter(t => t.date.startsWith(today));
-            const breakdown = { uber: 0, indrive: 0, goride: 0 };
-            let todaySum = 0;
+            const todaySum = todayTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
 
-            todayTrips.forEach(t => {
+            // Calculate Weekly Earnings Breakdown (for Display Cards)
+            const weeklyTrips = myTrips.filter(t => isSameWeek(new Date(t.date), now, { weekStartsOn: 1 }));
+            const weeklyBreakdown = { uber: 0, indrive: 0, goride: 0 };
+            const weeklySumForBreakdown = weeklyTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
+
+            weeklyTrips.forEach(t => {
                 const amount = t.netPayout || t.amount || 0;
-                todaySum += amount;
                 
                 const platform = (t.platform || '').toLowerCase();
                 if (platform === 'uber') {
-                    breakdown.uber += amount;
+                    weeklyBreakdown.uber += amount;
                 } else if (platform === 'indrive') {
-                    breakdown.indrive += amount;
+                    weeklyBreakdown.indrive += amount;
                 } else {
                     // GoRide includes Private, Cash, Other, and implicit app trips
-                    breakdown.goride += amount;
+                    weeklyBreakdown.goride += amount;
                 }
             });
 
-            setTodayEarnings({ total: todaySum, breakdown });
+            setTodayEarnings({ total: weeklySumForBreakdown, breakdown: weeklyBreakdown });
 
-            // Calculate Weekly Earnings
-            const weeklySum = myTrips
-                .filter(t => isSameWeek(new Date(t.date), now, { weekStartsOn: 1 }))
-                .reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
+            // Calculate Weekly Earnings (for Goals)
+            const weeklySum = weeklySumForBreakdown;
 
             // Phase 2: Tier Calculation (Monthly Reset Logic)
             const monthlyEarnings = TierCalculations.calculateMonthlyEarnings(myTrips);

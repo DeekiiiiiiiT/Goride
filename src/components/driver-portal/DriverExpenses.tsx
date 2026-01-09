@@ -34,13 +34,17 @@ import { PortalHome } from './views/PortalHome';
 import { ReimbursementMenu } from './views/ReimbursementMenu';
 import { DriverHeader } from './ui/DriverHeader';
 
-function ExpenseLogger() {
+interface ExpenseLoggerProps {
+  defaultOpen?: boolean;
+}
+
+function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(defaultOpen);
   const [isScanning, setIsScanning] = useState(false);
 
   // Form State
@@ -278,7 +282,7 @@ function ExpenseLogger() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
            <h2 className="text-xl font-bold">Log New Expense</h2>
-           <Button variant="ghost" onClick={() => setIsFormOpen(false)}>Cancel</Button>
+           <Button variant="ghost" onClick={() => setIsFormOpen(false)}>View History</Button>
         </div>
 
         <Card>
@@ -666,7 +670,7 @@ export function DriverExpenses() {
         
         {currentView === 'feature-expenses' && (
           <div className="p-4">
-            <ExpenseLogger />
+            <ExpenseLogger defaultOpen={true} />
           </div>
         )}
 
@@ -680,6 +684,7 @@ export function DriverExpenses() {
         {(currentView === 'claim-tolls' || currentView === 'claim-wait' || currentView === 'claim-cleaning' || currentView === 'claim-history' || currentView === 'menu-history') && (
            <div className="p-4">
              <DriverClaims 
+               hideTabs={true}
                defaultTab={
                  currentView === 'claim-tolls' ? 'tolls' : 
                  currentView === 'claim-wait' ? 'wait' : 

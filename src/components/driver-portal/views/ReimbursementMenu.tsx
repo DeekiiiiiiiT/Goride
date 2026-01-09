@@ -16,9 +16,6 @@ export function ReimbursementMenu({ onNavigate }: ReimbursementMenuProps) {
   return (
     <div className="p-4 space-y-4">
       <div className="space-y-1 mb-6 px-1">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-          Reimbursements
-        </h2>
         <p className="text-slate-500 text-sm">
           Select a category to submit a claim to Uber.
         </p>
@@ -50,15 +47,6 @@ export function ReimbursementMenu({ onNavigate }: ReimbursementMenuProps) {
           icon={Sparkles}
           gradient={portalTheme.cards.expenses.gradient} // Using blue/cyan for cleaning
           onClick={() => onNavigate('claim-cleaning')}
-        />
-
-        <DriverGradientCard 
-          variant="list"
-          title="My Claims History"
-          subtitle="View status of past claims"
-          icon={FileText}
-          gradient={portalTheme.cards.history.gradient}
-          onClick={() => onNavigate('claim-history')}
         />
       </div>
     </div>

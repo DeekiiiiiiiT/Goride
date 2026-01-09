@@ -49,6 +49,12 @@ import { ManualTripForm } from './ManualTripForm';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { startOfDay, subDays, isSameDay, isAfter, isBefore, endOfDay } from 'date-fns';
 
+// Helper to parse "YYYY-MM-DD" as local midnight to avoid UTC conversion issues
+const parseLocalDate = (dateStr: string) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 export function TripLogsPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +78,8 @@ export function TripLogsPage() {
     minDistance: '',
     hasTip: 'all',
     hasSurge: 'all',
-    tripType: 'all'
+    tripType: 'all',
+    platform: 'all'
   });
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -104,11 +111,27 @@ export function TripLogsPage() {
   const uniqueDrivers = useMemo(() => {
       const map = new Map();
       trips.forEach(t => {
-          if(t.driverId && !map.has(t.driverId)) {
-              map.set(t.driverId, t.driverName || t.driverId);
+          const name = t.driverName || t.driverId;
+          if (name) {
+              const normalized = name.toLowerCase().trim();
+              // Store the first variation we see, or prefer the one with proper casing if we wanted to be fancy
+              // For now, first wins, but we can try to pick the "Title Case" one if we see it?
+              // Let's just store the one that looks "nicer" (contains lowercase) if existing is all caps?
+              // Simple logic: If map doesn't have it, set it. If map has it and current is not all caps but stored is all caps, replace it.
+              
+              const isAllCaps = (s: string) => s === s.toUpperCase() && s !== s.toLowerCase();
+              
+              if (!map.has(normalized)) {
+                  map.set(normalized, name);
+              } else {
+                  const existing = map.get(normalized);
+                  if (isAllCaps(existing) && !isAllCaps(name)) {
+                      map.set(normalized, name);
+                  }
+              }
           }
       });
-      return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+      return Array.from(map.entries()).map(([normalized, name]) => ({ id: normalized, name }));
   }, [trips]);
 
   const uniqueVehicles = useMemo(() => {
@@ -138,7 +161,10 @@ export function TripLogsPage() {
           if (filters.status !== 'all' && t.status !== filters.status) return false;
 
           // 3. Driver
-          if (filters.driverId !== 'all' && t.driverId !== filters.driverId) return false;
+          if (filters.driverId !== 'all') {
+             const dName = (t.driverName || t.driverId || '').toLowerCase().trim();
+             if (dName !== filters.driverId) return false;
+          }
 
           // 4. Vehicle
           if (filters.vehicleId !== 'all' && t.vehicleId !== filters.vehicleId) return false;
@@ -163,9 +189,24 @@ export function TripLogsPage() {
           } else if (filters.dateRange === 'month') {
               if (isBefore(tDate, subDays(today, 30))) return false;
           } else if (filters.dateRange === 'custom' && filters.dateStart && filters.dateEnd) {
-              const start = startOfDay(new Date(filters.dateStart));
-              const end = endOfDay(new Date(filters.dateEnd));
+              const start = startOfDay(parseLocalDate(filters.dateStart));
+              const end = endOfDay(parseLocalDate(filters.dateEnd));
               if (isBefore(tDate, start) || isAfter(tDate, end)) return false;
+          }
+
+          // 5b. Platform Filter
+          if (filters.platform && filters.platform !== 'all') {
+              const p = (t.platform || '').toLowerCase();
+              const target = filters.platform.toLowerCase();
+              
+              if (target === 'uber') {
+                  if (p !== 'uber') return false;
+              } else if (target === 'indrive') {
+                  if (p !== 'indrive') return false;
+              } else if (target === 'goride') {
+                   // GoRide catch-all logic (includes internal, private, empty platform)
+                   if (p === 'uber' || p === 'indrive') return false;
+              }
           }
 
           // 6. Advanced Filters

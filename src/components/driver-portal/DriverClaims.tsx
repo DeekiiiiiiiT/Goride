@@ -20,9 +20,10 @@ import {
 
 interface DriverClaimsProps {
   defaultTab?: string;
+  hideTabs?: boolean;
 }
 
-export function DriverClaims({ defaultTab = 'tolls' }: DriverClaimsProps) {
+export function DriverClaims({ defaultTab = 'tolls', hideTabs = false }: DriverClaimsProps) {
   const { user } = useAuth();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   
@@ -120,18 +121,22 @@ export function DriverClaims({ defaultTab = 'tolls' }: DriverClaimsProps) {
 
   return (
     <div className="space-y-6 p-4 md:p-6 pb-20">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Claimable Loss</h1>
-        <p className="text-muted-foreground">Review and submit reimbursement requests to Uber.</p>
-      </div>
+      {!hideTabs && (
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight">Claimable Loss</h1>
+          <p className="text-muted-foreground">Review and submit reimbursement requests to Uber.</p>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="tolls">Toll Refunds</TabsTrigger>
-          <TabsTrigger value="wait">Wait Time</TabsTrigger>
-          <TabsTrigger value="cleaning">Cleaning Fees</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-        </TabsList>
+        {!hideTabs && (
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="tolls">Toll Refunds</TabsTrigger>
+            <TabsTrigger value="wait">Wait Time</TabsTrigger>
+            <TabsTrigger value="cleaning">Cleaning Fees</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+        )}
 
         <TabsContent value="tolls" className="mt-4 space-y-4">
           {loading ? (

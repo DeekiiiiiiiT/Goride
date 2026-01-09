@@ -35,6 +35,7 @@ export interface TripFilterState {
   hasTip?: string; // 'yes', 'no', 'all'
   hasSurge?: string; // 'yes', 'no', 'all'
   tripType?: string; // 'all', 'manual', 'platform'
+  platform?: string; // 'all', 'Uber', 'InDrive', 'GoRide'
 }
 
 interface TripFiltersProps {
@@ -64,7 +65,8 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
       minDistance: '',
       hasTip: 'all',
       hasSurge: 'all',
-      tripType: 'all'
+      tripType: 'all',
+      platform: 'all'
     });
     setIsOpen(false);
   };
@@ -76,7 +78,8 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
     filters.minEarnings,
     filters.hasTip !== 'all',
     filters.hasSurge !== 'all',
-    filters.tripType !== 'all' && filters.tripType !== undefined
+    filters.tripType !== 'all' && filters.tripType !== undefined,
+    filters.platform !== 'all' && filters.platform !== undefined
   ].filter(Boolean).length;
 
   return (
@@ -110,14 +113,14 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
              <div className="flex items-center gap-2">
                 <Input 
                    type="date" 
-                   className="w-[130px]" 
+                   className="w-auto" 
                    value={filters.dateStart}
                    onChange={(e) => updateFilter('dateStart', e.target.value)}
                 />
                 <span className="text-slate-400">-</span>
                 <Input 
                    type="date" 
-                   className="w-[130px]"
+                   className="w-auto"
                    value={filters.dateEnd}
                    onChange={(e) => updateFilter('dateEnd', e.target.value)}
                 />
@@ -140,6 +143,24 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
                 <SelectItem value="Completed">Completed</SelectItem>
                 <SelectItem value="Cancelled">Cancelled</SelectItem>
                 <SelectItem value="Processing">In Progress</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Platform */}
+          <div className="w-[140px]">
+            <Select 
+              value={filters.platform || 'all'} 
+              onValueChange={(val) => updateFilter('platform', val)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Platform" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Platforms</SelectItem>
+                <SelectItem value="Uber">Uber</SelectItem>
+                <SelectItem value="InDrive">InDrive</SelectItem>
+                <SelectItem value="GoRide">GoRide</SelectItem>
               </SelectContent>
             </Select>
           </div>
