@@ -12,7 +12,8 @@ import { MatchResult } from "../utils/tollReconciliation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 import { toast } from "sonner";
-import { Download } from "lucide-react";
+import { Download, Wallet, CheckCircle2, FileX, UserMinus, AlertCircle, Timer, Banknote } from "lucide-react";
+import { StatCard } from "../components/claimable-loss/StatCard";
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -29,8 +30,7 @@ export function ClaimableLoss() {
     loading: loadingTolls, 
     unreconciledTolls,
     reconciledTolls,
-    trips,
-    suggestions 
+    trips
   } = useTollReconciliation();
 
   const { claims, loading: loadingClaims, updateClaim, deleteClaim, refresh: refreshClaims } = useClaims();
@@ -114,6 +114,49 @@ export function ClaimableLoss() {
 
   // 5. Resolved Claims (History)
   const resolvedClaims = claims.filter(c => c.status === 'Resolved');
+
+  // 6. Active Pipeline Metrics
+  const { unclaimedTotal, pendingTotal, atRiskTotal } = React.useMemo(() => {
+    // Sum of negative variances (convert to positive for display as "Potential to recover")
+    const unclaimed = losses.reduce((sum, item) => sum + Math.abs(item.match.varianceAmount || 0), 0);
+
+    const pending = claims
+      .filter(c => c.status === 'Submitted_to_Uber' || c.status === 'Sent_to_Driver')
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    const atRisk = claims
+      .filter(c => c.status === 'Rejected')
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    return {
+      unclaimedTotal: unclaimed,
+      pendingTotal: pending,
+      atRiskTotal: atRisk
+    };
+  }, [losses, claims]);
+
+  const { reimbursedTotal, writeOffTotal, chargedToDriverTotal, netResult } = React.useMemo(() => {
+    const reimbursed = resolvedClaims
+      .filter(c => c.resolutionReason === 'Reimbursed')
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    const writeOff = resolvedClaims
+      .filter(c => c.resolutionReason === 'Write Off')
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    const charged = resolvedClaims
+      .filter(c => c.resolutionReason === 'Charge Driver')
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    const net = (reimbursed + charged) - writeOff;
+
+    return {
+      reimbursedTotal: reimbursed,
+      writeOffTotal: writeOff,
+      chargedToDriverTotal: charged,
+      netResult: net
+    };
+  }, [resolvedClaims]);
 
 
   // Handlers
@@ -252,8 +295,8 @@ export function ClaimableLoss() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 md:p-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Claimable Loss</h1>
             <p className="text-slate-500 text-sm mt-1">
@@ -266,6 +309,60 @@ export function ClaimableLoss() {
         </Button>
       </div>
       
+      <div className="space-y-4">
+        <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Active Pipeline</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard 
+            title="Unclaimed Potential" 
+            amount={unclaimedTotal} 
+            type="neutral" 
+            icon={Banknote}
+          />
+          <StatCard 
+            title="Pending Recovery" 
+            amount={pendingTotal} 
+            type="info" 
+            icon={Timer}
+          />
+          <StatCard 
+            title="Action Required" 
+            amount={atRiskTotal} 
+            type="warning" 
+            icon={AlertCircle}
+          />
+        </div>
+      </div>
+      
+      <div className="space-y-4">
+        <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Resolved Performance</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <StatCard 
+            title="Net Result" 
+            amount={netResult} 
+            type="net" 
+            icon={Wallet}
+          />
+          <StatCard 
+            title="Reimbursed" 
+            amount={reimbursedTotal} 
+            type="gain" 
+            icon={CheckCircle2}
+          />
+          <StatCard 
+            title="Write Offs" 
+            amount={writeOffTotal * -1} 
+            type="loss" 
+            icon={FileX}
+          />
+          <StatCard 
+            title="Charged to Drivers" 
+            amount={chargedToDriverTotal} 
+            type="gain" 
+            icon={UserMinus}
+          />
+        </div>
+      </div>
+
       <Tabs defaultValue="unmatched" className="w-full">
         <TabsList className="grid w-full grid-cols-5 lg:w-[1000px]">
           <TabsTrigger value="unmatched">

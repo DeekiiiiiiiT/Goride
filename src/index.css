@@ -2708,6 +2708,16 @@
     }
   }
 
+  .bg-amber-50\/40 {
+    background-color: color-mix(in srgb, oklch(.987 .022 95.277) 40%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-amber-50\/40 {
+      background-color: color-mix(in oklab, var(--color-amber-50) 40%, transparent);
+    }
+  }
+
   .bg-amber-50\/50 {
     background-color: color-mix(in srgb, oklch(.987 .022 95.277) 50%, transparent);
   }
@@ -2802,6 +2812,16 @@
     }
   }
 
+  .bg-blue-50\/40 {
+    background-color: color-mix(in srgb, oklch(.97 .014 254.604) 40%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-blue-50\/40 {
+      background-color: color-mix(in oklab, var(--color-blue-50) 40%, transparent);
+    }
+  }
+
   .bg-blue-50\/50 {
     background-color: color-mix(in srgb, oklch(.97 .014 254.604) 50%, transparent);
   }
@@ -2838,6 +2858,16 @@
 
   .bg-emerald-50 {
     background-color: var(--color-emerald-50);
+  }
+
+  .bg-emerald-50\/40 {
+    background-color: color-mix(in srgb, oklch(.979 .021 166.113) 40%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-emerald-50\/40 {
+      background-color: color-mix(in oklab, var(--color-emerald-50) 40%, transparent);
+    }
   }
 
   .bg-emerald-50\/50 {
@@ -3079,6 +3109,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-red-50\/30 {
       background-color: color-mix(in oklab, var(--color-red-50) 30%, transparent);
+    }
+  }
+
+  .bg-red-50\/40 {
+    background-color: color-mix(in srgb, oklch(.971 .013 17.38) 40%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-red-50\/40 {
+      background-color: color-mix(in oklab, var(--color-red-50) 40%, transparent);
     }
   }
 
@@ -4439,6 +4479,10 @@
   .tabular-nums {
     --tw-numeric-spacing: tabular-nums;
     font-variant-numeric: var(--tw-ordinal, ) var(--tw-slashed-zero, ) var(--tw-numeric-figure, ) var(--tw-numeric-spacing, ) var(--tw-numeric-fraction, );
+  }
+
+  .line-through {
+    text-decoration-line: line-through;
   }
 
   .underline {

@@ -364,6 +364,39 @@ app.delete("/make-server-37f42386/transactions/:id", async (c) => {
   }
 });
 
+// Claims Endpoints
+app.get("/make-server-37f42386/claims", async (c) => {
+  try {
+    const claims = await kv.getByPrefix("claim:");
+    return c.json(claims || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/claims", async (c) => {
+  try {
+    const claim = await c.req.json();
+    if (!claim.id) {
+        claim.id = crypto.randomUUID();
+    }
+    await kv.set(`claim:${claim.id}`, claim);
+    return c.json({ success: true, data: claim });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/claims/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`claim:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Expense Management Endpoints (Phase 5)
 app.post("/make-server-37f42386/scan-receipt", async (c) => {
   try {

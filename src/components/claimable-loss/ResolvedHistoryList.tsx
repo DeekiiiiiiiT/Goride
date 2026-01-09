@@ -97,7 +97,8 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
   };
 
   return (
-    <div className="border rounded-md bg-white shadow-sm">
+    <div className="space-y-6">
+      <div className="border rounded-md bg-white shadow-sm">
       <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center min-h-[72px]">
         <div>
             <h3 className="font-semibold text-slate-900">Resolved History</h3>
@@ -120,13 +121,7 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                     Delete Selected
                  </Button>
             </div>
-        ) : (
-            <div className="text-sm font-medium text-slate-600">
-                Total Resolved: <span className="text-emerald-600 font-bold ml-1">
-                    ${claims.reduce((sum, c) => sum + c.amount, 0).toFixed(2)}
-                </span>
-            </div>
-        )}
+        ) : null}
       </div>
       <Table>
         <TableHeader>
@@ -173,8 +168,10 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                         {claim.pickup || 'Unknown Location'}
                     </div>
                 </TableCell>
-                <TableCell className="text-right font-bold text-slate-700">
-                  ${claim.amount.toFixed(2)}
+                <TableCell className={`text-right font-bold ${
+                    claim.resolutionReason === 'Write Off' ? 'text-red-600' : 'text-emerald-600'
+                }`}>
+                  {claim.resolutionReason === 'Write Off' ? '-' : '+'}${claim.amount.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex flex-col items-end gap-1 group relative">
@@ -226,6 +223,7 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
           })}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

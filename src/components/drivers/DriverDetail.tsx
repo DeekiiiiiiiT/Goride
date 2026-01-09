@@ -169,32 +169,59 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
   // Phase 3: Filtered Cash Tolls (Expenses & Adjustments)
-  const cashTollTransactions = useMemo(() => transactions.filter(t => {
-      // Relaxed Status Check: Allow undefined/null or any 'positive' status
-      // If status is explicitly 'Rejected' or 'Void', skip. Otherwise allow.
-      if (t.status === 'Rejected' || t.status === 'Void' || t.status === 'Failed') return false;
-      
-      // 1. Valid Cash Toll Expense (Credit to Driver)
-      const isTollCategory = ['Toll Usage', 'Toll', 'Tolls', 'Expense'].includes(t.category);
-      // For generic 'Expense', ensure it's toll related
-      if (t.category === 'Expense' && !t.description?.toLowerCase().includes('toll')) return false;
+  const cashTollTransactions = useMemo(() => {
+      // Create a Lookup Map for Claim Reasons (NOT Status)
+      // We need to know HOW it was resolved. "Charge Driver" means it's still a debt.
+      // "Reimbursed" or "Write Off" means the debt is forgiven/paid by fleet.
+      const claimReasonMap = new Map<string, string>();
+      claims.forEach(c => {
+          if (c.resolutionTransactionId && c.resolutionReason) {
+              claimReasonMap.set(c.resolutionTransactionId, c.resolutionReason);
+          }
+      });
 
-      const isCash = t.paymentMethod?.toLowerCase() === 'cash' || !!t.receiptUrl;
-      const isValidExpense = isTollCategory && isCash;
+      return transactions
+        .map(t => {
+            // Check if this transaction has a linked Claim Resolution
+            const resolutionReason = claimReasonMap.get(t.id);
+            
+            // If the claim is explicitly Reimbursed or Written Off, we mark it as 'Resolved'
+            // This triggers the "Strikethrough" and "Ignore in Calc" logic.
+            if (resolutionReason && ['Reimbursed', 'Write Off'].includes(resolutionReason)) {
+                return { ...t, status: 'Resolved' }; 
+            }
+            
+            // If resolution is "Charge Driver", we do NOT mark it as Resolved.
+            // We return the original status (likely 'Completed'), so it counts as an active debit.
+            return t;
+        })
+        .filter(t => {
+            // Relaxed Status Check: Allow undefined/null or any 'positive' status
+            // If status is explicitly 'Rejected' or 'Void', skip. Otherwise allow.
+            if (t.status === 'Rejected' || t.status === 'Void' || t.status === 'Failed') return false;
+            
+            // 1. Valid Cash Toll Expense (Credit to Driver)
+            const isTollCategory = ['Toll Usage', 'Toll', 'Tolls', 'Expense'].includes(t.category);
+            // For generic 'Expense', ensure it's toll related
+            if (t.category === 'Expense' && !t.description?.toLowerCase().includes('toll')) return false;
 
-      // 2. Toll Adjustment / Dispute Chargeback (Debit to Driver)
-      const isAdjustment = ['Adjustment', 'Claim', 'Chargeback'].includes(t.category);
-      // Relax description check for explicit Claims/Chargebacks
-      const isExplicitClaim = ['Claim', 'Chargeback'].includes(t.category);
-      const isTollRelated = isExplicitClaim || 
-                            t.description?.toLowerCase().includes('toll') || 
-                            t.description?.toLowerCase().includes('dispute') ||
-                            t.description?.toLowerCase().includes('refund');
-                            
-      const isValidAdjustment = isAdjustment && isTollRelated;
+            const isCash = t.paymentMethod?.toLowerCase() === 'cash' || !!t.receiptUrl;
+            const isValidExpense = isTollCategory && isCash;
 
-      return isValidExpense || isValidAdjustment;
-  }), [transactions]);
+            // 2. Toll Adjustment / Dispute Chargeback (Debit to Driver)
+            const isAdjustment = ['Adjustment', 'Claim', 'Chargeback'].includes(t.category);
+            // Relax description check for explicit Claims/Chargebacks
+            const isExplicitClaim = ['Claim', 'Chargeback'].includes(t.category);
+            const isTollRelated = isExplicitClaim || 
+                                    t.description?.toLowerCase().includes('toll') || 
+                                    t.description?.toLowerCase().includes('dispute') ||
+                                    t.description?.toLowerCase().includes('refund');
+                                    
+            const isValidAdjustment = isAdjustment && isTollRelated;
+
+            return isValidExpense || isValidAdjustment;
+      });
+  }, [transactions, claims]);
 
   // Phase 4: Payment Transactions
   const paymentTransactions = useMemo(() => transactions.filter(t => {
@@ -245,12 +272,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   (driver?.uberDriverId && t.driverId === driver.uberDriverId) ||
                   (driver?.inDriveDriverId && t.driverId === driver.inDriveDriverId)
               );
-              setTransactions(driverTx);
+              setTransactions(Array.isArray(driverTx) ? driverTx : []);
               
               // Filter claims locally if needed, or just use all for linking (safer)
-              setClaims(allClaims || []);
+              setClaims(Array.isArray(allClaims) ? allClaims : []);
           } catch (e) {
               console.error("Failed to load data", e);
+              // Ensure we don't crash if API fails
+              setTransactions([]);
+              setClaims([]);
           }
       };
       loadData();
@@ -1463,7 +1493,18 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                             <div className="text-xl font-bold text-emerald-700">
                                                 ${cashTollTransactions.reduce((sum, t) => {
                                                     const type = getTollTransactionType(t.category);
-                                                    return type === 'credit' ? sum + Math.abs(t.amount) : sum - Math.abs(t.amount);
+                                                    
+                                                    // SKIP logic for Resolved Debts:
+                                                    // If it's a Charge/Debit, but it has been resolved (Reimbursed/Write Off), 
+                                                    // we effectively "cancel" the debt, so we do NOT subtract it from the total.
+                                                    if (type === 'debit') {
+                                                        const isResolved = ['Reimbursed', 'Write Off', 'Resolved'].includes(t.status);
+                                                        if (isResolved) return sum; // Ignore this debt
+                                                        return sum - Math.abs(t.amount); // Active debt, subtract it
+                                                    }
+                                                    
+                                                    // For Credits (Reimbursements to driver), we always add them unless Voided/Rejected (already filtered out of cashTollTransactions)
+                                                    return sum + Math.abs(t.amount);
                                                 }, 0).toFixed(2)}
                                             </div>
                                         </div>
@@ -1541,8 +1582,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
                                                                     {/* CHILD ROWS (Transactions nested under Trip) */}
                                                                     {hasChildren && isExpanded && children.map(child => {
-                                                                         const type = getTollTransactionType(child.category);
+                                                                        const type = getTollTransactionType(child.category);
                                                                          const isCredit = type === 'credit';
+                                                                         const isResolvedDebit = !isCredit && ['Reimbursed', 'Write Off', 'Resolved'].includes(child.status);
                                                                          
                                                                          return (
                                                                             <TableRow key={child.id} className="bg-white hover:bg-slate-50 border-l-4 border-l-slate-200">
@@ -1561,17 +1603,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                         ) : (
                                                                                             <CornerDownRight className="h-3 w-3 text-slate-400" />
                                                                                         )}
-                                                                                        <span className="text-sm text-slate-700">{child.description}</span>
+                                                                                        <span className={cn("text-sm", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-700")}>{child.description}</span>
                                                                                     </div>
                                                                                 </TableCell>
                                                                                 <TableCell>
-                                                                                    <Badge variant="outline" className="text-xs text-slate-500 border-slate-200">
+                                                                                    <Badge variant="outline" className={cn("text-xs border-slate-200", isResolvedDebit ? "text-emerald-600 bg-emerald-50 border-emerald-100" : "text-slate-500")}>
                                                                                         {child.status}
                                                                                     </Badge>
                                                                                 </TableCell>
                                                                                 <TableCell className="text-right font-mono">
                                                                                     {!isCredit ? (
-                                                                                        <span className="text-red-600 font-medium">-${Math.abs(child.amount).toFixed(2)}</span>
+                                                                                        isResolvedDebit ? (
+                                                                                            <span className="text-slate-400 line-through">-${Math.abs(child.amount).toFixed(2)}</span>
+                                                                                        ) : (
+                                                                                            <span className="text-red-600 font-medium">-${Math.abs(child.amount).toFixed(2)}</span>
+                                                                                        )
                                                                                     ) : (
                                                                                         <span className="text-slate-300">-</span>
                                                                                     )}
@@ -1593,6 +1639,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                             const tx = item.data as FinancialTransaction;
                                                             const type = getTollTransactionType(tx.category);
                                                             const isCredit = type === 'credit';
+                                                            const isResolvedDebit = !isCredit && ['Reimbursed', 'Write Off', 'Resolved'].includes(tx.status);
 
                                                             return (
                                                                 <TableRow key={tx.id} className="hover:bg-slate-50">
@@ -1601,7 +1648,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                     </TableCell>
                                                                     <TableCell>
                                                                         <div className="flex flex-col">
-                                                                            <span className="font-medium text-slate-900">{tx.description}</span>
+                                                                            <span className={cn("font-medium", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-900")}>{tx.description}</span>
                                                                             <div className="flex items-center gap-2 mt-0.5">
                                                                                 <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-amber-100 text-amber-700">
                                                                                     Unlinked
@@ -1622,13 +1669,17 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                         </div>
                                                                     </TableCell>
                                                                     <TableCell>
-                                                                        <Badge variant="outline" className="text-slate-500">
+                                                                        <Badge variant="outline" className={cn("text-slate-500", isResolvedDebit && "text-emerald-600 bg-emerald-50 border-emerald-100")}>
                                                                             {tx.status}
                                                                         </Badge>
                                                                     </TableCell>
                                                                     <TableCell className="text-right font-mono">
                                                                         {!isCredit ? (
-                                                                            <span className="text-red-600 font-bold">-${Math.abs(tx.amount).toFixed(2)}</span>
+                                                                            isResolvedDebit ? (
+                                                                                 <span className="text-slate-400 line-through">-${Math.abs(tx.amount).toFixed(2)}</span>
+                                                                            ) : (
+                                                                                 <span className="text-red-600 font-bold">-${Math.abs(tx.amount).toFixed(2)}</span>
+                                                                            )
                                                                         ) : (
                                                                             <span className="text-slate-300">-</span>
                                                                         )}
