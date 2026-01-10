@@ -13,7 +13,7 @@ import {
   Loader2,
   Trophy
 } from "lucide-react";
-import { Trip, FuelLog, ServiceRequest, DriverMetric, TierConfig, FinancialTransaction, QuotaConfig, DriverGoals } from '../../types/data';
+import { Trip, FuelLog, ServiceRequest, DriverMetrics, TierConfig, FinancialTransaction, QuotaConfig, DriverGoals } from '../../types/data';
 import { RoutePoint, TripStop } from '../../types/tripSession';
 import { toast } from 'sonner@2.0.3';
 import { FuelLogForm } from './FuelLogForm';
@@ -30,9 +30,7 @@ import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
 import { format, isSameWeek } from "date-fns";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { DriverOverview } from './DriverOverview';
-import { DriverHistory } from './DriverHistory';
 
 export function DriverDashboard() {
   const { user } = useAuth();
@@ -41,7 +39,7 @@ export function DriverDashboard() {
   const [serviceFormOpen, setServiceFormOpen] = useState(false);
   const [manualTripFormOpen, setManualTripFormOpen] = useState(false);
   
-  const [metrics, setMetrics] = useState<DriverMetric | null>(null);
+  const [metrics, setMetrics] = useState<DriverMetrics | null>(null);
   const [todayEarnings, setTodayEarnings] = useState<{
     total: number;
     breakdown: {
@@ -59,7 +57,6 @@ export function DriverDashboard() {
   const [debugDrivers, setDebugDrivers] = useState<any[]>([]);
   const [unclaimedTripIds, setUnclaimedTripIds] = useState<string[]>([]);
   const [isFixing, setIsFixing] = useState<string | null>(null);
-  const [history, setHistory] = useState<any[]>([]);
 
   // Trip Timer State
   const [tripInitialData, setTripInitialData] = useState<{
@@ -112,34 +109,23 @@ export function DriverDashboard() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const headers = {
-             'Content-Type': 'application/json',
-             'Authorization': `Bearer ${publicAnonKey}`
-        };
-
         // 1. Fetch Metrics
-        const metricsRes = await fetch(`${API_ENDPOINTS.fleet}/driver-metrics`, { headers });
-        if (metricsRes.ok) {
-            const allMetrics: DriverMetric[] = await metricsRes.json();
-            // Filter for current user or resolved driver (checking both ID and legacy driverId)
-            const myMetrics = allMetrics.find(m => 
-                m.driverId === user.id || 
-                (driverRecord?.id && m.driverId === driverRecord.id) ||
-                (driverRecord?.driverId && m.driverId === driverRecord.driverId)
-            );
-            if (myMetrics) setMetrics(myMetrics);
-        }
+        const allMetrics = await api.getDriverMetrics();
+        // Filter for current user or resolved driver (checking both ID and legacy driverId)
+        const myMetrics = allMetrics.find(m => 
+            m.driverId === user.id || 
+            (driverRecord?.id && m.driverId === driverRecord.id) ||
+            (driverRecord?.driverId && m.driverId === driverRecord.driverId)
+        );
+        if (myMetrics) setMetrics(myMetrics);
 
         // 2. Fetch Trips for Earnings & Recent Activity
-        const tripsRes = await fetch(`${API_ENDPOINTS.fleet}/trips`, { headers });
-        if (tripsRes.ok) {
-            const allTrips: Trip[] = await tripsRes.json();
-            // Filter for current user or resolved driver
-            const myTrips = allTrips.filter(t => 
-                t.driverId === user.id || 
-                (driverRecord?.id && t.driverId === driverRecord.id) ||
-                (driverRecord?.driverId && t.driverId === driverRecord.driverId)
-            );
+        const allTrips = await api.getTrips();
+        const myTrips = allTrips.filter(t => 
+            t.driverId === user.id || 
+            (driverRecord?.id && t.driverId === driverRecord.id) ||
+            (driverRecord?.driverId && t.driverId === driverRecord.driverId)
+        );
             
             // Calculate Today's Earnings (for Goals)
             const today = new Date().toISOString().split('T')[0];
@@ -203,10 +189,6 @@ export function DriverDashboard() {
                 console.error("Failed to calculate quota goals", e);
             }
 
-            // Calculate History
-            const historyData = TierCalculations.getMonthlyHistory(myTrips, tiers);
-            setHistory(historyData);
-
             setTierState({
                 current: currentTier,
                 next: nextTier,
@@ -220,7 +202,6 @@ export function DriverDashboard() {
                 myTrips.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setRecentTrip(myTrips[0]);
             }
-        }
 
       } catch (error) {
         console.error("Error fetching driver data:", error);
@@ -389,14 +370,6 @@ export function DriverDashboard() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="overview">
-          <div className="space-y-6">
             <DriverOverview 
               tierState={tierState}
               metrics={metrics}
@@ -413,13 +386,6 @@ export function DriverDashboard() {
             />
             
             <TripTimer onComplete={handleTripComplete} />
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="history">
-          <DriverHistory history={history} loading={loading} />
-        </TabsContent>
-      </Tabs>
 
       <FuelLogForm 
         open={fuelFormOpen} 

@@ -24,7 +24,13 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
 import { DateRange } from "react-day-picker";
 import { startOfDay, endOfDay, format } from "date-fns";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
+import { 
+  Drawer, 
+  DrawerContent, 
+  DrawerHeader, 
+  DrawerTitle, 
+  DrawerDescription 
+} from "../ui/drawer";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
 
@@ -199,14 +205,14 @@ export function DriverTrips() {
          )}
       </div>
 
-      <Sheet open={!!selectedTrip} onOpenChange={(open) => !open && setSelectedTrip(null)}>
-        <SheetContent className="w-full sm:max-w-md p-0 overflow-hidden flex flex-col">
-            <SheetHeader className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-                <SheetTitle>Trip Details</SheetTitle>
-                <SheetDescription>
+      <Drawer open={!!selectedTrip} onOpenChange={(open) => !open && setSelectedTrip(null)}>
+        <DrawerContent className="max-h-[85vh] flex flex-col">
+            <DrawerHeader className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 text-left">
+                <DrawerTitle>Trip Details</DrawerTitle>
+                <DrawerDescription>
                     {selectedTrip && format(new Date(selectedTrip.date), 'MMMM d, yyyy • h:mm a')}
-                </SheetDescription>
-            </SheetHeader>
+                </DrawerDescription>
+            </DrawerHeader>
             {selectedTrip && (
                 <ScrollArea className="flex-1">
                     <div className="p-6 space-y-6">
@@ -333,8 +339,8 @@ export function DriverTrips() {
                     </div>
                 </ScrollArea>
             )}
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

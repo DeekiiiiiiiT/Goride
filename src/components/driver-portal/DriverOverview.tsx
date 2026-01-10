@@ -32,7 +32,7 @@ import {
   DrawerFooter,
   DrawerClose,
 } from "../ui/drawer";
-import { Trip, DriverMetric, TierConfig, DriverGoals } from '../../types/data';
+import { Trip, DriverMetrics, TierConfig, DriverGoals } from '../../types/data';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { useAuth } from '../auth/AuthContext';
 
@@ -43,7 +43,7 @@ interface DriverOverviewProps {
     progress: number;
     cumulativeEarnings: number;
   };
-  metrics: DriverMetric | null;
+  metrics: DriverMetrics | null;
   todayEarnings: {
     total: number;
     breakdown: {
@@ -61,39 +61,6 @@ interface DriverOverviewProps {
   isFixing: string | null;
   onClaimId: (id: string) => void;
   onAction: (action: string) => void;
-}
-
-function GoalRow({ label, current, target }: { label: string; current: number; target: number }) {
-  const progress = target > 0 ? Math.min(100, (current / target) * 100) : 0;
-  const isMet = target > 0 && current >= target;
-  
-  return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between items-end text-sm">
-        <span className="font-medium text-slate-600 dark:text-slate-400">{label}</span>
-        <div className="flex items-center gap-1.5">
-          {isMet && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
-          <span className={`font-bold ${isMet ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'}`}>
-             {TierCalculations.formatCurrency(current)}
-          </span>
-          <span className="text-xs text-slate-400 font-medium">
-             / {TierCalculations.formatCurrency(target)}
-          </span>
-        </div>
-      </div>
-      
-      <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-        <div 
-          className={`h-full rounded-full transition-all duration-1000 ease-out ${
-            isMet 
-              ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' 
-              : 'bg-indigo-500'
-          }`}
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>
-  );
 }
 
 export function DriverOverview({
@@ -140,7 +107,7 @@ export function DriverOverview({
                              </div>
                              
                              <div className="space-y-1">
-                                 <h2 className="text-3xl font-bold text-white tracking-tight">
+                                 <h2 className="text-2xl font-bold text-white tracking-tight">
                                      Welcome, {driverRecord?.name?.split(' ')[0] || 'Driver'}
                                  </h2>
                                  <div className="flex items-center gap-3">
@@ -149,9 +116,6 @@ export function DriverOverview({
                                          <Trophy className="h-3 w-3 fill-slate-900 stroke-none" />
                                          {tierState.current.name}
                                      </div>
-                                     <span className="text-sm font-medium text-indigo-200/80 tracking-wide">
-                                         {tierState.current.sharePercentage}% Profit Share
-                                     </span>
                                  </div>
                              </div>
                          </div>
@@ -174,18 +138,9 @@ export function DriverOverview({
                                  <span className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Next Milestone</span>
                                  <div className="flex items-baseline gap-2">
                                     <span className="text-lg font-bold text-white">
-                                        {tierState.next?.name || 'Max Level'} Status
-                                    </span>
-                                    <span className="text-sm text-white/90 font-bold font-mono">
-                                        {tierState.progress.toFixed(0)}%
+                                        {tierState.next?.name || 'Max Level'}
                                     </span>
                                  </div>
-                             </div>
-                             <div className="text-right">
-                                 <span className="text-xs text-indigo-200 block mb-0.5">Goal</span>
-                                 <span className="text-sm font-bold text-white font-mono">
-                                    {tierState.next ? TierCalculations.formatCurrency(tierState.next.minEarnings) : 'Goal Reached'}
-                                 </span>
                              </div>
                          </div>
 
@@ -198,33 +153,13 @@ export function DriverOverview({
                          </div>
 
                          <div className="flex justify-between text-[10px] font-semibold text-slate-300 uppercase tracking-wide">
-                             <span>Current: {TierCalculations.formatCurrency(tierState.current.minEarnings)}</span>
+                             <span>Current: {TierCalculations.formatCurrency(tierState.cumulativeEarnings)}</span>
                              <span>Target: {tierState.next ? TierCalculations.formatCurrency(tierState.next.minEarnings) : 'Max'}</span>
                          </div>
                      </div>
                  </div>
              </CardContent>
          </Card>
-      )}
-
-      {/* Quota Goals Section */}
-      {goals && goals.weekly.target > 0 && (
-          <Card className="border-indigo-100 bg-white dark:bg-slate-950 dark:border-slate-800 shadow-sm">
-             <CardContent className="p-4 space-y-4">
-                 <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-                    <div className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-md">
-                        <Target className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                    <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Earning Goals</h3>
-                 </div>
-                 
-                 <div className="grid gap-4">
-                     <GoalRow label="Daily Goal" current={goals.daily.current} target={goals.daily.target} />
-                     <GoalRow label="Weekly Goal" current={goals.weekly.current} target={goals.weekly.target} />
-                     <GoalRow label="Monthly Goal" current={goals.monthly.current} target={goals.monthly.target} />
-                 </div>
-             </CardContent>
-          </Card>
       )}
 
       {!metrics && !recentTrip && !loading && (

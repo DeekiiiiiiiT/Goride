@@ -4293,16 +4293,6 @@
     color: var(--color-indigo-200);
   }
 
-  .text-indigo-200\/80 {
-    color: color-mix(in srgb, oklch(.87 .065 274.039) 80%, transparent);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .text-indigo-200\/80 {
-      color: color-mix(in oklab, var(--color-indigo-200) 80%, transparent);
-    }
-  }
-
   .text-indigo-300 {
     color: var(--color-indigo-300);
   }
@@ -4565,16 +4555,6 @@
     }
   }
 
-  .text-white\/90 {
-    color: #ffffffe6;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .text-white\/90 {
-      color: color-mix(in oklab, var(--color-white) 90%, transparent);
-    }
-  }
-
   .text-yellow-400 {
     color: var(--color-yellow-400);
   }
@@ -4683,11 +4663,6 @@
 
   .shadow-\[0_0_0_1px_hsl\(var\(--sidebar-border\)\)\] {
     --tw-shadow: 0 0 0 1px var(--tw-shadow-color, hsl(var(--sidebar-border)));
-    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-  }
-
-  .shadow-\[0_0_8px_rgba\(16\,185\,129\,0\.4\)\] {
-    --tw-shadow: 0 0 8px var(--tw-shadow-color, #10b98166);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 

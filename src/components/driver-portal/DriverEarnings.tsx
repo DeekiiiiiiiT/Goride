@@ -36,6 +36,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "../ui/sheet";
+import { DriverHistory } from './DriverHistory';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
+import { MonthlyPerformance } from '../../types/data';
 
 export function DriverEarnings() {
   const { user } = useAuth();
@@ -48,6 +51,8 @@ export function DriverEarnings() {
   const [filteredTrips, setFilteredTrips] = useState<Trip[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<FinancialTransaction[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
+  const [tiers, setTiers] = useState<TierConfig[]>([]);
+  const [history, setHistory] = useState<MonthlyPerformance[]>([]);
   const [stats, setStats] = useState({
     totalBalance: 0,
     tripFares: 0,
@@ -95,11 +100,14 @@ export function DriverEarnings() {
              'Authorization': `Bearer ${publicAnonKey}`
         };
 
-        const [allTrips, txData, metricsData] = await Promise.all([
+        const [allTrips, txData, metricsData, tiersData] = await Promise.all([
              api.getTrips(),
              api.getTransactions(),
-             api.getDriverMetrics()
+             api.getDriverMetrics(),
+             tierService.getTiers()
         ]);
+        
+        if (tiersData) setTiers(tiersData);
 
         if (allTrips) {
             const myTrips = allTrips.filter(t => 
@@ -142,6 +150,13 @@ export function DriverEarnings() {
 
     fetchData();
   }, [user?.id, driverRecord?.id, driverLoading]);
+
+  useEffect(() => {
+    if (trips.length > 0 && tiers.length > 0) {
+        const h = TierCalculations.getMonthlyHistory(trips, tiers);
+        setHistory(h);
+    }
+  }, [trips, tiers]);
 
   // Handle Date Filter
   useEffect(() => {
@@ -350,7 +365,14 @@ export function DriverEarnings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Earnings</h2>
         <div className="flex items-center gap-2">
             <Sheet>
@@ -592,6 +614,12 @@ export function DriverEarnings() {
              </CollapsibleContent>
          </Collapsible>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <DriverHistory history={history} loading={loading} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
