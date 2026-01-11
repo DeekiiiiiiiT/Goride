@@ -3,6 +3,30 @@ import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, Financi
 import { OdometerReading } from '../types/vehicle';
 import { API_ENDPOINTS } from './apiConfig';
 
+export interface TripFilterParams {
+    driverId?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+    platform?: string;
+    tripType?: string;
+    vehicleId?: string;
+    minEarnings?: string;
+    maxEarnings?: string;
+    minDistance?: string;
+    hasTip?: string;
+    hasSurge?: string;
+}
+
+export interface PaginatedTripResponse {
+    data: Trip[];
+    page: number;
+    limit: number;
+    total: number;
+}
+
 export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
     const response = await fetch(url, options);
@@ -160,6 +184,40 @@ export const api = {
         }
     });
     if (!response.ok) throw new Error("Failed to fetch driver metrics");
+    return response.json();
+  },
+
+  async getTripsFiltered(params: TripFilterParams): Promise<PaginatedTripResponse> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/search`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(params)
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Failed to search trips: ${response.statusText}`);
+    }
+    
+    return response.json();
+  },
+
+  async getTripStats(params: TripFilterParams): Promise<any> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/stats`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(params)
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Failed to fetch trip stats: ${response.statusText}`);
+    }
+    
     return response.json();
   },
 
@@ -533,6 +591,14 @@ export const api = {
       return response.json();
   },
 
+  async getDashboardStats() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/dashboard/stats`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch dashboard stats");
+    return response.json();
+  },
+
   async getFinancials() {
       const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/financials`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -610,6 +676,19 @@ export const api = {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch users");
+    return response.json();
+  },
+
+  async updateUserPassword(userId: string, password: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/update-password`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ userId, password })
+    });
+    if (!response.ok) throw new Error("Failed to update password");
     return response.json();
   },
 

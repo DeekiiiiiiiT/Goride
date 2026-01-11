@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, Timer, Clock, MapPin, Loader2, Navigation, Map as MapIcon } from 'lucide-react';
+import { Play, Square, Timer, Clock, MapPin, Loader2, Navigation, Map as MapIcon, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { TripSession, RoutePoint, TripStatus, TripStop } from '../../types/tripSession';
 import { getCurrentPosition, reverseGeocode, createStop, calculatePathDistance } from '../../utils/locationService';
 import { useTripTracker } from '../../hooks/useTripTracker';
@@ -52,6 +62,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false); // New state for stopping loader
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -265,22 +276,25 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   };
 
   const cancelTrip = () => {
-    if (confirm("Are you sure you want to cancel this trip?")) {
-        stopTracking();
-        setTripStatus('IDLE');
-        setStartTime(null);
-        setElapsedSeconds(0);
-        setWaitSeconds(0);
-        setStartLocation(null);
-        setStartCoords(null);
-        setRoute([]);
-        setStops([]);
-        setCurrentStop(null);
-        localStorage.removeItem(STORAGE_KEY);
-        setIsStarting(false);
-        setIsStopping(false);
-        toast.info("Trip cancelled");
-    }
+    setCancelDialogOpen(true);
+  };
+
+  const confirmCancelTrip = () => {
+    stopTracking();
+    setTripStatus('IDLE');
+    setStartTime(null);
+    setElapsedSeconds(0);
+    setWaitSeconds(0);
+    setStartLocation(null);
+    setStartCoords(null);
+    setRoute([]);
+    setStops([]);
+    setCurrentStop(null);
+    localStorage.removeItem(STORAGE_KEY);
+    setIsStarting(false);
+    setIsStopping(false);
+    toast.info("Trip cancelled");
+    setCancelDialogOpen(false);
   };
 
   const stopTrip = async () => {
@@ -502,7 +516,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
                 className="bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm"
               >
                 <MapPin className="h-4 w-4" />
-                <span className="hidden sm:inline">Arrive at Stop</span>
+                <span>Arrive at Stop</span>
               </Button>
             )}
             
@@ -512,7 +526,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
                 className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm"
               >
                 <Play className="h-4 w-4" />
-                <span className="hidden sm:inline">Resume Trip</span>
+                <span>Resume Trip</span>
               </Button>
             )}
 
@@ -522,17 +536,17 @@ export function TripTimer({ onComplete }: TripTimerProps) {
               className="gap-2 bg-white/60 hover:bg-white border-blue-200 text-blue-700"
             >
               <MapIcon className="h-4 w-4" /> 
-              <span className="hidden sm:inline">{showMap ? 'Hide Map' : 'Show Map'}</span>
+              <span>{showMap ? 'Hide Map' : 'Show Map'}</span>
             </Button>
             
             <Button
               onClick={cancelTrip}
-              variant="ghost"
-              className="text-red-500 hover:text-red-700 hover:bg-red-50 px-3"
+              variant="outline"
+              className="border-red-200 text-red-600 hover:bg-red-100 hover:text-red-700 hover:border-red-300 gap-2 px-3"
               title="Cancel Trip"
             >
-                <span className="sr-only">Cancel</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
+                <X className="h-4 w-4" />
+                <span>Cancel</span>
             </Button>
 
             <Button 
@@ -543,11 +557,11 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             >
               {isStopping ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Finalizing...
+                    <Loader2 className="h-4 w-4 animate-spin" /> <span>Finalizing...</span>
                   </>
               ) : (
                   <>
-                    <Square className="h-4 w-4 fill-current" /> <span className="hidden sm:inline">Complete</span>
+                    <Square className="h-4 w-4 fill-current" /> <span>Complete</span>
                   </>
               )}
             </Button>
@@ -561,6 +575,23 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         )}
         
         <StopList stops={stops} />
+        
+        <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will discard all trip data including route and duration. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Go Back</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmCancelTrip} className="bg-red-600 hover:bg-red-700">
+                Yes, Cancel Trip
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

@@ -43,6 +43,7 @@ export function EquipmentManager({ vehicleId }: EquipmentManagerProps) {
         try {
             setLoading(true);
             const data = await equipmentService.getEquipment(vehicleId);
+            // Allow all categories to support the new Fleet Management categories
             setItems(data);
         } catch (error) {
             toast.error("Failed to load equipment list");
@@ -94,6 +95,7 @@ export function EquipmentManager({ vehicleId }: EquipmentManagerProps) {
                 id: editingItem?.id || '',
                 vehicleId: vehicleId,
                 name: formData.name,
+                category: 'Equipment',
                 description: formData.description,
                 price: formData.price || 0,
                 shippingCost: formData.shippingCost || 0,
@@ -181,7 +183,10 @@ export function EquipmentManager({ vehicleId }: EquipmentManagerProps) {
                                 <TableRow key={item.id}>
                                     <TableCell>
                                         <div className="font-medium">{item.name}</div>
-                                        {item.description && <div className="text-xs text-muted-foreground">{item.description}</div>}
+                                        <div className="flex flex-wrap gap-2 items-center mt-0.5">
+                                            {item.category && <Badge variant="secondary" className="text-[10px] px-1 h-5">{item.category}</Badge>}
+                                            {item.description && <span className="text-xs text-muted-foreground">{item.description}</span>}
+                                        </div>
                                         {item.subItems && item.subItems.length > 0 && (
                                             <div className="flex flex-wrap gap-1 mt-1">
                                                 {item.subItems.map(sub => (

@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button"; // Added Button
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { CheckCircle2, AlertTriangle, Clock, Database, FileText, Server, Activity } from "lucide-react"; // Added Activity
+import { CheckCircle2, AlertTriangle, Clock, Database, FileText, Server, Activity, RefreshCw } from "lucide-react"; // Added Activity, RefreshCw
 import { Trip, DriverMetrics, VehicleMetrics, Notification, ImportBatch } from '../../types/data';
+import { api } from '../../services/api';
+import { toast } from 'sonner@2.0.3';
 
 interface SystemHealthViewProps {
   trips: Trip[];
@@ -98,6 +100,66 @@ export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notific
           }
           setDiagnosing(false);
       }, 1500);
+  };
+
+  const [perfStats, setPerfStats] = React.useState<any[]>([]);
+  const [perfLoading, setPerfLoading] = React.useState(false);
+
+  const runPerfDiagnostics = async () => {
+      setPerfLoading(true);
+      const results = [];
+      
+      // Check 1: Dashboard Stats API (Aggregated)
+      try {
+          const start = performance.now();
+          await api.getDashboardStats();
+          const end = performance.now();
+          results.push({
+              id: 'api-stats',
+              name: 'Aggregated Stats API',
+              status: 'healthy',
+              latency: Math.round(end - start),
+              threshold: 500,
+              description: 'Server-side aggregation endpoint'
+          });
+      } catch (e) {
+          results.push({
+              id: 'api-stats',
+              name: 'Aggregated Stats API',
+              status: 'error',
+              latency: 0,
+              threshold: 500,
+              description: 'Failed to connect'
+          });
+      }
+
+      // Check 2: Filtered Search API (GIN Index)
+      try {
+          const start = performance.now();
+          await api.getTripsFiltered({ limit: 1 });
+          const end = performance.now();
+          results.push({
+              id: 'api-search',
+              name: 'Trip Search API (GIN)',
+              status: 'healthy',
+              latency: Math.round(end - start),
+              threshold: 800,
+              description: 'Indexed JSONB search query'
+          });
+      } catch (e) {
+          results.push({
+              id: 'api-search',
+              name: 'Trip Search API (GIN)',
+              status: 'error',
+              latency: 0,
+              threshold: 800,
+              description: 'Search endpoint failed'
+          });
+      }
+
+      setPerfStats(results);
+      setPerfLoading(false);
+      toast.success("Latency check complete");
   };
 
   return (
@@ -262,6 +324,54 @@ export function SystemHealthView({ trips, driverMetrics, vehicleMetrics, notific
                       Click "Run Check" to verify database integrity.
                   </div>
               )}
+          </CardContent>
+      </Card>
+
+      {/* Performance Latency Panel */}
+      <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                  <CardTitle>API Performance Latency</CardTitle>
+                  <CardDescription>Measure response times for optimized endpoints.</CardDescription>
+              </div>
+              <Button onClick={runPerfDiagnostics} disabled={perfLoading} variant="outline" size="sm">
+                  {perfLoading ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                      <Clock className="mr-2 h-4 w-4" />
+                  )}
+                  Measure Latency
+              </Button>
+          </CardHeader>
+          <CardContent>
+               <div className="space-y-4">
+                  {perfStats.length > 0 ? perfStats.map((stat) => (
+                      <div key={stat.id} className="flex items-center justify-between p-3 border rounded-lg bg-slate-50/50">
+                          <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-full ${stat.status === 'healthy' ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                                  <Server className={`h-4 w-4 ${stat.status === 'healthy' ? 'text-emerald-600' : 'text-red-600'}`} />
+                              </div>
+                              <div>
+                                  <p className="font-medium text-sm text-slate-900">{stat.name}</p>
+                                  <p className="text-xs text-slate-500">{stat.description}</p>
+                              </div>
+                          </div>
+                          <div className="text-right">
+                              <span className={`text-base font-bold ${
+                                  stat.status === 'error' ? 'text-red-600' :
+                                  stat.latency < stat.threshold ? 'text-emerald-600' : 'text-amber-600'
+                              }`}>
+                                  {stat.status === 'error' ? 'ERR' : `${stat.latency}ms`}
+                              </span>
+                              <p className="text-[10px] text-slate-400">Target: &lt;{stat.threshold}ms</p>
+                          </div>
+                      </div>
+                  )) : (
+                      <div className="text-center py-6 text-slate-500 text-sm">
+                          Click "Measure Latency" to verify performance.
+                      </div>
+                  )}
+               </div>
           </CardContent>
       </Card>
 

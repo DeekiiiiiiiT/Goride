@@ -27,6 +27,67 @@ app.use(
 app.get("/fleet-management/health", (c) => c.json({ status: "ok" }));
 
 // --- TRIPS ---
+app.post("/fleet-management/trips/search", async (c) => {
+  try {
+    const { driverId, startDate, endDate, limit, offset, status } = await c.req.json();
+    
+    let query = supabase
+      .from("kv_store_37f42386")
+      .select("value")
+      .like("key", "trip:%");
+
+    // Apply Filters
+    if (driverId) {
+      // Use -> operator (JSONB) to leverage GIN index
+      query = query.eq("value->driverId", driverId);
+    }
+    
+    if (status) {
+        query = query.eq("value->status", status);
+    }
+
+    if (startDate) {
+      query = query.gte("value->createdAt", startDate);
+    }
+    
+    if (endDate) {
+      query = query.lte("value->createdAt", endDate);
+    }
+
+    // Sorting - defaulting to newest first
+    // Note: We need to cast to appropriate type if we want strict date sorting, 
+    // but ISO strings sort correctly alphabetically.
+    query = query.order("value->createdAt", { ascending: false });
+
+    // Pagination
+    const limitVal = typeof limit === 'number' ? limit : 20;
+    const offsetVal = typeof offset === 'number' ? offset : 0;
+    
+    // Range is inclusive
+    query = query.range(offsetVal, offsetVal + limitVal - 1);
+
+    const { data, error } = await query;
+
+    if (error) {
+        throw error;
+    }
+
+    // Unwrap the 'value' wrapper
+    const trips = data.map((row: any) => row.value);
+    
+    return c.json({ 
+        data: trips, 
+        page: Math.floor(offsetVal / limitVal) + 1,
+        limit: limitVal,
+        total: trips.length // Note: exact count requires a separate query if needed
+    });
+
+  } catch (e: any) {
+    console.error("Error searching trips:", e);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
+  }
+});
+
 app.post("/fleet-management/trips", async (c) => {
   try {
     const trips = await c.req.json();
@@ -286,6 +347,68 @@ app.post("/fleet-management/fleet/sync", async (c) => {
   } catch (e: any) {
       console.error("Fleet Sync Error:", e);
       return c.json({ error: e.message }, 500);
+  }
+});
+
+// --- DASHBOARD STATS ---
+app.get("/fleet-management/dashboard/stats", async (c) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayISO = today.toISOString();
+    
+    // 1. Fetch Today's Trips
+    // We use the same JSONB query strategy to fetch only relevant rows
+    const { data: tripData, error: tripError } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "trip:%")
+        .gte("value->requestTime", todayISO); // Assuming requestTime is the primary date field
+
+    if (tripError) throw tripError;
+
+    const trips = tripData?.map((r: any) => r.value) || [];
+
+    // 2. Fetch Active Drivers (approximate by drivers who have logged in or have trips today)
+    // For now, we'll just count drivers with status 'active' in the store
+    const { data: driverData, error: driverError } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "driver:%")
+        .eq("value->status", "active");
+
+    if (driverError) throw driverError;
+    const activeDrivers = driverData?.length || 0;
+
+    // 3. Calculate Aggregates
+    const stats = trips.reduce((acc: any, trip: any) => {
+        acc.totalRevenue += (trip.amount || 0);
+        acc.totalTrips += 1;
+        if (trip.status === 'Completed') acc.completedTrips += 1;
+        if (trip.status === 'Cancelled') acc.cancelledTrips += 1;
+        acc.totalDistance += (trip.distance || 0);
+        return acc;
+    }, {
+        totalRevenue: 0,
+        totalTrips: 0,
+        completedTrips: 0,
+        cancelledTrips: 0,
+        totalDistance: 0
+    });
+
+    return c.json({
+        period: "today",
+        date: todayISO,
+        revenue: stats.totalRevenue,
+        trips: stats.totalTrips,
+        activeDrivers: activeDrivers,
+        efficiency: stats.totalTrips > 0 ? Math.round((stats.completedTrips / stats.totalTrips) * 100) : 100,
+        fleetHealth: 98 // Placeholder or calculated from maintenance logs
+    });
+
+  } catch (e: any) {
+    console.error("Dashboard Stats Error:", e);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
   }
 });
 

@@ -101,7 +101,7 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
               <SelectContent>
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="yesterday">Yesterday</SelectItem>
-                <SelectItem value="week">Last 7 Days</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
                 <SelectItem value="month">Last 30 Days</SelectItem>
                 <SelectItem value="custom">Custom Range</SelectItem>
                 <SelectItem value="all">All Time</SelectItem>

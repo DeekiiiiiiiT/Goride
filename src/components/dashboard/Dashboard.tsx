@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from "../ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { 
@@ -22,8 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
-import { dashboardService } from '../../services/dashboardService';
 import { DashboardMetricsEngine } from '../../utils/dashboardMetricsEngine';
 import { Trip, Notification, DriverMetrics, VehicleMetrics, OrganizationMetrics, TripAnalytics, DashboardMetrics, DashboardAlert, ImportBatch } from '../../types/data';
 import { exportToCSV } from '../../utils/csvHelpers';
@@ -45,24 +45,128 @@ import { FileSpreadsheet, FileText, LayoutDashboard } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 
 export function Dashboard() {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [batches, setBatches] = useState<ImportBatch[]>([]);
-  const [driverMetrics, setDriverMetrics] = useState<DriverMetrics[]>([]);
-  const [vehicleMetrics, setVehicleMetrics] = useState<VehicleMetrics[]>([]);
-  const [orgMetrics, setOrgMetrics] = useState<OrganizationMetrics[]>([]);
-  
-  // Phase 1 Fleet Dashboard State
-  const [fleetMetrics, setFleetMetrics] = useState<DashboardMetrics | null>(null);
-  const [fleetAlerts, setFleetAlerts] = useState<DashboardAlert[]>([]);
-  
-  // Phase 4 Analytics State
-  const [tripAnalytics, setTripAnalytics] = useState<TripAnalytics | undefined>(undefined);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState('operations'); // Phase 6.4
+
+  // 1. React Query Hooks
+  const { data: serverStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['dashboard', 'stats'],
+    queryFn: () => api.getDashboardStats(),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  const { data: trips = [], isLoading: tripsLoading } = useQuery({
+    queryKey: ['trips'],
+    queryFn: () => api.getTrips(),
+    staleTime: 1000 * 60 * 2, // 2 minutes
+  });
+
+  const { data: driverMetrics = [], isLoading: driversLoading } = useQuery({
+    queryKey: ['driverMetrics'],
+    queryFn: () => api.getDriverMetrics(),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: vehicleMetrics = [], isLoading: vehiclesLoading } = useQuery({
+    queryKey: ['vehicleMetrics'],
+    queryFn: () => api.getVehicleMetrics(),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: batches = [], isLoading: batchesLoading } = useQuery({
+    queryKey: ['batches'],
+    queryFn: () => api.getBatches(),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: apiNotifications = [], isLoading: notificationsLoading } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => api.getNotifications(),
+    staleTime: 1000 * 60 * 1,
+  });
+
+  const { data: rules = [] } = useQuery({
+    queryKey: ['alertRules'],
+    queryFn: () => api.getAlertRules(),
+  });
+
+  const loading = statsLoading || tripsLoading || driversLoading || vehiclesLoading || batchesLoading || notificationsLoading;
+
+  // 2. Derived State (Memoized)
+  const fleetMetrics = useMemo(() => {
+    if (serverStats) {
+      // Map server response to DashboardMetrics
+      return {
+        timestamp: new Date().toISOString(),
+        date: serverStats.date,
+        hour: new Date().getHours(),
+        activeDrivers: serverStats.activeDrivers || 0,
+        vehiclesOnline: vehicleMetrics.length, 
+        tripsInProgress: 0,
+        tripsCompletedToday: serverStats.trips || 0,
+        earningsToday: serverStats.revenue || 0,
+        avgAcceptanceRate: 0,
+        avgCancellationRate: 0,
+        fleetUtilization: serverStats.efficiency || 0,
+        topDriverName: '-',
+        topDriverEarnings: 0,
+        bottomDriverName: '-',
+        criticalAlertsCount: 0,
+        alertDetails: '',
+        lastUpdateTime: new Date().toISOString()
+      };
+    } else if (trips.length > 0) {
+       // Fallback to client-side engine
+       return DashboardMetricsEngine.calculateMetrics(trips, driverMetrics);
+    }
+    return null;
+  }, [serverStats, trips, driverMetrics, vehicleMetrics]);
+
+  const { fleetAlerts, notifications } = useMemo(() => {
+     // Generate Real-time Alerts (Phase 4 Engine)
+     const realAlerts = AlertEngine.generateDashboardAlerts(driverMetrics, vehicleMetrics, trips);
+     
+     // Merge AI Insights (Notifications) into Dashboard Alerts
+     const aiAlerts: DashboardAlert[] = apiNotifications.map(n => ({
+        id: n.id,
+        definitionId: 'ai_insight',
+        timestamp: n.timestamp,
+        severity: n.severity === 'critical' ? 'critical' : n.severity === 'warning' ? 'high' : 'low',
+        title: n.title,
+        description: n.message,
+        status: 'new',
+        active: true
+     }));
+
+     // Check Rules - DYNAMIC LOGIC
+     const localAlerts = AlertEngine.checkRules(rules, driverMetrics, trips);
+     
+     // Convert localAlerts (Notification[]) to DashboardAlert[]
+     const ruleBasedAlerts: DashboardAlert[] = localAlerts.map(n => ({
+        id: n.id,
+        definitionId: 'custom_rule',
+        timestamp: n.timestamp,
+        severity: n.severity as 'low' | 'medium' | 'high' | 'critical',
+        title: n.title,
+        description: n.message,
+        status: 'new',
+        active: true
+     }));
+
+     // Update Fleet Alerts State (Dashboard Panel)
+     const combinedAlerts = [...realAlerts, ...aiAlerts, ...ruleBasedAlerts].sort((a,b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+     );
+
+     // Update Notifications State (Executive View)
+     const allNotifications = trips.length > 0 
+        ? [...localAlerts, ...apiNotifications].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        : apiNotifications;
+      
+     return { fleetAlerts: combinedAlerts, notifications: allNotifications };
+
+  }, [driverMetrics, vehicleMetrics, trips, apiNotifications, rules]);
 
   const handleViewChange = (val: string) => {
       setViewMode(val);
@@ -71,101 +175,20 @@ export function Dashboard() {
       else if (val === 'driver') setActiveTab('drivers');
       else if (val === 'analytics') setActiveTab('analytics');
       else if (val === 'executive') setActiveTab('executive');
+      else if (val === 'health') setActiveTab('health');
       else setActiveTab('overview');
       toast.info(`Switched to ${val.charAt(0).toUpperCase() + val.slice(1)} View`);
   };
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-
-      // 1. Fetch Raw Data first (Trips & Driver Metrics)
-      let fetchedTrips: Trip[] = [];
-      try {
-          fetchedTrips = await api.getTrips();
-          setTrips(fetchedTrips);
-      } catch (tripErr: any) {
-          console.error("Failed to load trips", tripErr);
-      }
-
-      let fetchedDriverMetrics: DriverMetrics[] = [];
-      try {
-          fetchedDriverMetrics = await api.getDriverMetrics();
-          setDriverMetrics(fetchedDriverMetrics);
-      } catch (err: any) { console.error("Failed to load driver metrics"); }
-
-      let fetchedVehicleMetrics: VehicleMetrics[] = [];
-      try {
-          fetchedVehicleMetrics = await api.getVehicleMetrics();
-          setVehicleMetrics(fetchedVehicleMetrics);
-      } catch (err: any) { console.error("Failed to load vehicle metrics"); }
-
-      // Fetch Batches for System Health
-      try {
-          const fetchedBatches = await api.getBatches();
-          setBatches(fetchedBatches);
-      } catch (err) { console.error("Failed to load batches"); }
-
-      // 2. Generate Real-time Fleet Dashboard Metrics (Phase 3 Engine)
-      // Use the engine to calculate metrics from actual data
-      const dMetrics = DashboardMetricsEngine.calculateMetrics(fetchedTrips, fetchedDriverMetrics);
-      setFleetMetrics(dMetrics);
-
-      // 3. Generate Real-time Alerts (Phase 4 Engine)
-      const realAlerts = AlertEngine.generateDashboardAlerts(fetchedDriverMetrics, fetchedVehicleMetrics, fetchedTrips);
-      
-      // Fetch Notifications (API) - Phase 8 Integration
-      let apiNotifications: Notification[] = [];
-      try {
-          apiNotifications = await api.getNotifications();
-      } catch (notifErr: any) {
-           console.error("Failed to load notifications", notifErr);
-      }
-      
-      // Merge AI Insights (Notifications) into Dashboard Alerts
-      const aiAlerts: DashboardAlert[] = apiNotifications.map(n => ({
-          id: n.id,
-          definitionId: 'ai_insight',
-          timestamp: n.timestamp,
-          severity: n.severity === 'critical' ? 'critical' : n.severity === 'warning' ? 'high' : 'low',
-          title: n.title,
-          description: n.message,
-          status: 'new',
-          active: true
-      }));
-      
-      const combinedAlerts = [...realAlerts, ...aiAlerts].sort((a,b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      setFleetAlerts(combinedAlerts);
-
-      // Fetch Rules (for Phase 8 Alerts)
-      let rules = [];
-      try {
-          rules = await api.getAlertRules();
-      } catch (e) { console.error("Failed to load rules"); }
-
-      // Update Notifications State (Executive View)
-      if (fetchedTrips.length > 0) {
-          const localAlerts = AlertEngine.checkRules(rules, fetchedDriverMetrics, fetchedTrips);
-          const allNotifications = [...localAlerts, ...apiNotifications].sort((a,b) => 
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          );
-          setNotifications(allNotifications);
-      } else {
-          setNotifications(apiNotifications);
-      }
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['trips'] });
+    queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });
+    queryClient.invalidateQueries({ queryKey: ['vehicleMetrics'] });
+    queryClient.invalidateQueries({ queryKey: ['batches'] });
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    toast.success("Refreshing dashboard data...");
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const handleExport = (type: 'trips' | 'financials' | 'drivers') => {
     if (type === 'trips') {
@@ -178,10 +201,7 @@ export function Dashboard() {
   };
   
   const handleNavigate = (page: string) => {
-      // In a real app with routing, this would use router.push
-      // For now we just log it or maybe change the tab if applicable
       console.log(`Navigate to ${page}`);
-      // Simple internal tab navigation mapping if useful
       if (page === 'drivers') setActiveTab('drivers');
       if (page === 'vehicles') setActiveTab('vehicles');
       if (page === 'transactions') setActiveTab('financials');
@@ -218,6 +238,7 @@ export function Dashboard() {
               <SelectItem value="maintenance">Maintenance View</SelectItem>
               <SelectItem value="driver">Driver View</SelectItem>
               <SelectItem value="analytics">Analytics View</SelectItem>
+              <SelectItem value="health">System Health & Monitoring</SelectItem>
             </SelectContent>
            </Select>
 
@@ -230,7 +251,7 @@ export function Dashboard() {
            
            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block" />
 
-           <Button variant="outline" size="icon" onClick={fetchData} title="Refresh Data">
+           <Button variant="outline" size="icon" onClick={handleRefresh} title="Refresh Data">
             <RefreshCw className="h-4 w-4" />
           </Button>
 

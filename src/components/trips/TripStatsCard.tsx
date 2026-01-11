@@ -1,28 +1,73 @@
 import React from 'react';
 import { Card, CardContent } from "../ui/card";
+import { Skeleton } from "../ui/skeleton";
 import { Trip } from '../../types/data';
 import { TrendingUp, TrendingDown, DollarSign, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 interface TripStatsCardProps {
   trips: Trip[];
   title?: string;
+  loading?: boolean;
+  stats?: {
+    totalTrips: number;
+    completed: number;
+    cancelled: number;
+    totalEarnings: number;
+    avgEarnings: number;
+    avgDuration: number;
+  };
 }
 
-export function TripStatsCard({ trips, title = "Current View Summary" }: TripStatsCardProps) {
-  const totalTrips = trips.length;
-  const completed = trips.filter(t => t.status === 'Completed').length;
-  const cancelled = trips.filter(t => t.status === 'Cancelled').length;
+export function TripStatsCard({ trips, title = "Current View Summary", stats, loading = false }: TripStatsCardProps) {
+  let totalTrips = 0;
+  let completed = 0;
+  let cancelled = 0;
+  let totalEarnings = 0;
+  let avgEarnings = 0;
+  let avgDuration = 0;
+
+  if (loading) {
+     return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+             {Array.from({ length: 5 }).map((_, i) => (
+                 <Card key={i}>
+                     <CardContent className="p-4 flex items-center justify-between">
+                         <div className="space-y-2">
+                             <Skeleton className="h-4 w-20" />
+                             <Skeleton className="h-8 w-16" />
+                             <Skeleton className="h-3 w-24" />
+                         </div>
+                         <Skeleton className="h-10 w-10 rounded-full" />
+                     </CardContent>
+                 </Card>
+             ))}
+        </div>
+     );
+  }
+
+  if (stats) {
+      // Use provided server-side stats
+      totalTrips = stats.totalTrips;
+      completed = stats.completed;
+      cancelled = stats.cancelled;
+      totalEarnings = stats.totalEarnings;
+      avgEarnings = stats.avgEarnings;
+      avgDuration = stats.avgDuration;
+  } else {
+      // Fallback to client-side calculation (only works if all trips are loaded)
+      totalTrips = trips.length;
+      completed = trips.filter(t => t.status === 'Completed').length;
+      cancelled = trips.filter(t => t.status === 'Cancelled').length;
+      totalEarnings = trips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      avgEarnings = completed > 0 ? totalEarnings / completed : 0;
+      
+      const tripsWithDuration = trips.filter(t => t.duration && t.duration > 0);
+      const totalDuration = tripsWithDuration.reduce((sum, t) => sum + (t.duration || 0), 0);
+      avgDuration = tripsWithDuration.length > 0 ? totalDuration / tripsWithDuration.length : 0;
+  }
   
   const completionRate = totalTrips > 0 ? (completed / totalTrips) * 100 : 0;
   const cancellationRate = totalTrips > 0 ? (cancelled / totalTrips) * 100 : 0;
-
-  const totalEarnings = trips.reduce((sum, t) => sum + (t.amount || 0), 0);
-  const avgEarnings = completed > 0 ? totalEarnings / completed : 0;
-
-  // Calculate efficiency (e.g. avg earnings per minute if duration exists)
-  const tripsWithDuration = trips.filter(t => t.duration && t.duration > 0);
-  const totalDuration = tripsWithDuration.reduce((sum, t) => sum + (t.duration || 0), 0);
-  const avgDuration = tripsWithDuration.length > 0 ? totalDuration / tripsWithDuration.length : 0;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

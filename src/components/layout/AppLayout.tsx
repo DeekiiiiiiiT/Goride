@@ -38,7 +38,8 @@ import {
   UserCog,
   Fuel,
   CreditCard,
-  FileSpreadsheet
+  FileSpreadsheet,
+  LayoutGrid
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -150,6 +151,12 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             label="Vehicles" 
             active={currentPage === 'vehicles'}
             onClick={() => onNavigate?.('vehicles')}
+          />
+          <NavItem 
+            icon={<LayoutGrid className="h-4 w-4" />} 
+            label="Inventory & Asset Management" 
+            active={currentPage === 'fleet'}
+            onClick={() => onNavigate?.('fleet')}
           />
           
           {/* Fuel Management Section */}

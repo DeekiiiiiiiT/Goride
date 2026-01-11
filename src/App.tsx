@@ -8,6 +8,7 @@ import { TripLogsPage } from './components/trips/TripLogsPage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { DriversPage } from './components/drivers/DriversPage';
 import { VehiclesPage } from './components/vehicles/VehiclesPage';
+import { FleetPage } from './components/fleet/FleetPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { TransactionsPage } from './components/transactions/TransactionsPage';
 import { TollReconciliation } from './pages/TollReconciliation';
@@ -116,6 +117,7 @@ function AppContent() {
       {currentPage === 'imports' && <ImportsPage />}
       {currentPage === 'drivers' && <DriversPage />}
       {currentPage === 'vehicles' && <VehiclesPage />}
+      {currentPage === 'fleet' && <FleetPage />}
       {currentPage === 'trips' && <TripLogsPage />}
       {currentPage === 'reports' && <ReportsPage />}
       {currentPage === 'transactions' && <TransactionsPage mode="analytics" />}
@@ -147,13 +149,27 @@ function AppContent() {
 }
 
 import { OfflineProvider } from './components/providers/OfflineProvider';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      cacheTime: 1000 * 60 * 30, // 30 minutes
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 export default function App() {
   return (
-    <AuthProvider>
-      <OfflineProvider>
-        <AppContent />
-      </OfflineProvider>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <OfflineProvider>
+          <AppContent />
+        </OfflineProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

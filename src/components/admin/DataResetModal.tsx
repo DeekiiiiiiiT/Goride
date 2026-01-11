@@ -8,19 +8,15 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
-import { AlertTriangle, Trash2, CheckCircle2, Calendar, User, Fuel, Car, Ticket, FileText } from "lucide-react";
+import { AlertTriangle, Trash2, CheckCircle2, User, Fuel, Car, Ticket, FileText } from "lucide-react";
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
-import { Trip, FinancialTransaction } from "../../types/data";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
 import { Checkbox } from "../../components/ui/checkbox";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
-import { ScrollArea } from "../../components/ui/scroll-area";
-import { Badge } from "../../components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Badge } from "../../components/ui/badge";
@@ -39,6 +35,7 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [previewItems, setPreviewItems] = useState<any[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [isAllTime, setIsAllTime] = useState(false);
 
   React.useEffect(() => {
       if (isOpen) {
@@ -73,8 +70,6 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
         setStep('confirm');
     }
   };
-
-  const [isAllTime, setIsAllTime] = useState(false);
 
   const handleFetchPreview = async () => {
     setStep('processing');
@@ -349,6 +344,10 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
                         </div>
                     </div>
                 </div>
+                <div className="pt-4 flex justify-end">
+                    <Button variant="ghost" onClick={() => setStep('select')} className="mr-2">Back</Button>
+                    <Button onClick={() => setStep('date-select')}>Next</Button>
+                 </div>
             </div>
         )}
 
@@ -418,6 +417,11 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
                         Delete entire history (All Time)
                     </label>
                 </div>
+
+                <div className="pt-4 flex justify-end">
+                    <Button variant="ghost" onClick={() => setStep('type-select')} className="mr-2">Back</Button>
+                    <Button onClick={handleFetchPreview}>Preview Deletion</Button>
+                 </div>
             </div>
         )}
 
@@ -520,6 +524,12 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
                         </Table>
                     </ScrollArea>
                 </div>
+                <div className="pt-4 flex justify-end">
+                    <Button variant="ghost" onClick={() => setStep('date-select')} className="mr-2">Back</Button>
+                    <Button variant="destructive" onClick={() => setStep('confirm')} disabled={selectedKeys.length === 0}>
+                        Proceed to Delete ({selectedKeys.length})
+                    </Button>
+                </div>
             </div>
         )}
 
@@ -534,6 +544,10 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
                 {target === 'all' && " All imported data will be wiped."}
              </div>
              <p className="text-center text-slate-600">Are you absolutely sure you want to proceed?</p>
+             <div className="pt-6 flex justify-center gap-4">
+                <Button variant="outline" onClick={() => setStep('preview')}>Cancel</Button>
+                <Button variant="destructive" onClick={handleConfirmDeletion}>Yes, Permanently Delete</Button>
+             </div>
           </div>
         )}
 
@@ -555,48 +569,15 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
                         Selected Trips, Tolls, and Fuel data have been permanently deleted. You can now safely re-import.
                     </p>
                 </div>
+                <Button className="mt-4" onClick={onClose}>Done</Button>
             </div>
         )}
 
-        <DialogFooter>
-          {step === 'select' && (
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          )}
-
-          {step === 'type-select' && (
-            <>
-                 <Button variant="ghost" onClick={() => setStep(target === 'driver' ? 'driver-select' : 'select')}>Back</Button>
-                 <Button onClick={() => setStep('date-select')} disabled={dateConfig.targets.length === 0}>Next</Button>
-            </>
-          )}
-
-          {step === 'date-select' && (
-            <>
-                 <Button variant="ghost" onClick={() => setStep('type-select')}>Back</Button>
-                 <Button onClick={handleFetchPreview} disabled={(!isAllTime && (!dateConfig.startDate || !dateConfig.endDate))}>
-                    Preview Data
-                 </Button>
-            </>
-          )}
-
-          {step === 'preview' && (
-            <>
-                 <Button variant="ghost" onClick={() => setStep('date-select')}>Back</Button>
-                 <Button variant="destructive" onClick={handleConfirmDeletion} disabled={selectedKeys.length === 0}>
-                    Delete Selected ({selectedKeys.length})
-                 </Button>
-            </>
-          )}
-          {step === 'confirm' && (
-            <>
-                <Button variant="ghost" onClick={() => setStep('select')}>Back</Button>
-                <Button variant="destructive" onClick={handleConfirmDeletion}>Confirm Purge</Button>
-            </>
-          )}
-          {step === 'success' && (
-            <Button onClick={onClose}>Done</Button>
-          )}
-        </DialogFooter>
+        {step === 'select' && (
+           <DialogFooter>
+             <Button variant="ghost" onClick={onClose}>Cancel</Button>
+           </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

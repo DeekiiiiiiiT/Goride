@@ -59,6 +59,11 @@ export function UserManagementPage() {
     role: 'driver' as 'admin' | 'driver'
   });
 
+  // Password Reset State
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [selectedUserForReset, setSelectedUserForReset] = useState<TeamMember | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+
   React.useEffect(() => {
     const fetchUsers = async () => {
         try {
@@ -74,6 +79,25 @@ export function UserManagementPage() {
     };
     fetchUsers();
   }, []);
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForReset || !newPassword) return;
+    
+    setLoading(true);
+    try {
+        await api.updateUserPassword(selectedUserForReset.id, newPassword);
+        toast.success(`Password updated for ${selectedUserForReset.name}`);
+        setIsResetPasswordOpen(false);
+        setNewPassword('');
+        setSelectedUserForReset(null);
+    } catch (error: any) {
+        console.error(error);
+        toast.error(error.message || "Failed to update password");
+    } finally {
+        setLoading(false);
+    }
+  };
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,7 +279,11 @@ export function UserManagementPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Reset Password</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                            setSelectedUserForReset(member);
+                            setIsResetPasswordOpen(true);
+                            setNewPassword('');
+                        }}>Reset Password</DropdownMenuItem>
                         <DropdownMenuItem className="text-rose-600">Delete User</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -273,6 +301,39 @@ export function UserManagementPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Reset Password</DialogTitle>
+                <DialogDescription>
+                    Enter a new password for {selectedUserForReset?.name}.
+                </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label htmlFor="newPassword">New Password</Label>
+                    <Input 
+                        id="newPassword" 
+                        type="text" 
+                        placeholder="New password" 
+                        required 
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        minLength={6}
+                    />
+                    <p className="text-xs text-slate-500">Must be at least 6 characters.</p>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" type="button" onClick={() => setIsResetPasswordOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Update Password
+                    </Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

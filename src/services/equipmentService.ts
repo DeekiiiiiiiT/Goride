@@ -32,5 +32,25 @@ export const equipmentService = {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to delete equipment");
+  },
+
+  async getAllEquipment(): Promise<EquipmentItem[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/equipment/all`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch all equipment");
+    return response.json();
+  },
+
+  async bulkAssignEquipment(items: EquipmentItem[]): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/equipment/bulk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(items)
+    });
+    if (!response.ok) throw new Error("Failed to bulk assign equipment");
   }
 };

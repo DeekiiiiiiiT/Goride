@@ -5,6 +5,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
+import * as cache from "./cache.ts";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { Buffer } from "node:buffer";
 
@@ -36,7 +37,223 @@ app.get("/make-server-37f42386/health", (c) => {
   return c.json({ status: "ok" });
 });
 
+// Dashboard Stats Endpoint (Aggregated)
+app.get("/make-server-37f42386/dashboard/stats", async (c) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTs = today.getTime();
+
+    const trips = await kv.getByPrefix("trip:");
+    const drivers = await kv.getByPrefix("driver:");
+    
+    let tripsToday = 0;
+    let revenueToday = 0;
+    const activeDriverIds = new Set();
+
+    if (trips && Array.isArray(trips)) {
+        trips.forEach((t: any) => {
+            const tripDate = t.date ? new Date(t.date) : (t.requestTimestamp ? new Date(t.requestTimestamp) : null);
+            if (tripDate && tripDate.getTime() >= todayTs) {
+                tripsToday++;
+                revenueToday += (typeof t.amount === 'number' ? t.amount : 0);
+                if (t.driverId) {
+                    activeDriverIds.add(t.driverId);
+                }
+            }
+        });
+    }
+
+    const totalDrivers = drivers && drivers.length > 0 ? drivers.length : 1; 
+    const activeDrivers = activeDriverIds.size;
+    const efficiency = Math.round((activeDrivers / totalDrivers) * 100);
+
+    return c.json({
+        date: new Date().toISOString(),
+        activeDrivers: activeDrivers,
+        trips: tripsToday,
+        revenue: revenueToday,
+        efficiency: efficiency
+    });
+  } catch (e: any) {
+    console.error("Error fetching dashboard stats:", e);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
+  }
+});
+
 // Trips endpoints
+// Trips Search Endpoint (GIN Index)
+app.post("/make-server-37f42386/trips/search", async (c) => {
+  try {
+    const { 
+        driverId, startDate, endDate, status, limit, offset,
+        platform, tripType, vehicleId
+    } = await c.req.json();
+    
+    // Query JSONB value directly
+    let query = supabase
+        .from("kv_store_37f42386")
+        .select("value", { count: 'exact' })
+        .like("key", "trip:%");
+
+    if (driverId) {
+        query = query.eq("value->>driverId", driverId);
+    }
+    
+    if (status) {
+        query = query.eq("value->>status", status);
+    }
+
+    if (platform) {
+        query = query.eq("value->>platform", platform);
+    }
+
+    if (vehicleId) {
+        query = query.eq("value->>vehicleId", vehicleId);
+    }
+
+    if (tripType === 'manual') {
+        query = query.eq("value->>isManual", true);
+    } else if (tripType === 'platform') {
+        query = query.not("value->>isManual", "eq", "true");
+    }
+
+    if (startDate) {
+        query = query.or(`value->>date.gte.${startDate},value->>requestTime.gte.${startDate}`);
+    }
+    
+    if (endDate) {
+        query = query.or(`value->>date.lte.${endDate},value->>requestTime.lte.${endDate}`);
+    }
+
+    // Order by date desc (Note: textual comparison works for ISO dates)
+    query = query.order("value->>date", { ascending: false });
+
+    const from = offset || 0;
+    const to = from + (limit || 50) - 1;
+    
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+        console.error("Search query error:", error);
+        throw error;
+    }
+
+    const trips = data?.map((d: any) => d.value) || [];
+
+    return c.json({
+        data: trips,
+        page: Math.floor(from / (limit || 50)) + 1,
+        limit: limit || 50,
+        total: count || 0
+    });
+
+  } catch (e: any) {
+    console.error("Error searching trips:", e);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
+  }
+});
+
+// Trip Stats Endpoint (Aggregated)
+app.post("/make-server-37f42386/trips/stats", async (c) => {
+  try {
+    const filters = await c.req.json();
+    const { 
+        driverId, startDate, endDate, status,
+        platform, tripType, vehicleId
+    } = filters;
+
+    // 1. Check Cache
+    // We use the entire filter object to generate a unique key
+    const version = await cache.getCacheVersion("stats");
+    const cacheKey = await cache.generateKey(`stats:${version}`, filters);
+    const cachedStats = await cache.getCache(cacheKey);
+
+    if (cachedStats) {
+        c.header("X-Cache", "HIT");
+        return c.json(cachedStats);
+    }
+    
+    // Query JSONB value directly
+    let query = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "trip:%");
+
+    if (driverId) {
+        query = query.eq("value->>driverId", driverId);
+    }
+    
+    if (status) {
+        query = query.eq("value->>status", status);
+    }
+
+    if (platform) {
+        query = query.eq("value->>platform", platform);
+    }
+
+    if (vehicleId) {
+        query = query.eq("value->>vehicleId", vehicleId);
+    }
+
+    if (tripType === 'manual') {
+        query = query.eq("value->>isManual", true);
+    } else if (tripType === 'platform') {
+        query = query.not("value->>isManual", "eq", "true");
+    }
+
+    if (startDate) {
+        query = query.or(`value->>date.gte.${startDate},value->>requestTime.gte.${startDate}`);
+    }
+    
+    if (endDate) {
+        query = query.or(`value->>date.lte.${endDate},value->>requestTime.lte.${endDate}`);
+    }
+
+    // No limit or offset - we need all matching records to calculate stats
+    const { data, error } = await query;
+
+    if (error) {
+        console.error("Stats query error:", error);
+        throw error;
+    }
+
+    const trips = data?.map((d: any) => d.value) || [];
+
+    const totalTrips = trips.length;
+    const completed = trips.filter((t: any) => t.status === 'Completed').length;
+    const cancelled = trips.filter((t: any) => t.status === 'Cancelled').length;
+    
+    const totalEarnings = trips.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+    const avgEarnings = completed > 0 ? totalEarnings / completed : 0;
+    
+    const tripsWithDuration = trips.filter((t: any) => t.duration && t.duration > 0);
+    const totalDuration = tripsWithDuration.reduce((sum: number, t: any) => sum + (Number(t.duration) || 0), 0);
+    const avgDuration = tripsWithDuration.length > 0 ? totalDuration / tripsWithDuration.length : 0;
+
+    const result = {
+        totalTrips,
+        completed,
+        cancelled,
+        totalEarnings,
+        avgEarnings,
+        avgDuration
+    };
+
+    // 2. Set Cache (TTL 300 seconds = 5 minutes)
+    await cache.setCache(cacheKey, result, 300);
+    
+    c.header("X-Cache", "MISS");
+    return c.json(result);
+
+  } catch (e: any) {
+    console.error("Error fetching trip stats:", e);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
+  }
+});
+
 app.post("/make-server-37f42386/trips", async (c) => {
   try {
     const trips = await c.req.json();
@@ -78,6 +295,9 @@ app.post("/make-server-37f42386/trips", async (c) => {
     
     // Store using mset
     await kv.mset(keys, processedTrips);
+    
+    // Invalidate stats cache since data has changed
+    await cache.invalidateCacheVersion("stats");
     
     return c.json({ success: true, count: processedTrips.length });
   } catch (e: any) {
@@ -135,6 +355,9 @@ app.delete("/make-server-37f42386/trips", async (c) => {
         counts[prefix] = count || 0;
     }
     
+    // Invalidate stats cache since data has changed
+    await cache.invalidateCacheVersion("stats");
+    
     return c.json({ 
         success: true, 
         deletedTrips: counts["trip:"] || 0,
@@ -153,6 +376,10 @@ app.delete("/make-server-37f42386/trips/:id", async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`trip:${id}`);
+    
+    // Invalidate stats cache since data has changed
+    await cache.invalidateCacheVersion("stats");
+
     return c.json({ success: true });
   } catch (e: any) {
     console.error(`Error deleting trip ${id}:`, e);
@@ -2848,6 +3075,29 @@ app.post("/make-server-37f42386/invite-user", async (c) => {
   }
 });
 
+// Admin: Update User Password
+app.post("/make-server-37f42386/update-password", async (c) => {
+  try {
+    const { userId, password } = await c.req.json();
+    
+    if (!userId || !password) {
+      return c.json({ error: "User ID and new password are required" }, 400);
+    }
+    
+    const { data, error } = await supabase.auth.admin.updateUserById(
+      userId,
+      { password: password }
+    );
+    
+    if (error) throw error;
+    
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.error("Update Password Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Admin: Delete User (Driver)
 app.post("/make-server-37f42386/delete-user", async (c) => {
   try {
@@ -2962,12 +3212,23 @@ app.post("/make-server-37f42386/map-match", async (c) => {
     }
 
     // Filter valid points with timestamps and sort them
-    const validPoints = points
+    const rawPoints = points
         .filter((p: any) => p && !isNaN(Number(p.lat)) && !isNaN(Number(p.lon)) && !isNaN(Number(p.timestamp)))
         .sort((a: any, b: any) => Number(a.timestamp) - Number(b.timestamp));
 
-    if (validPoints.length < 2) {
-      return c.json({ error: "At least 2 valid points with timestamps required" }, 400);
+    // Deduplicate to ensure strictly increasing timestamps (seconds) for OSRM
+    const uniquePoints: any[] = [];
+    let lastSec = -1;
+    for (const p of rawPoints) {
+        const sec = Math.floor(Number(p.timestamp) / 1000);
+        if (sec > lastSec) {
+            uniquePoints.push(p);
+            lastSec = sec;
+        }
+    }
+
+    if (uniquePoints.length < 2) {
+      return c.json({ error: "At least 2 points with unique timestamps (seconds) required" }, 400);
     }
 
     // Chunking Logic (60 points per chunk to be safe within 100 limit and URL length)
@@ -2975,8 +3236,8 @@ app.post("/make-server-37f42386/map-match", async (c) => {
     const chunks = [];
     
     // Create chunks with 1 point overlap
-    for (let i = 0; i < validPoints.length - 1; i += (CHUNK_SIZE - 1)) {
-        const chunk = validPoints.slice(i, Math.min(i + CHUNK_SIZE, validPoints.length));
+    for (let i = 0; i < uniquePoints.length - 1; i += (CHUNK_SIZE - 1)) {
+        const chunk = uniquePoints.slice(i, Math.min(i + CHUNK_SIZE, uniquePoints.length));
         chunks.push(chunk);
     }
     
@@ -2987,13 +3248,15 @@ app.post("/make-server-37f42386/map-match", async (c) => {
     const responses = await Promise.all(chunks.map(async (chunk) => {
         // Format: lon,lat;lon,lat
         const coords = chunk.map((p: any) => `${p.lon},${p.lat}`).join(';');
-        const timestamps = chunk.map((p: any) => Math.floor(p.timestamp / 1000)).join(';');
+        const timestamps = chunk.map((p: any) => Math.floor(Number(p.timestamp) / 1000)).join(';');
+        const radiuses = chunk.map(() => "25").join(';');
         
         // Using public OSRM server. 
-        const url = `https://router.project-osrm.org/match/v1/driving/${coords}?timestamps=${timestamps}&overview=full&geometries=geojson&steps=false&annotations=true`;
+        const url = `https://router.project-osrm.org/match/v1/driving/${coords}?timestamps=${timestamps}&radiuses=${radiuses}&overview=full&geometries=geojson&steps=false&annotations=true`;
         
         const res = await fetch(url);
         if (!res.ok) {
+            console.log(`OSRM Failed URL: ${url}`);
             throw new Error(`OSRM Match failed: ${res.statusText}`);
         }
         return res.json();
@@ -3147,6 +3410,89 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
 
     } catch (e: any) {
         console.error("Receipt Scan Error:", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Fleet Equipment Endpoints
+app.get("/make-server-37f42386/fleet/equipment/all", async (c) => {
+    try {
+        const equipment = await kv.getByPrefix("equipment:");
+        return c.json(equipment || []);
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/fleet/equipment/bulk", async (c) => {
+    try {
+        const items = await c.req.json();
+        if (!Array.isArray(items)) {
+            return c.json({ error: "Expected array of items" }, 400);
+        }
+        
+        // Key format: equipment:{vehicleId}:{itemId}
+        // Ensure keys match this format
+        const keys = items.map((item: any) => `equipment:${item.vehicleId}:${item.id}`);
+        await kv.mset(keys, items);
+        
+        return c.json({ success: true, count: items.length });
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Inventory Endpoints
+app.get("/make-server-37f42386/inventory", async (c) => {
+    try {
+        const inventory = await kv.getByPrefix("inventory:");
+        return c.json(inventory || []);
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/inventory", async (c) => {
+    try {
+        const item = await c.req.json();
+        if (!item.id) item.id = crypto.randomUUID();
+        await kv.set(`inventory:${item.id}`, item);
+        return c.json({ success: true, data: item });
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/inventory/bulk", async (c) => {
+    try {
+        const items = await c.req.json();
+        if (!Array.isArray(items)) return c.json({ error: "Expected array" }, 400);
+        
+        const keys = items.map((i: any) => `inventory:${i.id}`);
+        await kv.mset(keys, items);
+        return c.json({ success: true, count: items.length });
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Templates Endpoints
+app.get("/make-server-37f42386/templates", async (c) => {
+    try {
+        const templates = await kv.getByPrefix("template:equipment:");
+        return c.json(templates || []);
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/templates", async (c) => {
+    try {
+        const t = await c.req.json();
+        if (!t.id) t.id = crypto.randomUUID();
+        await kv.set(`template:equipment:${t.id}`, t);
+        return c.json({ success: true, data: t });
+    } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
 });

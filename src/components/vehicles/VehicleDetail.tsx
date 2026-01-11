@@ -84,6 +84,7 @@ import { OdometerDisplay } from './odometer/OdometerDisplay';
 import { calculateLiveMileage } from '../../utils/mileageProjection';
 import { FixedExpensesManager } from './expenses/FixedExpensesManager';
 import { EquipmentManager } from './EquipmentManager';
+import { ExteriorManager } from './ExteriorManager';
 import { MaintenanceManager, MaintenanceLog } from './MaintenanceManager';
 
 interface VehicleDetailProps {
@@ -929,6 +930,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   <TabsList>
                       <TabsTrigger value="fixed">Fixed Expenses</TabsTrigger>
                       <TabsTrigger value="equipment">Equipment Expenses</TabsTrigger>
+                      <TabsTrigger value="exterior">Exterior Parts</TabsTrigger>
                       <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
                   </TabsList>
                   
@@ -938,6 +940,10 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
 
                   <TabsContent value="equipment" className="mt-4">
                       <EquipmentManager vehicleId={vehicle.id || vehicle.licensePlate} />
+                  </TabsContent>
+
+                  <TabsContent value="exterior" className="mt-4">
+                      <ExteriorManager vehicleId={vehicle.id || vehicle.licensePlate} />
                   </TabsContent>
 
                   <TabsContent value="maintenance" className="mt-4">
