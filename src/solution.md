@@ -1,178 +1,81 @@
-# Fleet Expense System Implementation Plan
+# GoRide Cash Trip System Implementation Plan
 
-## Phase 1: Backend & Data Access Layer
-**Goal**: Enable efficient fleet-wide data fetching and bulk writing operations using Supabase KV Store.
+## Overview
+This roadmap outlines the steps to fully integrate "Cash Trips" into the GoRide ecosystem. The goal is to ensure that trips completed on the GoRide platform are automatically recognized as cash-in-hand for drivers, correctly reflected in financial reports, and properly reconciled.
 
-1.  **Step 1: Define TypeScript Interfaces**
-    *   Create `types/fleet.ts`.
-    *   Define `FleetMetric`, `InventoryItem`, `BulkOperationPayload` interfaces.
-    *   Update `types/equipment.ts` to include optional `inventoryId` reference.
+## Phase 1: Core Data Logic Implementation [Complete]
+**Goal:** Ensure the system correctly identifies and tags trips as "Cash Collected" at the point of creation.
 
-2.  **Step 2: Implement 'Get All Equipment' Endpoint**
-    *   Modify `/supabase/functions/server/index.tsx`.
-    *   Add route `GET /fleet/equipment/all`.
-    *   Implementation: Use `kv.getByPrefix('equipment:')` to fetch all equipment records in one request.
+*   **Step 1.1**: Audit `ManualTripInput` and `Trip` interfaces in `types/data.ts` and `utils/tripFactory.ts`. Ensure `platform` and `amount` are correctly typed and available. [x]
+*   **Step 1.2**: Locate `createManualTrip` in `utils/tripFactory.ts`. [x]
+*   **Step 1.3**: Implement the conditional logic: [x]
+    *   Define `isCashTrip` based on platform (GoRide, Cash, Private).
+    *   Set `cashCollected` = `amount` for cash trips, `0` for others.
+    *   Set `netPayout` = `0` for cash trips, `amount` for others.
+*   **Step 1.4**: Review `TripLogsPage.tsx` to ensure `handleManualTripSubmit` uses the factory correctly and doesn't override these fields. [x]
 
-3.  **Step 3: Implement 'Bulk Write' Endpoint**
-    *   Modify `/supabase/functions/server/index.tsx`.
-    *   Add route `POST /fleet/equipment/bulk`.
-    *   Implementation: Accept array of items, use `kv.mset` to save them atomically.
+## Phase 2: User Interface Visualization [Complete]
+**Goal:** Make it obvious to Admins and Drivers which trips were Cash Trips.
 
-4.  **Step 4: Implement Inventory Endpoints**
-    *   Modify `/supabase/functions/server/index.tsx`.
-    *   Add `GET /inventory` (using `kv.getByPrefix('inventory:')`).
-    *   Add `POST /inventory` (single item create/update).
-    *   Add `POST /inventory/bulk` (for bulk stock updates).
+*   **Step 2.1**: Update `TripLogsPage.tsx`. In the table, add a visual indicator (Badge or Icon) next to the Earnings amount for Cash Trips. [x]
+*   **Step 2.2**: Update `TripDetailsDialog.tsx`. In the "Payment Details" or "Key Metrics" section: [x]
+    *   Explicitly show "Cash Collected".
+    *   Show "Net Payout" (which will be 0 for cash trips).
+*   **Step 2.3**: Update `ManualTripForm.tsx`. Add a dynamic helper text below the Amount field that changes based on Platform selection (e.g., "Driver collects this cash directly"). [x]
 
-## Phase 2: Service Layer & State Management
-**Goal**: Create robust frontend services to abstract API communication.
+## Phase 3: Financial Ledger Integration [Complete]
+**Goal:** Ensure Cash Trips appear correctly in the Transaction Ledger.
 
-1.  **Step 1: Update Equipment Service**
-    *   Edit `services/equipmentService.ts`.
-    *   Add `getAllEquipment()` function.
-    *   Add `bulkAssignEquipment(payload)` function.
+*   **Step 3.1**: Open `TransactionsTab.tsx`. [x]
+*   **Step 3.2**: Locate the `tripTransactions` mapping logic (where Trips are converted to FinancialTransactions). [x]
+*   **Step 3.3**: Update the mapping logic: [x]
+    *   If `trip.cashCollected > 0`, set `paymentMethod` to 'Cash'.
+    *   Ensure `TransactionCategory` is appropriate (e.g., 'Fare Earnings').
+    *   Ensure the status reflects 'Completed'.
 
-2.  **Step 2: Create Inventory Service**
-    *   Create `services/inventoryService.ts`.
-    *   Implement `getInventory()`, `addStock()`, `updateStock()`, `deleteStock()`.
+## Phase 4: Reporting & Analytics Updates [Complete]
+**Goal:** Ensure high-level reports accurately reflect the cash flow.
 
-3.  **Step 3: Create Template Service**
-    *   Create `services/templateService.ts`.
-    *   Implement CRUD for equipment templates (`template:equipment:` prefix).
+*   **Step 4.1**: Update `TripStatsCard.tsx`. Add or ensure the "Earnings" metric allows drilling down or separating Cash vs Digital. [x]
+*   **Step 4.2**: Verify `FleetFinancialReport.tsx`. Ensure it correctly aggregates the cash trips. (It currently uses `driverMetrics`, so we may need to ensure `driverMetrics` logic—if dynamically calculated—accounts for this, or if it relies on the `transactions` array passed to it, Phase 3 fixes this). [x]
 
-4.  **Step 4: Data Hooks**
-    *   Create `hooks/useFleetData.ts`.
-    *   Implement `useFleetExpenses` (fetches vehicles + all equipment).
-    *   Implement `useInventory` (fetches stock).
+## Phase 5: System Verification & Polish [Complete]
+**Goal:** End-to-end validation.
 
-## Phase 3: Core UI Components
-**Goal**: Build the reusable atoms and molecules for the new dashboards.
+*   **Step 5.1**: Test Scenario A - Log a "GoRide" trip manually. Verify it appears as Cash in logs and ledger. [x]
+*   **Step 5.2**: Test Scenario B - Log an "Uber" trip manually. Verify it appears as Digital/Payout in logs and ledger. [x]
+*   **Step 5.3**: Check the "Fleet Financial Report" to ensure "Total Cash Collected" has increased by the GoRide trip amount. [x]
+*   **Step 5.4**: Final code review and cleanup of any unused imports or console logs. [x]
 
-1.  **Step 1: Vehicle Multi-Selector**
-    *   Create `components/fleet/shared/VehicleSelector.tsx`.
-    *   Use `shadcn/popover` and `shadcn/command`.
-    *   Features: Search by name/plate, "Select All" button, Badges for selected items.
+## Phase 6: Driver Portal Consistency (Fixing the "-" Issue) [Complete]
+**Goal:** Fix the issue where GoRide trips show "-" in the "Cash Collected" column of the Driver Trip History view and in the Driver Mobile App.
 
-2.  **Step 2: Standardized Status Badge**
-    *   Create `components/fleet/shared/StatusBadge.tsx`.
-    *   Map statuses (Good, Damaged, Low Stock) to Tailwind colors.
+*   **Step 6.1**: **Diagnosis & Component Identification**
+    *   Locate the specific component responsible for rendering the Driver Trip History table (Confirmed: `/components/drivers/DriverDetail.tsx`). [x]
+    *   Analyze the column rendering logic for "Cash Collected" to identify why it returns "-" for GoRide trips. [x]
+*   **Step 6.2**: **Logic Standardization**
+    *   Update the "Cash Collected" column renderer in `DriverDetail.tsx`. [x]
+    *   Implement the same logic used in `TripLogsPage.tsx`: Check if `cashCollected > 0` OR if the platform is 'GoRide', 'Private', or 'Cash'. [x]
+    *   Ensure the check is case-insensitive. [x]
+*   **Step 6.3**: **Financials Tab Audit**
+    *   Review the "Financials" metric calculations in `DriverDetail.tsx`. [x]
+    *   Ensure "Total Cash Collected" aggregates GoRide trips correctly even if `cashCollected` field is missing. [x]
+*   **Step 6.4**: **Global Search for Inconsistent Logic**
+    *   Search the codebase for other instances of hardcoded platform checks (e.g., `['indrive', 'bolt']`) and update them to include 'GoRide' and 'Private'. [x]
+    *   Fixed `DriverDetail.tsx` Filter Logic. [x]
+    *   Fixed `DriverDetail.tsx` Selected Trip Detail View. [x]
+    *   Fixed `DriverTrips.tsx` (Mobile View) Drawer and List logic. [x]
+*   **Step 6.5**: **Verification & Regression Fixes**
+    *   Manually verify that GoRide trips now show the correct cash amount in the Driver Trip History. [x]
+    *   **Regression Fix**: Restored missing platform data in "Cash Collected" tile by allowing negative/positive non-zero values for `cashCollected`, ensuring `Math.abs(cashCollected) > 0` check is used instead of strict `> 0` check. [x]
 
-3.  **Step 3: Inventory Item Card**
-    *   Create `components/inventory/InventoryItemCard.tsx`.
-    *   Display name, quantity, value, and "Assign" action button.
+## Phase 7: Cash Wallet & Weekly Settlements Fix [Complete]
+**Goal:** Ensure the "Cash Wallet" tab and "Financial Records" (Weekly Settlements) correctly calculate debt ("Owed") for GoRide trips.
 
-4.  **Step 4: Metric Cards**
-    *   Create `components/fleet/shared/MetricCard.tsx`.
-    *   Props: Title, Value, Icon, Trend (optional).
-
-## Phase 4: Fleet Dashboard (Read-Only)
-**Goal**: Implement the main "Control Center" for visualizing fleet expenses.
-
-1.  **Step 1: Dashboard Shell**
-    *   Create `components/fleet/FleetDashboard.tsx`.
-    *   Add Tab navigation (Overview, Inventory, Bulk Ops).
-    *   Add route `/fleet-expenses` in `App.tsx`.
-
-2.  **Step 2: Key Metrics Section**
-    *   Implement client-side calculation in `FleetDashboard.tsx`.
-    *   Calculate: Total Asset Value, Total Items, Vehicles with < 0 items.
-    *   Render `MetricCard` row.
-
-3.  **Step 3: Global Filter Bar**
-    *   Create `components/fleet/dashboard/GlobalFilterBar.tsx`.
-    *   Integrate `VehicleSelector` and Date Range Picker.
-    *   Pass filter state to parent dashboard.
-
-4.  **Step 4: Fleet Equipment Table**
-    *   Create `components/fleet/dashboard/FleetEquipmentTable.tsx`.
-    *   Columns: Equipment Name, Vehicle (Link), Category, Cost, Date.
-    *   Implement client-side sorting and filtering based on Global Filter.
-
-## Phase 5: Inventory Management System
-**Goal**: Manage unassigned assets and warehouse stock.
-
-1.  **Step 1: Inventory Dashboard**
-    *   Create `components/inventory/InventoryDashboard.tsx`.
-    *   Integrate `InventoryService` to load data.
-
-2.  **Step 2: Add/Edit Stock Dialog**
-    *   Create `components/inventory/InventoryDialog.tsx`.
-    *   Form fields: Name, Category, Quantity, Reorder Level, Cost per Unit.
-
-3.  **Step 3: Inventory Table**
-    *   Create `components/inventory/InventoryTable.tsx`.
-    *   Feature: Highlight rows where `Quantity <= ReorderLevel`.
-    *   Actions: "Edit", "Delete", "Quick Assign".
-
-## Phase 6: Bulk Operations Wizard (UI Skeleton)
-**Goal**: Design the multi-step interface for adding equipment to multiple vehicles.
-
-1.  **Step 1: Wizard Container**
-    *   Create `components/fleet/wizard/BulkWizard.tsx`.
-    *   State: `currentStep` (1-4), `wizardData` (vehicles, items, config).
-    *   Layout: Dialog with Progress Stepper.
-
-2.  **Step 2: Step 1 - Vehicle Selection**
-    *   Create `components/fleet/wizard/steps/VehicleSelectionStep.tsx`.
-    *   Reuse `VehicleSelector` but optimized for full-screen wizard.
-
-3.  **Step 3: Step 2 - Equipment Source**
-    *   Create `components/fleet/wizard/steps/EquipmentSelectionStep.tsx`.
-    *   Tabs: "New Item", "From Inventory", "From Template".
-    *   Render appropriate form based on tab.
-
-4.  **Step 4: Step 3 - Configuration**
-    *   Create `components/fleet/wizard/steps/ConfigurationStep.tsx`.
-    *   Fields: Installation Date, Notes, Cost override.
-
-5.  **Step 5: Step 4 - Review**
-    *   Create `components/fleet/wizard/steps/ReviewStep.tsx`.
-    *   Show summary: "Adding [Item] to [N] vehicles. Total Cost: [$X]".
-
-## Phase 7: Bulk Operations Logic & Wiring
-**Goal**: Connect the wizard UI to the backend with robust transaction logic.
-
-1.  **Step 1: Payload Generation**
-    *   Implement `generateBulkPayload()` utility.
-    *   Logic: Create N copies of the equipment item, each with unique ID and assigned `vehicleId`.
-
-2.  **Step 2: Inventory Deduction Logic**
-    *   Handle "From Inventory" case.
-    *   Logic: If source is inventory, decrement stock count. Validate `Required <= Available`.
-
-3.  **Step 3: Backend Integration**
-    *   Wire "Confirm" button to `equipmentService.bulkAssign`.
-    *   Handle `isSubmitting` state and error catching.
-
-4.  **Step 4: Success Feedback**
-    *   Show Success Dialog with summary.
-    *   Offer "Print Report" or "View Dashboard" options.
-
-## Phase 8: Templates System
-**Goal**: Allow saving equipment sets for rapid assignment.
-
-1.  **Step 1: Template Manager**
-    *   Create `components/fleet/templates/TemplateManager.tsx`.
-    *   List existing templates.
-
-2.  **Step 2: Create Template Dialog**
-    *   Allow defining a "Kit" (Name + Array of Items).
-    *   Save to `template:equipment:` prefix.
-
-3.  **Step 3: Integrate with Wizard**
-    *   Update `EquipmentSelectionStep.tsx` to pull from Template Service.
-
-## Phase 9: Polish & Smart Alerts
-**Goal**: Final UX enhancements and mobile responsiveness.
-
-1.  **Step 1: Alert Logic**
-    *   Create `utils/alertHelpers.ts`.
-    *   Function `getExpiringItems(items)`: returns items expiring in < 30 days.
-
-2.  **Step 2: Alerts Panel**
-    *   Add "Alerts" tab to `FleetDashboard`.
-    *   Display list of alerts grouped by urgency.
-
-3.  **Step 3: Mobile Responsive Check**
-    *   Verify Wizard works on mobile (stack columns).
-    *   Verify Table horizontal scroll behavior.
+*   **Step 7.1**: **Locate Settlement Calculation Logic**
+    *   Found logic in `/components/drivers/WeeklySettlementView.tsx`. [x]
+*   **Step 7.2**: **Fix Debt Calculation**
+    *   Updated `isCashPlatform` array in `tripCalculatedCash` to include 'goride' and 'private'. [x]
+    *   Updated `isCashPlatform` array in `cashTripCount` to include 'goride' and 'private'. [x]
+*   **Step 7.3**: **Verification**
+    *   The "Owed" amount in Weekly Settlements should now correctly reflect the sum of GoRide trip amounts. [x]

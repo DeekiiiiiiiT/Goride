@@ -13,6 +13,7 @@ interface TripStatsCardProps {
     completed: number;
     cancelled: number;
     totalEarnings: number;
+    totalCashCollected?: number;
     avgEarnings: number;
     avgDuration: number;
   };
@@ -23,6 +24,7 @@ export function TripStatsCard({ trips, title = "Current View Summary", stats, lo
   let completed = 0;
   let cancelled = 0;
   let totalEarnings = 0;
+  let totalCashCollected = 0;
   let avgEarnings = 0;
   let avgDuration = 0;
 
@@ -51,6 +53,7 @@ export function TripStatsCard({ trips, title = "Current View Summary", stats, lo
       completed = stats.completed;
       cancelled = stats.cancelled;
       totalEarnings = stats.totalEarnings;
+      totalCashCollected = stats.totalCashCollected || 0;
       avgEarnings = stats.avgEarnings;
       avgDuration = stats.avgDuration;
   } else {
@@ -59,6 +62,7 @@ export function TripStatsCard({ trips, title = "Current View Summary", stats, lo
       completed = trips.filter(t => t.status === 'Completed').length;
       cancelled = trips.filter(t => t.status === 'Cancelled').length;
       totalEarnings = trips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      totalCashCollected = trips.reduce((sum, t) => sum + (t.cashCollected || 0), 0);
       avgEarnings = completed > 0 ? totalEarnings / completed : 0;
       
       const tripsWithDuration = trips.filter(t => t.duration && t.duration > 0);
@@ -119,7 +123,10 @@ export function TripStatsCard({ trips, title = "Current View Summary", stats, lo
           <div>
             <p className="text-sm font-medium text-slate-500">Total Earnings</p>
             <h3 className="text-2xl font-bold text-indigo-600">${totalEarnings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
-            <p className="text-xs text-slate-400 mt-1">Gross Revenue</p>
+            <div className="text-xs text-slate-400 mt-1 flex flex-col gap-0.5">
+               <span className="text-emerald-600 font-medium">${totalCashCollected.toLocaleString()} Cash</span>
+               <span className="text-slate-400">${(totalEarnings - totalCashCollected).toLocaleString()} Payout</span>
+            </div>
           </div>
           <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
             <DollarSign className="h-5 w-5" />

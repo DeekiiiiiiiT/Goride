@@ -314,14 +314,14 @@ export function DriverTrips() {
                                 </div>
                             </div>
 
-                            {(selectedTrip.cashCollected || 0) > 0 && (
+                            {((Math.abs(Number(selectedTrip.cashCollected || 0)) > 0) || ['goride', 'private', 'cash'].includes((selectedTrip.platform || '').toLowerCase())) && (
                                 <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900 mt-4">
                                     <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
                                         <div className="flex items-center gap-2">
                                             <Banknote className="h-4 w-4" />
                                             <span className="text-sm font-medium">Cash Collected</span>
                                         </div>
-                                        <span className="font-bold">-${selectedTrip.cashCollected!.toFixed(2)}</span>
+                                        <span className="font-bold">-${(Math.abs(Number(selectedTrip.cashCollected)) || selectedTrip.amount || 0).toFixed(2)}</span>
                                     </div>
                                     <p className="text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-1">
                                         Collected directly from rider. Deducted from payout.
@@ -348,7 +348,7 @@ export function DriverTrips() {
 function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
    // Heuristic: If we have explicit cash collected OR the net payout is negative (implying cash collection > earnings), treat as cash trip.
    const amount = trip.netPayout || trip.amount;
-   const isCash = (trip.cashCollected || 0) > 0 || amount < 0;
+   const isCash = (Math.abs(Number(trip.cashCollected || 0)) > 0) || amount < 0 || ['goride', 'private', 'cash'].includes((trip.platform || '').toLowerCase());
    const date = new Date(trip.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 
    return (

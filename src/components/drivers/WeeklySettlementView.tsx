@@ -79,7 +79,7 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
                 const cash = Number(t.cashCollected || 0);
                 if (Math.abs(cash) > 0) return sum + Math.abs(cash);
                 const platform = (t.platform || '').toLowerCase();
-                const isCashPlatform = ['indrive', 'bolt', 'cash'].includes(platform);
+                const isCashPlatform = ['indrive', 'bolt', 'cash', 'goride', 'private'].includes(platform);
                 const isCashMethod = t['paymentMethod'] === 'Cash';
                 if (isCashPlatform || isCashMethod) return sum + Number(t.amount || 0);
                 return sum;
@@ -206,7 +206,7 @@ export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onL
             const cashTripCount = week.weekTrips.filter(t => {
                 const cash = Number(t.cashCollected || 0);
                 const platform = (t.platform || '').toLowerCase();
-                const isCashPlatform = ['indrive', 'bolt', 'cash'].includes(platform);
+                const isCashPlatform = ['indrive', 'bolt', 'cash', 'goride', 'private'].includes(platform);
                 const isCashMethod = t['paymentMethod'] === 'Cash';
                 return Math.abs(cash) > 0 || isCashPlatform || isCashMethod;
             }).length;

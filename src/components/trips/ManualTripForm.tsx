@@ -356,6 +356,11 @@ export function ManualTripForm({
                   required
                 />
               </div>
+              {['GoRide', 'Cash', 'Private'].includes(formData.platform) && (
+                <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
+                  * Driver collects this amount as cash
+                </p>
+              )}
             </div>
             
             {!initialData && (

@@ -20,10 +20,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { api, TripFilterParams } from '../../services/api';
 import { Trip } from '../../types/data';
 import { TripStatsCard } from './TripStatsCard';
+import { ManualTripForm } from './ManualTripForm';
 import { TripFilters, TripFilterState } from './TripFilters';
 import { CancellationAnalysis } from './CancellationAnalysis';
 import { RouteAnalysis } from './RouteAnalysis';
 import { ReportGenerator } from './ReportGenerator';
+import { TripDetailsDialog } from './TripDetailsDialog';
+import { TripMapDialog } from './TripMapDialog';
+import { TripIssueDialog } from './TripIssueDialog';
+import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { startOfDay, endOfDay, subDays, startOfWeek } from 'date-fns';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -37,7 +42,6 @@ const parseLocalDate = (dateStr: string) => {
 export function TripLogsPage() {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<'details' | 'map' | 'issue' | null>(null);
-  const [issueReason, setIssueReason] = useState('');
   const [isManualTripOpen, setIsManualTripOpen] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
@@ -206,7 +210,6 @@ export function TripLogsPage() {
   const handleAction = (trip: Trip, mode: 'details' | 'map' | 'issue') => {
       setSelectedTrip(trip);
       setViewMode(mode);
-      setIssueReason('');
   };
 
   const handleContactDriver = (trip: Trip) => {
@@ -222,13 +225,11 @@ export function TripLogsPage() {
       deleteTripMutation.mutate(tripToDelete.id);
   };
 
-  const submitIssue = () => {
-      if (!issueReason) {
-          toast.error("Please provide a reason");
-          return;
-      }
+  const handleIssueSubmit = async (tripId: string, reason: string) => {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
       toast.success("Issue flagged successfully", {
-          description: `Ticket created for Trip #${selectedTrip?.id.slice(0, 8)}`
+          description: `Ticket created for Trip #${tripId.slice(0, 8)}`
       });
       setViewMode(null);
   };
@@ -392,9 +393,16 @@ export function TripLogsPage() {
 
                               <TableCell className="align-top text-right">
                                 <div className="flex flex-col items-end">
-                                    <span className="font-bold text-slate-900">
-                                        ${(trip.amount || 0).toFixed(2)}
-                                    </span>
+                                    <div className="flex items-center justify-end gap-2">
+                                        {(trip.cashCollected! > 0 || ['GoRide', 'Cash', 'Private'].includes(trip.platform)) && (
+                                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                Cash
+                                            </Badge>
+                                        )}
+                                        <span className="font-bold text-slate-900">
+                                            ${(trip.amount || 0).toFixed(2)}
+                                        </span>
+                                    </div>
                                     {trip.fareBreakdown?.tips ? (
                                         <span className="text-xs text-emerald-600 flex items-center gap-1">
                                             +${trip.fareBreakdown.tips.toFixed(2)} Tip
@@ -515,6 +523,42 @@ export function TripLogsPage() {
             <RouteAnalysis trips={trips} />
         </TabsContent>
       </Tabs>
+      
+      <ManualTripForm 
+        open={isManualTripOpen}
+        onOpenChange={setIsManualTripOpen}
+        onSubmit={handleManualTripSubmit}
+        isAdmin={true}
+        drivers={availableDrivers}
+        vehicles={availableVehicles}
+      />
+      
+      <TripDetailsDialog 
+        trip={selectedTrip} 
+        open={viewMode === 'details'} 
+        onOpenChange={(open) => !open && setViewMode(null)} 
+      />
+
+      <TripMapDialog 
+        trip={selectedTrip} 
+        open={viewMode === 'map'} 
+        onOpenChange={(open) => !open && setViewMode(null)} 
+      />
+
+      <TripIssueDialog 
+        trip={selectedTrip} 
+        open={viewMode === 'issue'} 
+        onOpenChange={(open) => !open && setViewMode(null)} 
+        onSubmit={handleIssueSubmit}
+      />
+
+      <DeleteConfirmationDialog 
+        trip={tripToDelete}
+        open={!!tripToDelete}
+        onOpenChange={(open) => !open && setTripToDelete(null)}
+        onConfirm={confirmDeleteTrip}
+        isDeleting={deleteTripMutation.isPending}
+      />
     </div>
   );
 }

@@ -42,6 +42,10 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     endTimestamp = new Date(startTime.getTime() + data.duration * 60000).toISOString();
   }
 
+  // Determine if this is a cash-based trip where driver collects money directly
+  const isCashTrip = ['GoRide', 'Cash', 'Private'].includes(data.platform);
+  const amount = Number(data.amount);
+
   return {
     id: `manual_${crypto.randomUUID().split('-')[0]}`, // Short unique ID
     platform: data.platform,
@@ -51,7 +55,7 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     duration: data.duration, // Add duration to the trip object
     driverId: driverId,
     driverName: driverName,
-    amount: Number(data.amount),
+    amount: amount,
     status: 'Completed',
     pickupLocation: data.pickupLocation || 'Manual Entry',
     dropoffLocation: data.dropoffLocation || '',
@@ -63,9 +67,13 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     totalWaitTime: data.totalWaitTime,
     
     // Financials
-    netPayout: Number(data.amount), // For manual trips, we assume the entered amount is what the driver got
+    // For Cash trips, driver collects amount directly (Net Payout from platform is 0)
+    // For Platform trips (Uber/Bolt), platform collects and pays driver (Net Payout = amount)
+    cashCollected: isCashTrip ? amount : 0,
+    netPayout: isCashTrip ? 0 : amount, 
+    
     fareBreakdown: {
-      baseFare: Number(data.amount),
+      baseFare: amount,
       tips: 0,
       waitTime: 0,
       surge: 0,

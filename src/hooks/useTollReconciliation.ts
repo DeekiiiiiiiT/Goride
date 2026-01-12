@@ -14,10 +14,15 @@ export function useTollReconciliation() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allTx, allTrips] = await Promise.all([
+      const [rawTx, allTrips] = await Promise.all([
         api.getTransactions(),
         api.getTrips()
       ]);
+
+      // Deduplicate transactions to prevent key collisions
+      const uniqueTxMap = new Map();
+      rawTx.forEach(tx => uniqueTxMap.set(tx.id, tx));
+      const allTx = Array.from(uniqueTxMap.values());
 
       // 1. Identify Unreconciled Tolls
       // We check for !isReconciled OR !tripId to catch legacy imports that were auto-marked as reconciled but have no link.
@@ -94,7 +99,14 @@ export function useTollReconciliation() {
         
         // Update local state
         setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
-        setReconciledTolls(prev => [result.transaction, ...prev]);
+        setReconciledTolls(prev => {
+            // Prevent duplicates
+            const exists = prev.some(t => t.id === result.transaction.id);
+            if (exists) {
+                return prev.map(t => t.id === result.transaction.id ? result.transaction : t);
+            }
+            return [result.transaction, ...prev];
+        });
         
         setSuggestions(prev => {
             const next = new Map(prev);
@@ -178,7 +190,11 @@ export function useTollReconciliation() {
 
           // Update local state
           setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
-          setReconciledTolls(prev => [updatedTx, ...prev]);
+          setReconciledTolls(prev => {
+              const exists = prev.some(t => t.id === updatedTx.id);
+              if (exists) return prev.map(t => t.id === updatedTx.id ? updatedTx : t);
+              return [updatedTx, ...prev];
+          });
           
           setSuggestions(prev => {
               const next = new Map(prev);
@@ -201,7 +217,11 @@ export function useTollReconciliation() {
           // Update local state
           setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
           // We add to reconciled list so it appears in history (marked as Rejected)
-          setReconciledTolls(prev => [updatedTx, ...prev]);
+          setReconciledTolls(prev => {
+              const exists = prev.some(t => t.id === updatedTx.id);
+              if (exists) return prev.map(t => t.id === updatedTx.id ? updatedTx : t);
+              return [updatedTx, ...prev];
+          });
           
           setSuggestions(prev => {
               const next = new Map(prev);

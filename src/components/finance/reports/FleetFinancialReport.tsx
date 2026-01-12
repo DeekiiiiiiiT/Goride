@@ -1,12 +1,12 @@
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "../ui/card";
-import { Button } from "../ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Badge } from "../ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "../../ui/card";
+import { Button } from "../../ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
+import { Badge } from "../../ui/badge";
 import { format } from "date-fns";
 import { Download, FileText, CheckCircle2, AlertTriangle, Printer } from "lucide-react";
-import { DriverMetrics, FinancialTransaction } from "../../types/data";
-import { cn } from "../ui/utils";
+import { DriverMetrics, FinancialTransaction } from "../../../types/data";
+import { cn } from "../../ui/utils";
 
 interface FleetFinancialReportProps {
   transactions: FinancialTransaction[];
@@ -15,7 +15,10 @@ interface FleetFinancialReportProps {
 
 export function FleetFinancialReport({ transactions, driverMetrics }: FleetFinancialReportProps) {
   // 1. Calculate Fleet Totals
-  const totalCashCollected = driverMetrics.reduce((sum, d) => sum + (d.cashCollected || 0), 0);
+  // Calculate directly from transactions to ensure real-time accuracy (Cash Trips)
+  const totalCashCollected = transactions
+    .filter(t => t.paymentMethod === 'Cash' && t.category === 'Fare Earnings')
+    .reduce((sum, t) => sum + t.amount, 0);
   
   // Sum of all "Cash Collection" transactions
   const totalCashReceived = transactions
@@ -34,7 +37,14 @@ export function FleetFinancialReport({ transactions, driverMetrics }: FleetFinan
       )
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const owed = driver.cashCollected || 0;
+    // Calculate owed from Cash Trips recorded
+    const owed = transactions
+      .filter(t => 
+        (t.driverId === driver.id || t.driverId === driver.uberDriverId || t.driverId === driver.inDriveDriverId) &&
+        t.paymentMethod === 'Cash' && 
+        t.category === 'Fare Earnings'
+      )
+      .reduce((sum, t) => sum + t.amount, 0);
     const balance = owed - received;
 
     return {

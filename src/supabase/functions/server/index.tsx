@@ -85,7 +85,7 @@ app.get("/make-server-37f42386/dashboard/stats", async (c) => {
 // Trips Search Endpoint (GIN Index)
 app.post("/make-server-37f42386/trips/search", async (c) => {
   try {
-    const { 
+    let { 
         driverId, startDate, endDate, status, limit, offset,
         platform, tripType, vehicleId
     } = await c.req.json();
@@ -100,7 +100,14 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
         query = query.eq("value->>driverId", driverId);
     }
     
-    if (status) {
+    if (status === 'Processing') {
+        // Handle variations of "In Progress" status and relax date constraints for active trips
+        query = query.or(`value->>status.eq.Processing,value->>status.eq.In Progress,value->>status.eq.In_Progress,value->>status.eq.started`);
+        
+        // Clear date filters for active trips to ensure they appear regardless of start time
+        startDate = undefined;
+        endDate = undefined;
+    } else if (status) {
         query = query.eq("value->>status", status);
     }
 
@@ -160,7 +167,7 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
 app.post("/make-server-37f42386/trips/stats", async (c) => {
   try {
     const filters = await c.req.json();
-    const { 
+    let { 
         driverId, startDate, endDate, status,
         platform, tripType, vehicleId
     } = filters;
@@ -186,7 +193,14 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
         query = query.eq("value->>driverId", driverId);
     }
     
-    if (status) {
+    if (status === 'Processing') {
+        // Handle variations of "In Progress" status and relax date constraints for active trips
+        query = query.or(`value->>status.eq.Processing,value->>status.eq.In Progress,value->>status.eq.In_Progress,value->>status.eq.started`);
+        
+        // Clear date filters for active trips to ensure they appear regardless of start time
+        startDate = undefined;
+        endDate = undefined;
+    } else if (status) {
         query = query.eq("value->>status", status);
     }
 
@@ -227,6 +241,7 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
     const cancelled = trips.filter((t: any) => t.status === 'Cancelled').length;
     
     const totalEarnings = trips.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+    const totalCashCollected = trips.reduce((sum: number, t: any) => sum + (Number(t.cashCollected) || 0), 0);
     const avgEarnings = completed > 0 ? totalEarnings / completed : 0;
     
     const tripsWithDuration = trips.filter((t: any) => t.duration && t.duration > 0);
@@ -238,6 +253,7 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
         completed,
         cancelled,
         totalEarnings,
+        totalCashCollected,
         avgEarnings,
         avgDuration
     };

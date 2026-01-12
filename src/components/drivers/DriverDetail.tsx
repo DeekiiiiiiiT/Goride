@@ -106,6 +106,19 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 
+const PLATFORM_COLORS: Record<string, string> = {
+  Uber: '#3b82f6',
+  InDrive: '#10b981',
+  GoRide: '#6366f1',
+  Bolt: '#22c55e',
+  Lyft: '#ec4899',
+  Private: '#f59e0b',
+  Cash: '#84cc16',
+  Other: '#64748b'
+};
+
+const getPlatformColor = (platform: string) => PLATFORM_COLORS[platform] || PLATFORM_COLORS['Other'];
+
 interface DriverDocument {
   id: string;
   name: string;
@@ -603,19 +616,23 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      let totalTolls = 0;
 
      // Platform Stats
-     const platformStats = {
-        Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0 },
-        InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0 },
-        Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0 }
+     const platformStats: Record<string, any> = {
+        Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+        InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+        GoRide: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+        Bolt: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+        Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 }
      };
 
      // Chart Data Map
-     const chartDataMap = new Map<string, { Uber: number, InDrive: number, Other: number }>();
+     const chartDataMap = new Map<string, Record<string, number>>();
      
      try {
          const days = eachDayOfInterval({ start, end });
          days.forEach(d => {
-             chartDataMap.set(format(d, 'yyyy-MM-dd'), { Uber: 0, InDrive: 0, Other: 0 });
+             const initialDayStats: Record<string, number> = {};
+             Object.keys(platformStats).forEach(k => initialDayStats[k] = 0);
+             chartDataMap.set(format(d, 'yyyy-MM-dd'), initialDayStats);
          });
      } catch (e) { }
 
@@ -627,13 +644,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         const tripDateObj = new Date(trip.date);
         if (isNaN(tripDateObj.getTime())) return;
         
+        // FIX: Determine effective cash (handling GoRide/Private legacy/missing data)
+        const platformName = (trip.platform || 'Other').toLowerCase();
+        const isCashPlatform = ['goride', 'private', 'cash'].includes(platformName);
+        const rawCash = Number(trip.cashCollected || 0);
+        const effectiveCash = (Math.abs(rawCash) > 0)
+           ? rawCash
+           : (isCashPlatform ? trip.amount : 0);
+
         // Lifetime stats
         totalEarnings += trip.amount;
         lifetimeTrips += 1;
-        if (trip.cashCollected) totalCashCollected += Math.abs(trip.cashCollected);
+        if (effectiveCash) totalCashCollected += Math.abs(effectiveCash);
         // Only count tolls as debt if they weren't collected in cash (assuming cash collected includes toll reimbursement)
         // If it's a card trip (no cash collected), the driver received the toll refund in their payout, so they owe it back.
-        if (trip.tollCharges && !trip.cashCollected) {
+        if (trip.tollCharges && !effectiveCash) {
             lifetimeTolls += trip.tollCharges;
         }
 
@@ -641,7 +666,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         if (isWithinInterval(tripDateObj, { start, end })) {
             periodEarnings += trip.amount;
             
-            const platform = (trip.platform === 'Uber' || trip.platform === 'InDrive') ? trip.platform : 'Other';
+            const platform = trip.platform || 'Other';
+            if (!platformStats[platform]) {
+                platformStats[platform] = { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 };
+            }
             const pStats = platformStats[platform];
 
             // Platform Stats
@@ -653,7 +681,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 pStats.completed++;
             }
             if (trip.status === 'Cancelled') periodCancelledTrips++;
-            if (trip.cashCollected) cashCollected += Math.abs(trip.cashCollected);
+            if (effectiveCash) {
+                const amount = Math.abs(effectiveCash);
+                cashCollected += amount;
+                pStats.cashCollected = (pStats.cashCollected || 0) + amount;
+            }
             
             if (trip.distance) {
                 totalDistance += trip.distance;
@@ -704,9 +736,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          return {
              day: format(d, 'MMM d'),
              fullDate: date,
-             Uber: amounts.Uber,
-             InDrive: amounts.InDrive,
-             Other: amounts.Other
+             ...amounts
          };
      });
 
@@ -1095,35 +1125,40 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   trend={`${metrics.trendPercent}% vs prev`} 
                   trendUp={metrics.trendUp}
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
-                   breakdown={[
-                       { label: 'Uber', value: `$${metrics.platformStats.Uber.earnings.toFixed(2)}`, color: '#3b82f6' },
-                       { label: 'InDrive', value: `$${metrics.platformStats.InDrive.earnings.toFixed(2)}`, color: '#10b981' }
-                   ]}
+                   breakdown={Object.entries(metrics.platformStats)
+                       .filter(([_, stats]: [string, any]) => stats.earnings > 0 || stats.completed > 0)
+                       .map(([label, stats]: [string, any]) => ({
+                           label,
+                           value: `$${stats.earnings.toFixed(2)}`,
+                           color: getPlatformColor(label)
+                       }))}
                />
                <MetricCard 
-                  title="Period Cash Activity" 
-                  value={`$${metrics.periodNetChange.toFixed(2)}`} 
-                  subtext="Net Change in Period"
+                  title="Cash Collected" 
+                  value={`$${metrics.cashCollected.toFixed(2)}`} 
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
-                  tooltip={`Lifetime Outstanding Balance: $${metrics.netOutstanding.toFixed(2)}`}
+                  tooltip="Total cash collected from trips during this period"
                   breakdown={[
-                      { label: 'Collected', value: `$${metrics.cashCollected.toFixed(2)}`, color: '#f43f5e' },
-                      { label: 'Paid', value: `$${metrics.periodCashReceived.toFixed(2)}`, color: '#10b981' }
+                      ...Object.entries(metrics.platformStats)
+                          .filter(([_, stats]: [string, any]) => stats.cashCollected > 0)
+                          .map(([label, stats]: [string, any]) => ({
+                              label: label, 
+                              value: `$${stats.cashCollected.toFixed(2)}`, 
+                              color: '#f43f5e' 
+                          }))
                   ]}
-                  action={
-                      <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setPaymentModalState({ isOpen: true })}>
-                          Log Cash Payment
-                      </Button>
-                  }
                />
                <MetricCard 
                   title="Km Driven for Period" 
                   value={`${metrics.totalDistance.toFixed(1)} km`} 
                   icon={<Navigation className="h-4 w-4 text-slate-500" />}
-                   breakdown={[
-                       { label: 'Uber', value: `${metrics.platformStats.Uber.distance.toFixed(1)} km`, color: '#3b82f6' },
-                       { label: 'InDrive', value: `${metrics.platformStats.InDrive.distance.toFixed(1)} km`, color: '#10b981' }
-                   ]}
+                   breakdown={Object.entries(metrics.platformStats)
+                       .filter(([_, stats]: [string, any]) => stats.distance > 0)
+                       .map(([label, stats]: [string, any]) => ({
+                           label,
+                           value: `${stats.distance.toFixed(1)} km`,
+                           color: getPlatformColor(label)
+                       }))}
                />
                <Card>
                   <CardHeader className="pb-2">
@@ -1191,10 +1226,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   value={`$${metrics.totalTolls.toFixed(2)}`}
                   subtext="Added to Debt (Cash Risk)"
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
-                  breakdown={[
-                       { label: 'Uber', value: `$${metrics.platformStats.Uber.tolls.toFixed(2)}`, color: '#3b82f6' },
-                       { label: 'InDrive', value: `$${metrics.platformStats.InDrive.tolls.toFixed(2)}`, color: '#10b981' }
-                   ]}
+                   breakdown={Object.entries(metrics.platformStats)
+                       .filter(([_, stats]: [string, any]) => stats.tolls > 0)
+                       .map(([label, stats]: [string, any]) => ({
+                           label,
+                           value: `$${stats.tolls.toFixed(2)}`,
+                           color: getPlatformColor(label)
+                       }))}
                />
                <MetricCard 
                   title="Month-to-Date Earnings"
@@ -2114,7 +2152,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     // Cash Filter
                                     const matchesCash = !filterCashOnly || 
                                         (Math.abs(Number(t.cashCollected || 0)) > 0) || 
-                                        (t.platform && ['indrive', 'bolt'].includes(t.platform.toLowerCase())) ||
+                                        (t.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(t.platform.toLowerCase())) ||
                                         (t as any).paymentMethod === 'Cash';
 
                                     return matchesSearch && matchesPlatform && matchesStatus && matchesCash;
@@ -2151,7 +2189,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     <TableCell>{trip.duration ? `${trip.duration.toFixed(0)} min` : '-'}</TableCell>
                                     <TableCell className="font-medium text-amber-600">
                                         {Math.abs(Number(trip.cashCollected || 0)) > 0 ? `$${Math.abs(Number(trip.cashCollected)).toFixed(2)}` : 
-                                        (trip.platform && ['indrive', 'bolt'].includes(trip.platform.toLowerCase()) ? `$${(trip.amount ?? 0).toFixed(2)}` : '-')}
+                                        (trip.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(trip.platform.toLowerCase()) ? `$${(trip.amount ?? 0).toFixed(2)}` : '-')}
                                     </TableCell>
                                     <TableCell className="font-medium">${(trip.amount ?? 0).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
@@ -2446,7 +2484,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                       <div className="font-bold text-lg text-amber-600">
                         {Math.abs(Number(selectedTrip.cashCollected || 0)) > 0 
                             ? `$${Math.abs(Number(selectedTrip.cashCollected)).toFixed(2)}` 
-                            : '-'}
+                            : (selectedTrip.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(selectedTrip.platform.toLowerCase()) 
+                                ? `$${(selectedTrip.amount ?? 0).toFixed(2)}` 
+                                : '-')}
                       </div>
                   </div>
 

@@ -8,6 +8,7 @@ import { EquipmentList } from './EquipmentList';
 import { TemplateCard } from './TemplateCard';
 import { BulkAssignmentModal } from './BulkAssignmentModal';
 import { AddInventoryModal } from './AddInventoryModal';
+import { AddTemplateModal } from './AddTemplateModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { Plus, LayoutGrid, Settings, Database, AlertCircle } from "lucide-react";
@@ -34,6 +35,7 @@ export function FleetPage() {
     
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
+    const [isAddTemplateOpen, setIsAddTemplateOpen] = useState(false);
 
     useEffect(() => {
         loadTemplates();
@@ -129,6 +131,17 @@ export function FleetPage() {
         }
     };
 
+    const handleSaveTemplate = async (template: EquipmentTemplate) => {
+        try {
+            await templateService.saveTemplate(template);
+            toast.success("Template created successfully");
+            loadTemplates();
+            setIsAddTemplateOpen(false);
+        } catch (e: any) {
+            toast.error("Failed to create template: " + e.message);
+        }
+    };
+
     if (fleetLoading || inventoryLoading) return <div className="p-8">Loading Fleet Data...</div>;
 
     return (
@@ -206,7 +219,7 @@ export function FleetPage() {
                 <TabsContent value="templates" className="space-y-4">
                     <div className="flex justify-between">
                          <h2 className="text-xl font-semibold">Equipment Templates</h2>
-                         <Button variant="outline" size="sm"><Plus className="mr-2 h-4 w-4"/> New Template</Button>
+                         <Button variant="outline" size="sm" onClick={() => setIsAddTemplateOpen(true)}><Plus className="mr-2 h-4 w-4"/> New Template</Button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {templates.map(t => (
@@ -236,6 +249,12 @@ export function FleetPage() {
                 isOpen={isAddInventoryOpen}
                 onClose={() => setIsAddInventoryOpen(false)}
                 onSave={handleAddInventory}
+            />
+            
+            <AddTemplateModal 
+                isOpen={isAddTemplateOpen}
+                onClose={() => setIsAddTemplateOpen(false)}
+                onSave={handleSaveTemplate}
             />
         </div>
     );

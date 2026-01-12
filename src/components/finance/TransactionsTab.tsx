@@ -95,6 +95,7 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
              // This ensures Uber/Bolt imports (which are Trips) appear in the Transaction List
              const tripTransactions: FinancialTransaction[] = trips.map(t => {
                  const batch = batches.find((b: ImportBatch) => b.id === t.batchId);
+                 const isCash = (t.cashCollected || 0) > 0;
                  
                  // If this trip is already represented in realTx (e.g. via ID match), strictly speaking we should dedup.
                  // But typically Trips and FinancialTransactions are separate tables.
@@ -108,9 +109,9 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                      vehicleId: t.vehicleId,
                      type: 'Revenue',
                      category: 'Fare Earnings',
-                     description: `Trip: ${t.pickupLocation || 'Unknown'} -> ${t.dropoffLocation || 'Unknown'}`,
-                     amount: t.netPayout || t.amount,
-                     paymentMethod: 'Digital Wallet',
+                     description: `${t.platform || 'Trip'} ${isCash ? '(Cash)' : ''}: ${t.pickupLocation || 'Unknown'} -> ${t.dropoffLocation || 'Unknown'}`,
+                     amount: isCash ? t.cashCollected! : (t.netPayout || t.amount),
+                     paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
                      status: t.status === 'Completed' ? 'Completed' : 'Pending',
                      batchId: t.batchId,
                      batchName: batch?.fileName || (t.batchId ? 'Imported Trip File' : undefined),

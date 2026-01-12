@@ -575,7 +575,7 @@ export const api = {
       metadata?: any,
       insights?: any 
   }) {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/sync`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/sync`, {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
