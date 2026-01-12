@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ResponsiveContainer, ResponsiveContainerProps } from 'recharts@2.15.2';
+import { ResponsiveContainer, ResponsiveContainerProps } from 'recharts';
 
 /**
  * A wrapper around Recharts ResponsiveContainer that prevents rendering
@@ -18,28 +18,33 @@ export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
 
     let timeoutId: any;
 
-    const checkSize = () => {
-      // Check if element is visible and has dimensions
-      // We use clientWidth/Height to exclude borders/scrollbars, 
-      // as Recharts uses client dimensions for calculation.
-      if (element.clientWidth > 0 && element.clientHeight > 0) {
-        setShouldRender(true);
-      } else {
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+
+      const { width, height } = entry.contentRect;
+
+      if (width === 0 || height === 0) {
+        // If dimensions are zero, hide immediately to prevent errors
+        clearTimeout(timeoutId);
         setShouldRender(false);
+      } else {
+        // If dimensions are present, debounce the show to ensure stability
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          if (element.clientWidth > 0 && element.clientHeight > 0) {
+            setShouldRender(true);
+          }
+        }, 100);
       }
-    };
-
-    // Initial check
-    checkSize();
-
-    // Use ResizeObserver to detect size changes
-    const observer = new ResizeObserver(() => {
-      // Debounce the check to avoid rapid changes or layout thrashing
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(checkSize, 100);
     });
 
     observer.observe(element);
+
+    // Initial check
+    if (element.clientWidth > 0 && element.clientHeight > 0) {
+      setShouldRender(true);
+    }
 
     return () => {
       observer.disconnect();
@@ -63,7 +68,7 @@ export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
       }}
     >
       {shouldRender ? (
-        <ResponsiveContainer {...props}>
+        <ResponsiveContainer minWidth={0} minHeight={0} {...props}>
           {props.children}
         </ResponsiveContainer>
       ) : null}

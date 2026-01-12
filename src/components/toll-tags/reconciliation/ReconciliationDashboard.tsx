@@ -88,6 +88,10 @@ export function ReconciliationDashboard() {
           // Just reconcile directly. 
           // The variance will automatically make it show up in Claimable Loss if logic allows (it does).
           await reconcile(tx, match.trip);
+          toast.success("Flagged for claim");
+          
+          // Force refresh to ensure list is updated (workaround for sticky state)
+          refresh();
       }
   };
 

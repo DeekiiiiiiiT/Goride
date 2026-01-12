@@ -30,7 +30,8 @@ export function ClaimableLoss() {
     loading: loadingTolls, 
     unreconciledTolls,
     reconciledTolls,
-    trips
+    trips,
+    unreconcile
   } = useTollReconciliation();
 
   const { claims, loading: loadingClaims, updateClaim, deleteClaim, refresh: refreshClaims } = useClaims();
@@ -294,6 +295,15 @@ export function ClaimableLoss() {
     document.body.removeChild(link);
   };
 
+  const handleReverseLoss = async (item: { transaction: FinancialTransaction, match: MatchResult }) => {
+      try {
+          await unreconcile(item.transaction, item.match.trip);
+          toast.success("Transaction reversed to Toll Reconciliation");
+      } catch (error) {
+          toast.error("Failed to reverse transaction");
+      }
+  };
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -394,6 +404,7 @@ export function ClaimableLoss() {
                     setSelectedLoss(item);
                     setIsModalOpen(true);
                 }}
+                onReverse={handleReverseLoss}
             />
         </TabsContent>
 

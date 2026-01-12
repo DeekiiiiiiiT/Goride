@@ -38,7 +38,8 @@ export function useTollReconciliation() {
         if (isCashClaim) {
             // For Cash Claims, we only want those explicitly waiting for approval
             // If it's Approved/Rejected, it shouldn't appear in the "To Reconcile" list
-            return tx.status === 'Pending';
+            // We also filter out items that are already Reconciled (Flagged for Claim), as they should move to the History/Loss list.
+            return tx.status === 'Pending' && !tx.isReconciled;
         }
 
         // For Tag Imports, we want anything that hasn't been linked/reconciled

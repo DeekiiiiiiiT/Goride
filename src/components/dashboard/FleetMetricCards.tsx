@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Users, Car, Activity, DollarSign, ArrowUp, ArrowDown } from "lucide-react";
 import { DashboardMetrics, Trip } from '../../types/data';
-import { Line, LineChart, ResponsiveContainer } from "recharts";
+import { Line, LineChart } from "recharts";
 import { SafeResponsiveContainer } from '../ui/SafeResponsiveContainer';
 
 interface FleetMetricCardsProps {

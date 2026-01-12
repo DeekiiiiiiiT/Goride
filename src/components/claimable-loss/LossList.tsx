@@ -9,7 +9,21 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { AlertCircle, ArrowRight, Clock } from "lucide-react";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "../ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
+import { AlertCircle, ArrowRight, Clock, MoreHorizontal, Undo2 } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../types/data";
 import { MatchResult, calculateTollFinancials } from "../../utils/tollReconciliation";
 import { calculateDaysRemaining } from "../../utils/timeUtils";
@@ -23,9 +37,10 @@ interface LossListProps {
   losses: LossItem[];
   isLoading?: boolean;
   onSelectLoss: (item: LossItem) => void;
+  onReverse?: (item: LossItem) => void;
 }
 
-export function LossList({ losses, isLoading, onSelectLoss }: LossListProps) {
+export function LossList({ losses, isLoading, onSelectLoss, onReverse }: LossListProps) {
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Analyzing claims...</div>;
   }
@@ -134,14 +149,43 @@ export function LossList({ losses, isLoading, onSelectLoss }: LossListProps) {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-8"
-                    onClick={() => onSelectLoss({ transaction, match })}
-                  >
-                    View Match <ArrowRight className="ml-2 h-3 w-3" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 gap-2">
+                        Actions <MoreHorizontal className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onSelectLoss({ transaction, match })}>
+                        <ArrowRight className="mr-2 h-4 w-4" />
+                        View Match
+                      </DropdownMenuItem>
+                      {onReverse && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onReverse({ transaction, match });
+                                  }}
+                                  className="text-orange-600 focus:text-orange-700 focus:bg-orange-50"
+                                >
+                                  <Undo2 className="mr-2 h-4 w-4" />
+                                  Reverse
+                                </DropdownMenuItem>
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                <p>Send claim back to Toll Reconciliation list</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             );

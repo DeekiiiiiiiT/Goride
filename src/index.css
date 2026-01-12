@@ -6409,6 +6409,10 @@
     background-color: var(--accent);
   }
 
+  .focus\:bg-orange-50:focus {
+    background-color: var(--color-orange-50);
+  }
+
   .focus\:bg-primary:focus {
     background-color: var(--primary);
   }
@@ -6423,6 +6427,10 @@
 
   .focus\:text-accent-foreground:focus {
     color: var(--accent-foreground);
+  }
+
+  .focus\:text-orange-700:focus {
+    color: var(--color-orange-700);
   }
 
   .focus\:text-primary-foreground:focus {
