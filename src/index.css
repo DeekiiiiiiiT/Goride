@@ -3318,6 +3318,10 @@
     background-color: var(--sidebar-border);
   }
 
+  .bg-sky-50 {
+    background-color: var(--color-sky-50);
+  }
+
   .bg-sky-100 {
     background-color: var(--color-sky-100);
   }
@@ -6231,6 +6235,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:text-orange-700:hover {
+      color: var(--color-orange-700);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:text-primary-foreground:hover {
       color: var(--primary-foreground);
     }
@@ -7155,6 +7165,12 @@
   @media (width >= 40rem) {
     .sm\:max-w-\[600px\] {
       max-width: 600px;
+    }
+  }
+
+  @media (width >= 40rem) {
+    .sm\:max-w-\[700px\] {
+      max-width: 700px;
     }
   }
 

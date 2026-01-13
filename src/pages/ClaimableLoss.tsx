@@ -58,6 +58,23 @@ export function ClaimableLoss() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [itemsToDelete, setItemsToDelete] = useState<string[]>([]);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  
+  // Generic Confirmation Dialog State
+  const [confirmDialog, setConfirmDialog] = useState<{
+      isOpen: boolean;
+      title: string;
+      description: string;
+      actionLabel: string;
+      onConfirm: () => void;
+      isDestructive?: boolean;
+  }>({
+      isOpen: false,
+      title: "",
+      description: "",
+      actionLabel: "Continue",
+      onConfirm: () => {},
+      isDestructive: false
+  });
 
   // Create Trip Map for O(1) lookup
   const tripMap = React.useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
@@ -304,6 +321,94 @@ export function ClaimableLoss() {
       }
   };
 
+  const handleBulkReverse = (items: { transaction: FinancialTransaction, match: MatchResult }[]) => {
+      if (!items.length) return;
+      
+      setConfirmDialog({
+          isOpen: true,
+          title: "Reverse Transactions",
+          description: `Are you sure you want to reverse ${items.length} items? They will be sent back to the Toll Reconciliation list.`,
+          actionLabel: "Reverse",
+          onConfirm: async () => {
+              let successCount = 0;
+              let failCount = 0;
+
+              const toastId = toast.loading(`Reversing ${items.length} transactions...`);
+
+              try {
+                  await Promise.all(items.map(async (item) => {
+                      try {
+                          await unreconcile(item.transaction, item.match.trip);
+                          successCount++;
+                      } catch (e) {
+                          console.error(e);
+                          failCount++;
+                      }
+                  }));
+
+                  toast.dismiss(toastId);
+                  if (failCount > 0) {
+                      toast.warning(`Reversed ${successCount} items. Failed: ${failCount}`);
+                  } else {
+                      toast.success(`Successfully reversed ${successCount} items`);
+                  }
+
+              } catch (e) {
+                  toast.dismiss(toastId);
+                  toast.error("Batch processing failed");
+              }
+          }
+      });
+  };
+
+  const handleBulkUpdateStatus = (claims: Claim[], status: string, reason?: string) => {
+      if (!claims.length) return;
+      
+      const isReject = status === 'Rejected';
+      const actionWord = isReject ? 'Reject' : 'Update';
+      
+      setConfirmDialog({
+          isOpen: true,
+          title: `${actionWord} Claims`,
+          description: `Are you sure you want to update ${claims.length} claims to ${status}?`,
+          actionLabel: actionWord,
+          isDestructive: isReject,
+          onConfirm: async () => {
+              const toastId = toast.loading(`Updating ${claims.length} claims...`);
+              let successCount = 0;
+              let failCount = 0;
+
+              try {
+                  await Promise.all(claims.map(async (c) => {
+                      try {
+                          await updateClaim({ 
+                              ...c, 
+                              status: status as any, 
+                              resolutionReason: reason,
+                              updatedAt: new Date().toISOString() 
+                          });
+                          successCount++;
+                      } catch (e) {
+                          failCount++;
+                      }
+                  }));
+
+                  toast.dismiss(toastId);
+                  if (failCount > 0) {
+                      toast.warning(`Updated ${successCount} claims. Failed: ${failCount}`);
+                  } else {
+                      toast.success(`Successfully updated ${successCount} claims`);
+                  }
+                  refreshClaims();
+
+              } catch (e) {
+                  toast.dismiss(toastId);
+                  toast.error("Batch processing failed");
+              }
+          }
+      });
+  };
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -405,6 +510,7 @@ export function ClaimableLoss() {
                     setIsModalOpen(true);
                 }}
                 onReverse={handleReverseLoss}
+                onBulkReverse={handleBulkReverse}
             />
         </TabsContent>
 
@@ -414,6 +520,8 @@ export function ClaimableLoss() {
                 isLoading={loadingClaims}
                 onResolve={(c) => handleRetry(c)} 
                 onRevert={(c) => handleRevert(c)}
+                onBulkResolve={(claims) => handleBulkUpdateStatus(claims, 'Sent_to_Driver')}
+                onBulkRevert={(claims) => handleBulkUpdateStatus(claims, 'Rejected')}
                 title="Awaiting Driver Submission"
                 description="Claims sent to drivers but not yet submitted to Uber."
                 getDriverName={getDriverName}
@@ -429,6 +537,8 @@ export function ClaimableLoss() {
                 isLoading={loadingClaims}
                 onResolve={handleResolve}
                 onRevert={handleRevert}
+                onBulkResolve={(claims) => handleBulkUpdateStatus(claims, 'Resolved', 'Reimbursed')}
+                onBulkRevert={(claims) => handleBulkUpdateStatus(claims, 'Rejected')}
                 getDriverName={getDriverName}
             />
         </TabsContent>
@@ -440,6 +550,9 @@ export function ClaimableLoss() {
                 onRetry={handleRetry}
                 onChargeDriver={handleChargeDriver}
                 onWriteOff={handleWriteOff}
+                onBulkRetry={(claims) => handleBulkUpdateStatus(claims, 'Sent_to_Driver')}
+                onBulkCharge={(claims) => handleBulkUpdateStatus(claims, 'Resolved', 'Charge Driver')}
+                onBulkWriteOff={(claims) => handleBulkUpdateStatus(claims, 'Resolved', 'Write Off')}
                 getDriverName={getDriverName}
             />
         </TabsContent>
@@ -475,6 +588,29 @@ export function ClaimableLoss() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDialog.isOpen} onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, isOpen: open }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDialog.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+                onClick={() => {
+                    confirmDialog.onConfirm();
+                    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                }}
+                className={confirmDialog.isDestructive ? "bg-red-600 hover:bg-red-700" : ""}
+            >
+                {confirmDialog.actionLabel}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

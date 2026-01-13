@@ -24,6 +24,7 @@ export interface FuelEntry {
   
   odometer?: number;
   location?: string; // Station Name/Address
+  stationAddress?: string; // Specific location/address
   
   type: 'Card_Transaction' | 'Manual_Entry' | 'Reimbursement';
   isFlagged?: boolean; // If capacity exceeded or outlier

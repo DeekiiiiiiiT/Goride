@@ -35,7 +35,8 @@ export function FuelLogTable({ entries, onEdit, onDelete, getVehicleName, getDri
     const filteredEntries = entries.filter(entry => 
         getVehicleName(entry.vehicleId).toLowerCase().includes(searchTerm.toLowerCase()) ||
         getDriverName(entry.driverId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        entry.location?.toLowerCase().includes(searchTerm.toLowerCase())
+        entry.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        entry.stationAddress?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const getTypeIcon = (type: string) => {
@@ -44,6 +45,18 @@ export function FuelLogTable({ entries, onEdit, onDelete, getVehicleName, getDri
             case 'Manual_Entry': return <Banknote className="h-4 w-4 text-emerald-500" />;
             default: return <Fuel className="h-4 w-4 text-slate-500" />;
         }
+    };
+
+    const formatDate = (dateString: string) => {
+        if (!dateString) return '-';
+        // Fix for timezone offset issue with YYYY-MM-DD strings
+        // "2026-01-08" -> UTC Midnight -> Previous day in EST
+        // We parse manually to ensure it displays as the intended local date
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+            const [year, month, day] = dateString.split('-').map(Number);
+            return new Date(year, month - 1, day).toLocaleDateString();
+        }
+        return new Date(dateString).toLocaleDateString();
     };
 
     return (
@@ -74,7 +87,7 @@ export function FuelLogTable({ entries, onEdit, onDelete, getVehicleName, getDri
                             <TableHead>Volume (L)</TableHead>
                             <TableHead>Cost ($)</TableHead>
                             <TableHead>Odometer</TableHead>
-                            <TableHead>Location</TableHead>
+                            <TableHead>Gas Station</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -89,7 +102,7 @@ export function FuelLogTable({ entries, onEdit, onDelete, getVehicleName, getDri
                             filteredEntries.map((entry) => (
                                 <TableRow key={entry.id}>
                                     <TableCell>
-                                        {new Date(entry.date).toLocaleDateString()}
+                                        {formatDate(entry.date)}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2" title={entry.type}>
@@ -114,8 +127,15 @@ export function FuelLogTable({ entries, onEdit, onDelete, getVehicleName, getDri
                                     <TableCell>
                                         {entry.odometer?.toLocaleString()} km
                                     </TableCell>
-                                    <TableCell className="max-w-[150px] truncate" title={entry.location}>
-                                        {entry.location || '-'}
+                                    <TableCell className="max-w-[150px] truncate">
+                                        <div className="flex flex-col">
+                                            <span className="font-medium truncate" title={entry.location}>{entry.location || '-'}</span>
+                                            {entry.stationAddress && (
+                                                <span className="text-xs text-slate-500 truncate" title={entry.stationAddress}>
+                                                    {entry.stationAddress}
+                                                </span>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>

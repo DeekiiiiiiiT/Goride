@@ -1,7 +1,7 @@
 import * as React from "react";
 import { MapPin, Loader2, Navigation, Search, X } from "lucide-react";
 import { cn } from "./utils";
-import { getCurrentPosition, reverseGeocode, AddressResult, searchAddress, debounce } from "../../utils/locationService";
+import { getCurrentPosition, reverseGeocode, AddressResult, searchAddress, debounce, getPlaceDetails } from "../../utils/locationService";
 import { toast } from "sonner@2.0.3";
 
 export interface LocationInputProps
@@ -91,12 +91,33 @@ const LocationInput = React.forwardRef<HTMLInputElement, LocationInputProps>(
     };
 
     // Handle address selection
-    const handleSelectSuggestion = (address: string, lat?: string, lon?: string) => {
+    const handleSelectSuggestion = async (address: string, lat?: string, lon?: string, placeId?: string) => {
+      let finalLat = lat ? parseFloat(lat) : undefined;
+      let finalLon = lon ? parseFloat(lon) : undefined;
+      let finalAddress = address;
+
+      // If we have a Google Place ID but no coordinates yet, fetch details
+      if (placeId && (finalLat === undefined || finalLon === undefined)) {
+        setInternalIsLoading(true);
+        try {
+          const details = await getPlaceDetails(placeId);
+          if (details) {
+            finalLat = details.lat;
+            finalLon = details.lon;
+            finalAddress = details.address; // Use formatted address from details if available
+          }
+        } catch (e) {
+          console.error("Failed to get place details", e);
+        } finally {
+          setInternalIsLoading(false);
+        }
+      }
+
       if (onAddressSelect) {
-        onAddressSelect(address, lat ? parseFloat(lat) : undefined, lon ? parseFloat(lon) : undefined);
+        onAddressSelect(finalAddress, finalLat, finalLon);
       } else {
         const event = {
-          target: { value: address },
+          target: { value: finalAddress },
         } as React.ChangeEvent<HTMLInputElement>;
         onChange?.(event);
       }
@@ -144,7 +165,7 @@ const LocationInput = React.forwardRef<HTMLInputElement, LocationInputProps>(
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             ) : (
-              <>
+            <>
                 {showLocationButton && (
                   <button
                     type="button"
@@ -180,9 +201,9 @@ const LocationInput = React.forwardRef<HTMLInputElement, LocationInputProps>(
             <ul className="py-1">
               {suggestions.map((suggestion, index) => (
                 <li
-                  key={`${suggestion.lat}-${suggestion.lon}-${index}`}
+                  key={suggestion.place_id || `${suggestion.lat}-${suggestion.lon}-${index}`}
                   className="px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer flex items-start gap-2"
-                  onClick={() => handleSelectSuggestion(suggestion.display_name, suggestion.lat, suggestion.lon)}
+                  onClick={() => handleSelectSuggestion(suggestion.display_name, suggestion.lat, suggestion.lon, suggestion.place_id)}
                 >
                   <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                   <span>{suggestion.display_name}</span>

@@ -1,4 +1,5 @@
 import { TripStop, RoutePoint } from '../types/tripSession';
+import { projectId, publicAnonKey } from './supabase/info';
 
 export interface GeoCoordinates {
   latitude: number;
@@ -7,8 +8,9 @@ export interface GeoCoordinates {
 
 export interface AddressResult {
   display_name: string;
-  lat: string;
-  lon: string;
+  lat: string | number;
+  lon: string | number;
+  place_id?: string;
   address?: {
     road?: string;
     house_number?: string;
@@ -22,7 +24,64 @@ export interface AddressResult {
   };
 }
 
-const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
+// Global variable to track loading state
+let mapsLoadedPromise: Promise<void> | null = null;
+
+/**
+ * Load Google Maps API with modern async loading pattern
+ */
+export const loadGoogleMapsApi = async (): Promise<void> => {
+  if (typeof window !== 'undefined' && window.google?.maps && window.google?.maps?.importLibrary) {
+    return Promise.resolve();
+  }
+
+  if (mapsLoadedPromise) return mapsLoadedPromise;
+
+  mapsLoadedPromise = new Promise(async (resolve, reject) => {
+    try {
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/maps-config`, {
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server configuration error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.apiKey) {
+        console.error("Server returned empty API key. Data:", data);
+        throw new Error("Google Maps API Key configuration missing on server");
+      }
+
+      // Check if script is already present
+      if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
+        resolve();
+        return;
+      }
+
+      const script = document.createElement('script');
+      // Added loading=async as requested by warning
+      // Removed libraries parameter as we will use dynamic importLibrary
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&loading=async`;
+      script.async = true;
+      script.defer = true;
+      
+      script.onload = () => resolve();
+      script.onerror = (e) => reject(e);
+      
+      document.head.appendChild(script);
+    } catch (error) {
+      console.error("Failed to load Google Maps:", error);
+      reject(error);
+      mapsLoadedPromise = null;
+    }
+  });
+
+  return mapsLoadedPromise;
+};
 
 /**
  * Get current user position using Browser Geolocation API
@@ -66,28 +125,28 @@ export const getCurrentPosition = (): Promise<GeoCoordinates> => {
 };
 
 /**
- * Convert coordinates to address using OpenStreetMap Nominatim API
+ * Convert coordinates to address using Google Maps Geocoder
  */
 export const reverseGeocode = async (
   lat: number,
   lon: number
 ): Promise<string> => {
   try {
-    const response = await fetch(
-      `${NOMINATIM_BASE_URL}/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch address");
-    }
-
-    const data: AddressResult = await response.json();
-    return data.display_name;
+    await loadGoogleMapsApi();
+    
+    // Dynamically import Geocoding library
+    const { Geocoder } = await google.maps.importLibrary("geocoding") as any;
+    const geocoder = new Geocoder();
+    
+    return new Promise((resolve, reject) => {
+      geocoder.geocode({ location: { lat, lng: lon } }, (results: any[], status: string) => {
+        if (status === 'OK' && results[0]) {
+          resolve(results[0].formatted_address);
+        } else {
+          reject(new Error("Address not found"));
+        }
+      });
+    });
   } catch (error) {
     console.error("Reverse geocoding error:", error);
     throw new Error("Failed to convert coordinates to address");
@@ -95,32 +154,102 @@ export const reverseGeocode = async (
 };
 
 /**
- * Search for addresses using OpenStreetMap Nominatim API
+ * Search for addresses using Google Places Autocomplete (New API)
+ * Restricted to Jamaica (country: 'jm')
  */
 export const searchAddress = async (query: string): Promise<AddressResult[]> => {
   if (!query || query.length < 3) return [];
 
   try {
-    const response = await fetch(
-      `${NOMINATIM_BASE_URL}/search?format=json&q=${encodeURIComponent(
-        query
-      )}&addressdetails=1&limit=5`,
-      {
-        headers: {
-          "Accept-Language": "en-US,en;q=0.9",
+    await loadGoogleMapsApi();
+
+    // Use dynamic import for Places library
+    const { AutocompleteSuggestion } = await google.maps.importLibrary("places") as any;
+
+    // The new AutocompleteSuggestion API
+    if (AutocompleteSuggestion && AutocompleteSuggestion.fetchAutocompleteSuggestions) {
+      const request = {
+        input: query,
+        includedRegionCodes: ['jm'],
+      };
+
+      const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+      
+      // Map suggestions to our AddressResult format
+      // Note: New API results might structure data differently.
+      // We often need to fetch details for the coordinates, so we store the placeSuggestion.
+      return suggestions.map((suggestion: any) => ({
+        display_name: suggestion.placePrediction?.text?.text || suggestion.placePrediction?.mainText?.text || "Unknown Location",
+        lat: '', // To be fetched
+        lon: '', // To be fetched
+        place_id: suggestion.placePrediction?.placeId || suggestion.placePrediction?.place, // Handle different structure versions
+      }));
+    } 
+    
+    // Fallback to legacy service if new API class is missing (shouldn't happen with modern key)
+    console.warn("AutocompleteSuggestion not found, falling back to legacy service");
+    return new Promise((resolve) => {
+       const autocompleteService = new window.google.maps.places.AutocompleteService();
+       autocompleteService.getPlacePredictions(
+        {
+          input: query,
+          componentRestrictions: { country: 'jm' },
         },
-      }
-    );
+        (predictions: any[], status: string) => {
+          if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
+             resolve([]);
+             return;
+          }
+          const results: AddressResult[] = predictions.map(prediction => ({
+            display_name: prediction.description,
+            lat: '',
+            lon: '',
+            place_id: prediction.place_id
+          }));
+          resolve(results);
+        }
+       );
+    });
 
-    if (!response.ok) {
-      throw new Error("Failed to search address");
-    }
-
-    const data: AddressResult[] = await response.json();
-    return data;
   } catch (error) {
     console.error("Address search error:", error);
     return [];
+  }
+};
+
+/**
+ * Fetch Place Details (lat, lon) from Place ID using modern Place Class
+ */
+export const getPlaceDetails = async (placeId: string): Promise<{ lat: number; lon: number; address: string } | null> => {
+  try {
+    await loadGoogleMapsApi();
+
+    // Modern Place API (2025+)
+    const { Place } = await google.maps.importLibrary("places") as any;
+    
+    if (Place) {
+      const place = new Place({ id: placeId });
+      
+      // Fetch only the fields we need
+      await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] });
+      
+      const location = place.location;
+      
+      if (location) {
+         return {
+           lat: location.lat(),
+           lon: location.lng(),
+           address: place.formattedAddress || place.displayName,
+         };
+      }
+    }
+
+    // Fallback if Place class fails
+    return null;
+
+  } catch (error) {
+    console.error("Get place details error:", error);
+    return null;
   }
 };
 
@@ -145,42 +274,13 @@ export const debounce = <T extends (...args: any[]) => any>(
 };
 
 /**
- * Calculate driving distance between two points using OSRM
- * Returns distance in kilometers
+ * Calculate driving distance between two points using Haversine
  */
 export const calculateRouteDistance = async (
   start: { lat: number; lon: number },
   end: { lat: number; lon: number }
 ): Promise<number | null> => {
-  try {
-    // OSRM requires {lon},{lat} format
-    const startCoord = `${start.lon},${start.lat}`;
-    const endCoord = `${end.lon},${end.lat}`;
-    
-    // Using OSRM public demo server (Note: subject to usage policies)
-    // For production, you should host your own OSRM instance or use a paid service
-    const response = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${startCoord};${endCoord}?overview=false`
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch route");
-    }
-
-    const data = await response.json();
-    
-    if (data.routes && data.routes.length > 0) {
-      // OSRM returns distance in meters
-      const meters = data.routes[0].distance;
-      return meters / 1000;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error("Routing error:", error);
-    // Fallback to Haversine if OSRM fails
-    return calculateHaversineDistance(start, end);
-  }
+  return calculateHaversineDistance(start, end);
 };
 
 /**
@@ -258,24 +358,3 @@ export const createStop = (
     isOverThreshold: false
   };
 };
-
-/**
- * Format coordinates for OSRM API (lon,lat;lon,lat)
- */
-export const formatCoordinatesForOSRM = (points: RoutePoint[]): string => {
-  return points
-    .filter(p => p && !isNaN(p.lat) && !isNaN(p.lon))
-    .map(p => `${p.lon},${p.lat}`)
-    .join(';');
-};
-
-/**
- * Format timestamps for OSRM API (unix timestamps separated by ;)
- */
-export const formatTimestampsForOSRM = (points: RoutePoint[]): string => {
-  return points
-    .filter(p => p && !isNaN(p.lat) && !isNaN(p.lon))
-    .map(p => Math.floor(p.timestamp / 1000)) // Convert ms to seconds
-    .join(';');
-};
-

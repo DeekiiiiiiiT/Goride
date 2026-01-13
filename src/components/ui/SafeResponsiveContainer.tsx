@@ -5,12 +5,16 @@ import { ResponsiveContainer, ResponsiveContainerProps } from 'recharts';
 
 /**
  * A wrapper around Recharts ResponsiveContainer that prevents rendering
- * when the container has no dimensions (e.g. inside hidden tabs),
- * suppressing the "width(-1) and height(-1)" console warnings.
+ * when the container has no dimensions.
+ * 
+ * FIX: We now pass the calculated pixel dimensions directly to ResponsiveContainer
+ * instead of letting it measure itself ("100%"). This eliminates the "width(-1)" error
+ * which happens when Recharts tries to measure a container that might be in a transition state.
  */
 export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
   const divRef = useRef<HTMLDivElement>(null);
   const [shouldRender, setShouldRender] = useState(false);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const element = divRef.current;
@@ -24,17 +28,18 @@ export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
 
       const { width, height } = entry.contentRect;
 
-      if (width === 0 || height === 0) {
-        // If dimensions are zero, hide immediately to prevent errors
-        clearTimeout(timeoutId);
+      if (width <= 0 || height <= 0) {
         setShouldRender(false);
       } else {
-        // If dimensions are present, debounce the show to ensure stability
+        // Update dimensions immediately
+        setDimensions({ width, height });
+        
+        // Debounce the actual rendering of the chart
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
-          if (element.clientWidth > 0 && element.clientHeight > 0) {
-            setShouldRender(true);
-          }
+           if (element.clientWidth > 0 && element.clientHeight > 0) {
+             setShouldRender(true);
+           }
         }, 100);
       }
     });
@@ -43,6 +48,7 @@ export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
 
     // Initial check
     if (element.clientWidth > 0 && element.clientHeight > 0) {
+      setDimensions({ width: element.clientWidth, height: element.clientHeight });
       setShouldRender(true);
     }
 
@@ -52,24 +58,27 @@ export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
     };
   }, []);
 
-  const { width = '100%', height = '100%', minWidth, minHeight, className, style, id } = props;
+  const { width = '100%', height = '100%', minWidth, minHeight, className, style, children, ...others } = props;
 
   return (
     <div 
       ref={divRef} 
-      id={id}
       className={className}
       style={{ 
-        width, 
-        height, 
-        minWidth, 
-        minHeight,
+        width: width, 
+        height: height, 
+        minWidth: minWidth ?? 0, 
+        minHeight: minHeight ?? 0,
         ...style 
       }}
     >
-      {shouldRender ? (
-        <ResponsiveContainer minWidth={0} minHeight={0} {...props}>
-          {props.children}
+      {shouldRender && dimensions.width > 0 && dimensions.height > 0 ? (
+        <ResponsiveContainer 
+            width={dimensions.width}
+            height={dimensions.height}
+            {...others}
+        >
+          {children}
         </ResponsiveContainer>
       ) : null}
     </div>

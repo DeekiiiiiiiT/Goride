@@ -110,6 +110,25 @@ export interface Vehicle {
 
   // Attached Documents
   documents?: VehicleDocument[];
+
+  // Specifications
+  specifications?: {
+      engineType?: string;
+      engineSize?: string;
+      transmission?: string;
+      driveType?: string;
+      kerbWeight?: string;
+      aerodynamicAids?: string;
+      fuelEconomy?: string; // Storing as string to allow "24.6 km/L" format if user prefers, or mapped to numeric
+      tankCapacity?: string; // Display string
+      
+      // Descriptions (keeping these for display if needed, but the form might just capture values)
+      engineDescription?: string;
+      transmissionDescription?: string;
+      driveTypeDescription?: string;
+      weightDescription?: string;
+      aeroDescription?: string;
+  };
 }
 
 export type OdometerSource = 'Service Log' | 'Manual Update' | 'Fuel Log' | 'Trip Import' | 'Baseline';

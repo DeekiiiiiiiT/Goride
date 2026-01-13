@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
+import { Checkbox } from "../ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
@@ -38,9 +39,42 @@ interface LossListProps {
   isLoading?: boolean;
   onSelectLoss: (item: LossItem) => void;
   onReverse?: (item: LossItem) => void;
+  onBulkReverse?: (items: LossItem[]) => void;
 }
 
-export function LossList({ losses, isLoading, onSelectLoss, onReverse }: LossListProps) {
+export function LossList({ losses, isLoading, onSelectLoss, onReverse, onBulkReverse }: LossListProps) {
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  // Reset selection when losses change (e.g. after a refresh)
+  React.useEffect(() => {
+    setSelectedIds(new Set());
+  }, [losses]);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === losses.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(losses.map(l => l.transaction.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleBulkAction = () => {
+    if (!onBulkReverse) return;
+    const selectedItems = losses.filter(l => selectedIds.has(l.transaction.id));
+    onBulkReverse(selectedItems);
+    setSelectedIds(new Set());
+  };
+
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Analyzing claims...</div>;
   }
@@ -61,18 +95,41 @@ export function LossList({ losses, isLoading, onSelectLoss, onReverse }: LossLis
     <div className="border rounded-md bg-white shadow-sm">
       <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center">
         <div>
-            <h3 className="font-semibold text-slate-900">Underpaid Trips</h3>
+            <h3 className="font-semibold text-slate-900">Underpaid Trips {losses.length > 0 && <span className="ml-2 bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full text-xs">{losses.length}</span>}</h3>
             <p className="text-sm text-slate-500">Tolls incurred during a trip that were not fully refunded.</p>
         </div>
-        <div className="text-sm font-medium text-slate-600">
-            Total Potential Claim: <span className="text-orange-600 font-bold ml-1">
-                ${losses.reduce((sum, item) => sum + Math.abs(item.match.varianceAmount || 0), 0).toFixed(2)}
-            </span>
+        <div className="flex items-center gap-4">
+            {selectedIds.size > 0 && (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <span className="text-sm text-slate-500 font-medium">{selectedIds.size} selected</span>
+                    <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={handleBulkAction}
+                        className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200"
+                    >
+                        <Undo2 className="mr-2 h-4 w-4" />
+                        Reverse
+                    </Button>
+                </div>
+            )}
+            <div className="text-sm font-medium text-slate-600">
+                Total Potential Claim: <span className="text-orange-600 font-bold ml-1">
+                    ${losses.reduce((sum, item) => sum + Math.abs(item.match.varianceAmount || 0), 0).toFixed(2)}
+                </span>
+            </div>
         </div>
       </div>
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[40px]">
+                <Checkbox 
+                    checked={losses.length > 0 && selectedIds.size === losses.length}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
+                />
+            </TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Toll Description</TableHead>
             <TableHead>Trip Ref</TableHead>
@@ -111,7 +168,14 @@ export function LossList({ losses, isLoading, onSelectLoss, onReverse }: LossLis
             const expiry = getExpiryDisplay(daysRemaining, status);
 
             return (
-              <TableRow key={transaction.id}>
+              <TableRow key={transaction.id} data-state={selectedIds.has(transaction.id) ? "selected" : undefined}>
+                <TableCell>
+                    <Checkbox 
+                        checked={selectedIds.has(transaction.id)}
+                        onCheckedChange={() => toggleSelect(transaction.id)}
+                        aria-label="Select row"
+                    />
+                </TableCell>
                 <TableCell className="font-medium text-slate-700">
                   {new Date(transaction.date).toLocaleDateString()}
                   <div className="text-xs text-slate-400">{transaction.time}</div>

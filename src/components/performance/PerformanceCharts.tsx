@@ -5,9 +5,9 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
+  Tooltip
 } from 'recharts';
+import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { DriverPerformanceSummary } from '../../types/performance';
 import { getTopPerformers } from '../../utils/performanceUtils';

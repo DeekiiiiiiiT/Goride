@@ -37,6 +37,12 @@ app.get("/make-server-37f42386/health", (c) => {
   return c.json({ status: "ok" });
 });
 
+// Google Maps Config Endpoint
+app.get("/make-server-37f42386/maps-config", (c) => {
+  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  return c.json({ apiKey: apiKey || "", timestamp: Date.now() });
+});
+
 // Dashboard Stats Endpoint (Aggregated)
 app.get("/make-server-37f42386/dashboard/stats", async (c) => {
   try {

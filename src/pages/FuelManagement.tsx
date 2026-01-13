@@ -121,21 +121,31 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   };
 
   // Log Handlers
-  const handleSaveLog = async (entry: FuelEntry) => {
+  const handleSaveLog = async (entryOrEntries: FuelEntry | FuelEntry[]) => {
       try {
-          const savedLog = await fuelService.saveFuelEntry(entry);
-          if (editingLog) {
-              setLogs(prev => prev.map(l => l.id === savedLog.id ? savedLog : l));
-              toast.success("Transaction updated");
+          if (Array.isArray(entryOrEntries)) {
+              // Bulk Mode
+              const promises = entryOrEntries.map(entry => fuelService.saveFuelEntry(entry));
+              const savedLogs = await Promise.all(promises);
+              setLogs(prev => [...savedLogs, ...prev]);
+              toast.success(`Successfully recorded ${savedLogs.length} transactions`);
           } else {
-              setLogs(prev => [savedLog, ...prev]);
-              toast.success("Transaction recorded");
+              // Single Mode
+              const entry = entryOrEntries;
+              const savedLog = await fuelService.saveFuelEntry(entry);
+              if (editingLog) {
+                  setLogs(prev => prev.map(l => l.id === savedLog.id ? savedLog : l));
+                  toast.success("Transaction updated");
+              } else {
+                  setLogs(prev => [savedLog, ...prev]);
+                  toast.success("Transaction recorded");
+              }
           }
           setIsLogModalOpen(false);
           setEditingLog(null);
       } catch (e) {
           console.error(e);
-          toast.error("Failed to save transaction");
+          toast.error("Failed to save transaction(s)");
       }
   };
 
@@ -297,17 +307,6 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
 
       {activeTab === 'logs' && (
         <div className="space-y-4">
-             <div className="flex justify-between items-center">
-                <div className="space-y-1">
-                </div>
-                <div className="flex gap-2">
-                    <Button onClick={() => { setEditingLog(null); setIsLogModalOpen(true); }}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Entry
-                    </Button>
-                </div>
-            </div>
-
             <FuelLogTable 
                 entries={logs}
                 onEdit={(log) => { setEditingLog(log); setIsLogModalOpen(true); }}

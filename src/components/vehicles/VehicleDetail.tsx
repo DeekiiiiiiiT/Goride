@@ -24,7 +24,14 @@ import {
   Trash2,
   MoreVertical,
   DollarSign,
-  Receipt
+  Receipt,
+  Wind,
+  Zap,
+  Settings,
+  Scale,
+  Move,
+  Info,
+  Car
 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { 
@@ -54,6 +61,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -168,6 +181,84 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
 
   const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
+
+  const getDriveTypeDescription = (type: string) => {
+      const t = type.toLowerCase();
+      if (t.includes('4wd') || t.includes('awd') || t.includes('4x4')) 
+          return "Provides better traction in off-road or slippery conditions, often with higher fuel consumption.";
+      if (t.includes('fwd')) 
+          return "Common in passenger cars; efficient and compact, placing weight over driven wheels for good traction.";
+      if (t.includes('rwd')) 
+          return "Often used in performance or utility vehicles for better weight balance and handling.";
+      if (t.includes('2wd')) 
+          return "Power is sent to two wheels, generally offering better fuel efficiency than 4WD systems.";
+      return "The drivetrain configuration determines which wheels receive power, affecting traction and efficiency.";
+  };
+
+  const getTransmissionDescription = (type: string) => {
+      const t = type.toLowerCase();
+      if (t.includes('cvt')) 
+          return "Continuously Variable Transmission provides smooth power delivery and optimal engine efficiency.";
+      if (t.includes('manual')) 
+          return "Allows the driver to manually select gears, offering greater control over power delivery.";
+      if (t.includes('automatic')) 
+          return "Automatically changes gears as the vehicle moves, freeing the driver from shifting manually.";
+      return "The transmission system transfers power from the engine to the wheels.";
+  };
+
+  // Specifications State
+  const [isEditingSpecs, setIsEditingSpecs] = useState(false);
+  const [specsForm, setSpecsForm] = useState({
+      engineType: vehicle.specifications?.engineType || '3-cylinder',
+      engineSize: vehicle.specifications?.engineSize || '1.0L',
+      transmission: vehicle.specifications?.transmission || 'CVT Automatic',
+      driveType: vehicle.specifications?.driveType || 'FWD',
+      kerbWeight: vehicle.specifications?.kerbWeight || '1070 kg',
+      aerodynamicAids: vehicle.specifications?.aerodynamicAids || 'Standard',
+      fuelType: vehicle.fuelSettings?.fuelType || 'Gasoline_87',
+      fuelEconomy: vehicle.specifications?.fuelEconomy || '24.6',
+      tankCapacity: vehicle.specifications?.tankCapacity || '36',
+      bodyType: vehicle.bodyType || 'MPV'
+  });
+
+  const handleSaveSpecs = async () => {
+      try {
+          // Normalize fuel type for backend
+          const validFuelType = ['Gasoline_87', 'Gasoline_91', 'Gasoline_93', 'Diesel', 'Electric', 'Hybrid'].includes(specsForm.fuelType) 
+            ? specsForm.fuelType as any 
+            : 'Gasoline_87';
+
+          const updatedVehicle = {
+              ...vehicle,
+              bodyType: specsForm.bodyType,
+              specifications: { 
+                  ...vehicle.specifications,
+                  engineType: specsForm.engineType,
+                  engineSize: specsForm.engineSize,
+                  transmission: specsForm.transmission,
+                  driveType: specsForm.driveType,
+                  kerbWeight: specsForm.kerbWeight,
+                  aerodynamicAids: specsForm.aerodynamicAids,
+                  fuelEconomy: specsForm.fuelEconomy,
+                  tankCapacity: specsForm.tankCapacity,
+              },
+              fuelSettings: {
+                  ...vehicle.fuelSettings,
+                  fuelType: validFuelType,
+                  // Keep existing or update if logical
+                  tankCapacity: parseFloat(specsForm.tankCapacity) || vehicle.fuelSettings?.tankCapacity || 0,
+                  efficiencyCity: parseFloat(specsForm.fuelEconomy) || vehicle.fuelSettings?.efficiencyCity || 0,
+                  efficiencyHighway: vehicle.fuelSettings?.efficiencyHighway || 0
+              }
+          };
+          await api.saveVehicle(updatedVehicle);
+          if (onUpdate) onUpdate(updatedVehicle);
+          setIsEditingSpecs(false);
+          toast.success("Specifications updated");
+      } catch (error) {
+          toast.error("Failed to update specifications");
+      }
+  };
 
   const [uploadForm, setUploadForm] = useState({
     type: 'Registration',
@@ -696,7 +787,6 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="expenses">Vehicle Expenses</TabsTrigger>
               <TabsTrigger value="odometer">Odometer</TabsTrigger>
-              <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
@@ -745,7 +835,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                           <CardDescription>Daily revenue performance</CardDescription>
                       </CardHeader>
                       <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                               <BarChart data={analytics.trendData}>
                                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                   <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
@@ -762,7 +852,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                           <CardDescription>Peak earning hours</CardDescription>
                       </CardHeader>
                       <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                               <BarChart data={analytics.activityByHour}>
                                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                   <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={2} />
@@ -784,7 +874,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                           <CardDescription>Time distribution (Monthly)</CardDescription>
                       </CardHeader>
                       <CardContent className="h-[300px] flex items-center justify-center">
-                         <ResponsiveContainer width="100%" height="100%">
+                         <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                             <PieChart>
                                 <Pie 
                                     data={[
@@ -875,7 +965,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                           <CardDescription>Where is the money going?</CardDescription>
                       </CardHeader>
                       <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                               <PieChart>
                                   <Pie data={analytics.financials.breakdown} innerRadius={60} outerRadius={80} dataKey="value">
                                       {analytics.financials.breakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
@@ -893,7 +983,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                           <CardDescription>Revenue vs Expenses vs Profit</CardDescription>
                       </CardHeader>
                       <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                               <BarChart 
                                 layout="vertical" 
                                 data={[
@@ -973,124 +1063,17 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               />
           </TabsContent>
 
-          <TabsContent value="documents" className="space-y-6 mt-6">
-               <div className="flex justify-between items-end">
-                   <div>
-                       <h3 className="text-lg font-medium text-slate-900">Vehicle Documents</h3>
-                       <p className="text-sm text-slate-500 mt-1">Manage registration, insurance, and permits.</p>
-                   </div>
-                   <Button onClick={() => setIsUploadOpen(true)} className="bg-slate-900 text-white hover:bg-slate-800">
-                       <Upload className="h-4 w-4 mr-2" />
-                       Upload Document
-                   </Button>
-               </div>
-               
-               <div className="border rounded-md overflow-hidden">
-                   <Table>
-                       <TableHeader className="bg-slate-50">
-                           <TableRow>
-                               <TableHead>Document Name</TableHead>
-                               <TableHead>Type</TableHead>
-                               <TableHead>Status</TableHead>
-                               <TableHead>Expiry Date</TableHead>
-                               <TableHead className="text-right">Actions</TableHead>
-                           </TableRow>
-                       </TableHeader>
-                       <TableBody>
-                           {documents.length === 0 && (
-                               <TableRow>
-                                   <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                                       No documents found. Upload one to get started.
-                                   </TableCell>
-                               </TableRow>
-                           )}
-                           {documents.map((doc) => (
-                               <TableRow key={doc.id}>
-                                   <TableCell className="font-medium">
-                                       <div className="flex items-center gap-3">
-                                           <div className="p-2 bg-slate-100 rounded text-slate-500">
-                                               <FileText className="h-4 w-4" />
-                                           </div>
-                                           {doc.name}
-                                       </div>
-                                   </TableCell>
-                                   <TableCell>{doc.type}</TableCell>
-                                   <TableCell>
-                                       <Badge variant="outline" className={doc.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600'}>
-                                           {doc.status}
-                                       </Badge>
-                                   </TableCell>
-                                   <TableCell>{doc.expiryDate ? format(new Date(doc.expiryDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
-                                   <TableCell className="text-right">
-                                       <div className="flex justify-end items-center gap-1">
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => {
-                                                if (doc.url) setViewingDoc({ url: doc.url, name: doc.name, type: doc.type });
-                                                else toast.error("No file available");
-                                            }} title="View Document">
-                                                <Eye className="h-4 w-4" />
-                                            </Button>
-                                            
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
-                                                        <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => {
-                                                        setEditingDocId(doc.id);
-                                                        const metadata = doc.metadata || {};
-                                                        setUploadForm(prev => ({
-                                                          ...prev,
-                                                          type: doc.type,
-                                                          name: doc.name,
-                                                          expiryDate: doc.expiryDate || '',
-                                                          // Spread all potential metadata fields
-                                                          ...metadata,
-                                                          // Ensure specific mapping if keys differ (mostly matching)
-                                                          valuationDate: metadata.valuationDate || '',
-                                                          modelYear: metadata.modelYear || vehicle.year,
-                                                          marketValue: metadata.marketValue || '',
-                                                          forcedSaleValue: metadata.forcedSaleValue || '',
-                                                          policyNumber: metadata.policyNumber || '',
-                                                          idv: metadata.idv || '',
-                                                          policyPremium: metadata.policyPremium || '',
-                                                          excessDeductible: metadata.excessDeductible || '',
-                                                          depreciationRate: metadata.depreciationRate || '',
-                                                          authorizedDrivers: metadata.authorizedDrivers || '',
-                                                          limitationsUse: metadata.limitationsUse || '',
-                                                          bodyType: metadata.bodyType || vehicle.bodyType || '',
-                                                          engineNumber: metadata.engineNumber || vehicle.engineNumber || '',
-                                                          ccRating: metadata.ccRating || vehicle.ccRating || '',
-                                                          laNumber: metadata.laNumber || vehicle.laNumber || '',
-                                                          mvid: metadata.mvid || vehicle.mvid || '',
-                                                          controlNumber: metadata.controlNumber || vehicle.controlNumber || '',
-                                                          plateNumber: metadata.plateNumber || vehicle.licensePlate,
-                                                          chassisNumber: metadata.chassisNumber || vehicle.vin
-                                                        }));
-                                                        setIsUploadOpen(true);
-                                                    }}>
-                                                        Edit Details
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem className="text-red-600" onClick={() => {
-                                                        setDeletedDocIds(prev => [...prev, doc.id]);
-                                                        toast.success("Document deleted");
-                                                    }}>
-                                                        Delete
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                       </div>
-                                   </TableCell>
-                               </TableRow>
-                           ))}
-                       </TableBody>
-                   </Table>
-               </div>
-          </TabsContent>
+
 
           <TabsContent value="profile" className="space-y-6 mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Tabs defaultValue="overview" className="w-full">
+                  <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent mb-6">
+                      <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2">Overview</TabsTrigger>
+                      <TabsTrigger value="specs" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2">Specifications</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="overview" className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Certificate of Fitness */}
                   <Card>
                       <CardHeader className="flex flex-row items-start justify-between pb-2">
@@ -1432,6 +1415,244 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                       </CardContent>
                   </Card>
               </div>
+
+               <div className="pt-6 border-t border-slate-200 mt-8">
+                   <div className="flex justify-between items-end mb-4">
+                       <div>
+                           <h3 className="text-lg font-medium text-slate-900">Vehicle Documents</h3>
+                           <p className="text-sm text-slate-500 mt-1">Manage registration, insurance, and permits.</p>
+                       </div>
+                       <Button onClick={() => setIsUploadOpen(true)} className="bg-slate-900 text-white hover:bg-slate-800">
+                           <Upload className="h-4 w-4 mr-2" />
+                           Upload Document
+                       </Button>
+                   </div>
+                   
+                   <div className="border rounded-md overflow-hidden bg-white shadow-sm">
+                       <Table>
+                           <TableHeader className="bg-slate-50">
+                               <TableRow>
+                                   <TableHead>Document Name</TableHead>
+                                   <TableHead>Type</TableHead>
+                                   <TableHead>Status</TableHead>
+                                   <TableHead>Expiry Date</TableHead>
+                                   <TableHead className="text-right">Actions</TableHead>
+                               </TableRow>
+                           </TableHeader>
+                           <TableBody>
+                               {documents.length === 0 && (
+                                   <TableRow>
+                                       <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                                           No documents found. Upload one to get started.
+                                       </TableCell>
+                                   </TableRow>
+                               )}
+                               {documents.map((doc) => (
+                                   <TableRow key={doc.id}>
+                                       <TableCell className="font-medium">
+                                           <div className="flex items-center gap-3">
+                                               <div className="p-2 bg-slate-100 rounded text-slate-500">
+                                                   <FileText className="h-4 w-4" />
+                                               </div>
+                                               {doc.name}
+                                           </div>
+                                       </TableCell>
+                                       <TableCell>{doc.type}</TableCell>
+                                       <TableCell>
+                                           <Badge variant="outline" className={doc.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600'}>
+                                               {doc.status}
+                                           </Badge>
+                                       </TableCell>
+                                       <TableCell>{doc.expiryDate ? format(new Date(doc.expiryDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                                       <TableCell className="text-right">
+                                           <div className="flex justify-end items-center gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => {
+                                                    if (doc.url) setViewingDoc({ url: doc.url, name: doc.name, type: doc.type });
+                                                    else toast.error("No file available");
+                                                }} title="View Document">
+                                                    <Eye className="h-4 w-4" />
+                                                </Button>
+                                                
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
+                                                            <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => {
+                                                            setEditingDocId(doc.id);
+                                                            const metadata = doc.metadata || {};
+                                                            setUploadForm(prev => ({
+                                                              ...prev,
+                                                              type: doc.type,
+                                                              name: doc.name,
+                                                              expiryDate: doc.expiryDate || '',
+                                                              // Spread all potential metadata fields
+                                                              ...metadata,
+                                                              // Ensure specific mapping if keys differ (mostly matching)
+                                                              valuationDate: metadata.valuationDate || '',
+                                                              modelYear: metadata.modelYear || vehicle.year,
+                                                              marketValue: metadata.marketValue || '',
+                                                              forcedSaleValue: metadata.forcedSaleValue || '',
+                                                              policyNumber: metadata.policyNumber || '',
+                                                              idv: metadata.idv || '',
+                                                              policyPremium: metadata.policyPremium || '',
+                                                              excessDeductible: metadata.excessDeductible || '',
+                                                              depreciationRate: metadata.depreciationRate || '',
+                                                              authorizedDrivers: metadata.authorizedDrivers || '',
+                                                              limitationsUse: metadata.limitationsUse || '',
+                                                              bodyType: metadata.bodyType || vehicle.bodyType || '',
+                                                              engineNumber: metadata.engineNumber || vehicle.engineNumber || '',
+                                                              ccRating: metadata.ccRating || vehicle.ccRating || '',
+                                                              laNumber: metadata.laNumber || vehicle.laNumber || '',
+                                                              mvid: metadata.mvid || vehicle.mvid || '',
+                                                              controlNumber: metadata.controlNumber || vehicle.controlNumber || '',
+                                                              plateNumber: metadata.plateNumber || vehicle.licensePlate,
+                                                              chassisNumber: metadata.chassisNumber || vehicle.vin
+                                                            }));
+                                                            setIsUploadOpen(true);
+                                                        }}>
+                                                            Edit Details
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem className="text-red-600" onClick={() => {
+                                                            setDeletedDocIds(prev => [...prev, doc.id]);
+                                                            toast.success("Document deleted");
+                                                        }}>
+                                                            Delete
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                           </div>
+                                       </TableCell>
+                                   </TableRow>
+                               ))}
+                           </TableBody>
+                       </Table>
+                   </div>
+               </div>
+               </TabsContent>
+
+               <TabsContent value="specs" className="space-y-6">
+                   <Card>
+                       <CardHeader className="flex flex-row items-center justify-between">
+                           <div>
+                               <CardTitle>Technical Specifications</CardTitle>
+                               <CardDescription>Detailed vehicle configuration and performance metrics</CardDescription>
+                           </div>
+                           <Button variant="outline" size="sm" onClick={() => setIsEditingSpecs(true)}>
+                               <Pencil className="h-4 w-4 mr-2" />
+                               Edit
+                           </Button>
+                       </CardHeader>
+                       <CardContent>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                               <div className="space-y-6">
+                                   {/* Engine */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                           <Zap className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Engine</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.engineSize} {specsForm.engineType}</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               {vehicle.specifications?.engineDescription || "Naturally aspirated or turbo - smaller engines are generally more efficient."}
+                                           </p>
+                                       </div>
+                                   </div>
+                                   
+                                   {/* Transmission */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                           <Settings className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Transmission</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.transmission}</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               {vehicle.specifications?.transmissionDescription || getTransmissionDescription(specsForm.transmission)}
+                                           </p>
+                                       </div>
+                                   </div>
+
+                                   {/* Drive Type */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                                           <Move className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Drive Type</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.driveType}</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               {vehicle.specifications?.driveTypeDescription || getDriveTypeDescription(specsForm.driveType)}
+                                           </p>
+                                       </div>
+                                   </div>
+                                   
+                                    {/* Fuel */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
+                                           <Fuel className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Fuel & Economy</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.fuelType.replace('_', ' ')}</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               {specsForm.fuelEconomy} km/L • {specsForm.tankCapacity}L Tank
+                                           </p>
+                                       </div>
+                                   </div>
+                               </div>
+
+                               <div className="space-y-6">
+                                   {/* Kerb Weight */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+                                           <Scale className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Kerb Weight</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.kerbWeight}</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               {vehicle.specifications?.weightDescription || "Light weight reduces the power needed for propulsion."}
+                                           </p>
+                                       </div>
+                                   </div>
+
+                                   {/* Aero */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600">
+                                           <Wind className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Aerodynamic Aids</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.aerodynamicAids}</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               {vehicle.specifications?.aeroDescription || "Spats and undercovers help reduce drag."}
+                                           </p>
+                                       </div>
+                                   </div>
+
+                                   {/* Body Type */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
+                                           <Car className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Body Type</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.bodyType}</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               Vehicle classification and chassis style.
+                                           </p>
+                                       </div>
+                                   </div>
+                               </div>
+                           </div>
+                       </CardContent>
+                   </Card>
+               </TabsContent>
+              </Tabs>
           </TabsContent>
       </Tabs>
 
@@ -1476,6 +1697,203 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   </Button>
               </div>
           </DialogContent>
+      </Dialog>
+
+          {/* Update Specs Dialog */}
+      <Dialog open={isEditingSpecs} onOpenChange={setIsEditingSpecs}>
+           <DialogContent className="max-w-2xl">
+               <DialogHeader>
+                   <DialogTitle>Update Specifications</DialogTitle>
+                   <DialogDescription>Modify the technical details of the vehicle.</DialogDescription>
+               </DialogHeader>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                   <div className="space-y-4">
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Engine Type</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The configuration of the engine cylinders (e.g., Inline-4, V6).</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.engineType} 
+                                onChange={e => setSpecsForm({...specsForm, engineType: e.target.value})} 
+                                placeholder="e.g. 3-cylinder" 
+                            />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Engine Size</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The displacement volume of the engine (e.g., 1.0L).</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.engineSize} 
+                                onChange={e => setSpecsForm({...specsForm, engineSize: e.target.value})} 
+                                placeholder="e.g. 1.0L" 
+                            />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Transmission</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The type of gearbox system (e.g., CVT Automatic).</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.transmission} 
+                                onChange={e => setSpecsForm({...specsForm, transmission: e.target.value})} 
+                                placeholder="e.g. CVT Automatic" 
+                            />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Drive Type</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The drivetrain configuration (e.g., FWD, AWD).</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.driveType} 
+                                onChange={e => setSpecsForm({...specsForm, driveType: e.target.value})} 
+                                placeholder="e.g. FWD" 
+                            />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Aerodynamic Aids</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>Features that reduce air resistance (e.g., Spoilers).</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.aerodynamicAids} 
+                                onChange={e => setSpecsForm({...specsForm, aerodynamicAids: e.target.value})} 
+                                placeholder="e.g. Standard" 
+                            />
+                       </div>
+                   </div>
+
+                   <div className="space-y-4">
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Kerb Weight</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The weight of the vehicle without passengers or cargo.</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.kerbWeight} 
+                                onChange={e => setSpecsForm({...specsForm, kerbWeight: e.target.value})} 
+                                placeholder="e.g. 1070 kg" 
+                            />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Fuel Type</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The type of fuel required for the engine.</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Select value={specsForm.fuelType} onValueChange={(val) => setSpecsForm({...specsForm, fuelType: val})}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select fuel type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Gasoline_87">Gasoline (87)</SelectItem>
+                                    <SelectItem value="Gasoline_91">Gasoline (91)</SelectItem>
+                                    <SelectItem value="Gasoline_93">Gasoline (93)</SelectItem>
+                                    <SelectItem value="Diesel">Diesel</SelectItem>
+                                    <SelectItem value="Electric">Electric</SelectItem>
+                                    <SelectItem value="Hybrid">Hybrid</SelectItem>
+                                </SelectContent>
+                            </Select>
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Fuel Economy (Km/L)</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The distance traveled per unit of fuel.</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.fuelEconomy} 
+                                onChange={e => setSpecsForm({...specsForm, fuelEconomy: e.target.value})} 
+                                placeholder="e.g. 24.6" 
+                            />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Fuel Tank Capacity (L)</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The maximum volume of fuel the tank can hold.</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.tankCapacity} 
+                                onChange={e => setSpecsForm({...specsForm, tankCapacity: e.target.value})} 
+                                placeholder="e.g. 36" 
+                            />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Body Type</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The physical shape/category of the vehicle.</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Input 
+                                value={specsForm.bodyType} 
+                                onChange={e => setSpecsForm({...specsForm, bodyType: e.target.value})} 
+                                placeholder="e.g. MPV" 
+                            />
+                       </div>
+                   </div>
+               </div>
+               <div className="flex justify-end gap-2">
+                   <Button variant="outline" onClick={() => setIsEditingSpecs(false)}>Cancel</Button>
+                   <Button onClick={handleSaveSpecs}>Save Changes</Button>
+               </div>
+           </DialogContent>
       </Dialog>
 
       {/* Upload Document Dialog */}
