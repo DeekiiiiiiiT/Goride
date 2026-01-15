@@ -167,8 +167,8 @@ export function ManualTripForm({
         try {
           const dist = await calculateRouteDistance(pickupCoords, dropoffCoords);
           if (dist !== null) {
-            setFormData(prev => ({ ...prev, distance: parseFloat(dist.toFixed(1)) }));
-            toast.success(`Distance calculated: ${dist.toFixed(1)} km`);
+            setFormData(prev => ({ ...prev, distance: parseFloat(dist.toFixed(2)) }));
+            toast.success(`Distance calculated: ${dist.toFixed(2)} km`);
           }
         } catch (error) {
           console.error("Failed to calculate distance", error);
@@ -334,9 +334,9 @@ export function ManualTripForm({
                 <Input 
                   type="number" 
                   min="0" 
-                  step="0.1"
+                  step="0.01"
                   className="pl-9"
-                  placeholder="0.0"
+                  placeholder="0.00"
                   value={formData.distance || ''}
                   onChange={(e) => handleInputChange('distance', parseFloat(e.target.value))}
                 />

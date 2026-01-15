@@ -2966,14 +2966,7 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
 
     // Convert file to base64
     const arrayBuffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = "";
-    const len = bytes.byteLength;
-    const chunkSize = 1024;
-    for (let i = 0; i < len; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
-    }
-    const base64Image = `data:${file.type};base64,${btoa(binary)}`;
+    const base64Image = `data:${file.type};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
 
     const prompt = `
       You are an expert data parser.
@@ -3489,14 +3482,7 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
         const openai = new OpenAI({ apiKey });
         
         const arrayBuffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = "";
-        const len = bytes.byteLength;
-        const chunkSize = 1024;
-        for (let i = 0; i < len; i += chunkSize) {
-            binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunkSize, len))));
-        }
-        const base64Image = `data:${file.type};base64,${btoa(binary)}`;
+        const base64Image = `data:${file.type};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
 
         const prompt = `Analyze this receipt image. It is likely a Jamaican toll receipt. 
         Extract the following details in JSON format:

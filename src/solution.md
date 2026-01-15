@@ -1,81 +1,52 @@
-# Solution Plan: Trip Manifest Implementation
+# Trip Details: Stops & Wait Time Implementation Plan
 
-This plan details the implementation of the "Trip Manifest" feature, which allows users to view the specific trips that constitute the "Business Mileage" within a verified odometer gap.
+This document outlines the phased approach to fixing the "Trip Details" view. The goal is to accurately display intermediate stops triggered by the driver (the "Stop" button), showing specific locations and the recorded wait time for each.
 
-## Phase 1: Service Layer Refactoring
-**Goal:** Extract trip fetching logic into a reusable method to support on-demand loading.
+## Phase 1: Data Verification & Mocking
+**Goal:** Ensure we have a reliable way to test the UI changes without needing to physically drive a vehicle to generate new data.
 
-1.  **Refactor `mileageCalculationService`**:
-    -   Create a new public method `getTripsForPeriod(vehicleId: string, startAnchor: OdometerReading, endAnchor: OdometerReading): Promise<Trip[]>`.
-    -   Move the logic that fetches trips (either by `anchorPeriodId` or date range) from `calculatePeriodMileage` into this new method.
-    -   Update `calculatePeriodMileage` to call `getTripsForPeriod`.
+- [ ] **Step 1.1: Audit Data Interfaces**
+    - Review `types/data.ts` (Trip) and `types/tripSession.ts` (TripStop) to confirm all necessary fields (`location`, `durationSeconds`, `arrivalTime`) are available.
+- [ ] **Step 1.2: Create Test Fixture**
+    - Define a `MOCK_TRIP_WITH_STOPS` object within `TripDetailsDialog.tsx` (commented out by default).
+    - This object will simulate a trip with:
+        - 1 Pickup
+        - 2 Intermediate "Stop Button" events (one short wait, one long wait).
+        - 1 Dropoff
+    - This allows us to instantly verify UI changes.
 
-## Phase 2: UI Foundation - SlideOut Component
-**Goal:** Create the container component for the manifest.
+## Phase 2: Timeline UI Refactor
+**Goal:** Refactor the current hardcoded "Pickup -> Dropoff" HTML structure into a dynamic list that can handle *N* number of stops.
 
-1.  **Create `components/vehicles/odometer/TripManifestSheet.tsx`**:
-    -   Import `Sheet`, `SheetContent`, `SheetHeader`, etc. from `../../ui/sheet`.
-    -   Define props: `isOpen`, `onClose`, `vehicleId`, `startAnchor`, `endAnchor`.
-    -   Set up the basic structure with a placeholder title and content area.
-    -   Ensure it handles `null` anchors gracefully (though it shouldn't be called with them).
+- [ ] **Step 2.1: Design "Stop Node" Component**
+    - Create a reusable render helper or component for a single timeline event.
+    - Define styles for:
+        - **Pickup:** Green/Blue dot (existing).
+        - **Intermediate Stop:** Amber/Slate dot (new). Must look distinct to indicate it's a "Wait" point.
+        - **Dropoff:** Red dot (existing).
+- [ ] **Step 2.2: Implement Vertical Connector Logic**
+    - Ensure the vertical line (`border-l`) connects all dots seamlessly, regardless of the number of stops.
+    - Handle the "Last Item" case (dropoff) where the line should stop.
 
-## Phase 3: Integration into MasterLogTimeline
-**Goal:** Connect the new component to the main timeline view.
+## Phase 3: Integration & Wait Time Display
+**Goal:** Connect the real `trip.stops` data to the new UI and display the specific wait time metrics.
 
-1.  **Update `MasterLogTimeline.tsx`**:
-    -   Import `TripManifestSheet`.
-    -   Add state: `const [manifestGap, setManifestGap] = useState<{start: OdometerReading, end: OdometerReading} | null>(null);`.
-    -   In the gap rendering section (inside the map loop), add a "View Trip Manifest" button.
-    -   Wire the button `onClick` to `setManifestGap({ start: prevItem, end: item })`.
-    -   Render the `TripManifestSheet` at the bottom of the component, passing the `manifestGap` state (controlled by `!!manifestGap`) and an `onClose` handler that clears the state.
+- [ ] **Step 3.1: Map `trip.stops`**
+    - In `TripDetailsDialog.tsx`, write the logic to merge Pickup, `trip.stops`, and Dropoff into a single chronological list for rendering.
+- [ ] **Step 3.2: Render Wait Times**
+    - For each intermediate stop, calculate the duration string (e.g., "3m 12s").
+    - Add a `Clock` icon and the duration text next to the address.
+- [ ] **Step 3.3: High-Visibility Alerts**
+    - Implement conditional styling for "Long Stops" (e.g., > 2 minutes).
+    - Make the text red or add an alert icon if the wait time was significant.
 
-## Phase 4: Data Fetching in Manifest
-**Goal:** Load the actual trips when the sheet opens.
+## Phase 4: Summary Metrics & Polish
+**Goal:** Surface the aggregate impact of these stops (Total Wait Time) in the trip summary.
 
-1.  **Implement Data Loading in `TripManifestSheet`**:
-    -   Add state for `trips` (`Trip[]`) and `loading` (`boolean`).
-    -   Add a `useEffect` that triggers when `startAnchor` or `endAnchor` changes.
-    -   Call `mileageCalculationService.getTripsForPeriod` inside the effect.
-    -   Handle loading state (show spinner) and error state (show error message).
-
-## Phase 5: Manifest Content - Summary Header
-**Goal:** Show the context of the gap (Physical vs Digital).
-
-1.  **Build the Header UI**:
-    -   Display the date range of the gap.
-    -   Show the "Physical Gap": Start Odometer -> End Odometer (and total Δ).
-    -   Show the "Digital Sum": Total Trip Distance & Trip Count.
-    -   Calculate and show "Variance" or "Personal Mileage" (Physical - Digital).
-    -   Use the "Business-First" styling (clean metrics, verified badges).
-
-## Phase 6: Manifest Content - Trip List Structure
-**Goal:** Render the trips in an organized list.
-
-1.  **Implement Trip List**:
-    -   Create a scrollable area for the list.
-    -   Map through the `trips`.
-    -   Render a card or row for each trip showing:
-        -   Time (HH:mm)
-        -   Platform (Uber/Lyft icon/text)
-        -   Distance (km)
-        -   Status (Completed/Cancelled)
-    -   Add an empty state ("No trips found for this period").
-
-## Phase 7: Grouping & Sorting
-**Goal:** Improve readability by grouping trips by day.
-
-1.  **Group Trips**:
-    -   Helper function to group trips by date (YYYY-MM-DD).
-    -   Sort groups chronologically (or reverse, depending on preference - usually chronological for a manifest).
-    -   Render sticky headers for each date group (e.g., "Jan 5, 2024").
-
-## Phase 8: Final Polish & Testing
-**Goal:** Ensure a seamless user experience.
-
-1.  **Refine UI**:
-    -   Add source icons to the Start/End anchors in the header (using the `getSourceIcon` logic - might need to duplicate or export it).
-    -   Ensure mobile responsiveness (Sheet works well on mobile).
-    -   Verify that clicking "Close" works correctly.
-    -   Test edge cases:
-        -   Gap with 0 trips.
-        -   Gap where trips > physical distance (Anomaly).
+- [ ] **Step 4.1: Calculate Total Trip Wait Time**
+    - Create a helper to sum `durationSeconds` from all stops in the `stops` array.
+- [ ] **Step 4.2: Update Header Metrics**
+    - Add a "Total Wait" metric block alongside "Distance" and "Duration" in the top section of the dialog.
+- [ ] **Step 4.3: Final Review**
+    - Verify Dark Mode appearance.
+    - Remove the Mock Data from Phase 1.

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Trip } from "../../types/data";
+import { TripStop } from "../../types/tripSession";
 import { ScrollArea } from "../ui/scroll-area";
 import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
@@ -15,6 +16,11 @@ interface TripDetailsDialogProps {
 
 export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialogProps) {
   if (!trip) return null;
+
+  // Calculate Total Wait Time
+  const totalWaitSeconds = trip.stops?.reduce((acc, stop) => acc + (stop.durationSeconds || 0), 0) || 0;
+  const waitMinutes = Math.floor(totalWaitSeconds / 60);
+  const waitSeconds = totalWaitSeconds % 60;
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -73,31 +79,87 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                 <Navigation className="h-4 w-4 text-indigo-500" />
                 Route Information
               </h3>
-              <div className="relative pl-4 border-l-2 border-slate-200 dark:border-slate-800 space-y-6">
-                <div className="relative">
-                  <div className="absolute -left-[23px] top-1 h-3 w-3 rounded-full border-2 border-indigo-600 bg-white dark:bg-slate-950" />
-                  <div className="space-y-1">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide font-medium">Pickup</p>
-                    <p className="text-sm text-slate-900 dark:text-slate-50 font-medium">{trip.pickupLocation || "Location not recorded"}</p>
-                    {trip.requestTime && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {format(new Date(trip.requestTime), "h:mm a")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="relative">
-                  <div className="absolute -left-[23px] top-1 h-3 w-3 rounded-full border-2 border-rose-500 bg-white dark:bg-slate-950" />
-                  <div className="space-y-1">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide font-medium">Dropoff</p>
-                    <p className="text-sm text-slate-900 dark:text-slate-50 font-medium">{trip.dropoffLocation || "Location not recorded"}</p>
-                    {trip.dropoffTime && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {format(new Date(trip.dropoffTime), "h:mm a")}
-                      </p>
-                    )}
-                  </div>
-                </div>
+              <div className="relative pl-4 border-l-2 border-slate-200 dark:border-slate-800 space-y-8 pb-1">
+                {/* Dynamic Timeline Generation */}
+                {(() => {
+                  const events = [];
+                  
+                  // 1. Pickup Event
+                  events.push({
+                    type: 'pickup',
+                    label: 'Pickup',
+                    location: trip.pickupLocation,
+                    time: trip.requestTime,
+                    color: 'border-indigo-600',
+                    textColor: 'text-indigo-600'
+                  });
+
+                  // 2. Intermediate Stops (from trip.stops)
+                  if (trip.stops && Array.isArray(trip.stops)) {
+                    trip.stops.forEach((stop, index) => {
+                      events.push({
+                        type: 'stop',
+                        label: `Stop #${index + 1}`,
+                        location: stop.location,
+                        time: stop.arrivalTime,
+                        duration: stop.durationSeconds,
+                        color: 'border-amber-500', 
+                        textColor: 'text-amber-600'
+                      });
+                    });
+                  }
+
+                  // 3. Dropoff Event
+                  events.push({
+                    type: 'dropoff',
+                    label: 'Dropoff',
+                    location: trip.dropoffLocation,
+                    time: trip.dropoffTime,
+                    color: 'border-rose-500',
+                    textColor: 'text-rose-600'
+                  });
+
+                  return events.map((event, index) => (
+                    <div key={index} className="relative">
+                      {/* Timeline Dot */}
+                      <div className={`absolute -left-[23px] top-1 h-3 w-3 rounded-full border-2 bg-white dark:bg-slate-950 ${event.color}`} />
+                      
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className={`text-xs uppercase tracking-wide font-bold ${event.textColor}`}>
+                            {event.label}
+                          </p>
+                          
+                          {/* Wait Time Badge for Stops */}
+                          {event.type === 'stop' && event.duration !== undefined && (
+                            <Badge 
+                              variant="outline" 
+                              className={`h-5 px-1.5 text-[10px] font-normal flex items-center gap-1
+                                ${event.duration > 300 
+                                  ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-400' 
+                                  : 'border-slate-300 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                                }`}
+                            >
+                              <Clock className="h-3 w-3" />
+                              {Math.floor(event.duration / 60)}m {event.duration % 60}s
+                              {event.duration > 300 && <span className="font-bold ml-0.5">!</span>}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        <p className="text-sm text-slate-900 dark:text-slate-50 font-medium">
+                          {event.location || "Location not recorded"}
+                        </p>
+                        
+                        {event.time && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {format(new Date(event.time), "h:mm a")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
               
               <div className="flex items-center gap-6 pt-2 text-sm text-slate-600 dark:text-slate-400">
@@ -111,6 +173,12 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-slate-400" />
                     <span>{trip.duration} min</span>
+                  </div>
+                )}
+                {totalWaitSeconds > 0 && (
+                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500 font-medium">
+                    <Clock className="h-4 w-4" />
+                    <span>Wait: {waitMinutes}m {waitSeconds}s</span>
                   </div>
                 )}
               </div>
