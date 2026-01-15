@@ -110,7 +110,7 @@ export function ManualTripForm({
           endTime: initialData.endTime,
           duration: initialData.duration,
           amount: 0,
-          platform: 'InDrive',
+          platform: initialData.isLiveRecorded ? 'GoRide' : 'InDrive',
           paymentMethod: 'Cash',
           pickupLocation: initialData.pickupLocation || '',
           dropoffLocation: initialData.endLocation || '',
@@ -346,26 +346,28 @@ export function ManualTripForm({
 
           {/* Platform & Payment Method Row */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Platform</Label>
-              <Select 
-                value={formData.platform} 
-                onValueChange={(val: any) => handleInputChange('platform', val)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="InDrive">InDrive (Manual)</SelectItem>
-                  <SelectItem value="Uber">Uber (Manual)</SelectItem>
-                  <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
-                  <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
-                  <SelectItem value="GoRide">GoRide (Manual)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {!formData.isLiveRecorded && (
+              <div className="space-y-2">
+                <Label>Platform</Label>
+                <Select 
+                  value={formData.platform} 
+                  onValueChange={(val: any) => handleInputChange('platform', val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="InDrive">InDrive (Manual)</SelectItem>
+                    <SelectItem value="Uber">Uber (Manual)</SelectItem>
+                    <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
+                    <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
+                    <SelectItem value="GoRide">GoRide (Manual)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-            <div className="space-y-2">
+            <div className={formData.isLiveRecorded ? "col-span-2 space-y-2" : "space-y-2"}>
               <Label>Payment Method</Label>
               <Select 
                 value={formData.paymentMethod} 
