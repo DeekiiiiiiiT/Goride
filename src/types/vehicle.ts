@@ -137,11 +137,33 @@ export type OdometerType = 'Hard' | 'Calculated';
 export interface OdometerReading {
   id: string;
   vehicleId: string;
+  driverId?: string;
+  driverName?: string;
   date: string; // ISO string
   value: number; // The odometer reading in km
   type: OdometerType;
-  source: OdometerSource;
+  source: OdometerSource | 'Weekly Check-in' | 'Fuel Receipt';
   notes?: string;
   referenceId?: string; // ID of the service log, document, or trip batch
+  imageUrl?: string; // Photo of the odometer
+  isVerified: boolean;
+  isManagerVerified?: boolean;
+  verifiedBy?: string; // Manager Name
+  verifiedAt?: string;
   createdAt: string;
+}
+
+export interface MileageReport {
+    vehicleId: string;
+    periodStart: string;
+    periodEnd: string;
+    startOdometer: number;
+    endOdometer: number;
+    totalDistance: number;
+    platformDistance: number;
+    personalDistance: number;
+    personalPercentage: number;
+    anomalyDetected: boolean;
+    anomalyReason?: string;
+    tripCount: number;
 }

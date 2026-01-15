@@ -81,7 +81,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
 
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
-  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports'].includes(currentPage);
+  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage);
   const isDrivingOpen = ['drivers', 'tier-config', 'performance'].includes(currentPage);
 
   return (
@@ -175,6 +175,13 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-overview' || currentPage === 'fuel-management'} onClick={() => onNavigate?.('fuel-overview')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Overview</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reimbursements'} onClick={() => onNavigate?.('fuel-reimbursements')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Reimbursements</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

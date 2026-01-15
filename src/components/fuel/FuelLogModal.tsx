@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { LocationInput } from "../ui/LocationInput";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
@@ -52,6 +53,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         pricePerLiter: number;
         odometer: number;
         location: string;
+        stationAddress: string;
     }>>([]);
 
     // Initialize one empty row for bulk when switching or opening
@@ -64,7 +66,8 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 liters: 0,
                 pricePerLiter: 0,
                 odometer: 0,
-                location: ''
+                location: '',
+                stationAddress: ''
             }]);
         }
     }, [activeTab]);
@@ -143,7 +146,8 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 liters: 0,
                 pricePerLiter: 0,
                 odometer: 0,
-                location: ''
+                location: '',
+                stationAddress: ''
             }
         ]);
     };
@@ -215,6 +219,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             pricePerLiter: row.pricePerLiter,
             odometer: row.odometer,
             location: row.location,
+            stationAddress: row.stationAddress,
             vehicleId: bulkCommon.vehicleId,
             driverId: bulkCommon.driverId,
             // Card ID is undefined for manual entries usually, but if type is Card, we might need it.
@@ -228,7 +233,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[700px]">
+            <DialogContent className="sm:max-w-[1000px]">
                 <DialogHeader>
                     <DialogTitle>{initialData ? 'Edit Fuel Entry' : 'Log Fuel Transaction'}</DialogTitle>
                     <DialogDescription>
@@ -268,7 +273,6 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                         <SelectContent>
                                             <SelectItem value="Card_Transaction">Fuel Card</SelectItem>
                                             <SelectItem value="Manual_Entry">Cash / Out of Pocket</SelectItem>
-                                            <SelectItem value="Reimbursement">Reimbursement</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -386,11 +390,12 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                 </div>
                                 <div className="space-y-2 col-span-2">
                                     <Label htmlFor="stationAddress">Gas Station Location</Label>
-                                    <Input 
+                                    <LocationInput 
                                         id="stationAddress" 
                                         placeholder="Enter address (e.g. 123 Main St)"
                                         value={formData.stationAddress || ''}
                                         onChange={(e) => setFormData(prev => ({ ...prev, stationAddress: e.target.value }))}
+                                        onAddressSelect={(address) => setFormData(prev => ({ ...prev, stationAddress: address }))}
                                     />
                                 </div>
                             </div>
@@ -450,7 +455,6 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                             <SelectContent>
                                                 <SelectItem value="Card_Transaction">Fuel Card</SelectItem>
                                                 <SelectItem value="Manual_Entry">Cash / Out of Pocket</SelectItem>
-                                                <SelectItem value="Reimbursement">Reimbursement</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -460,18 +464,19 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                             {/* Bulk Rows */}
                             <div className="space-y-2">
                                 <div className="grid grid-cols-12 gap-2 text-xs font-medium text-slate-500 px-2">
-                                    <div className="col-span-3">Date</div>
-                                    <div className="col-span-2">Amount ($)</div>
-                                    <div className="col-span-2">Price / L ($)</div>
-                                    <div className="col-span-2">Odometer</div>
-                                    <div className="col-span-2">Gas Station</div>
+                                    <div className="col-span-2">Date</div>
+                                    <div className="col-span-1">Amount ($)</div>
+                                    <div className="col-span-1">Price / L ($)</div>
+                                    <div className="col-span-1">Odometer</div>
+                                    <div className="col-span-3">Gas Station Name</div>
+                                    <div className="col-span-3">Location Address</div>
                                     <div className="col-span-1"></div>
                                 </div>
                                 
                                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                                     {bulkEntries.map((entry, index) => (
                                         <div key={entry.id} className="grid grid-cols-12 gap-2 items-start">
-                                            <div className="col-span-3">
+                                            <div className="col-span-2">
                                                 <Input 
                                                     type="date" 
                                                     value={entry.date}
@@ -479,7 +484,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                     className="h-9 text-sm px-2"
                                                 />
                                             </div>
-                                            <div className="col-span-2">
+                                            <div className="col-span-1">
                                                 <Input 
                                                     type="number" 
                                                     step="0.01"
@@ -489,7 +494,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                     className="h-9 text-sm px-2"
                                                 />
                                             </div>
-                                            <div className="col-span-2">
+                                            <div className="col-span-1">
                                                 <Input 
                                                     type="number" 
                                                     step="0.001"
@@ -499,7 +504,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                     className="h-9 text-sm px-2"
                                                 />
                                             </div>
-                                            <div className="col-span-2">
+                                            <div className="col-span-1">
                                                 <Input 
                                                     type="number" 
                                                     placeholder="Odo"
@@ -508,11 +513,20 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                     className="h-9 text-sm px-2"
                                                 />
                                             </div>
-                                            <div className="col-span-2">
+                                            <div className="col-span-3">
                                                 <Input 
                                                     placeholder="Gas Station"
                                                     value={entry.location}
                                                     onChange={(e) => updateBulkEntry(entry.id, 'location', e.target.value)}
+                                                    className="h-9 text-sm px-2"
+                                                />
+                                            </div>
+                                            <div className="col-span-3">
+                                                <LocationInput 
+                                                    placeholder="Address"
+                                                    value={entry.stationAddress || ''}
+                                                    onChange={(e) => updateBulkEntry(entry.id, 'stationAddress', e.target.value)}
+                                                    onAddressSelect={(address) => updateBulkEntry(entry.id, 'stationAddress', address)}
                                                     className="h-9 text-sm px-2"
                                                 />
                                             </div>

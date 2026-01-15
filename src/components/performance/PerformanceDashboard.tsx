@@ -10,8 +10,10 @@ import { Label } from "../ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, RefreshCw, Settings, Users, DollarSign, Activity, AlertTriangle } from 'lucide-react';
+import { Calendar as CalendarIcon, RefreshCw, Settings, Users, DollarSign, Activity, AlertTriangle, ClipboardList } from 'lucide-react';
 import { cn } from "../ui/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { WeeklyCheckInLogs } from './WeeklyCheckInLogs';
 
 export function PerformanceDashboard() {
   // Quick filters state
@@ -183,11 +185,27 @@ export function PerformanceDashboard() {
         </Card>
       </div>
 
-      {/* Main Content */}
-      <div className="space-y-6">
-        <PerformanceCharts drivers={drivers} />
-        <AtRiskTable drivers={atRiskDrivers} />
-      </div>
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="bg-slate-100 p-1">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Performance Overview
+          </TabsTrigger>
+          <TabsTrigger value="checkins" className="flex items-center gap-2">
+            <ClipboardList className="h-4 w-4" />
+            Weekly Check-In
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          <PerformanceCharts drivers={drivers} />
+          <AtRiskTable drivers={atRiskDrivers} />
+        </TabsContent>
+
+        <TabsContent value="checkins">
+          <WeeklyCheckInLogs />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

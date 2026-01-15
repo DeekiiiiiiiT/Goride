@@ -10,9 +10,10 @@ interface FleetAlertsPanelProps {
   metrics: DashboardMetrics;
   driverMetrics?: DriverMetrics[];
   onNavigate: (page: string) => void;
+  onReview?: (checkInId: string) => void;
 }
 
-export function FleetAlertsPanel({ alerts, metrics, driverMetrics = [], onNavigate }: FleetAlertsPanelProps) {
+export function FleetAlertsPanel({ alerts, metrics, driverMetrics = [], onNavigate, onReview }: FleetAlertsPanelProps) {
   
   const { topPerformers, needsAttention, aiInsights, operationalAlerts } = useMemo(() => {
       // Phase 5: Safety Net - Exclude known Fleet Owner names if they slipped through CSV parsing
@@ -112,8 +113,21 @@ export function FleetAlertsPanel({ alerts, metrics, driverMetrics = [], onNaviga
                                  <p className="text-xs text-slate-500">{alert.description}</p>
                                  <div className="flex items-center gap-2 pt-1">
                                      <span className="text-[10px] text-slate-400">2 min ago</span>
-                                     <Button variant="outline" size="sm" className="h-5 text-[10px] px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                         Act
+                                     <Button 
+                                         variant="outline" 
+                                         size="sm" 
+                                         className="h-5 text-[10px] px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                         onClick={() => {
+                                             if (alert.definitionId === 'def-manual-odometer') {
+                                                 if (onReview && alert.metadata?.checkInId) {
+                                                     onReview(alert.metadata.checkInId);
+                                                 } else {
+                                                     console.warn("Review handler missing or no CheckIn ID linked");
+                                                 }
+                                             }
+                                         }}
+                                     >
+                                         {alert.definitionId === 'def-manual-odometer' ? 'Review' : 'Act'}
                                      </Button>
                                  </div>
                              </div>

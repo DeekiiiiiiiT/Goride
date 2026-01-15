@@ -72,6 +72,7 @@ export function DriverDashboard() {
     stops?: TripStop[];
     totalWaitTime?: number;
     distance?: number;
+    isLiveRecorded?: boolean;
   } | undefined>(undefined);
 
   // Phase 2: Tier State
@@ -258,7 +259,8 @@ export function DriverDashboard() {
       stops: data.stops,
       totalWaitTime: data.totalWaitTime,
       distance: data.distance,
-      isOffline: data.isOffline
+      isOffline: data.isOffline,
+      isLiveRecorded: true
     } as any);
     setManualTripFormOpen(true);
   };
@@ -285,25 +287,54 @@ export function DriverDashboard() {
 
   const handleFuelSubmit = async (data: Partial<FuelLog>) => {
       try {
+          // @ts-ignore - receiving custom field from form
+          const method = data.paymentMethod || 'reimbursement';
+          
+          let type = 'Expense';
+          let payMethod = 'Cash';
+          let status = 'Pending';
+          
+          if (method === 'reimbursement') {
+              type = 'Reimbursement';
+              payMethod = 'Cash';
+              status = 'Pending';
+          } else if (method === 'card') {
+              type = 'Card_Transaction';
+              payMethod = 'Fuel Card';
+              status = 'Approved';
+          } else if (method === 'personal') {
+              type = 'Personal';
+              payMethod = 'Personal Cash';
+              status = 'Approved';
+          }
+
           const newTx: Partial<FinancialTransaction> = {
             id: crypto.randomUUID(),
             driverId: user?.id,
             driverName: driverRecord?.name || user?.email,
             date: data.date || new Date().toISOString(),
             time: format(new Date(), 'HH:mm:ss'),
-            type: 'Expense',
+            type: type,
             category: 'Fuel',
             amount: -Math.abs(data.totalCost || 0),
             description: data.notes || `Fuel Refill: ${data.liters}L`,
-            status: 'Pending',
-            paymentMethod: 'Cash',
+            status: status,
+            paymentMethod: payMethod,
             quantity: data.liters,
             odometer: data.odometer,
-            receiptUrl: data.receiptUrl
-          };
+            receiptUrl: data.receiptUrl,
+            // Unified Timeline Metadata
+            source: 'Fuel Log',
+            isVerified: true
+          } as any;
 
           await api.saveTransaction(newTx);
-          toast.success("Fuel log saved successfully!", {
+          
+          const successMsg = method === 'reimbursement' 
+                ? "Reimbursement requested!" 
+                : "Fuel log saved successfully!";
+
+          toast.success(successMsg, {
               description: `Logged ${data.liters}L at ${data.odometer}km.`
           });
       } catch (e) {
@@ -327,8 +358,12 @@ export function DriverDashboard() {
             description: `${data.type}: ${data.description}`,
             status: 'Pending',
             paymentMethod: 'Cash',
-            notes: `Priority: ${data.priority}`
-          };
+            notes: `Priority: ${data.priority}`,
+            odometer: data.odometer,
+            // Unified Timeline Metadata
+            source: 'Service Request',
+            isVerified: true
+          } as any;
 
           await api.saveTransaction(newTx);
           toast.success("Service request submitted!", {

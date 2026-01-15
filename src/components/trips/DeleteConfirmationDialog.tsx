@@ -18,16 +18,18 @@ export function DeleteConfirmationDialog({ trip, open, onOpenChange, onConfirm, 
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="text-rose-600">Delete Trip Log?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to delete this manual trip record?
-            <br /><br />
-            <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-md border border-slate-100 dark:border-slate-800 text-sm">
-                <p><strong>ID:</strong> {trip.id.slice(0, 8)}...</p>
-                <p><strong>Date:</strong> {new Date(trip.date).toLocaleDateString()}</p>
-                <p><strong>Driver:</strong> {trip.driverName}</p>
+          <AlertDialogDescription asChild>
+            <div className="text-muted-foreground text-sm">
+              Are you sure you want to delete this manual trip record?
+              <br /><br />
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-md border border-slate-100 dark:border-slate-800 text-sm">
+                  <p><strong>ID:</strong> {trip.id.slice(0, 8)}...</p>
+                  <p><strong>Date:</strong> {new Date(trip.date).toLocaleDateString()}</p>
+                  <p><strong>Driver:</strong> {trip.driverName}</p>
+              </div>
+              <br />
+              This action cannot be undone.
             </div>
-            <br />
-            This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

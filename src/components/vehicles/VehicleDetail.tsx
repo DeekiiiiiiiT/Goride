@@ -94,6 +94,7 @@ import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
+import { MasterLogTimeline } from './odometer/MasterLogTimeline';
 import { calculateLiveMileage } from '../../utils/mileageProjection';
 import { FixedExpensesManager } from './expenses/FixedExpensesManager';
 import { EquipmentManager } from './EquipmentManager';
@@ -1051,16 +1052,41 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           </TabsContent>
 
           <TabsContent value="odometer" className="mt-6">
-              <OdometerHistory 
-                  vehicleId={vehicle.id || vehicle.licensePlate} 
-                  maintenanceLogs={maintenanceLogs} 
-                  trips={trips} 
-                  onCorrectReading={() => {
-                      setNewOdometerValue(vehicle.metrics.odometer?.toString() || '');
-                      setIsUpdateOdometerOpen(true);
-                  }}
-                  refreshTrigger={odometerRefreshTrigger}
-              />
+              <Tabs defaultValue="master-log" className="w-full">
+                  <div className="flex justify-between items-center mb-6">
+                      <TabsList className="bg-slate-100 p-1">
+                          <TabsTrigger value="master-log" className="data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5 text-xs font-medium">Master Log</TabsTrigger>
+                          <TabsTrigger value="raw-history" className="data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5 text-xs font-medium">Raw History</TabsTrigger>
+                      </TabsList>
+                      
+                      <Button onClick={() => {
+                          setNewOdometerValue(vehicle.metrics.odometer?.toString() || '');
+                          setIsUpdateOdometerOpen(true);
+                      }} size="sm" className="h-8 bg-indigo-600 hover:bg-indigo-700">
+                          <Plus className="w-3 h-3 mr-1" /> Add Anchor
+                      </Button>
+                  </div>
+
+                  <TabsContent value="master-log" className="mt-0">
+                      <MasterLogTimeline 
+                          vehicleId={vehicle.id || vehicle.licensePlate}
+                          refreshTrigger={odometerRefreshTrigger}
+                      />
+                  </TabsContent>
+
+                  <TabsContent value="raw-history" className="mt-0">
+                      <OdometerHistory 
+                          vehicleId={vehicle.id || vehicle.licensePlate} 
+                          maintenanceLogs={maintenanceLogs} 
+                          trips={trips} 
+                          onCorrectReading={() => {
+                              setNewOdometerValue(vehicle.metrics.odometer?.toString() || '');
+                              setIsUpdateOdometerOpen(true);
+                          }}
+                          refreshTrigger={odometerRefreshTrigger}
+                      />
+                  </TabsContent>
+              </Tabs>
           </TabsContent>
 
 

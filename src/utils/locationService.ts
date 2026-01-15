@@ -31,6 +31,7 @@ let mapsLoadedPromise: Promise<void> | null = null;
  * Load Google Maps API with modern async loading pattern
  */
 export const loadGoogleMapsApi = async (): Promise<void> => {
+  // If library is already available, we are good
   if (typeof window !== 'undefined' && window.google?.maps && window.google?.maps?.importLibrary) {
     return Promise.resolve();
   }
@@ -39,6 +40,37 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
 
   mapsLoadedPromise = new Promise(async (resolve, reject) => {
     try {
+      // Check if script is already present
+      const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]') as HTMLScriptElement;
+      
+      if (existingScript) {
+          // Check if it has the necessary libraries
+          const src = existingScript.src;
+          if (!src.includes('places')) {
+             console.log("Removing existing Google Maps script missing 'places' library");
+             existingScript.remove();
+             // Force cleanup of google object if it exists but is incomplete?
+             // window.google = undefined; // Risky if other things use it, but necessary for clean reload
+          } else {
+             // Script seems correct, wait for it to initialize
+             let attempts = 0;
+             const checkInterval = setInterval(() => {
+                 attempts++;
+                 const hasImportLib = !!(window.google?.maps?.importLibrary);
+                 const hasPlacesLib = !!(window.google?.maps?.places);
+                 
+                 if (hasImportLib || hasPlacesLib) {
+                     clearInterval(checkInterval);
+                     resolve();
+                 } else if (attempts > 50) { // 5 seconds
+                     clearInterval(checkInterval);
+                     resolve(); // Try anyway
+                 }
+             }, 100);
+             return;
+          }
+      }
+
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/maps-config`, {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
@@ -56,18 +88,12 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
         throw new Error("Google Maps API Key configuration missing on server");
       }
 
-      // Check if script is already present
-      if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
-        resolve();
-        return;
-      }
-
       const script = document.createElement('script');
-      // Added loading=async as requested by warning
-      // Removed libraries parameter as we will use dynamic importLibrary
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&loading=async`;
+      // loading=async is required for importLibrary
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&loading=async&libraries=places,geometry`; 
       script.async = true;
       script.defer = true;
+      script.id = 'google-maps-script';
       
       script.onload = () => resolve();
       script.onerror = (e) => reject(e);
@@ -134,19 +160,33 @@ export const reverseGeocode = async (
   try {
     await loadGoogleMapsApi();
     
-    // Dynamically import Geocoding library
-    const { Geocoder } = await google.maps.importLibrary("geocoding") as any;
-    const geocoder = new Geocoder();
-    
+    // Check if importLibrary is available
+    if (window.google?.maps?.importLibrary) {
+        const { Geocoder } = await google.maps.importLibrary("geocoding") as any;
+        const geocoder = new Geocoder();
+        return new Promise((resolve, reject) => {
+            geocoder.geocode({ location: { lat, lng: lon } }, (results: any[], status: string) => {
+                if (status === 'OK' && results[0]) {
+                resolve(results[0].formatted_address);
+                } else {
+                reject(new Error("Address not found"));
+                }
+            });
+        });
+    }
+
+    // Fallback for legacy
+    const geocoder = new window.google.maps.Geocoder();
     return new Promise((resolve, reject) => {
-      geocoder.geocode({ location: { lat, lng: lon } }, (results: any[], status: string) => {
-        if (status === 'OK' && results[0]) {
-          resolve(results[0].formatted_address);
-        } else {
-          reject(new Error("Address not found"));
-        }
-      });
+        geocoder.geocode({ location: { lat, lng: lon } }, (results: any[], status: string) => {
+            if (status === 'OK' && results[0]) {
+                resolve(results[0].formatted_address);
+            } else {
+                reject(new Error("Address not found"));
+            }
+        });
     });
+
   } catch (error) {
     console.error("Reverse geocoding error:", error);
     throw new Error("Failed to convert coordinates to address");
@@ -163,32 +203,35 @@ export const searchAddress = async (query: string): Promise<AddressResult[]> => 
   try {
     await loadGoogleMapsApi();
 
-    // Use dynamic import for Places library
-    const { AutocompleteSuggestion } = await google.maps.importLibrary("places") as any;
-
-    // The new AutocompleteSuggestion API
-    if (AutocompleteSuggestion && AutocompleteSuggestion.fetchAutocompleteSuggestions) {
-      const request = {
-        input: query,
-        includedRegionCodes: ['jm'],
-      };
-
-      const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-      
-      // Map suggestions to our AddressResult format
-      // Note: New API results might structure data differently.
-      // We often need to fetch details for the coordinates, so we store the placeSuggestion.
-      return suggestions.map((suggestion: any) => ({
-        display_name: suggestion.placePrediction?.text?.text || suggestion.placePrediction?.mainText?.text || "Unknown Location",
-        lat: '', // To be fetched
-        lon: '', // To be fetched
-        place_id: suggestion.placePrediction?.placeId || suggestion.placePrediction?.place, // Handle different structure versions
-      }));
-    } 
+    // Try modern API if available
+    if (window.google?.maps?.importLibrary) {
+        try {
+            const { AutocompleteSuggestion } = await google.maps.importLibrary("places") as any;
+            if (AutocompleteSuggestion && AutocompleteSuggestion.fetchAutocompleteSuggestions) {
+                const request = {
+                    input: query,
+                    includedRegionCodes: ['jm'],
+                };
+                const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+                return suggestions.map((suggestion: any) => ({
+                    display_name: suggestion.placePrediction?.text?.text || suggestion.placePrediction?.mainText?.text || "Unknown Location",
+                    lat: '', 
+                    lon: '', 
+                    place_id: suggestion.placePrediction?.placeId || suggestion.placePrediction?.place, 
+                }));
+            }
+        } catch (e) {
+            console.warn("Modern Places API failed, trying legacy:", e);
+        }
+    }
     
-    // Fallback to legacy service if new API class is missing (shouldn't happen with modern key)
-    console.warn("AutocompleteSuggestion not found, falling back to legacy service");
+    // Legacy fallback
     return new Promise((resolve) => {
+       if (!window.google?.maps?.places?.AutocompleteService) {
+           console.error("Google Maps Places library not loaded");
+           resolve([]);
+           return;
+       }
        const autocompleteService = new window.google.maps.places.AutocompleteService();
        autocompleteService.getPlacePredictions(
         {
@@ -224,28 +267,51 @@ export const getPlaceDetails = async (placeId: string): Promise<{ lat: number; l
   try {
     await loadGoogleMapsApi();
 
-    // Modern Place API (2025+)
-    const { Place } = await google.maps.importLibrary("places") as any;
-    
-    if (Place) {
-      const place = new Place({ id: placeId });
-      
-      // Fetch only the fields we need
-      await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] });
-      
-      const location = place.location;
-      
-      if (location) {
-         return {
-           lat: location.lat(),
-           lon: location.lng(),
-           address: place.formattedAddress || place.displayName,
-         };
-      }
+    if (window.google?.maps?.importLibrary) {
+        try {
+            const { Place } = await google.maps.importLibrary("places") as any;
+            if (Place) {
+                const place = new Place({ id: placeId });
+                await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] });
+                const location = place.location;
+                if (location) {
+                    return {
+                        lat: location.lat(),
+                        lon: location.lng(),
+                        address: place.formattedAddress || place.displayName,
+                    };
+                }
+            }
+        } catch (e) {
+             console.warn("Modern Place Details API failed, trying legacy:", e);
+        }
     }
 
-    // Fallback if Place class fails
-    return null;
+    // Legacy fallback
+    return new Promise((resolve) => {
+        if (!window.google?.maps?.places?.PlacesService) {
+             resolve(null);
+             return;
+        }
+        // Need a dummy element for PlacesService
+        const dummyNode = document.createElement('div');
+        const placesService = new window.google.maps.places.PlacesService(dummyNode);
+        
+        placesService.getDetails({
+            placeId: placeId,
+            fields: ['geometry', 'formatted_address', 'name']
+        }, (place: any, status: string) => {
+            if (status === window.google.maps.places.PlacesServiceStatus.OK && place && place.geometry && place.geometry.location) {
+                resolve({
+                    lat: place.geometry.location.lat(),
+                    lon: place.geometry.location.lng(),
+                    address: place.formatted_address || place.name
+                });
+            } else {
+                resolve(null);
+            }
+        });
+    });
 
   } catch (error) {
     console.error("Get place details error:", error);

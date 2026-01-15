@@ -7,6 +7,7 @@ import {
   Loader2,
   RefreshCw
 } from "lucide-react";
+import { startOfWeek } from "date-fns";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -24,6 +25,7 @@ import {
 } from "../ui/select";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
+import { fuelService } from '../../services/fuelService';
 import { DashboardMetricsEngine } from '../../utils/dashboardMetricsEngine';
 import { Trip, Notification, DriverMetrics, VehicleMetrics, OrganizationMetrics, TripAnalytics, DashboardMetrics, DashboardAlert, ImportBatch } from '../../types/data';
 import { exportToCSV } from '../../utils/csvHelpers';
@@ -41,6 +43,8 @@ import { MeetingSchedulerModal } from './MeetingSchedulerModal';
 import { DailyBriefingModal } from './DailyBriefingModal';
 import { PredictiveAnalyticsPanel } from './PredictiveAnalyticsPanel';
 import { AlertsConfigView } from './AlertsConfigView';
+import { CheckInReviewModal } from './CheckInReviewModal';
+import { useAdminCheckIn } from '../../hooks/useAdminCheckIn';
 import { FileSpreadsheet, FileText, LayoutDashboard } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 
@@ -48,6 +52,10 @@ export function Dashboard() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState('operations'); // Phase 6.4
+  
+  // Phase 7: Check-In Review Logic
+  const [reviewCheckInId, setReviewCheckInId] = useState<string | null>(null);
+  const { reviewCheckIn } = useAdminCheckIn();
 
   // 1. React Query Hooks
   const { data: serverStats, isLoading: statsLoading } = useQuery({
@@ -91,7 +99,45 @@ export function Dashboard() {
     queryFn: () => api.getAlertRules(),
   });
 
+  // Phase 7: Fetch Fuel & Check-In Data for Alerts
+  const currentWeekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString().split('T')[0], []);
+  
+  const { data: fuelEntries = [] } = useQuery({
+    queryKey: ['fuelEntries'],
+    queryFn: () => fuelService.getFuelEntries(),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: adjustments = [] } = useQuery({
+    queryKey: ['adjustments'],
+    queryFn: () => fuelService.getMileageAdjustments(),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: checkIns = [] } = useQuery({
+    queryKey: ['checkIns', currentWeekStart],
+    queryFn: () => api.getCheckIns(currentWeekStart),
+    staleTime: 1000 * 60 * 5,
+  });
+
   const loading = statsLoading || tripsLoading || driversLoading || vehiclesLoading || batchesLoading || notificationsLoading;
+
+  // Phase 7: Review Modal Helpers
+  const selectedCheckIn = useMemo(() => {
+      return checkIns.find((c: any) => c.id === reviewCheckInId);
+  }, [checkIns, reviewCheckInId]);
+  
+  const selectedDriverName = useMemo(() => {
+      if (!selectedCheckIn) return '';
+      return driverMetrics.find((d: any) => d.driverId === selectedCheckIn.driverId)?.driverName || 'Unknown Driver';
+  }, [selectedCheckIn, driverMetrics]);
+
+  const handleReviewSubmit = async (id: string, status: 'approved' | 'rejected', notes?: string) => {
+      await reviewCheckIn(id, status, notes);
+      queryClient.invalidateQueries({ queryKey: ['checkIns'] });
+      setReviewCheckInId(null);
+      toast.success(`Check-In ${status === 'approved' ? 'Approved' : 'Rejected'}`);
+  };
 
   // 2. Derived State (Memoized)
   const fleetMetrics = useMemo(() => {
@@ -125,7 +171,14 @@ export function Dashboard() {
 
   const { fleetAlerts, notifications } = useMemo(() => {
      // Generate Real-time Alerts (Phase 4 Engine)
-     const realAlerts = AlertEngine.generateDashboardAlerts(driverMetrics, vehicleMetrics, trips);
+     const realAlerts = AlertEngine.generateDashboardAlerts(
+        driverMetrics, 
+        vehicleMetrics, 
+        trips,
+        fuelEntries,
+        adjustments,
+        checkIns
+     );
      
      // Merge AI Insights (Notifications) into Dashboard Alerts
      const aiAlerts: DashboardAlert[] = apiNotifications.map(n => ({
@@ -313,7 +366,13 @@ export function Dashboard() {
 
                    {/* Right Column: Alerts & Leaderboard (30%) */}
                    <div className="md:col-span-3 h-full overflow-y-auto pl-1">
-                       <FleetAlertsPanel alerts={fleetAlerts} metrics={fleetMetrics} driverMetrics={driverMetrics} onNavigate={handleNavigate} />
+                       <FleetAlertsPanel 
+                           alerts={fleetAlerts} 
+                           metrics={fleetMetrics} 
+                           driverMetrics={driverMetrics} 
+                           onNavigate={handleNavigate}
+                           onReview={setReviewCheckInId} 
+                       />
                    </div>
                </div>
            )}
@@ -352,7 +411,13 @@ export function Dashboard() {
                  {/* Live Alerts Panel */}
                  <div className="h-[600px] overflow-hidden rounded-lg border bg-white shadow-sm">
                      {fleetMetrics && (
-                        <FleetAlertsPanel alerts={fleetAlerts} metrics={fleetMetrics} driverMetrics={driverMetrics} onNavigate={handleNavigate} />
+                        <FleetAlertsPanel 
+                            alerts={fleetAlerts} 
+                            metrics={fleetMetrics} 
+                            driverMetrics={driverMetrics} 
+                            onNavigate={handleNavigate}
+                            onReview={setReviewCheckInId}
+                        />
                      )}
                  </div>
                  {/* Rule Configuration */}
@@ -378,6 +443,17 @@ export function Dashboard() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Review Modal */}
+      {selectedCheckIn && (
+          <CheckInReviewModal 
+              isOpen={!!selectedCheckIn}
+              onClose={() => setReviewCheckInId(null)}
+              checkIn={selectedCheckIn}
+              driverName={selectedDriverName}
+              onReview={handleReviewSubmit}
+          />
+      )}
     </div>
   );
 }

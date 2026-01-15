@@ -13,6 +13,7 @@ export interface TripFilterParams {
     platform?: string;
     tripType?: string;
     vehicleId?: string;
+    anchorPeriodId?: string; // Phase 6: Direct lookup
     minEarnings?: string;
     maxEarnings?: string;
     minDistance?: string;
@@ -460,7 +461,8 @@ export const api = {
         body: JSON.stringify(transaction)
     });
     if (!response.ok) throw new Error("Failed to save transaction");
-    return response.json();
+    const result = await response.json();
+    return result.data || result;
   },
 
   async deleteTransaction(id: string) {
@@ -723,6 +725,24 @@ export const api = {
     return response.json();
   },
 
+  async scanOdometerWithAI(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/scan-odometer`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: formData
+    });
+    
+    if (!response.ok) {
+        throw new Error("Failed to scan odometer");
+    }
+    return response.json();
+  },
+
   async getClaims(driverId?: string) {
     const url = driverId 
         ? `${API_ENDPOINTS.financial}/claims?driverId=${driverId}` 
@@ -756,6 +776,18 @@ export const api = {
     return response.json();
   },
 
+  async getCheckIns(weekStart?: string) {
+    let url = `${API_ENDPOINTS.fleet}/check-ins`;
+    if (weekStart) {
+        url += `?weekStart=${weekStart}`;
+    }
+    const response = await fetchWithRetry(url, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch check-ins");
+    return response.json();
+  },
+
   async reconcileTollTransaction(transaction: FinancialTransaction, trip: Trip) {
     // 1. Update Transaction: Link to trip and mark reconciled
     // Auto-assign driver from the matched trip to ensure data consistency
@@ -785,7 +817,8 @@ export const api = {
         body: JSON.stringify({ id, notes })
     });
     if (!response.ok) throw new Error("Failed to approve expense");
-    return response.json();
+    const result = await response.json();
+    return result.data || result;
   },
 
   async rejectExpense(id: string, reason?: string) {
@@ -798,7 +831,8 @@ export const api = {
         body: JSON.stringify({ id, reason })
     });
     if (!response.ok) throw new Error("Failed to reject expense");
-    return response.json();
+    const result = await response.json();
+    return result.data || result;
   },
 
   async unreconcileTollTransaction(transaction: FinancialTransaction, trip: Trip) {
@@ -850,5 +884,23 @@ export const api = {
     }
     
     return response.json();
+  },
+
+  async getFuelEntriesByVehicle(vehicleId: string): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch fuel entries");
+    const entries = await response.json();
+    return entries.filter((e: any) => e.vehicleId === vehicleId);
+  },
+
+  async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch check-ins");
+    const checkIns = await response.json();
+    return checkIns.filter((c: any) => c.vehicleId === vehicleId);
   }
 };

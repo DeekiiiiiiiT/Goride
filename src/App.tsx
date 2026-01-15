@@ -128,10 +128,11 @@ function AppContent() {
       {currentPage === 'tier-config' && <TierConfigPage />}
       {currentPage === 'performance' && <PerformanceDashboard />}
       
-      {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration'].includes(currentPage) && (
+      {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
         <FuelManagement 
             defaultTab={
                 currentPage === 'fuel-reconciliation' ? 'reconciliation' :
+                currentPage === 'fuel-reimbursements' ? 'reimbursements' :
                 currentPage === 'fuel-cards' ? 'cards' :
                 currentPage === 'fuel-logs' ? 'logs' :
                 currentPage === 'fuel-reports' ? 'reports' :

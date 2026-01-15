@@ -1,4 +1,7 @@
 import { DriverMetrics, Trip, AlertRule, Notification, VehicleMetrics, DashboardAlert } from '../types/data';
+import { WeeklyCheckIn } from '../types/check-in';
+import { FuelEntry, MileageAdjustment } from '../types/fuel';
+import { startOfWeek, isAfter, setDay } from 'date-fns';
 
 export const AlertEngine = {
     /**
@@ -8,10 +11,14 @@ export const AlertEngine = {
     generateDashboardAlerts: (
         driverMetrics: DriverMetrics[], 
         vehicleMetrics: VehicleMetrics[],
-        trips: Trip[]
+        trips: Trip[],
+        fuelEntries: FuelEntry[] = [],
+        adjustments: MileageAdjustment[] = [],
+        checkIns: WeeklyCheckIn[] = []
     ): DashboardAlert[] => {
         const alerts: DashboardAlert[] = [];
         const now = new Date();
+        const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 }).toISOString().split('T')[0];
 
         // --- 1. Driver Checks (Every 15 min in real system) ---
         driverMetrics.forEach(driver => {
@@ -119,6 +126,89 @@ export const AlertEngine = {
                     });
                 }
             }
+        });
+
+        // --- 4. Fuel Leakage Checks (Phase 7) ---
+        // Group data by vehicle for the current week
+        const weekTrips = trips.filter(t => t.date >= currentWeekStart);
+        const weekEntries = fuelEntries.filter(e => e.date >= currentWeekStart);
+        
+        vehicleMetrics.forEach(vehicle => {
+            const vTrips = weekTrips.filter(t => t.vehicleId === vehicle.vehicleId);
+            const vEntries = weekEntries.filter(e => e.vehicleId === vehicle.vehicleId);
+            
+            if (vEntries.length === 0) return; // No fuel spend, no leakage
+
+            const totalSpend = vEntries.reduce((sum, e) => sum + e.amount, 0);
+            const totalDistance = vTrips.reduce((sum, t) => sum + (t.distance || 0), 0);
+            
+            // Simplified Estimation: Est Cost = Distance * 0.15 (approx $0.15/km)
+            const estimatedCost = totalDistance * 0.15;
+            const leakage = totalSpend - estimatedCost;
+
+            if (leakage > 25) { // Threshold $25
+                 alerts.push({
+                    id: `leak-${vehicle.vehicleId}-${crypto.randomUUID()}`,
+                    definitionId: 'def-fuel-leakage',
+                    timestamp: now.toISOString(),
+                    severity: 'high',
+                    title: `Fuel Leakage Detected: ${vehicle.plateNumber}`,
+                    description: `Spend ($${totalSpend.toFixed(0)}) exceeds estimate ($${estimatedCost.toFixed(0)}) by $${leakage.toFixed(0)}.`,
+                    status: 'new',
+                    vehicleId: vehicle.vehicleId
+                });
+            }
+        });
+
+        // --- 5. Missing Check-In Checks (Phase 7) ---
+        // Only trigger if it's past Tuesday
+        const tuesday = setDay(new Date(currentWeekStart), 2); 
+        // Note: setDay(..., 2) sets to Tuesday of the same week
+        
+        if (isAfter(now, tuesday)) {
+             driverMetrics.forEach(driver => {
+                 // Only check drivers who have trips this week (Active)
+                 const hasTrips = weekTrips.some(t => t.driverId === driver.driverId);
+                 if (!hasTrips) return;
+
+                 const hasCheckIn = checkIns.some(c => 
+                     c.driverId === driver.driverId && 
+                     c.weekStart === currentWeekStart
+                 );
+                 
+                 if (!hasCheckIn) {
+                     alerts.push({
+                        id: `miss-check-${driver.driverId}-${currentWeekStart}`,
+                        definitionId: 'def-missing-checkin',
+                        timestamp: now.toISOString(),
+                        severity: 'medium',
+                        title: `Missing Weekly Check-In: ${driver.driverName}`,
+                        description: `Active driver has not submitted odometer reading for week of ${currentWeekStart}.`,
+                        status: 'new',
+                        driverId: driver.driverId
+                    });
+                 }
+             });
+        }
+
+        // --- 6. Manual Odometer Overrides (Phase 6) ---
+        checkIns.forEach(checkIn => {
+             if (checkIn.method === 'manual_override' && checkIn.reviewStatus === 'pending_review') {
+                 // Find driver name for better context
+                 const driverName = driverMetrics.find(d => d.driverId === checkIn.driverId)?.driverName || 'Unknown Driver';
+                 
+                 alerts.push({
+                     id: `man-odo-${checkIn.id}`,
+                     definitionId: 'def-manual-odometer',
+                     timestamp: checkIn.timestamp || now.toISOString(),
+                     severity: 'high',
+                     title: `Manual Odometer Override: ${driverName}`,
+                     description: `Driver manually entered ${checkIn.odometer} km. Reason: "${checkIn.manualReadingReason || 'None provided'}". Photo evidence requires review.`,
+                     status: 'new',
+                     driverId: checkIn.driverId,
+                     metadata: { checkInId: checkIn.id }
+                 });
+             }
         });
 
         return alerts.sort((a,b) => {

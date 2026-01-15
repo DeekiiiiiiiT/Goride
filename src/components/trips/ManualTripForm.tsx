@@ -51,6 +51,7 @@ interface ManualTripFormProps {
     stops?: TripStop[];
     totalWaitTime?: number;
     distance?: number;
+    isLiveRecorded?: boolean;
   };
 }
 
@@ -71,7 +72,8 @@ export function ManualTripForm({
     date: format(new Date(), 'yyyy-MM-dd'),
     time: format(new Date(), 'HH:mm'),
     amount: 0,
-    platform: 'Cash',
+    platform: 'InDrive',
+    paymentMethod: 'Cash',
     pickupLocation: '',
     dropoffLocation: '',
     notes: '',
@@ -108,7 +110,8 @@ export function ManualTripForm({
           endTime: initialData.endTime,
           duration: initialData.duration,
           amount: 0,
-          platform: 'GoRide',
+          platform: 'InDrive',
+          paymentMethod: 'Cash',
           pickupLocation: initialData.pickupLocation || '',
           dropoffLocation: initialData.endLocation || '',
           notes: '',
@@ -116,7 +119,8 @@ export function ManualTripForm({
           vehicleId: defaultVehicleId || '',
           route: initialData.route || [],
           stops: initialData.stops || [],
-          totalWaitTime: initialData.totalWaitTime || 0
+          totalWaitTime: initialData.totalWaitTime || 0,
+          isLiveRecorded: initialData.isLiveRecorded
         });
         if (initialData.pickupCoords) {
           setPickupCoords(initialData.pickupCoords);
@@ -133,7 +137,8 @@ export function ManualTripForm({
           date: format(new Date(), 'yyyy-MM-dd'),
           time: format(new Date(), 'HH:mm'),
           amount: 0,
-          platform: 'Cash',
+          platform: 'InDrive',
+          paymentMethod: 'Cash',
           pickupLocation: '',
           dropoffLocation: '',
           notes: '',
@@ -339,52 +344,64 @@ export function ManualTripForm({
             </div>
           </div>
 
-          {/* Amount & Platform Row */}
+          {/* Platform & Payment Method Row */}
           <div className="grid grid-cols-2 gap-4">
-            <div className={initialData ? "space-y-2 col-span-2" : "space-y-2"}>
-              <Label>Earnings Amount</Label>
-              <div className="relative">
-                <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-600" />
-                <Input 
-                  type="number" 
-                  min="0" 
-                  step="0.01"
-                  className="pl-9 font-medium"
-                  placeholder="0.00"
-                  value={formData.amount || ''}
-                  onChange={(e) => handleInputChange('amount', parseFloat(e.target.value))}
-                  required
-                />
-              </div>
-              {['GoRide', 'Cash', 'Private'].includes(formData.platform) && (
-                <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
-                  * Driver collects this amount as cash
-                </p>
-              )}
+            <div className="space-y-2">
+              <Label>Platform</Label>
+              <Select 
+                value={formData.platform} 
+                onValueChange={(val: any) => handleInputChange('platform', val)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="InDrive">InDrive (Manual)</SelectItem>
+                  <SelectItem value="Uber">Uber (Manual)</SelectItem>
+                  <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
+                  <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
+                  <SelectItem value="GoRide">GoRide (Manual)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            
-            {!initialData && (
-              <div className="space-y-2">
-                <Label>Source / Platform</Label>
-                <Select 
-                  value={formData.platform} 
-                  onValueChange={(val: any) => handleInputChange('platform', val)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GoRide">GoRide (Live)</SelectItem>
-                    <SelectItem value="Cash">Cash Trip</SelectItem>
-                    <SelectItem value="Private">Private Client</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                    <SelectItem value="Uber">Uber (Manual)</SelectItem>
-                    <SelectItem value="InDrive">InDrive (Manual)</SelectItem>
-                    <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
-                    <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <Select 
+                value={formData.paymentMethod} 
+                onValueChange={(val: any) => handleInputChange('paymentMethod', val)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Card">Card / Digital</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Amount Row */}
+          <div className="space-y-2">
+            <Label>Earnings Amount</Label>
+            <div className="relative">
+              <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-600" />
+              <Input 
+                type="number" 
+                min="0" 
+                step="0.01"
+                className="pl-9 font-medium"
+                placeholder="0.00"
+                value={formData.amount || ''}
+                onChange={(e) => handleInputChange('amount', parseFloat(e.target.value))}
+                required
+              />
+            </div>
+            {formData.paymentMethod === 'Cash' && (
+              <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
+                * Driver collects this amount as cash
+              </p>
             )}
           </div>
 

@@ -61,6 +61,7 @@ export function DriverEarnings() {
     tolls: 0,
     cashCollected: 0,
     reimbursements: 0,
+    pendingReimbursements: 0,
     reimbursementBreakdown: [] as { label: string; amount: number }[],
     expenses: 0,
     expenseDetailed: {
@@ -256,9 +257,26 @@ export function DriverEarnings() {
       // Reimbursements (Adjustment/Revenue with positive amount)
       // Expenses (Expense with negative amount - usually doesn't impact "Payout Balance" unless paid by wallet)
       
-      const txReimbursements = currentTx.filter(t => 
-        (t.type === 'Adjustment' || t.category === 'Fuel Reimbursement' || (t.category && typeof t.category === 'string' && t.category.includes('Reimbursement'))) && t.amount > 0
-      );
+      const txReimbursements = currentTx.filter(t => {
+          if (t.amount <= 0) return false;
+          
+          // Phase 4: Reimbursement Workflow - Only show if Approved
+          if (t.type === 'Reimbursement') {
+              return t.status === 'Approved';
+          }
+          
+          // Legacy or other adjustments
+          if (t.type === 'Adjustment') {
+              return true;
+          }
+          
+          // Fallback based on category string
+          if (t.category === 'Fuel Reimbursement' || (t.category && typeof t.category === 'string' && t.category.includes('Reimbursement'))) {
+              return t.status !== 'Pending';
+          }
+          
+          return false;
+      });
 
       const reimbursementBreakdown: { label: string; amount: number }[] = [];
       
@@ -280,6 +298,14 @@ export function DriverEarnings() {
 
       const txReimbursementTotal = txReimbursements.reduce((sum, t) => sum + t.amount, 0);
       const displayReimbursementsTotal = tolls + txReimbursementTotal;
+
+      // Calculate Pending Reimbursements (for display only)
+      const pendingReimbursementsTx = currentTx.filter(t => 
+          (t.type === 'Reimbursement' || t.category === 'Fuel Reimbursement') && 
+          t.amount > 0 && 
+          t.status === 'Pending'
+      );
+      const pendingReimbursementsTotal = pendingReimbursementsTx.reduce((sum, t) => sum + t.amount, 0);
 
       // Phase 1: Expense Categorization Logic
       const expenseTx = currentTx.filter(t => t.type === 'Expense');
@@ -343,6 +369,7 @@ export function DriverEarnings() {
           tolls: tolls,
           cashCollected: cash,
           reimbursements: displayReimbursementsTotal,
+          pendingReimbursements: pendingReimbursementsTotal,
           reimbursementBreakdown: reimbursementBreakdown,
           expenses: totalExpenses,
           expenseDetailed: {
@@ -549,6 +576,12 @@ export function DriverEarnings() {
                             <span className="text-sm text-slate-900">${stats.reimbursements.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </CollapsibleTrigger>
                         <CollapsibleContent className="space-y-2 mt-2 pl-3 border-l-2 border-slate-100 ml-1.5">
+                            {stats.pendingReimbursements > 0 && (
+                                <div className="flex justify-between items-center text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs mb-2">
+                                    <span className="flex items-center gap-1">Pending Approval <Info className="h-3 w-3" /></span>
+                                    <span>${stats.pendingReimbursements.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                            )}
                             {stats.reimbursementBreakdown.length > 0 ? (
                                 stats.reimbursementBreakdown.map((item, index) => (
                                     <Row key={index} label={item.label} value={`$${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />

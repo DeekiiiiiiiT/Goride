@@ -11,7 +11,7 @@ import {
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
-import { CalendarIcon, FileCheck, AlertCircle, TrendingUp, Info } from "lucide-react";
+import { CalendarIcon, FileCheck, AlertCircle, TrendingUp, Info, Download } from "lucide-react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
@@ -20,6 +20,7 @@ import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
 import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute } from '../../types/fuel';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
+import { downloadCSV } from '../../utils/export';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -86,6 +87,36 @@ export function ReconciliationTable({
         return "text-slate-600";
     };
 
+    const handleExport = () => {
+        const data = reports.map(report => {
+            const vehicle = vehicles.find(v => v.id === report.vehicleId);
+            const driverSpend = fuelEntries
+                .filter(e => 
+                    e.vehicleId === report.vehicleId && 
+                    e.date >= report.weekStart && 
+                    e.date <= report.weekEnd &&
+                    (e.type === 'Reimbursement' || e.type === 'Manual_Entry')
+                )
+                .reduce((sum, e) => sum + e.amount, 0);
+
+            return {
+                WeekStart: report.weekStart,
+                WeekEnd: report.weekEnd,
+                Vehicle: vehicle?.licensePlate || 'Unknown',
+                DriverID: report.driverId,
+                TotalSpend: report.totalGasCardCost,
+                OperatingCost: report.operatingFuelCost,
+                Leakage: report.fuelMiscCost,
+                CompanyShare: report.companyShare,
+                DriverShare: report.driverShare, // Deduction
+                PaidByDriver: driverSpend,      // Reimbursement Due
+                NetPay: driverSpend - report.driverShare
+            };
+        });
+
+        downloadCSV(data, `reconciliation-${format(weekStart, 'yyyy-MM-dd')}`);
+    };
+
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -109,6 +140,10 @@ export function ReconciliationTable({
                             {formatCurrency(totals.misc)}
                         </p>
                     </div>
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Export
+                    </Button>
                     <Button onClick={() => onFinalize?.(reports)}>
                         <FileCheck className="mr-2 h-4 w-4" />
                         Finalize
@@ -132,51 +167,25 @@ export function ReconciliationTable({
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <div className="flex items-center justify-end gap-1 cursor-help">
-                                                Gas Card Charges
+                                                Total Spend
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            <p>Total amount charged to fuel cards for this vehicle.</p>
+                                            <p>Total fuel cost (Cards + Reimbursements).</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
-                                <TableHead className="text-right">
+                                <TableHead className="text-right bg-emerald-50/50">
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <div className="flex items-center justify-end gap-1 cursor-help">
-                                                Operating Cost
+                                                Paid by Driver
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            <p>Calculated based on efficiency (L/100km) × Trip Distance.</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <div className="flex items-center justify-end gap-1 cursor-help">
-                                                Fuel Misc (Leakage)
-                                                <Info className="h-3 w-3 text-slate-400" />
-                                            </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Difference between Actual Spend and Operating Cost. Positive values indicate excess consumption.</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TableHead>
-                                <TableHead className="text-right bg-blue-50/50">
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <div className="flex items-center justify-end gap-1 cursor-help">
-                                                Company Share
-                                                <Info className="h-3 w-3 text-slate-400" />
-                                            </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Portion of fuel cost covered by the company.</p>
+                                            <p>Amount paid out-of-pocket (Reimbursement Due).</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -184,12 +193,25 @@ export function ReconciliationTable({
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <div className="flex items-center justify-end gap-1 cursor-help">
-                                                Driver Share
+                                                Deduction
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            <p>Portion of fuel cost split to the driver to incentivize efficiency.</p>
+                                            <p>Driver's share of costs (Personal KM + Leakage).</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right font-bold bg-slate-100">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Net Pay
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Amount to pay (or deduct from) driver.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -198,15 +220,25 @@ export function ReconciliationTable({
                         <TableBody>
                             {reports.map((report) => {
                                 const vehicle = vehicles.find(v => v.id === report.vehicleId);
-                                const hasLeakage = report.fuelMiscCost > 10; // Threshold
+                                const hasLeakage = report.fuelMiscCost > 10; 
+                                
+                                // Calculate "Paid by Driver" (Cash/Reimbursement)
+                                const driverSpend = fuelEntries
+                                    .filter(e => 
+                                        e.vehicleId === report.vehicleId && 
+                                        e.date >= report.weekStart && 
+                                        e.date <= report.weekEnd &&
+                                        (e.type === 'Reimbursement' || e.type === 'Manual_Entry')
+                                    )
+                                    .reduce((sum, e) => sum + e.amount, 0);
+
+                                const netPay = driverSpend - report.driverShare;
+
                                 // Check if dispute overlaps with report period
                                 const dispute = disputes.find(d => {
                                     if (d.vehicleId !== report.vehicleId) return false;
                                     if (d.weekStart !== report.weekStart) return false;
-                                    // Strict match on end date if present in dispute
-                                    if (d.weekEnd) {
-                                        return d.weekEnd === report.weekEnd;
-                                    }
+                                    if (d.weekEnd) return d.weekEnd === report.weekEnd;
                                     return true;
                                 });
 
@@ -243,23 +275,14 @@ export function ReconciliationTable({
                                         <TableCell className="text-right font-medium">
                                             {formatCurrency(report.totalGasCardCost)}
                                         </TableCell>
-                                        <TableCell className="text-right text-slate-600">
-                                            {formatCurrency(report.operatingFuelCost)}
-                                            <div className="text-[10px] text-slate-400">
-                                                {report.totalTripDistance.toFixed(0)} km
-                                            </div>
+                                        <TableCell className="text-right bg-emerald-50/30 text-emerald-700 font-medium">
+                                            {formatCurrency(driverSpend)}
                                         </TableCell>
-                                        <TableCell className={`text-right ${getLeakageColor(report.fuelMiscCost)}`}>
-                                            <div className="flex items-center justify-end gap-2">
-                                                {formatCurrency(report.fuelMiscCost)}
-                                                {hasLeakage && <AlertCircle className="h-4 w-4 text-red-500" />}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-right bg-blue-50/30 font-medium text-slate-900">
-                                            {formatCurrency(report.companyShare)}
-                                        </TableCell>
-                                        <TableCell className="text-right bg-amber-50/30 font-medium text-slate-900">
+                                        <TableCell className="text-right bg-amber-50/30 text-amber-700 font-medium">
                                             {formatCurrency(report.driverShare)}
+                                        </TableCell>
+                                        <TableCell className={`text-right font-bold ${netPay >= 0 ? 'text-emerald-700' : 'text-rose-700'} bg-slate-50`}>
+                                            {formatCurrency(netPay)}
                                         </TableCell>
                                     </TableRow>
                                 );

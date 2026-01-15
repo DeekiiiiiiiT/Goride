@@ -209,6 +209,41 @@ export function DriverFuelStats() {
                 </Card>
             </div>
 
+            {/* Phase 6: Mileage Waterfall */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Mileage Breakdown</CardTitle>
+                    <CardDescription>How your total distance is allocated</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-1">
+                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                        <span className="font-semibold text-slate-900">Total Odometer Change</span>
+                        <span className="font-bold text-slate-900">{(report.totalTripDistance + report.companyMiscDistance + report.personalDistance).toFixed(1)} km</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center py-2 text-slate-600">
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-400">-</span>
+                            <span>Business Trips</span>
+                        </div>
+                        <span>{report.totalTripDistance.toFixed(1)} km</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-2 text-slate-600">
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-400">-</span>
+                            <span>Company Errands</span>
+                        </div>
+                        <span>{report.companyMiscDistance.toFixed(1)} km</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-3 mt-2 bg-indigo-50 px-3 -mx-3 rounded-md border border-indigo-100">
+                        <span className="font-medium text-indigo-900">= Personal Usage</span>
+                        <span className="font-bold text-indigo-700">{report.personalDistance.toFixed(1)} km</span>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Efficiency Breakdown */}
             <Card>
                 <CardHeader>

@@ -7,7 +7,8 @@ export interface ManualTripInput {
   endTime?: string; // HH:mm
   duration?: number; // minutes
   amount: number;
-  platform: 'GoRide' | 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Private' | 'Cash' | 'Other';
+  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive';
+  paymentMethod: 'Cash' | 'Card';
   pickupLocation?: string;
   dropoffLocation?: string;
   notes?: string;
@@ -16,6 +17,7 @@ export interface ManualTripInput {
   route?: RoutePoint[];
   stops?: TripStop[];
   totalWaitTime?: number; // seconds
+  isLiveRecorded?: boolean; // Context flag: true if coming from live timer
 }
 
 export function createManualTrip(data: ManualTripInput, driverId: string, driverName?: string): Trip {
@@ -43,12 +45,14 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
   }
 
   // Determine if this is a cash-based trip where driver collects money directly
-  const isCashTrip = ['GoRide', 'Cash', 'Private'].includes(data.platform);
+  // Phase 2: Logic update - use explicit paymentMethod field
+  const isCashTrip = data.paymentMethod === 'Cash';
   const amount = Number(data.amount);
 
   return {
     id: `manual_${crypto.randomUUID().split('-')[0]}`, // Short unique ID
     platform: data.platform,
+    paymentMethod: data.paymentMethod, // Add the payment method to the trip object
     date: startTimestamp,
     requestTime: startTimestamp,
     dropoffTime: endTimestamp,
@@ -83,7 +87,7 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     },
     
     // Metadata
-    isManual: true, // Custom flag to help UI distinguish
-    batchId: 'manual_entry'
+    isManual: data.isLiveRecorded ? false : true,
+    batchId: data.isLiveRecorded ? 'live_driver_app' : 'manual_entry'
   } as Trip;
 }

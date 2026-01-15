@@ -79,6 +79,7 @@ import { ImpactAnalysis } from './ImpactAnalysis';
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { QuarantineList } from './QuarantineList';
 import { CalibrationReport } from './CalibrationReport';
+import { tripCalibrationService } from '../../services/tripCalibrationService';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
@@ -438,6 +439,11 @@ export function ImportsPage() {
   const handleConfirmImport = async () => {
       setIsUploading(true);
       try {
+          // Phase 6: Automatic Anchor Calibration
+          // This tags trips with the nearest preceding verified anchor
+          setWarning("Calibrating trips against physical odometer anchors...");
+          const calibratedTrips = await tripCalibrationService.calibrateTrips(processedData);
+          
           // Generate a Batch ID
           const batchId = crypto.randomUUID();
           
@@ -447,7 +453,7 @@ export function ImportsPage() {
             fileName: uploadedFiles.map(f => f.name).join(', '),
             uploadDate: new Date().toISOString(),
             status: 'completed' as const,
-            recordCount: processedData.length,
+            recordCount: calibratedTrips.length,
             type: 'merged_import',
             processedBy: 'Admin' // In real app, use user name
           };
@@ -460,7 +466,7 @@ export function ImportsPage() {
               const fleetState = {
                   drivers: auditState.sanitized.drivers.map(d => d.data),
                   vehicles: auditState.sanitized.vehicles.map(v => v.data),
-                  trips: auditState.sanitized.trips.map(t => ({ ...t.data, batchId })), // Attach Batch ID
+                  trips: calibratedTrips.map(t => ({ ...t, batchId })), // Attach Batch ID and Calibrated Tags
                   financials: auditState.sanitized.financials.data,
                   metadata: auditState.sanitized.metadata,
                   insights: auditState.sanitized.insights
@@ -504,7 +510,7 @@ export function ImportsPage() {
               
           } else {
               // LEGACY FLOW (Fallback for standard merge)
-              const tripsWithBatch = processedData.map(trip => ({
+              const tripsWithBatch = calibratedTrips.map(trip => ({
                 ...trip,
                 batchId
               }));

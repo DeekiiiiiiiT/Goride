@@ -93,7 +93,7 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
   try {
     let { 
         driverId, startDate, endDate, status, limit, offset,
-        platform, tripType, vehicleId
+        platform, tripType, vehicleId, anchorPeriodId
     } = await c.req.json();
     
     // Query JSONB value directly
@@ -104,6 +104,10 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
 
     if (driverId) {
         query = query.eq("value->>driverId", driverId);
+    }
+
+    if (anchorPeriodId) {
+        query = query.eq("value->>anchorPeriodId", anchorPeriodId);
     }
     
     if (status === 'Processing') {
@@ -175,7 +179,7 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
     const filters = await c.req.json();
     let { 
         driverId, startDate, endDate, status,
-        platform, tripType, vehicleId
+        platform, tripType, vehicleId, anchorPeriodId
     } = filters;
 
     // 1. Check Cache
@@ -197,6 +201,10 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
 
     if (driverId) {
         query = query.eq("value->>driverId", driverId);
+    }
+
+    if (anchorPeriodId) {
+        query = query.eq("value->>anchorPeriodId", anchorPeriodId);
     }
     
     if (status === 'Processing') {
@@ -571,12 +579,25 @@ app.post("/make-server-37f42386/drivers", async (c) => {
 // Transactions Endpoints
 app.get("/make-server-37f42386/transactions", async (c) => {
   try {
-    const transactions = await kv.getByPrefix("transaction:");
+    // Use direct query instead of kv.getByPrefix to allow limiting
+    // Fetch last 1000 transactions to prevent timeout/overflow
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "transaction:%")
+        .limit(1000);
+
+    if (error) throw error;
+
+    const transactions = data?.map((d: any) => d.value) || [];
+
     if (Array.isArray(transactions)) {
         // Sort by date desc
         transactions.sort((a: any, b: any) => {
-            const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
-            const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+            const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 
+                          (a?.date ? new Date(a.date).getTime() : 0);
+            const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 
+                          (b?.date ? new Date(b.date).getTime() : 0);
             return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
         });
         return c.json(transactions);
@@ -711,6 +732,61 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
   }
 });
 
+app.post("/make-server-37f42386/scan-odometer", async (c) => {
+  try {
+    const body = await c.req.parseBody();
+    const file = body['file'];
+    
+    if (!file || !(file instanceof File)) {
+        return c.json({ error: "File upload required" }, 400);
+    }
+
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+
+    const openai = new OpenAI({ apiKey });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(arrayBuffer).toString('base64');
+    const dataUrl = `data:${file.type};base64,${base64Data}`;
+
+    const prompt = `
+      You are an AI assistant for a vehicle fleet.
+      Analyze this image of a vehicle dashboard to find the Odometer reading.
+      Return a valid JSON object with these fields:
+      - reading (number | null): The odometer value (e.g. 15043). Do not include decimals unless it is clearly part of the main odometer. Ignore trip meters (which are usually smaller or resetable).
+      - unit (string): "km" or "mi" if visible, otherwise default to "km"
+      - confidence (string): "high", "medium", or "low"
+
+      If you cannot clearly see an odometer, set reading to null.
+      Output only valid JSON.
+    `;
+
+    const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+            {
+                role: "user",
+                content: [
+                    { type: "text", text: prompt },
+                    { type: "image_url", image_url: { url: dataUrl } }
+                ]
+            }
+        ],
+        response_format: { type: "json_object" }
+    });
+
+    const text = response.choices[0].message.content || "{}";
+    const data = JSON.parse(text);
+
+    return c.json({ success: true, data });
+
+  } catch (e: any) {
+    console.error("Scan Odometer Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 app.post("/make-server-37f42386/expenses/approve", async (c) => {
   try {
     const { id, notes } = await c.req.json();
@@ -726,6 +802,37 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
         approvedAt: new Date().toISOString(), 
         notes: notes || tx.metadata?.notes 
     };
+
+    // Auto-create Fuel Entry for approved Fuel Reimbursements
+    if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
+        // Calculate price per liter if quantity is available
+        const quantity = Number(tx.quantity) || 0;
+        const amount = Math.abs(Number(tx.amount) || 0);
+        const pricePerLiter = quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0;
+        
+        const fuelEntry = {
+            id: crypto.randomUUID(),
+            date: tx.date || new Date().toISOString().split('T')[0],
+            type: 'Reimbursement', // Using internal type even if UI doesn't show it
+            amount: amount,
+            liters: quantity,
+            pricePerLiter: pricePerLiter,
+            odometer: Number(tx.odometer) || 0,
+            location: tx.merchant || tx.description || 'Reimbursement',
+            stationAddress: tx.location || '',
+            vehicleId: tx.vehicleId, // Must be present to link to vehicle stats
+            driverId: tx.driverId,
+            cardId: undefined, // Not a card transaction
+            transactionId: tx.id // Link back to original transaction
+        };
+
+        // Only save if we have a vehicleId (Critical for fleet stats)
+        if (fuelEntry.vehicleId) {
+             await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
+             
+             // Invalidate vehicle metrics cache if needed, or rely on next fetch
+        }
+    }
 
     await kv.set(`transaction:${id}`, tx);
     return c.json({ success: true, data: tx });
@@ -3517,6 +3624,86 @@ app.post("/make-server-37f42386/templates", async (c) => {
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
+});
+
+
+// Weekly Check-Ins Endpoints
+app.get("/make-server-37f42386/check-ins", async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const weekStart = c.req.query("weekStart");
+    
+    const checkIns = await kv.getByPrefix("checkin:");
+    
+    let filtered = checkIns || [];
+    if (driverId) {
+        filtered = filtered.filter((c: any) => c.driverId === driverId);
+    }
+    if (weekStart) {
+        filtered = filtered.filter((c: any) => c.weekStart === weekStart);
+    }
+    
+    return c.json(filtered);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/check-ins", async (c) => {
+  try {
+    const checkIn = await c.req.json();
+    if (!checkIn.driverId || !checkIn.weekStart || !checkIn.odometer) {
+        return c.json({ error: "Missing required fields" }, 400);
+    }
+
+    // Validation for Manual Override
+    if (checkIn.method === 'manual_override' && !checkIn.manualReadingReason) {
+        return c.json({ error: "Reason required for manual override" }, 400);
+    }
+    
+    // Key: checkin:{id}
+    const key = `checkin:${checkIn.id}`;
+    
+    // Log manual overrides for review
+    if (checkIn.method === 'manual_override') {
+        console.warn(`[Alert] Manual Odometer Override by Driver ${checkIn.driverId}: ${checkIn.odometer}km. Reason: ${checkIn.manualReadingReason}`);
+        // In a real system, we might create a 'notification' object here for the fleet manager
+    }
+
+    await kv.set(key, { ...checkIn, timestamp: new Date().toISOString() });
+    
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/check-ins/review", async (c) => {
+  try {
+    const { checkInId, status, managerNotes } = await c.req.json();
+    
+    if (!checkInId || !status) {
+        return c.json({ error: "Missing checkInId or status" }, 400);
+    }
+
+    const key = `checkin:${checkInId}`;
+    const checkIn = await kv.get(key);
+    
+    if (!checkIn) {
+        return c.json({ error: "Check-in not found" }, 404);
+    }
+
+    // Update status
+    checkIn.reviewStatus = status; // 'approved' | 'rejected'
+    checkIn.verified = (status === 'approved');
+    checkIn.managerNotes = managerNotes;
+    checkIn.reviewedAt = new Date().toISOString();
+
+    await kv.set(key, checkIn);
+    return c.json({ success: true, data: checkIn });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 Deno.serve(app.fetch);

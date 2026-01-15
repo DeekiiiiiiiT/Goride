@@ -363,9 +363,15 @@ function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
                     {date}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className="text-xs font-normal text-slate-500 border-slate-200">
-                         {trip.platform}
-                      </Badge>
+                      {trip.isLiveRecorded ? (
+                          <Badge variant="outline" className="text-xs font-normal bg-indigo-50 text-indigo-600 border-indigo-200">
+                             Live Trip
+                          </Badge>
+                      ) : (
+                          <Badge variant="outline" className="text-xs font-normal text-slate-500 border-slate-200">
+                             {trip.platform}
+                          </Badge>
+                      )}
                       {isCash && (
                           <Badge variant="secondary" className="text-xs font-normal bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-transparent flex items-center gap-1">
                               <Banknote className="h-3 w-3" />

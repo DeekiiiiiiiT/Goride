@@ -2,7 +2,8 @@ import { RoutePoint, TripStop } from './tripSession';
 
 export interface Trip {
   id: string;
-  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Private' | 'Cash' | 'Other';
+  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'GoRide' | 'Private' | 'Cash' | 'Other';
+  paymentMethod?: 'Cash' | 'Card'; // Phase 1: New field for decoupled payment
   date: string; // ISO date string
   requestTime?: string; // ISO date string
   dropoffTime?: string; // ISO date string
@@ -68,6 +69,10 @@ export interface Trip {
   cancelledBy?: 'rider' | 'driver' | 'admin';
   estimatedLoss?: number; // For cancelled trips
   
+  // Phase 6: Anchor Period Tracking
+  anchorPeriodId?: string; // Links to the startAnchor ID
+  isPersonal?: boolean;    // Explicitly marked as personal if not from platform
+
   [key: string]: any; // Allow dynamic properties
 }
 
@@ -380,7 +385,7 @@ export interface ServiceRequest {
 
 // --- Phase 1: Enhanced Transaction Data Structure (Transactions Tab Enhancement) ---
 
-export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment' | 'Float_Given' | 'Payment_Received';
+export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment' | 'Float_Given' | 'Payment_Received' | 'Reimbursement';
 
 export type TransactionCategory = 
   // Revenue
@@ -550,6 +555,7 @@ export interface DashboardAlert {
   driverId?: string;
   vehicleId?: string;
   routeId?: string;
+  metadata?: Record<string, any>;
 }
 
 // --- Phase 1: Budget Data Structure ---

@@ -1,6 +1,7 @@
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
 import { FuelEntry, FuelCard, WeeklyFuelReport, MileageAdjustment } from '../types/fuel';
+import { WeeklyCheckIn } from '../types/check-in';
 
 // Defaults if missing from Vehicle Profile
 const DEFAULT_EFFICIENCY_L_100KM = 10; // ~23 MPG
@@ -47,7 +48,8 @@ export const FuelCalculationService = {
         weekEnd: Date,
         trips: Trip[],
         fuelEntries: FuelEntry[],
-        adjustments: MileageAdjustment[] = []
+        adjustments: MileageAdjustment[] = [],
+        checkIns: WeeklyCheckIn[] = []
     ): WeeklyFuelReport {
         const startStr = weekStart.toISOString();
         const endStr = weekEnd.toISOString();
@@ -69,10 +71,9 @@ export const FuelCalculationService = {
         );
 
         // 2. Calculate Gas Card Charges (Actual Spend)
-        // We only count 'Card_Transaction' or 'Reimbursement' as cost to company?
-        // Usually, 'Card_Transaction' is the main one. 
+        // Updated: Now includes 'Reimbursement' as Company Cost (Phase 1 Fuel Logic)
         const totalGasCardCost = vehicleEntries
-            .filter(e => e.type === 'Card_Transaction')
+            .filter(e => e.type === 'Card_Transaction' || e.type === 'Reimbursement')
             .reduce((sum, e) => sum + e.amount, 0);
 
         // Determine average fuel price for this week (weighted average)
@@ -89,7 +90,70 @@ export const FuelCalculationService = {
         const personalAdj = vehicleAdjustments.filter(a => a.type === 'Personal');
 
         const companyMiscDistance = companyMiscAdj.reduce((sum, a) => sum + a.distance, 0);
-        const personalDistance = personalAdj.reduce((sum, a) => sum + a.distance, 0);
+        
+        // Phase 2: Residual Personal KM Calculation
+        // Priority 1: Use Weekly Check-Ins (Start/End of Week)
+        // Priority 2: Use Fuel Logs (Phase 1 Logic)
+        
+        let derivedTotalDistance = 0;
+        let calculatedPersonalDistance = 0;
+        let method = 'Manual';
+
+        // Filter check-ins for this vehicle
+        const vehicleCheckIns = checkIns
+            .filter(c => c.vehicleId === vehicle.id)
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+        // We need a check-in roughly at weekStart and weekEnd
+        // weekStart is usually Monday 00:00. weekEnd is Sunday 23:59.
+        // We look for check-ins within a reasonable window (e.g. +/- 3 days of the boundary)
+        const findClosestCheckIn = (targetDate: Date) => {
+            const targetTime = targetDate.getTime();
+            return vehicleCheckIns.find(c => {
+                const checkTime = new Date(c.timestamp).getTime();
+                const diffDays = Math.abs(checkTime - targetTime) / (1000 * 60 * 60 * 24);
+                return diffDays <= 3; // within 3 days
+            });
+        };
+
+        const startCheckIn = findClosestCheckIn(weekStart);
+        // For end of week, we ideally want the check-in of the *next* Monday
+        const nextMonday = new Date(weekEnd);
+        nextMonday.setDate(nextMonday.getDate() + 1);
+        const endCheckIn = findClosestCheckIn(nextMonday);
+
+        if (startCheckIn && endCheckIn && endCheckIn.odometer > startCheckIn.odometer) {
+             derivedTotalDistance = endCheckIn.odometer - startCheckIn.odometer;
+             method = 'CheckIn';
+        } else {
+            // Fallback: Fuel Logs (Phase 1)
+            const odometers = vehicleEntries
+                .map(e => e.odometer)
+                .filter(o => o !== undefined && o > 0)
+                .sort((a, b) => a - b);
+            
+            if (odometers.length >= 2) {
+                const minOdo = odometers[0];
+                const maxOdo = odometers[odometers.length - 1];
+                derivedTotalDistance = maxOdo - minOdo;
+                method = 'FuelLog';
+            }
+        }
+        
+        if (derivedTotalDistance > 0) {
+             // Formula: Personal = Total - (Business Trips + Authorized Misc)
+            const businessTotal = totalTripDistance + companyMiscDistance;
+            
+            // Only apply residual if valid (positive)
+            if (derivedTotalDistance > businessTotal) {
+                calculatedPersonalDistance = derivedTotalDistance - businessTotal;
+            }
+        }
+        
+        // Use calculated residual if we found a valid range, otherwise fallback to manual adjustments
+        const personalDistance = calculatedPersonalDistance > 0 
+            ? calculatedPersonalDistance 
+            : personalAdj.reduce((sum, a) => sum + a.distance, 0);
 
         const companyMiscCost = this.calculateOperatingCost(companyMiscDistance, vehicle, avgPrice);
         const personalCost = this.calculateOperatingCost(personalDistance, vehicle, avgPrice);
@@ -148,10 +212,11 @@ export const FuelCalculationService = {
         weekEnd: Date,
         trips: Trip[],
         fuelEntries: FuelEntry[],
-        adjustments: MileageAdjustment[] = []
+        adjustments: MileageAdjustment[] = [],
+        checkIns: WeeklyCheckIn[] = []
     ): WeeklyFuelReport[] {
         return vehicles.map(v => 
-            this.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments)
+            this.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, checkIns)
         );
     }
 };

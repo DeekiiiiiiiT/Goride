@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload } from 'lucide-react';
+import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
@@ -13,14 +13,26 @@ import { ReconciliationTable } from '../components/fuel/ReconciliationTable';
 import { DatePickerWithRange } from '../components/ui/date-range-picker';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
+import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
+import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute } from '../types/fuel';
-import { Trip } from '../types/data';
+import { Trip, FinancialTransaction } from '../types/data';
 import { api } from '../services/api';
 import { fuelService } from '../services/fuelService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { toast } from "sonner@2.0.3";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { DateRange } from "react-day-picker";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 
 export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: string }) {
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -45,6 +57,12 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<FuelEntry | null>(null);
 
+  // Reimbursement State
+  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [isSubmitExpenseModalOpen, setIsSubmitExpenseModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<FinancialTransaction | null>(null);
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
+
   // Adjustment State
   const [adjustments, setAdjustments] = useState<MileageAdjustment[]>([]);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
@@ -54,40 +72,47 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   const [disputes, setDisputes] = useState<FuelDispute[]>([]);
   const [selectedDispute, setSelectedDispute] = useState<FuelDispute | null>(null);
   const [isResolutionModalOpen, setIsResolutionModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Assignment Data
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
 
-  useEffect(() => {
-    // Load helper data
-    const loadData = async () => {
-        try {
-            const [vData, dData, tData, cardsData, logsData, adjsData, disputesData] = await Promise.all([
-                api.getVehicles().catch(() => []), 
-                api.getDrivers().catch(() => []),
-                api.getTrips({ limit: 500 }).catch(() => []),
-                fuelService.getFuelCards().catch(() => []),
-                fuelService.getFuelEntries().catch(() => []),
-                fuelService.getMileageAdjustments().catch(() => []),
-                FuelDisputeService.getAllDisputes().catch(() => [])
-            ]);
-            
-            setVehicles(vData);
-            setDrivers(dData);
-            setTrips(tData);
-            setCards(cardsData);
-            setLogs(logsData);
-            setAdjustments(adjsData);
-            setDisputes(disputesData);
+  const loadData = async (silent = false) => {
+      if (!silent) setIsRefreshing(true);
+      try {
+          const [vData, dData, tData, cardsData, logsData, adjsData, disputesData, txData] = await Promise.all([
+              api.getVehicles().catch(() => []), 
+              api.getDrivers().catch(() => []),
+              api.getTrips({ limit: 500 }).catch(() => []),
+              fuelService.getFuelCards().catch(() => []),
+              fuelService.getFuelEntries().catch(() => []),
+              fuelService.getMileageAdjustments().catch(() => []),
+              FuelDisputeService.getAllDisputes().catch(() => []),
+              api.getTransactions().catch(() => [])
+          ]);
+          
+          setVehicles(vData);
+          setDrivers(dData);
+          setTrips(tData);
+          setCards(cardsData);
+          setLogs(logsData);
+          setAdjustments(adjsData);
+          setDisputes(disputesData);
+          setTransactions(txData);
 
-        } catch (e) {
-            console.error("Failed to load fuel management data", e);
-            toast.error("Failed to load initial data");
-        }
-    };
-    loadData();
+          if (!silent) toast.success("Data refreshed");
+      } catch (e) {
+          console.error("Failed to load fuel management data", e);
+          toast.error("Failed to load initial data");
+      } finally {
+          setIsRefreshing(false);
+      }
+  };
+
+  useEffect(() => {
+    loadData(true);
   }, []);
 
   // Card Handlers
@@ -160,6 +185,69 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
       }
   };
 
+  // Reimbursement Handlers
+  const handleApproveReimbursement = async (id: string, notes?: string) => {
+      try {
+          const updated = await api.approveExpense(id, notes);
+          setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+          toast.success("Reimbursement Approved");
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to approve reimbursement");
+      }
+  };
+
+  const handleRejectReimbursement = async (id: string, reason?: string) => {
+      try {
+          const updated = await api.rejectExpense(id, reason);
+          setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+          toast.success("Reimbursement Rejected");
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to reject reimbursement");
+      }
+  };
+
+  const handleSaveExpense = async (transactionData: any) => {
+      try {
+          const savedTx = await api.saveTransaction(transactionData);
+          if (editingExpense) {
+              setTransactions(prev => prev.map(t => t.id === savedTx.id ? savedTx : t));
+              toast.success("Expense updated");
+          } else {
+              setTransactions(prev => [savedTx, ...prev]);
+              toast.success("Expense request submitted");
+          }
+          setEditingExpense(null);
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to save expense");
+      }
+  };
+
+  const handleEditExpense = (tx: FinancialTransaction) => {
+      setEditingExpense(tx);
+      setIsSubmitExpenseModalOpen(true);
+  };
+
+  const handleDeleteExpense = (id: string) => {
+      setDeleteConfirmationId(id);
+  };
+
+  const confirmDeleteExpense = async () => {
+      if (!deleteConfirmationId) return;
+      try {
+          await api.deleteTransaction(deleteConfirmationId);
+          setTransactions(prev => prev.filter(t => t.id !== deleteConfirmationId));
+          toast.success("Expense deleted");
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to delete expense");
+      } finally {
+          setDeleteConfirmationId(null);
+      }
+  };
+
 
   const handleSaveAdjustment = async (adj: MileageAdjustment) => {
       try {
@@ -210,6 +298,9 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   if (activeTab === 'reconciliation') {
       pageTitle = "Fuel Reconciliation";
       pageDescription = "Compare actual gas card charges against estimated operating costs.";
+  } else if (activeTab === 'reimbursements') {
+      pageTitle = "Reimbursement Queue";
+      pageDescription = "Review and approve driver reimbursement requests.";
   } else if (activeTab === 'cards') {
       pageTitle = "Fuel Card Inventory";
       pageDescription = "Manage gas cards and their assignments.";
@@ -233,6 +324,19 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
             setIsLogModalOpen(true);
         }}
     >
+      <div className="flex justify-end mb-4">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => loadData()} 
+            disabled={isRefreshing}
+            className="text-slate-600 border-slate-200"
+          >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+      </div>
+
       {activeTab === 'dashboard' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card>
@@ -257,7 +361,29 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
                     </div>
                 </CardContent>
             </Card>
+             <Card>
+                <CardContent className="p-6 flex items-center gap-4">
+                    <div className="p-3 bg-orange-100 text-orange-600 rounded-full">
+                        <Banknote className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-500 font-medium">Pending Approvals</p>
+                        <h3 className="text-2xl font-bold text-slate-900">{transactions.filter(t => t.status === 'Pending' && t.type === 'Reimbursement' && (t.category === 'Fuel' || t.category === 'Fuel Reimbursement')).length}</h3>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
+      )}
+
+      {activeTab === 'reimbursements' && (
+          <FuelReimbursementTable 
+              transactions={transactions}
+              onApprove={handleApproveReimbursement}
+              onReject={handleRejectReimbursement}
+              onRequestSubmit={() => { setEditingExpense(null); setIsSubmitExpenseModalOpen(true); }}
+              onEdit={handleEditExpense}
+              onDelete={handleDeleteExpense}
+          />
       )}
 
       {activeTab === 'reconciliation' && (
@@ -362,6 +488,32 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
             onSave={handleDisputeUpdated}
             onCreateAdjustment={handleCreateAdjustmentFromDispute}
       />
+
+      <SubmitExpenseModal 
+            isOpen={isSubmitExpenseModalOpen}
+            onClose={() => { setIsSubmitExpenseModalOpen(false); setEditingExpense(null); }}
+            onSave={handleSaveExpense}
+            drivers={drivers}
+            vehicles={vehicles}
+            initialData={editingExpense}
+      />
+
+      <AlertDialog open={!!deleteConfirmationId} onOpenChange={(open) => !open && setDeleteConfirmationId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the expense request.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteExpense} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </FuelLayout>
   );

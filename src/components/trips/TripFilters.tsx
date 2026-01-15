@@ -159,8 +159,11 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
               <SelectContent>
                 <SelectItem value="all">All Platforms</SelectItem>
                 <SelectItem value="Uber">Uber</SelectItem>
+                <SelectItem value="Lyft">Lyft</SelectItem>
+                <SelectItem value="Bolt">Bolt</SelectItem>
                 <SelectItem value="InDrive">InDrive</SelectItem>
                 <SelectItem value="GoRide">GoRide</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>

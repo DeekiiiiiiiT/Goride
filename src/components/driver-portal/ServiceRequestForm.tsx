@@ -91,13 +91,18 @@ export function ServiceRequestForm({ open, onOpenChange, onSubmit }: ServiceRequ
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="odometer">Current Odometer</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="odometer">Current Odometer</Label>
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-wider">Verified Anchor</span>
+              </div>
               <Input 
                 id="odometer" 
                 type="number" 
                 placeholder="45320"
+                className="border-indigo-200 focus-visible:ring-indigo-500"
                 value={formData.odometer}
                 onChange={e => setFormData({...formData, odometer: e.target.value})}
+                required
               />
             </div>
           </div>

@@ -346,12 +346,17 @@ export function TripLogsPage() {
                                 <div className="flex flex-col">
                                     <span className="font-medium text-slate-900">{trip.driverName || 'Unknown Driver'}</span>
                                     <span className="text-xs text-slate-500 font-mono mb-1">{trip.vehicleId || 'No Vehicle'}</span>
-                                    {trip.isManual && (
+                                    {trip.isLiveRecorded && (
+                                        <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 bg-indigo-50 text-indigo-700 border-indigo-200">
+                                            Live Trip
+                                        </Badge>
+                                    )}
+                                    {trip.isManual && !trip.isLiveRecorded && (
                                         <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 bg-amber-50 text-amber-700 border-amber-200">
                                             Manual Entry
                                         </Badge>
                                     )}
-                                    {trip.productType && !trip.isManual && (
+                                    {trip.productType && !trip.isManual && !trip.isLiveRecorded && (
                                         <Badge variant="secondary" className="w-fit text-[10px] h-5 px-1 bg-slate-100 text-slate-600">
                                             {trip.productType}
                                         </Badge>
@@ -394,7 +399,7 @@ export function TripLogsPage() {
                               <TableCell className="align-top text-right">
                                 <div className="flex flex-col items-end">
                                     <div className="flex items-center justify-end gap-2">
-                                        {(trip.cashCollected! > 0 || ['GoRide', 'Cash', 'Private'].includes(trip.platform)) && (
+                                        {(trip.paymentMethod === 'Cash' || trip.cashCollected! > 0 || ['GoRide', 'Cash', 'Private'].includes(trip.platform)) && (
                                             <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal bg-emerald-50 text-emerald-700 border-emerald-200">
                                                 Cash
                                             </Badge>

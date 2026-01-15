@@ -19,6 +19,9 @@ import { NotificationCenter } from "../notifications/NotificationCenter";
 import { useAuth } from "../auth/AuthContext";
 import { OfflineStatusIndicator } from "../offline/OfflineStatusIndicator";
 import { useOffline } from "../providers/OfflineProvider";
+import { useCurrentDriver } from "../../hooks/useCurrentDriver";
+import { useWeeklyCheckIn } from "../../hooks/useWeeklyCheckIn";
+import { WeeklyCheckInModal } from "./WeeklyCheckInModal";
 
 interface DriverLayoutProps {
   children: React.ReactNode;
@@ -31,9 +34,23 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
   const { user } = useAuth();
   const { isOnline } = useOffline();
   const initials = user?.email ? user.email.substring(0, 2).toUpperCase() : 'DR';
+  
+  const { driverRecord } = useCurrentDriver();
+  const { needsCheckIn, isLoading: checkInLoading, submitCheckIn } = useWeeklyCheckIn(driverRecord?.id);
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
+      <WeeklyCheckInModal 
+          isOpen={needsCheckIn} 
+          onClose={() => {}} 
+          isForced={true}
+          isLoading={checkInLoading}
+          onSubmit={async (odo, photo, method, reviewStatus, aiReading, manualReason) => {
+              const vehicleId = driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle || 'unknown';
+              await submitCheckIn(odo, photo, vehicleId, method, reviewStatus, aiReading, manualReason);
+          }}
+      />
+
       {/* Mobile Header */}
       <header className={`sticky top-0 z-30 flex items-center justify-between px-4 h-16 text-white shadow-md transition-all duration-300 ${
         isOnline 
