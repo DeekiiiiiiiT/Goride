@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, Timer, Clock, MapPin, Loader2, Navigation, Map as MapIcon, X } from 'lucide-react';
+import { Play, Square, Timer, Clock, MapPin, Loader2, Navigation, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import {
@@ -54,6 +54,12 @@ const formatElapsedTime = (totalSeconds: number) => {
   return `${pad(minutes)}:${pad(seconds)}`;
 };
 
+const getOrdinal = (n: number) => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
 export function TripTimer({ onComplete }: TripTimerProps) {
   const { isOnline } = useOffline();
   const [tripStatus, setTripStatus] = useState<TripStatus>('IDLE');
@@ -63,7 +69,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false); // New state for stopping loader
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [showMap, setShowMap] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [waitSeconds, setWaitSeconds] = useState(0);
@@ -516,7 +521,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
                 className="bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm"
               >
                 <MapPin className="h-4 w-4" />
-                <span>Arrive at Stop</span>
+                <span>{getOrdinal(stops.length + 1)} Stop</span>
               </Button>
             )}
             
@@ -529,15 +534,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
                 <span>Resume Trip</span>
               </Button>
             )}
-
-            <Button 
-              onClick={() => setShowMap(!showMap)} 
-              variant="outline" 
-              className="gap-2 bg-white/60 hover:bg-white border-blue-200 text-blue-700"
-            >
-              <MapIcon className="h-4 w-4" /> 
-              <span>{showMap ? 'Hide Map' : 'Show Map'}</span>
-            </Button>
             
             <Button
               onClick={cancelTrip}
@@ -568,12 +564,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
           </div>
         </div>
         
-        {showMap && (
-          <div className="rounded-lg overflow-hidden border border-blue-200 shadow-inner bg-white">
-            <LeafletMap route={route} currentLocation={currentLocation} height="250px" />
-          </div>
-        )}
-        
+
         <StopList stops={stops} />
         
         <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

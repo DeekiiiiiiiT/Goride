@@ -253,40 +253,42 @@ export function ManualTripForm({
             </div>
           )}
 
-          {/* Date & Time Row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <div className="relative">
-                <CalendarIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <Input 
-                  type="date" 
-                  className="pl-9"
-                  value={formData.date}
-                  onChange={(e) => handleInputChange('date', e.target.value)}
-                  required
-                />
+          {/* Date & Time Row - Only show for manual entries */}
+          {!formData.isLiveRecorded && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                  <Input 
+                    type="date" 
+                    className="pl-9"
+                    value={formData.date}
+                    onChange={(e) => handleInputChange('date', e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Time</Label>
+                <div className="relative">
+                  <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                  <Input 
+                    type="time" 
+                    className="pl-9"
+                    value={formData.time}
+                    onChange={(e) => handleInputChange('time', e.target.value)}
+                    required
+                  />
+                </div>
+                {formData.duration && (
+                  <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
+                    ⏱ Duration: {Math.round(formData.duration)} min
+                  </p>
+                )}
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Time</Label>
-              <div className="relative">
-                <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <Input 
-                  type="time" 
-                  className="pl-9"
-                  value={formData.time}
-                  onChange={(e) => handleInputChange('time', e.target.value)}
-                  required
-                />
-              </div>
-              {formData.duration && (
-                <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
-                  ⏱ Duration: {Math.round(formData.duration)} min
-                </p>
-              )}
-            </div>
-          </div>
+          )}
 
           {/* Vehicle & Distance Row */}
           <div className="grid grid-cols-2 gap-4">
@@ -324,24 +326,27 @@ export function ManualTripForm({
                <></>
             )}
 
-            <div className={isAdmin ? "space-y-2" : "space-y-2 col-span-2"}>
-              <Label className="flex items-center gap-2">
-                 Distance (km)
-                 {isCalculatingDistance && <Loader2 className="h-3 w-3 animate-spin text-indigo-600" />}
-              </Label>
-              <div className="relative">
-                <Route className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <Input 
-                  type="number" 
-                  min="0" 
-                  step="0.01"
-                  className="pl-9"
-                  placeholder="0.00"
-                  value={formData.distance || ''}
-                  onChange={(e) => handleInputChange('distance', parseFloat(e.target.value))}
-                />
+            {/* Distance Input - Hidden for Live Trips */}
+            {!formData.isLiveRecorded && (
+              <div className={isAdmin ? "space-y-2" : "space-y-2 col-span-2"}>
+                <Label className="flex items-center gap-2">
+                   Distance (km)
+                   {isCalculatingDistance && <Loader2 className="h-3 w-3 animate-spin text-indigo-600" />}
+                </Label>
+                <div className="relative">
+                  <Route className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                  <Input 
+                    type="number" 
+                    min="0" 
+                    step="0.01"
+                    className="pl-9"
+                    placeholder="0.00"
+                    value={formData.distance || ''}
+                    onChange={(e) => handleInputChange('distance', parseFloat(e.target.value))}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Platform & Payment Method Row */}
@@ -407,44 +412,46 @@ export function ManualTripForm({
             )}
           </div>
 
-          {/* Locations */}
-          <div className="space-y-2">
-            <Label>Locations (Optional)</Label>
-            <div className="grid grid-cols-1 gap-2">
-              <div className="relative">
-                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500 z-10" />
-                 <LocationInput 
-                    placeholder="Pickup Location" 
-                    className="pl-9 text-sm"
-                    value={formData.pickupLocation}
-                    onChange={(e) => handleInputChange('pickupLocation', e.target.value)}
-                    onAddressSelect={(addr, lat, lon) => {
-                      handleInputChange('pickupLocation', addr);
-                      if (lat && lon) setPickupCoords({ lat, lon });
-                    }}
-                    showLocationButton={true}
-                 />
-              </div>
-              <div className="relative">
-                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-rose-500 z-10" />
-                 <LocationInput 
-                    placeholder="Dropoff Location" 
-                    className="pl-9 text-sm"
-                    value={formData.dropoffLocation}
-                    onChange={(e) => handleInputChange('dropoffLocation', e.target.value)}
-                    onAddressSelect={(addr, lat, lon) => {
-                      handleInputChange('dropoffLocation', addr);
-                      if (lat && lon) setDropoffCoords({ lat, lon });
-                    }}
-                    showNavigationButton={!!formData.dropoffLocation}
-                    onNavigateClick={handleOpenNavigation}
-                 />
+          {/* Locations - Hidden for Live Trips */}
+          {!formData.isLiveRecorded && (
+            <div className="space-y-2">
+              <Label>Locations (Optional)</Label>
+              <div className="grid grid-cols-1 gap-2">
+                <div className="relative">
+                   <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500 z-10" />
+                   <LocationInput 
+                      placeholder="Pickup Location" 
+                      className="pl-9 text-sm"
+                      value={formData.pickupLocation}
+                      onChange={(e) => handleInputChange('pickupLocation', e.target.value)}
+                      onAddressSelect={(addr, lat, lon) => {
+                        handleInputChange('pickupLocation', addr);
+                        if (lat && lon) setPickupCoords({ lat, lon });
+                      }}
+                      showLocationButton={true}
+                   />
+                </div>
+                <div className="relative">
+                   <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-rose-500 z-10" />
+                   <LocationInput 
+                      placeholder="Dropoff Location" 
+                      className="pl-9 text-sm"
+                      value={formData.dropoffLocation}
+                      onChange={(e) => handleInputChange('dropoffLocation', e.target.value)}
+                      onAddressSelect={(addr, lat, lon) => {
+                        handleInputChange('dropoffLocation', addr);
+                        if (lat && lon) setDropoffCoords({ lat, lon });
+                      }}
+                      showNavigationButton={!!formData.dropoffLocation}
+                      onNavigateClick={handleOpenNavigation}
+                   />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Map Visualization */}
-          {((formData.route && formData.route.length > 0) || (pickupCoords && dropoffCoords)) && (
+          {/* Map Visualization - Hidden for Live Trips */}
+          {!formData.isLiveRecorded && ((formData.route && formData.route.length > 0) || (pickupCoords && dropoffCoords)) && (
             <div className="my-2 rounded-lg overflow-hidden border border-slate-200">
               <LeafletMap 
                 route={formData.route || []} 
