@@ -443,8 +443,15 @@ export const api = {
     );
   },
 
-  async getTransactions() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
+  async getTransactions(driverIdOrIds?: string | string[]) {
+    let url = `${API_ENDPOINTS.financial}/transactions`;
+    if (driverIdOrIds) {
+        const ids = Array.isArray(driverIdOrIds) ? driverIdOrIds.filter(Boolean).join(',') : driverIdOrIds;
+        if (ids) {
+            url += `?driverIds=${ids}`;
+        }
+    }
+    const response = await fetchWithRetry(url, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch transactions");

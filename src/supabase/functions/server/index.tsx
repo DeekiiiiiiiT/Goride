@@ -579,30 +579,40 @@ app.post("/make-server-37f42386/drivers", async (c) => {
 // Transactions Endpoints
 app.get("/make-server-37f42386/transactions", async (c) => {
   try {
-    // Use direct query instead of kv.getByPrefix to allow limiting
-    // Fetch last 1000 transactions to prevent timeout/overflow
-    const { data, error } = await supabase
+    const driverIdsParam = c.req.query("driverIds");
+    const driverIdParam = c.req.query("driverId"); // Legacy support
+
+    let query = supabase
         .from("kv_store_37f42386")
         .select("value")
-        .like("key", "transaction:%")
+        .like("key", "transaction:%");
+
+    const idsToFilter = new Set<string>();
+    if (driverIdParam) idsToFilter.add(driverIdParam);
+    if (driverIdsParam) {
+        driverIdsParam.split(',').forEach(id => {
+            if (id.trim()) idsToFilter.add(id.trim());
+        });
+    }
+
+    if (idsToFilter.size > 0) {
+        // Use OR filter for multiple IDs: value->>driverId.eq.ID1,value->>driverId.eq.ID2
+        const orConditions = Array.from(idsToFilter)
+            .map(id => `value->>driverId.eq.${id}`)
+            .join(',');
+        query = query.or(orConditions);
+    }
+
+    // Sort by date desc (Newest first) and limit
+    // We prioritize 'date' field as per FinancialTransaction schema
+    const { data, error } = await query
+        .order("value->>date", { ascending: false })
         .limit(1000);
 
     if (error) throw error;
 
     const transactions = data?.map((d: any) => d.value) || [];
-
-    if (Array.isArray(transactions)) {
-        // Sort by date desc
-        transactions.sort((a: any, b: any) => {
-            const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 
-                          (a?.date ? new Date(a.date).getTime() : 0);
-            const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 
-                          (b?.date ? new Date(b.date).getTime() : 0);
-            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
-        });
-        return c.json(transactions);
-    }
-    return c.json([]);
+    return c.json(transactions);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -3093,6 +3103,7 @@ app.post("/make-server-37f42386/claims", async (c) => {
             // Ensure description contains 'Toll' so it's picked up by DriverDetail filter
             description: `Toll Dispute Charge - ${claim.subject || 'Resolution'}`, 
             category: 'Adjustment',
+            tripId: claim.tripId, // Link to the Trip so it appears nested in the ledger
             type: 'Adjustment',
             amount: Math.abs(claim.amount || 0), // Positive magnitude; ledger logic subtracts it
             status: 'Completed',

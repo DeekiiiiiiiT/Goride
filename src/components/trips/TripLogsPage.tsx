@@ -459,17 +459,13 @@ export function TripLogsPage() {
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={() => handleContactDriver(trip)}>Contact Driver</DropdownMenuItem>
                                     <DropdownMenuItem className="text-rose-600" onClick={() => handleAction(trip, 'issue')}>Flag Issue</DropdownMenuItem>
-                                    {trip.isManual && (
-                                        <>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem 
-                                                className="text-rose-600 focus:text-rose-700 focus:bg-rose-50" 
-                                                onClick={() => handleDeleteTrip(trip)}
-                                            >
-                                                Delete Trip
-                                            </DropdownMenuItem>
-                                        </>
-                                    )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem 
+                                        className="text-rose-600 focus:text-rose-700 focus:bg-rose-50" 
+                                        onClick={() => handleDeleteTrip(trip)}
+                                    >
+                                        Delete Trip
+                                    </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </TableCell>

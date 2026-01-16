@@ -183,29 +183,39 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   
   // Phase 3: Filtered Cash Tolls (Expenses & Adjustments)
   const cashTollTransactions = useMemo(() => {
-      // Create a Lookup Map for Claim Reasons (NOT Status)
-      // We need to know HOW it was resolved. "Charge Driver" means it's still a debt.
-      // "Reimbursed" or "Write Off" means the debt is forgiven/paid by fleet.
-      const claimReasonMap = new Map<string, string>();
+      // Create a Lookup Map for Claims (Source -> Claim)
+      const claimMap = new Map<string, any>();
       claims.forEach(c => {
-          if (c.resolutionTransactionId && c.resolutionReason) {
-              claimReasonMap.set(c.resolutionTransactionId, c.resolutionReason);
+          if (c.transactionId) {
+              claimMap.set(c.transactionId, c);
           }
       });
 
       return transactions
         .map(t => {
-            // Check if this transaction has a linked Claim Resolution
-            const resolutionReason = claimReasonMap.get(t.id);
+            // Check if this transaction has a linked Claim
+            const claim = claimMap.get(t.id);
+            const resolutionReason = claim?.resolutionReason;
+            const resolutionTxId = claim?.resolutionTransactionId;
             
             // If the claim is explicitly Reimbursed or Written Off, we mark it as 'Resolved'
-            // This triggers the "Strikethrough" and "Ignore in Calc" logic.
             if (resolutionReason && ['Reimbursed', 'Write Off'].includes(resolutionReason)) {
                 return { ...t, status: 'Resolved' }; 
             }
             
-            // If resolution is "Charge Driver", we do NOT mark it as Resolved.
-            // We return the original status (likely 'Completed'), so it counts as an active debit.
+            // If resolution is "Charge Driver":
+            if (resolutionReason === 'Charge Driver') {
+                // 1. If we have the Resolution Transaction, it's Completed.
+                if (resolutionTxId) {
+                    return { ...t, status: 'Completed' };
+                }
+                // 2. If MISSING Resolution Transaction, it's a "Zombie" state (Charge failed).
+                else {
+                    // Mark as Needs Retry
+                    return { ...t, status: 'Action Required', _needsRetry: true, _claimId: claim.id };
+                }
+            }
+
             return t;
         })
         .filter(t => {
@@ -213,6 +223,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             // If status is explicitly 'Rejected' or 'Void', skip. Otherwise allow.
             if (t.status === 'Rejected' || t.status === 'Void' || t.status === 'Failed') return false;
             
+            // SPECIAL CHECK: Show "Retry Charge" transactions even if they have the wrong category/format
+            // This allows us to show the "Fix Format" button for them.
+            if (t.metadata?.source === 'retry_charge') return true;
+
             // 1. Valid Cash Toll Expense (Credit to Driver)
             const isTollCategory = ['Toll Usage', 'Toll', 'Tolls', 'Expense'].includes(t.category);
             // For generic 'Expense', ensure it's toll related
@@ -228,7 +242,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             const isTollRelated = isExplicitClaim || 
                                     t.description?.toLowerCase().includes('toll') || 
                                     t.description?.toLowerCase().includes('dispute') ||
-                                    t.description?.toLowerCase().includes('refund');
+                                    t.description?.toLowerCase().includes('refund') ||
+                                    t.description?.toLowerCase().includes('charge'); // Added 'charge' to catch "Charge Driver" txs
                                     
             const isValidAdjustment = isAdjustment && isTollRelated;
 
@@ -271,33 +286,37 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   }, [trips, tiers]);
 
   // Fetch Transactions & Claims
-  React.useEffect(() => {
-      const loadData = async () => {
-          try {
-              const [allTx, allClaims] = await Promise.all([
-                  api.getTransactions(),
-                  api.getClaims() // Fetch ALL claims to ensure we find links even if driverId filter is tricky
-              ]);
+  const refreshData = React.useCallback(async () => {
+      try {
+          // Collect all relevant driver IDs to query
+          const driverIds = [
+              driverId,
+              driver?.uberDriverId,
+              driver?.inDriveDriverId
+          ].filter(Boolean) as string[];
 
-              // Filter for this driver
-              const driverTx = allTx.filter((t: any) => 
-                  t.driverId === driverId || 
-                  (driver?.uberDriverId && t.driverId === driver.uberDriverId) ||
-                  (driver?.inDriveDriverId && t.driverId === driver.inDriveDriverId)
-              );
-              setTransactions(Array.isArray(driverTx) ? driverTx : []);
-              
-              // Filter claims locally if needed, or just use all for linking (safer)
-              setClaims(Array.isArray(allClaims) ? allClaims : []);
-          } catch (e) {
-              console.error("Failed to load data", e);
-              // Ensure we don't crash if API fails
-              setTransactions([]);
-              setClaims([]);
-          }
-      };
-      loadData();
-  }, [driverId, driver]);
+          const [driverTx, allClaims] = await Promise.all([
+              api.getTransactions(driverIds),
+              api.getClaims() // Fetch ALL claims to ensure we find links even if driverId filter is tricky
+          ]);
+
+          // Server-side filtering is now enabled for getTransactions(driverIds)
+          setTransactions(Array.isArray(driverTx) ? driverTx : []);
+          
+          // Filter claims locally if needed, or just use all for linking (safer)
+          setClaims(Array.isArray(allClaims) ? allClaims : []);
+      } catch (e) {
+          console.error("Failed to load data", e);
+          // Ensure we don't crash if API fails
+          // But don't clear data if it's just a refresh failure
+          if (transactions.length === 0) setTransactions([]);
+          if (claims.length === 0) setClaims([]);
+      }
+  }, [driverId, driver, transactions.length, claims.length]);
+
+  React.useEffect(() => {
+      refreshData();
+  }, [refreshData]);
 
   // Grouped Transactions Logic (Trip-Centric)
   const groupedTollTransactions = useMemo(() => {
@@ -513,6 +532,107 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   const handleDeleteTransaction = (id: string) => {
       setTransactionToDelete(id);
+  };
+
+  const handleFixTransactionFormat = async (tx: FinancialTransaction) => {
+      const toastId = toast.loading("Fixing transaction format...");
+      try {
+          const updatedTx: FinancialTransaction = {
+              ...tx,
+              category: 'Adjustment', // Fix Category
+              amount: -Math.abs(tx.amount), // Ensure it is Negative
+              metadata: {
+                  ...tx.metadata,
+                  fixedFormat: true
+              }
+          };
+
+          await api.saveTransaction(updatedTx);
+          
+          // Update local state
+          setTransactions(prev => prev.map(t => t.id === tx.id ? updatedTx : t));
+          
+          toast.dismiss(toastId);
+          toast.success("Transaction fixed");
+      } catch (e) {
+          console.error("Fix Transaction Error:", e);
+          toast.dismiss(toastId);
+          toast.error("Failed to fix transaction");
+      }
+  };
+
+  const handleRetryCharge = async (tx: any) => {
+      // Debug/Validation
+      if (!tx._claimId) {
+          toast.error("Error: Missing Claim ID. Cannot retry.");
+          return;
+      }
+      
+      const toastId = toast.loading("Processing charge retry...");
+      
+      try {
+          // Find the claim
+          const claim = claims.find(c => c.id === tx._claimId);
+          
+          if (!claim) {
+              toast.dismiss(toastId);
+              toast.error("Claim record not found locally. Please refresh.");
+              return;
+          }
+
+          // 1. Create the missing transaction MANUALLY
+          // Since the backend is just a storage layer, we must construct the transaction here.
+          // CRITICAL: We use 'Adjustment' category so it appears as a DEBIT (Charge) in the ledger.
+          // Using 'Toll' would make it appear as a Credit (Reimbursement).
+          const newTransaction: Partial<FinancialTransaction> = {
+              driverId: driverId,
+              amount: -Math.abs(claim.amount), // Ensure it's a debit (negative)
+              date: claim.date || new Date().toISOString(),
+              time: claim.time || new Date().toLocaleTimeString(),
+              description: claim.description || "Toll Charge (Recovery)",
+              category: 'Adjustment', 
+              type: 'expense',
+              status: 'Completed',
+              tripId: claim.tripId, // CRITICAL: Link to trip
+              metadata: {
+                  source: 'retry_charge',
+                  claimId: claim.id,
+                  originalCategory: claim.category
+              }
+          };
+
+          // 2. Save the transaction
+          // api.saveTransaction returns the transaction object directly (it unwraps result.data)
+          const savedTx = await api.saveTransaction(newTransaction);
+          
+          if (!savedTx || !savedTx.id) {
+              throw new Error("Failed to receive transaction ID from server");
+          }
+          
+          const newTxId = savedTx.id;
+
+          // 3. Update the claim to link to this new transaction
+          const updatedClaim = {
+              ...claim,
+              status: 'Resolved',
+              resolutionReason: 'Charge Driver',
+              resolutionTransactionId: newTxId,
+              updatedAt: new Date().toISOString()
+          };
+
+          // 4. Save the updated claim
+          await api.saveClaim(updatedClaim);
+          
+          toast.dismiss(toastId);
+          toast.success("Charge retry processed successfully");
+          
+          // 5. Refresh data to see the new transaction
+          await refreshData();
+      } catch (e) {
+          console.error("Retry Charge Error:", e);
+          toast.dismiss(toastId);
+          toast.error("Failed to retry charge. See console for details.");
+      }
   };
   
   // Merge Real Documents with Mock Documents
@@ -1528,7 +1648,25 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                 <h4 className="text-sm font-medium text-emerald-900">Net Toll Reimbursement</h4>
                                                 <p className="text-xs text-emerald-700 mt-1">Approved toll expenses minus dispute chargebacks.</p>
                                             </div>
-                                            <div className="text-xl font-bold text-emerald-700">
+                                            <div className="flex items-center gap-6">
+                                                <div className="text-right">
+                                                    <div className="text-xs uppercase tracking-wider text-red-600 font-semibold mb-1">Dispute Charges</div>
+                                                    <div className="text-lg font-bold text-red-700">
+                                                        -${cashTollTransactions.reduce((sum, t) => {
+                                                            const type = getTollTransactionType(t.category);
+                                                            if (type === 'debit') {
+                                                                const isResolved = ['Reimbursed', 'Write Off', 'Resolved'].includes(t.status);
+                                                                if (isResolved) return sum; 
+                                                                return sum + Math.abs(t.amount);
+                                                            }
+                                                            return sum;
+                                                        }, 0).toFixed(2)}
+                                                    </div>
+                                                </div>
+
+                                                <div className="h-10 w-px bg-emerald-200/50"></div>
+
+                                                <div className="text-xl font-bold text-emerald-700">
                                                 ${cashTollTransactions.reduce((sum, t) => {
                                                     const type = getTollTransactionType(t.category);
                                                     
@@ -1544,6 +1682,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                     // For Credits (Reimbursements to driver), we always add them unless Voided/Rejected (already filtered out of cashTollTransactions)
                                                     return sum + Math.abs(t.amount);
                                                 }, 0).toFixed(2)}
+                                            </div>
                                             </div>
                                         </div>
                                         
@@ -1645,9 +1784,49 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                     </div>
                                                                                 </TableCell>
                                                                                 <TableCell>
-                                                                                    <Badge variant="outline" className={cn("text-xs border-slate-200", isResolvedDebit ? "text-emerald-600 bg-emerald-50 border-emerald-100" : "text-slate-500")}>
-                                                                                        {child.status}
-                                                                                    </Badge>
+                                                                                    {/* Check for "Zombie" Retry - Needs Fix */}
+                                                                                    {child.metadata?.source === 'retry_charge' && child.category !== 'Adjustment' ? (
+                                                                                         <div className="flex items-center gap-2">
+                                                                                            <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                                                                                                Format Error
+                                                                                            </Badge>
+                                                                                            <button 
+                                                                                                type="button"
+                                                                                                className="h-6 px-2 text-[10px] font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded shadow-sm transition-all cursor-pointer relative z-50 flex items-center active:scale-95"
+                                                                                                onClick={(e) => {
+                                                                                                    e.preventDefault();
+                                                                                                    e.stopPropagation();
+                                                                                                    handleFixTransactionFormat(child);
+                                                                                                }}
+                                                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                                            >
+                                                                                                Fix Format
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    ) : (child as any)._needsRetry ? (
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                                                                                                Action Required
+                                                                                            </Badge>
+                                                                                            {/* Using native button to ensure clickability and avoid component conflicts */}
+                                                                                            <button 
+                                                                                                type="button"
+                                                                                                className="h-6 px-2 text-[10px] font-semibold text-white bg-red-600 hover:bg-red-700 rounded shadow-sm transition-all cursor-pointer relative z-50 flex items-center active:scale-95"
+                                                                                                onClick={(e) => {
+                                                                                                    e.preventDefault();
+                                                                                                    e.stopPropagation();
+                                                                                                    handleRetryCharge(child);
+                                                                                                }}
+                                                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                                            >
+                                                                                                Retry Charge
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <Badge variant="outline" className={cn("text-xs border-slate-200", isResolvedDebit ? "text-emerald-600 bg-emerald-50 border-emerald-100" : "text-slate-500")}>
+                                                                                            {child.status}
+                                                                                        </Badge>
+                                                                                    )}
                                                                                 </TableCell>
                                                                                 <TableCell className="text-right font-mono">
                                                                                     {!isCredit ? (
@@ -1707,9 +1886,49 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                         </div>
                                                                     </TableCell>
                                                                     <TableCell>
-                                                                        <Badge variant="outline" className={cn("text-slate-500", isResolvedDebit && "text-emerald-600 bg-emerald-50 border-emerald-100")}>
-                                                                            {tx.status}
-                                                                        </Badge>
+                                                                        {/* Check for "Zombie" Retry - Needs Fix */}
+                                                                        {tx.metadata?.source === 'retry_charge' && tx.category !== 'Adjustment' ? (
+                                                                             <div className="flex items-center gap-2">
+                                                                                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                                                                                    Format Error
+                                                                                </Badge>
+                                                                                <button 
+                                                                                    type="button"
+                                                                                    className="h-6 px-2 text-[10px] font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded shadow-sm transition-all cursor-pointer relative z-50 flex items-center active:scale-95"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        handleFixTransactionFormat(tx);
+                                                                                    }}
+                                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                                >
+                                                                                    Fix Format
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : (tx as any)._needsRetry ? (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                                                                                    Action Required
+                                                                                </Badge>
+                                                                                {/* Using native button to ensure clickability and avoid component conflicts */}
+                                                                                <button 
+                                                                                    type="button"
+                                                                                    className="h-6 px-2 text-[10px] font-semibold text-white bg-red-600 hover:bg-red-700 rounded shadow-sm transition-all cursor-pointer relative z-50 flex items-center active:scale-95"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        handleRetryCharge(tx);
+                                                                                    }}
+                                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                                >
+                                                                                    Retry Charge
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <Badge variant="outline" className={cn("text-slate-500", isResolvedDebit && "text-emerald-600 bg-emerald-50 border-emerald-100")}>
+                                                                                {tx.status}
+                                                                            </Badge>
+                                                                        )}
                                                                     </TableCell>
                                                                     <TableCell className="text-right font-mono">
                                                                         {!isCredit ? (

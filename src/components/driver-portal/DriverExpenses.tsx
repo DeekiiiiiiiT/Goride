@@ -76,14 +76,20 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const allTx = await api.getTransactions();
-      // Filter for this driver and only Expenses
+      // Pass all relevant IDs to filter server-side
+      // We explicitly check user.id and driverRecord fields
+      const driverIds = [
+          user?.id,
+          driverRecord?.id,
+          driverRecord?.driverId
+      ].filter(Boolean) as string[];
+
+      const allTx = await api.getTransactions(driverIds);
+      
+      // Filter for only Expenses (server handles the ID filtering now)
       const myTx = allTx.filter((t: FinancialTransaction) => 
-        (t.driverId === user?.id || t.driverId === driverRecord?.id || t.driverId === driverRecord?.driverId) && 
         t.type === 'Expense'
       );
-      // Sort by date desc
-      myTx.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setTransactions(myTx);
     } catch (e) {
       console.error("Failed to fetch transactions", e);

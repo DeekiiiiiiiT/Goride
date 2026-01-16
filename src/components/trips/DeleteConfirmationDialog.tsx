@@ -20,7 +20,7 @@ export function DeleteConfirmationDialog({ trip, open, onOpenChange, onConfirm, 
           <AlertDialogTitle className="text-rose-600">Delete Trip Log?</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="text-muted-foreground text-sm">
-              Are you sure you want to delete this manual trip record?
+              Are you sure you want to delete this trip record?
               <br /><br />
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-md border border-slate-100 dark:border-slate-800 text-sm">
                   <p><strong>ID:</strong> {trip.id.slice(0, 8)}...</p>

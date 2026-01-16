@@ -103,7 +103,8 @@ export function DriverEarnings() {
 
         const [allTrips, txData, metricsData, tiersData] = await Promise.all([
              api.getTrips(),
-             api.getTransactions(),
+             // Pass all relevant IDs
+             api.getTransactions([user?.id, driverRecord?.id, driverRecord?.driverId].filter(Boolean) as string[]),
              api.getDriverMetrics(),
              tierService.getTiers()
         ]);
@@ -121,11 +122,8 @@ export function DriverEarnings() {
         }
 
         if (txData) {
-            const myTx = txData.filter((t: FinancialTransaction) => 
-                t.driverId === user.id || 
-                (driverRecord?.id && t.driverId === driverRecord.id) || 
-                (driverRecord?.driverId && t.driverId === driverRecord.driverId)
-            );
+            // Server-side filtered by user.id
+            const myTx = txData;
             setTransactions(myTx);
             setFilteredTransactions(myTx);
         }
