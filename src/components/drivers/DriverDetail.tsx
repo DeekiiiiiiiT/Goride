@@ -267,6 +267,29 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       return isPayment && t.amount > 0;
   }), [transactions]);
 
+  // Calculate Toll Stats for new Metric Card
+  const { disputeCharges, netTollReimbursement } = useMemo(() => {
+      let disputes = 0;
+      let net = 0;
+
+      cashTollTransactions.forEach(t => {
+          const type = getTollTransactionType(t.category);
+          const amount = Math.abs(t.amount);
+
+          if (type === 'debit') {
+              const isResolved = ['Reimbursed', 'Write Off', 'Resolved'].includes(t.status);
+              if (!isResolved) {
+                  disputes += amount;
+                  net -= amount;
+              }
+          } else {
+              net += amount;
+          }
+      });
+
+      return { disputeCharges: disputes, netTollReimbursement: net };
+  }, [cashTollTransactions]);
+
   const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterCashOnly, setFilterCashOnly] = useState<boolean>(false);
@@ -1546,7 +1569,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
          <TabsContent value="wallet" className="space-y-6">
              {/* Summary Cards Row (Phase 5) */}
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                  {/* Card 1: Net Outstanding */}
                  <Card className="bg-white">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1563,7 +1586,23 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      </CardContent>
                  </Card>
 
-                 {/* Card 2: Float Held */}
+                 {/* Card 2: Net Toll Reimbursement (New) */}
+                 <Card className="bg-white">
+                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                         <CardTitle className="text-sm font-medium text-slate-500">Net Toll Reimbursement</CardTitle>
+                         <TrendingUp className="h-4 w-4 text-emerald-500" />
+                     </CardHeader>
+                     <CardContent>
+                         <div className="text-2xl font-bold text-emerald-600">
+                             ${netTollReimbursement.toFixed(2)}
+                         </div>
+                         <p className="text-xs text-slate-500 mt-1">
+                             Includes <span className="text-red-600 font-medium">-${disputeCharges.toFixed(2)}</span> in disputes
+                         </p>
+                     </CardContent>
+                 </Card>
+
+                 {/* Card 3: Float Held */}
                  <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                          <CardTitle className="text-sm font-medium text-slate-500">Float Held</CardTitle>
@@ -1661,58 +1700,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             <CardContent>
                                 {ledgerView === 'tolls' ? (
                                     <div className="space-y-4">
-                                        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-lg flex items-center justify-between">
-                                            <div>
-                                                <h4 className="text-sm font-medium text-emerald-900">Net Toll Reimbursement</h4>
-                                                <p className="text-xs text-emerald-700 mt-1">Approved toll expenses minus dispute chargebacks.</p>
-                                            </div>
-                                            <div className="flex items-center gap-6">
-                                                <div className="text-right">
-                                                    <div className="text-xs uppercase tracking-wider text-red-600 font-semibold mb-1">Dispute Charges</div>
-                                                    <div className="text-lg font-bold text-red-700">
-                                                        -${cashTollTransactions.reduce((sum, t) => {
-                                                            const type = getTollTransactionType(t.category);
-                                                            if (type === 'debit') {
-                                                                const isResolved = ['Reimbursed', 'Write Off', 'Resolved'].includes(t.status);
-                                                                if (isResolved) return sum; 
-                                                                return sum + Math.abs(t.amount);
-                                                            }
-                                                            return sum;
-                                                        }, 0).toFixed(2)}
-                                                    </div>
-                                                </div>
-
-                                                <div className="h-10 w-px bg-emerald-200/50"></div>
-
-                                                <div className="text-xl font-bold text-emerald-700">
-                                                ${cashTollTransactions.reduce((sum, t) => {
-                                                    const type = getTollTransactionType(t.category);
-                                                    
-                                                    // SKIP logic for Resolved Debts:
-                                                    // If it's a Charge/Debit, but it has been resolved (Reimbursed/Write Off), 
-                                                    // we effectively "cancel" the debt, so we do NOT subtract it from the total.
-                                                    if (type === 'debit') {
-                                                        const isResolved = ['Reimbursed', 'Write Off', 'Resolved'].includes(t.status);
-                                                        if (isResolved) return sum; // Ignore this debt
-                                                        return sum - Math.abs(t.amount); // Active debt, subtract it
-                                                    }
-                                                    
-                                                    // For Credits (Reimbursements to driver), we always add them unless Voided/Rejected (already filtered out of cashTollTransactions)
-                                                    return sum + Math.abs(t.amount);
-                                                }, 0).toFixed(2)}
-                                            </div>
-                                            </div>
-                                        </div>
-                                        
                                         <div className="rounded-md border border-slate-200 overflow-x-auto">
                                             <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead>Date</TableHead>
+                                                    <TableHead className="w-[110px]">Date</TableHead>
                                                     <TableHead>Description</TableHead>
-                                                    <TableHead>Status</TableHead>
-                                                    <TableHead className="text-right text-red-700">Debit</TableHead>
-                                                    <TableHead className="text-right text-emerald-700">Credit</TableHead>
+                                                    <TableHead className="w-[90px]">Status</TableHead>
+                                                    <TableHead className="text-right text-red-700 w-[90px]">Debit</TableHead>
+                                                    <TableHead className="text-right text-emerald-700 w-[90px]">Credit</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -1724,6 +1720,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                             const children = item.children;
                                                             const hasChildren = children.length > 0;
                                                             const isExpanded = expandedRows.has(trip.id);
+
+                                                            // Calculate total toll credit from children (Phase 2)
+                                                            const totalTollCredit = children
+                                                                .filter(child => getTollTransactionType(child.category) === 'credit')
+                                                                .reduce((sum, child) => sum + Math.abs(child.amount), 0);
+
+                                                            const totalTollDebit = children
+                                                                .filter(child => getTollTransactionType(child.category) === 'debit')
+                                                                .reduce((sum, child) => sum + Math.abs(child.amount), 0);
 
                                                             return (
                                                                 <React.Fragment key={trip.id}>
@@ -1742,10 +1747,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                             </div>
                                                                         </TableCell>
                                                                         <TableCell>
-                                                                            <div className="flex flex-col">
-                                                                                <span className="font-medium text-slate-900">
-                                                                                    Trip: {trip.route || trip.dropoffLocation || "Unknown Route"}
-                                                                                </span>
+                                                                            <div className="flex flex-col max-w-[250px]">
+                                                                                <TooltipProvider>
+                                                                                    <UiTooltip>
+                                                                                        <TooltipTrigger asChild>
+                                                                                            <span className="font-medium text-slate-900 truncate">
+                                                                                                Trip: {trip.route || trip.dropoffLocation || "Unknown Route"}
+                                                                                            </span>
+                                                                                        </TooltipTrigger>
+                                                                                        <TooltipContent>
+                                                                                            <p>Trip: {trip.route || trip.dropoffLocation || "Unknown Route"}</p>
+                                                                                        </TooltipContent>
+                                                                                    </UiTooltip>
+                                                                                </TooltipProvider>
                                                                                 <div className="flex items-center gap-2 mt-0.5">
                                                                                     <Badge variant="outline" className="text-[10px] h-4 px-1 py-0 border-slate-300 text-slate-500">
                                                                                         {trip.platform}
@@ -1765,13 +1779,18 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                             </Badge>
                                                                         </TableCell>
                                                                         <TableCell className="text-right font-mono">
-                                                                            <span className="text-slate-300">-</span>
+                                                                            {totalTollDebit > 0 ? (
+                                                                                <span className="text-red-600 font-bold">-${totalTollDebit.toFixed(2)}</span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300">-</span>
+                                                                            )}
                                                                         </TableCell>
                                                                         <TableCell className="text-right font-mono">
-                                                                            <div className="flex flex-col items-end">
-                                                                                <span className="text-emerald-600 font-bold">${trip.amount.toFixed(2)}</span>
-                                                                                <span className="text-[10px] text-slate-400">Fare</span>
-                                                                            </div>
+                                                                            {totalTollCredit > 0 ? (
+                                                                                <span className="text-emerald-600 font-bold">+${totalTollCredit.toFixed(2)}</span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300">-</span>
+                                                                            )}
                                                                         </TableCell>
                                                                     </TableRow>
 
@@ -1792,13 +1811,24 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                     </span>
                                                                                 </TableCell>
                                                                                 <TableCell>
-                                                                                    <div className="flex items-center gap-2">
+                                                                                    <div className="flex items-center gap-2 max-w-[250px]">
                                                                                         {child.receiptUrl ? (
-                                                                                            <FileText className="h-3 w-3 text-blue-500" />
+                                                                                            <FileText className="h-3 w-3 text-blue-500 shrink-0" />
                                                                                         ) : (
-                                                                                            <CornerDownRight className="h-3 w-3 text-slate-400" />
+                                                                                            <CornerDownRight className="h-3 w-3 text-slate-400 shrink-0" />
                                                                                         )}
-                                                                                        <span className={cn("text-sm", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-700")}>{child.description}</span>
+                                                                                        <TooltipProvider>
+                                                                                            <UiTooltip>
+                                                                                                <TooltipTrigger asChild>
+                                                                                                    <span className={cn("text-sm truncate", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-700")}>
+                                                                                                        {child.description}
+                                                                                                    </span>
+                                                                                                </TooltipTrigger>
+                                                                                                <TooltipContent>
+                                                                                                    <p>{child.description}</p>
+                                                                                                </TooltipContent>
+                                                                                            </UiTooltip>
+                                                                                        </TooltipProvider>
                                                                                     </div>
                                                                                 </TableCell>
                                                                                 <TableCell>
@@ -1921,12 +1951,32 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                         {format(new Date(tx.date), 'MMM d, yyyy')}
                                                                     </TableCell>
                                                                     <TableCell>
-                                                                        <div className="flex flex-col">
-                                                                            <span className={cn("font-medium", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-900")}>{tx.description}</span>
+                                                                        <div className="flex flex-col max-w-[250px]">
+                                                                            <TooltipProvider>
+                                                                                <UiTooltip>
+                                                                                    <TooltipTrigger asChild>
+                                                                                        <span className={cn("font-medium truncate", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-900")}>
+                                                                                            {tx.description}
+                                                                                        </span>
+                                                                                    </TooltipTrigger>
+                                                                                    <TooltipContent>
+                                                                                        <p>{tx.description}</p>
+                                                                                    </TooltipContent>
+                                                                                </UiTooltip>
+                                                                            </TooltipProvider>
                                                                             <div className="flex items-center gap-2 mt-0.5">
-                                                                                <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-amber-100 text-amber-700">
-                                                                                    Unlinked
-                                                                                </Badge>
+                                                                                <TooltipProvider>
+                                                                                    <UiTooltip>
+                                                                                        <TooltipTrigger asChild>
+                                                                                            <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-amber-100 text-amber-700 cursor-help">
+                                                                                                Unlinked
+                                                                                            </Badge>
+                                                                                        </TooltipTrigger>
+                                                                                        <TooltipContent>
+                                                                                            <p>This transaction is not associated with a specific trip.</p>
+                                                                                        </TooltipContent>
+                                                                                    </UiTooltip>
+                                                                                </TooltipProvider>
                                                                                 {tx.receiptUrl && (
                                                                                     <a 
                                                                                         href={tx.receiptUrl} 
@@ -2075,11 +2125,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead>Date</TableHead>
+                                                    <TableHead className="w-[110px]">Date</TableHead>
                                                     <TableHead>Description</TableHead>
-                                                    <TableHead>Method</TableHead>
-                                                    <TableHead>Status</TableHead>
-                                                    <TableHead className="text-right">Amount</TableHead>
+                                                    <TableHead className="w-[120px]">Method</TableHead>
+                                                    <TableHead className="w-[90px]">Status</TableHead>
+                                                    <TableHead className="text-right w-[90px]">Amount</TableHead>
                                                     <TableHead className="w-[50px]"></TableHead>
                                                 </TableRow>
                                             </TableHeader>

@@ -1689,6 +1689,10 @@
     width: 88px;
   }
 
+  .w-\[90px\] {
+    width: 90px;
+  }
+
   .w-\[90vw\] {
     width: 90vw;
   }
@@ -3104,16 +3108,6 @@
 
   .bg-emerald-100 {
     background-color: var(--color-emerald-100);
-  }
-
-  .bg-emerald-200\/50 {
-    background-color: color-mix(in srgb, oklch(.905 .093 164.15) 50%, transparent);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-emerald-200\/50 {
-      background-color: color-mix(in oklab, var(--color-emerald-200) 50%, transparent);
-    }
   }
 
   .bg-emerald-400 {
