@@ -31,6 +31,7 @@ import {
   Wallet,
   Landmark,
   Trash2,
+  Loader2,
   Car as CarIcon,
   Pencil,
   Plus,
@@ -269,6 +270,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterCashOnly, setFilterCashOnly] = useState<boolean>(false);
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set()); // Phase 2: Debouncing/Locking
   const tripsPerPage = 10;
 
   // Phase 2: Tier State
@@ -540,10 +542,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           const updatedTx: FinancialTransaction = {
               ...tx,
               category: 'Adjustment', // Fix Category
-              amount: -Math.abs(tx.amount), // Ensure it is Negative
+              type: 'Adjustment', // Ensure Type is Adjustment for consistency
+              amount: -Math.abs(tx.amount), // Ensure it is Negative (Debit)
               metadata: {
                   ...tx.metadata,
-                  fixedFormat: true
+                  fixedFormat: true,
+                  originalId: tx.id,
+                  fixReason: 'Format Error'
               }
           };
 
@@ -567,6 +572,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           toast.error("Error: Missing Claim ID. Cannot retry.");
           return;
       }
+
+      // Debounce Check
+      if (processingIds.has(tx._claimId)) {
+          return;
+      }
+
+      setProcessingIds(prev => new Set(prev).add(tx._claimId));
       
       const toastId = toast.loading("Processing charge retry...");
       
@@ -591,7 +603,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
               time: claim.time || new Date().toLocaleTimeString(),
               description: claim.description || "Toll Charge (Recovery)",
               category: 'Adjustment', 
-              type: 'expense',
+              type: 'Adjustment', // Consistent with Fix Format logic
               status: 'Completed',
               tripId: claim.tripId, // CRITICAL: Link to trip
               metadata: {
@@ -632,6 +644,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           console.error("Retry Charge Error:", e);
           toast.dismiss(toastId);
           toast.error("Failed to retry charge. See console for details.");
+      } finally {
+          setProcessingIds(prev => {
+              const next = new Set(prev);
+              next.delete(tx._claimId);
+              return next;
+          });
       }
   };
   
@@ -1802,6 +1820,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                             >
                                                                                                 Fix Format
                                                                                             </button>
+                                                                                            <Button
+                                                                                                variant="ghost"
+                                                                                                size="icon"
+                                                                                                className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                                                                onClick={(e) => {
+                                                                                                    e.preventDefault();
+                                                                                                    e.stopPropagation();
+                                                                                                    handleDeleteTransaction(child.id);
+                                                                                                }}
+                                                                                                title="Delete Duplicate"
+                                                                                            >
+                                                                                                <Trash2 className="h-3 w-3" />
+                                                                                            </Button>
                                                                                         </div>
                                                                                     ) : (child as any)._needsRetry ? (
                                                                                         <div className="flex items-center gap-2">
@@ -1811,7 +1842,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                             {/* Using native button to ensure clickability and avoid component conflicts */}
                                                                                             <button 
                                                                                                 type="button"
-                                                                                                className="h-6 px-2 text-[10px] font-semibold text-white bg-red-600 hover:bg-red-700 rounded shadow-sm transition-all cursor-pointer relative z-50 flex items-center active:scale-95"
+                                                                                                disabled={processingIds.has((child as any)._claimId)}
+                                                                                                className={cn(
+                                                                                                    "h-6 px-2 text-[10px] font-semibold text-white rounded shadow-sm transition-all relative z-50 flex items-center gap-1",
+                                                                                                    processingIds.has((child as any)._claimId) 
+                                                                                                        ? "bg-slate-400 cursor-not-allowed opacity-75" 
+                                                                                                        : "bg-red-600 hover:bg-red-700 cursor-pointer active:scale-95"
+                                                                                                )}
                                                                                                 onClick={(e) => {
                                                                                                     e.preventDefault();
                                                                                                     e.stopPropagation();
@@ -1819,13 +1856,33 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                                 }}
                                                                                                 onMouseDown={(e) => e.stopPropagation()}
                                                                                             >
-                                                                                                Retry Charge
+                                                                                                {processingIds.has((child as any)._claimId) && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                                                                {processingIds.has((child as any)._claimId) ? "Retrying..." : "Retry Charge"}
                                                                                             </button>
                                                                                         </div>
                                                                                     ) : (
-                                                                                        <Badge variant="outline" className={cn("text-xs border-slate-200", isResolvedDebit ? "text-emerald-600 bg-emerald-50 border-emerald-100" : "text-slate-500")}>
-                                                                                            {child.status}
-                                                                                        </Badge>
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <Badge variant="outline" className={cn("text-xs border-slate-200", isResolvedDebit ? "text-emerald-600 bg-emerald-50 border-emerald-100" : "text-slate-500")}>
+                                                                                                {child.status}
+                                                                                            </Badge>
+                                                                                            {(child.category === 'Adjustment' || child.metadata?.source === 'retry_charge') && (
+                                                                                                // Only allow deletion of manual Adjustments or Retries
+                                                                                                // This prevents accidental deletion of automated Trip transactions
+                                                                                                <Button
+                                                                                                    variant="ghost"
+                                                                                                    size="icon"
+                                                                                                    className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                                                                    onClick={(e) => {
+                                                                                                        e.preventDefault();
+                                                                                                        e.stopPropagation();
+                                                                                                        handleDeleteTransaction(child.id);
+                                                                                                    }}
+                                                                                                    title="Delete Transaction"
+                                                                                                >
+                                                                                                    <Trash2 className="h-3 w-3" />
+                                                                                                </Button>
+                                                                                            )}
+                                                                                        </div>
                                                                                     )}
                                                                                 </TableCell>
                                                                                 <TableCell className="text-right font-mono">
@@ -1904,6 +1961,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                 >
                                                                                     Fix Format
                                                                                 </button>
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        handleDeleteTransaction(tx.id);
+                                                                                    }}
+                                                                                    title="Delete Duplicate"
+                                                                                >
+                                                                                    <Trash2 className="h-3 w-3" />
+                                                                                </Button>
                                                                             </div>
                                                                         ) : (tx as any)._needsRetry ? (
                                                                             <div className="flex items-center gap-2">
@@ -1913,7 +1983,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                 {/* Using native button to ensure clickability and avoid component conflicts */}
                                                                                 <button 
                                                                                     type="button"
-                                                                                    className="h-6 px-2 text-[10px] font-semibold text-white bg-red-600 hover:bg-red-700 rounded shadow-sm transition-all cursor-pointer relative z-50 flex items-center active:scale-95"
+                                                                                    disabled={processingIds.has((tx as any)._claimId)}
+                                                                                    className={cn(
+                                                                                        "h-6 px-2 text-[10px] font-semibold text-white rounded shadow-sm transition-all relative z-50 flex items-center gap-1",
+                                                                                        processingIds.has((tx as any)._claimId) 
+                                                                                            ? "bg-slate-400 cursor-not-allowed opacity-75" 
+                                                                                            : "bg-red-600 hover:bg-red-700 cursor-pointer active:scale-95"
+                                                                                    )}
                                                                                     onClick={(e) => {
                                                                                         e.preventDefault();
                                                                                         e.stopPropagation();
@@ -1921,13 +1997,33 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                     }}
                                                                                     onMouseDown={(e) => e.stopPropagation()}
                                                                                 >
-                                                                                    Retry Charge
+                                                                                    {processingIds.has((tx as any)._claimId) && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                                                    {processingIds.has((tx as any)._claimId) ? "Retrying..." : "Retry Charge"}
                                                                                 </button>
                                                                             </div>
                                                                         ) : (
-                                                                            <Badge variant="outline" className={cn("text-slate-500", isResolvedDebit && "text-emerald-600 bg-emerald-50 border-emerald-100")}>
-                                                                                {tx.status}
-                                                                            </Badge>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Badge variant="outline" className={cn("text-slate-500", isResolvedDebit && "text-emerald-600 bg-emerald-50 border-emerald-100")}>
+                                                                                    {tx.status}
+                                                                                </Badge>
+                                                                                {(tx.category === 'Adjustment' || tx.metadata?.source === 'retry_charge') && (
+                                                                                    // Only allow deletion of manual Adjustments or Retries
+                                                                                    // This prevents accidental deletion of automated Trip transactions
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="icon"
+                                                                                        className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                                                        onClick={(e) => {
+                                                                                            e.preventDefault();
+                                                                                            e.stopPropagation();
+                                                                                            handleDeleteTransaction(tx.id);
+                                                                                        }}
+                                                                                        title="Delete Transaction"
+                                                                                    >
+                                                                                        <Trash2 className="h-3 w-3" />
+                                                                                    </Button>
+                                                                                )}
+                                                                            </div>
                                                                         )}
                                                                     </TableCell>
                                                                     <TableCell className="text-right font-mono">
