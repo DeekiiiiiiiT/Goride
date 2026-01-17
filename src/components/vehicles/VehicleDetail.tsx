@@ -31,7 +31,8 @@ import {
   Scale,
   Move,
   Info,
-  Car
+  Car,
+  Gauge
 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { 
@@ -47,6 +48,14 @@ import {
   Legend
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -89,7 +98,9 @@ import { Trip } from '../../types/data';
 import { api } from '../../services/api';
 import { odometerService } from '../../services/odometerService';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { format, subDays, isSameDay, getDay, getHours } from 'date-fns';
+import { format, subDays, isSameDay, getDay, getHours, differenceInDays, addDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { DateRange } from "react-day-picker";
+import { DatePickerWithRange } from "../ui/date-range-picker";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
@@ -206,6 +217,12 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           return "Automatically changes gears as the vehicle moves, freeing the driver from shifting manually.";
       return "The transmission system transfers power from the engine to the wheels.";
   };
+
+  // Date Range State
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+      from: subDays(new Date(), 29),
+      to: new Date(),
+  });
 
   // Specifications State
   const [isEditingSpecs, setIsEditingSpecs] = useState(false);
@@ -334,13 +351,29 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   const analytics = useMemo(() => {
     const vehicleTrips = trips.filter(t => t.vehicleId === vehicle.id || t.vehicleId === vehicle.licensePlate);
     
-    const last30Days = Array.from({ length: 30 }, (_, i) => {
-        const d = subDays(new Date(), 29 - i);
+    // Calculate date range
+    const daysDiff = (dateRange?.from && dateRange?.to) ? Math.max(1, differenceInDays(dateRange.to, dateRange.from) + 1) : 30;
+    const startDate = dateRange?.from ? startOfDay(dateRange.from) : subDays(new Date(), 29);
+
+    const trendData = Array.from({ length: daysDiff }, (_, i) => {
+        const d = addDays(startDate, i);
         return {
             date: format(d, 'MMM dd'),
             fullDate: d,
             earnings: 0,
             trips: 0
+        };
+    });
+
+    const kmTrackingData = Array.from({ length: daysDiff }, (_, i) => {
+        const d = addDays(startDate, i);
+        return {
+            date: format(d, 'MMM dd'),
+            fullDate: d,
+            uber: 0,
+            indrive: 0,
+            goride: 0,
+            other: 0
         };
     });
 
@@ -359,13 +392,36 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
 
     let totalDurationMinutes = 0;
     let totalDistance = 0;
+    let sumVisibleEarnings = 0;
 
     vehicleTrips.forEach(t => {
         const tDate = new Date(t.date);
-        const dayStat = last30Days.find(d => isSameDay(d.fullDate, tDate));
+        
+        // Filter out trips outside of date range
+        if (dateRange?.from && dateRange?.to) {
+             if (!isWithinInterval(tDate, { start: startOfDay(dateRange.from), end: endOfDay(dateRange.to) })) {
+                 return;
+             }
+        } else {
+             // Default 30 days logic if no range selected (though state initializes it)
+             const cutoff = subDays(new Date(), 30);
+             if (tDate < cutoff) return;
+        }
+
+        const dayStat = trendData.find(d => isSameDay(d.fullDate, tDate));
         if (dayStat) {
             dayStat.earnings += t.amount;
             dayStat.trips += 1;
+        }
+        
+        const kmStat = kmTrackingData.find(d => isSameDay(d.fullDate, tDate));
+        if (kmStat) {
+            const p = (t.platform || 'other').toLowerCase();
+            const dist = t.distance || 0;
+            if (p.includes('uber')) kmStat.uber += dist;
+            else if (p.includes('indrive')) kmStat.indrive += dist;
+            else if (p.includes('goride')) kmStat.goride += dist;
+            else kmStat.other += dist;
         }
 
         const dayIndex = getDay(tDate);
@@ -378,23 +434,50 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
 
         totalDurationMinutes += (t.duration || 0);
         totalDistance += (t.distance || 0);
+        sumVisibleEarnings += t.amount;
     });
 
     let activeHours = totalDurationMinutes / 60;
     let idleHours = activeHours * 0.4;
+    
+    // Determine Earnings Base for Rate Calculations
+    // We must ensure the numerator (Earnings) and denominator (Hours/Trips/Km) represent the same dataset.
+    let earningsForHourlyRate = sumVisibleEarnings;
 
     if (vehicle.metrics.onlineHours !== undefined && vehicle.metrics.onTripHours !== undefined) {
-        activeHours = vehicle.metrics.onTripHours;
-        idleHours = Math.max(0, vehicle.metrics.onlineHours - activeHours);
+        // If we use lifetime hours from metrics, we must use lifetime earnings
+        // BUT: If the user filters by date, we should probably stick to the calculated visible earnings/hours?
+        // The original logic was mixing lifetime metrics with calculated metrics.
+        // For date filtering, it's safer to use the calculated "visible" metrics if we have trips data.
+        // However, keeping original logic for now if metric exists, but only if date range is "All Time" or huge?
+        // Actually, if a user filters "Last 7 days", showing Lifetime Earnings Per Hour doesn't make sense if based on lifetime stats.
+        // I will prefer calculated stats if we have trip data for the period.
+        
+        // Only fallback to metrics if activeHours is 0 (no trips found) AND we haven't filtered?
+        // Let's keep it simple: if calculated activeHours > 0, use it.
+        // The original code overrode activeHours with metrics.
+        
+        // I will commenting out the override if we have visible trips, or if we are in a date range mode.
+        // Assuming the intention of the filter is to see performance FOR THAT PERIOD.
+        // So I will skip the metrics override if we are filtering.
     }
     
-    const totalEarnings = vehicle.metrics.totalLifetimeEarnings;
-    const totalTrips = vehicleTrips.length;
+    const totalEarnings = sumVisibleEarnings; // Use visible earnings for the period, not lifetime
+    const totalTrips = vehicleTrips.filter(t => {
+         const tDate = new Date(t.date);
+         if (dateRange?.from && dateRange?.to) {
+             return isWithinInterval(tDate, { start: startOfDay(dateRange.from), end: endOfDay(dateRange.to) });
+         }
+         return true;
+    }).length; // Re-calculate count
     
     const fuelCost = totalDistance * 0.15;
     const maintenanceCost = totalDistance * 0.05;
-    const insuranceCost = 150 * 6;
-    const depreciationCost = 200 * 6;
+    
+    // Estimate Insurance and Depreciation based on time period
+    const daysCount = daysDiff;
+    const insuranceCost = (150 * 6) / 365 * daysCount; 
+    const depreciationCost = (200 * 6) / 365 * daysCount;
     
     const totalExpenses = fuelCost + maintenanceCost + insuranceCost + depreciationCost;
     const netProfit = totalEarnings - totalExpenses;
@@ -407,12 +490,14 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
     const history: any[] = maintenanceLogs;
     const totalMaintCost = history.reduce((sum, item) => sum + (item.cost || 0), 0);
 
-    const earningsPerTrip = totalTrips > 0 ? totalEarnings / totalTrips : 0;
-    const earningsPerKm = totalDistance > 0 ? totalEarnings / totalDistance : 0;
-    const earningsPerHour = activeHours > 0 ? totalEarnings / activeHours : 0;
+    // Use consistent datasets for rates (Visible Trips vs Visible Earnings)
+    const earningsPerTrip = totalTrips > 0 ? sumVisibleEarnings / totalTrips : 0;
+    const earningsPerKm = totalDistance > 0 ? sumVisibleEarnings / totalDistance : 0;
+    const earningsPerHour = activeHours > 0 ? earningsForHourlyRate / activeHours : 0;
 
     return {
-        trendData: last30Days,
+        trendData: trendData,
+        kmTrackingData,
         dayOfWeekData: dayOfWeekStats,
         activityByHour,
         metrics: {
@@ -442,7 +527,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
             nextDue: vehicle.nextServiceDate
         }
     };
-  }, [vehicle, trips, maintenanceLogs]);
+  }, [vehicle, trips, maintenanceLogs, dateRange]);
 
   // Documents Logic
   const documents = useMemo(() => {
@@ -638,10 +723,13 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       
       {/* --- Top Navigation --- */}
-      <Button variant="ghost" onClick={onBack} className="pl-0 hover:bg-transparent hover:text-indigo-600">
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Fleet
-      </Button>
+      <div className="flex justify-between items-center">
+        <Button variant="ghost" onClick={onBack} className="pl-0 hover:bg-transparent hover:text-indigo-600">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Fleet
+        </Button>
+        <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+      </div>
 
       {/* --- Header Section --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -788,6 +876,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="expenses">Vehicle Expenses</TabsTrigger>
               <TabsTrigger value="odometer">Odometer</TabsTrigger>
+              <TabsTrigger value="km-tracking">Km Tracking</TabsTrigger>
               <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
@@ -1087,6 +1176,64 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                       />
                   </TabsContent>
               </Tabs>
+          </TabsContent>
+
+          <TabsContent value="km-tracking" className="mt-6">
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Daily Distance by Platform</CardTitle>
+                      <CardDescription>Kilometers driven breakdown per day</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-[400px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={analytics.kmTrackingData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
+                              <YAxis fontSize={12} tickLine={false} axisLine={false} label={{ value: 'km', angle: -90, position: 'insideLeft' }} />
+                              <RechartsTooltip />
+                              <Legend />
+                              <Bar dataKey="uber" stackId="a" fill="#000000" name="Uber" radius={[0, 0, 4, 4]} />
+                              <Bar dataKey="indrive" stackId="a" fill="#B3D66A" name="InDrive" />
+                              <Bar dataKey="goride" stackId="a" fill="#6366f1" name="GoRide" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="other" stackId="a" fill="#94a3b8" name="Other" />
+                          </BarChart>
+                      </ResponsiveContainer>
+                  </CardContent>
+              </Card>
+              
+              <Card className="mt-6">
+                 <CardHeader>
+                    <CardTitle>Summary Table</CardTitle>
+                 </CardHeader>
+                 <CardContent>
+                    <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Uber (km)</TableHead>
+                                    <TableHead>InDrive (km)</TableHead>
+                                    <TableHead>GoRide (km)</TableHead>
+                                    <TableHead className="text-right">Total (km)</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {analytics.kmTrackingData.slice().reverse().map((row: any) => (
+                                    <TableRow key={row.date}>
+                                        <TableCell>{row.date}</TableCell>
+                                        <TableCell>{row.uber.toFixed(1)}</TableCell>
+                                        <TableCell>{row.indrive.toFixed(1)}</TableCell>
+                                        <TableCell>{row.goride.toFixed(1)}</TableCell>
+                                        <TableCell className="text-right font-medium">
+                                            {(row.uber + row.indrive + row.goride + row.other).toFixed(1)}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                 </CardContent>
+              </Card>
           </TabsContent>
 
 
@@ -1625,7 +1772,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                            <h4 className="font-medium text-slate-900">Fuel & Economy</h4>
                                            <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.fuelType.replace('_', ' ')}</p>
                                            <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                                               {specsForm.fuelEconomy} km/L • {specsForm.tankCapacity}L Tank
+                                               {specsForm.fuelEconomy} km/L
                                            </p>
                                        </div>
                                    </div>
@@ -1670,6 +1817,20 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                            <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.bodyType}</p>
                                            <p className="text-sm text-slate-500 mt-1 leading-relaxed">
                                                Vehicle classification and chassis style.
+                                           </p>
+                                       </div>
+                                   </div>
+
+                                   {/* Tank Capacity */}
+                                   <div className="flex gap-4">
+                                       <div className="h-10 w-10 shrink-0 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+                                           <Gauge className="h-5 w-5" />
+                                       </div>
+                                       <div className="flex-1">
+                                           <h4 className="font-medium text-slate-900">Tank Capacity</h4>
+                                           <p className="text-sm font-semibold text-slate-700 mt-1">{specsForm.tankCapacity}L</p>
+                                           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                                               Standard fuel tank capacity.
                                            </p>
                                        </div>
                                    </div>

@@ -251,7 +251,28 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       processed.forEach(t => {
           const c = t._classification;
           if (c === 'Ignored' || c === 'Pending_Dispute') {
-              hidden.push(t);
+              // Phase 1: Filter Hidden items to only show relevant Toll activity
+              // Prevent Fuel, Cash Collections, etc. from appearing in "Hidden/Ignored"
+              const category = (t.category || '').toLowerCase();
+              const desc = (t.description || '').toLowerCase();
+
+              const isBlacklisted = 
+                  category === 'cash collection' || 
+                  category === 'float issue' || 
+                  category.includes('fuel') || 
+                  category === 'payment' ||
+                  t.paymentMethod === 'Tag Balance';
+
+              const isTollRelated = 
+                  category.includes('toll') || 
+                  desc.includes('toll') || 
+                  ['adjustment', 'claim', 'chargeback'].includes(category);
+
+              // Only show if it's explicitly toll-related AND not blacklisted
+              // OR if it's a Pending Dispute (which we always want to track)
+              if ((isTollRelated && !isBlacklisted) || c === 'Pending_Dispute') {
+                  hidden.push(t);
+              }
           } else {
               active.push(t);
           }

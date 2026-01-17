@@ -195,25 +195,36 @@ export function FuelReimbursementTable({ transactions, onApprove, onReject, onRe
 
     return (
         <div className="space-y-6">
-            <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-4">
-                       <h2 className="text-lg font-semibold text-slate-900">Pending Requests</h2>
-                       {pending.length > 0 && (
-                            <Badge variant="secondary" className="bg-orange-100 text-orange-700">
-                                {pending.length} Pending
-                            </Badge>
-                       )}
-                   </div>
-                   {onRequestSubmit && (
-                       <Button onClick={onRequestSubmit} size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
-                           <Plus className="h-4 w-4 mr-2" />
-                           Submit Expense
-                       </Button>
-                   )}
+            <Tabs defaultValue="pending" className="w-full">
+                <div className="flex items-center justify-between mb-4">
+                    <TabsList>
+                        <TabsTrigger value="pending">
+                            Pending
+                            {pending.length > 0 && (
+                                <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-700 hover:bg-orange-200">
+                                    {pending.length}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
+                        <TabsTrigger value="history">History</TabsTrigger>
+                    </TabsList>
+                    
+                    {onRequestSubmit && (
+                        <Button onClick={onRequestSubmit} size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Submit Expense
+                        </Button>
+                    )}
                 </div>
-                {renderTable(pending, true)}
-            </div>
+
+                <TabsContent value="pending" className="space-y-4">
+                    {renderTable(pending, true)}
+                </TabsContent>
+
+                <TabsContent value="history" className="space-y-4">
+                    {renderTable(history, false)}
+                </TabsContent>
+            </Tabs>
 
             {/* Details Modal */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>
