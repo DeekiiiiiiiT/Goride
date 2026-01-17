@@ -77,6 +77,31 @@ export const api = {
     return response.json();
   },
 
+  async updateAnchor(id: string, payload: { date?: string, value?: number, type: string, vehicleId: string }) {
+    // Uses the generic PATCH endpoint added to server/index.tsx
+    // Endpoint path: /make-server-37f42386/anchors/:id
+    // Note: API_ENDPOINTS.fuel typically points to /make-server-37f42386/... 
+    // We'll assume the path is relative to the base function URL if possible, or construct it.
+    // Based on other calls, API_ENDPOINTS.fuel seems to be the base URL.
+    // However, I added the route at root level /make-server.../anchors
+    // Let's use absolute path construction similar to others if needed, or stick to convention.
+    // Actually, looking at deleteOdometerReading: `${API_ENDPOINTS.fuel}/odometer-history/...`
+    // I'll assume I can use `${API_ENDPOINTS.fuel}/anchors/${id}` if I ensure the route is correct.
+    // In server/index.tsx, I defined `app.patch("/make-server-37f42386/anchors/:id", ...)`
+    // If API_ENDPOINTS.fuel is `.../make-server-37f42386`, then `${API_ENDPOINTS.fuel}/anchors/${id}` works.
+    
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/anchors/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error("Failed to update anchor");
+    return response.json();
+  },
+
   async getBatches(): Promise<ImportBatch[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -909,5 +934,32 @@ export const api = {
     if (!response.ok) throw new Error("Failed to fetch check-ins");
     const checkIns = await response.json();
     return checkIns.filter((c: any) => c.vehicleId === vehicleId);
+  },
+
+  async deleteCheckIn(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete check-in");
+    return response.json();
+  },
+
+  async deleteMaintenanceLog(id: string, vehicleId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs/${vehicleId}/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete maintenance log");
+    return response.json();
+  },
+
+  async deleteFuelEntry(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete fuel entry");
+    return response.json();
   }
 };

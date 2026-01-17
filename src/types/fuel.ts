@@ -101,3 +101,24 @@ export interface FuelDispute {
   resolvedAt?: string;
   resolvedBy?: string;
 }
+
+export type FuelCoverageType = 'Percentage' | 'Fixed_Amount' | 'Full';
+
+export interface FuelRule {
+  id: string;
+  category: 'Fuel' | 'Maintenance' | 'Tolls';
+  coverageType: FuelCoverageType;
+  coverageValue: number; // e.g., 50 for 50%, or 100 for $100
+  conditions?: {
+    maxAmount?: number;
+    requiresReceipt?: boolean;
+  };
+}
+
+export interface FuelScenario {
+  id: string;
+  name: string; // e.g. "Standard Fleet", "Owner Operator", "Rental"
+  description?: string;
+  rules: FuelRule[];
+  isDefault?: boolean;
+}

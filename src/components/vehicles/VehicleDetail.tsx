@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Clock, 
@@ -94,9 +94,11 @@ import {
 import { Checkbox } from "../ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Vehicle, VehicleDocument } from '../../types/vehicle';
+import { FuelScenario } from '../../types/fuel';
 import { Trip } from '../../types/data';
 import { api } from '../../services/api';
 import { odometerService } from '../../services/odometerService';
+import { fuelService } from '../../services/fuelService';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { format, subDays, isSameDay, getDay, getHours, differenceInDays, addDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { DateRange } from "react-day-picker";
@@ -172,6 +174,11 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
 
   const [isUpdateOdometerOpen, setIsUpdateOdometerOpen] = useState(false);
   const [odometerRefreshTrigger, setOdometerRefreshTrigger] = useState(0);
+  const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
+
+  useEffect(() => {
+    fuelService.getFuelScenarios().then(setScenarios).catch(console.error);
+  }, []);
   
   // Odometer Update Form
   const [newOdometerValue, setNewOdometerValue] = useState('');
@@ -236,7 +243,8 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
       fuelType: vehicle.fuelSettings?.fuelType || 'Gasoline_87',
       fuelEconomy: vehicle.specifications?.fuelEconomy || '24.6',
       tankCapacity: vehicle.specifications?.tankCapacity || '36',
-      bodyType: vehicle.bodyType || 'MPV'
+      bodyType: vehicle.bodyType || 'MPV',
+      fuelScenarioId: vehicle.fuelScenarioId || ''
   });
 
   const handleSaveSpecs = async () => {
@@ -249,6 +257,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           const updatedVehicle = {
               ...vehicle,
               bodyType: specsForm.bodyType,
+              fuelScenarioId: (specsForm.fuelScenarioId && specsForm.fuelScenarioId !== 'none') ? specsForm.fuelScenarioId : undefined,
               specifications: { 
                   ...vehicle.specifications,
                   engineType: specsForm.engineType,
@@ -2056,6 +2065,29 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                 onChange={e => setSpecsForm({...specsForm, tankCapacity: e.target.value})} 
                                 placeholder="e.g. 36" 
                             />
+                       </div>
+
+                       <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label>Expense Scenario</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger><Info className="h-3 w-3 text-slate-400" /></TooltipTrigger>
+                                        <TooltipContent>The coverage rules applied to this vehicle.</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Select value={specsForm.fuelScenarioId || "none"} onValueChange={(val) => setSpecsForm({...specsForm, fuelScenarioId: val})}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Scenario" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">None</SelectItem>
+                                    {scenarios.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                        </div>
 
                        <div className="space-y-2">

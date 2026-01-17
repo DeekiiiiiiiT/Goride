@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { FuelCard, FuelEntry, MileageAdjustment } from '../types/fuel';
+import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { API_ENDPOINTS } from './apiConfig';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
@@ -110,5 +110,36 @@ export const fuelService = {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to delete mileage adjustment");
+  },
+
+  // --- Fuel Scenarios ---
+  async getFuelScenarios(): Promise<FuelScenario[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch fuel scenarios");
+    return response.json();
+  },
+
+  async saveFuelScenario(scenario: FuelScenario): Promise<FuelScenario> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(scenario)
+    });
+    if (!response.ok) throw new Error("Failed to save fuel scenario");
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  async deleteFuelScenario(id: string): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete fuel scenario");
   }
 };

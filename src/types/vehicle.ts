@@ -100,7 +100,8 @@ export interface Vehicle {
   tollTagProvider?: string; // e.g. "JRC", "T-Tag"
   tollBalance?: number;     // Estimated running balance
 
-  // Fuel Configuration (Phase 1 Impl)
+  // Fuel Configuration
+  fuelScenarioId?: string; // ID of the assigned FuelScenario
   fuelSettings?: {
       fuelType: 'Gasoline_87' | 'Gasoline_91' | 'Gasoline_93' | 'Diesel' | 'Electric' | 'Hybrid';
       efficiencyCity: number; // L/100km or MPG

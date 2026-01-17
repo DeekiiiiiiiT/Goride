@@ -451,7 +451,14 @@ export interface FinancialTransaction {
   batchName?: string;
   
   // New Fields for Cash Wallet
-  metadata?: Record<string, any>;
+  metadata?: {
+    odometerMethod?: 'ai_verified' | 'manual_override' | 'manual';
+    aiConfidence?: string;
+    odometerProofUrl?: string;
+    approvalReason?: string;
+    approvedAt?: string;
+    [key: string]: any;
+  };
 }
 
 export interface BankReconciliationRecord {

@@ -16,8 +16,28 @@ import {
   Info,
   Search,
   RotateCw,
-  Plus
+  Plus,
+  Pencil,
+  Trash2
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../ui/alert-dialog";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "../../ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -48,6 +68,12 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
   const [reports, setReports] = useState<Record<string, MileageReport>>({});
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<OdometerReading | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editOdometer, setEditOdometer] = useState('');
+  
   const [manifestGap, setManifestGap] = useState<{start: OdometerReading, end: OdometerReading} | null>(null);
   
   // Filter States
@@ -55,6 +81,16 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [confidenceFilter, setConfidenceFilter] = useState<string>('any');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
+
+  const parseDateForDisplay = (dateStr: string): Date => {
+     if (dateStr.includes('T')) {
+         return new Date(dateStr);
+     }
+     // Legacy date-only string (YYYY-MM-DD)
+     // Parse manually to local midnight to avoid UTC shift
+     const [year, month, day] = dateStr.split('-').map(Number);
+     return new Date(year, month - 1, day);
+  };
 
   const fetchTimelineData = useCallback(async () => {
     setLoading(true);
@@ -113,6 +149,76 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
     } finally {
       setReviewingId(null);
     }
+  };
+
+  const handleDelete = (readingId: string) => {
+    setDeleteId(readingId);
+  };
+
+  const handleEdit = (item: OdometerReading) => {
+    setEditingItem(item);
+    const dateObj = parseDateForDisplay(item.date);
+    setEditDate(format(dateObj, 'yyyy-MM-dd'));
+    setEditTime(format(dateObj, 'HH:mm'));
+    setEditOdometer(item.value.toString());
+  };
+
+  const saveEdit = async () => {
+    if (!editingItem) return;
+    
+    // Construct new date
+    let newDateStr = editDate;
+    if (editTime && editDate) {
+        newDateStr = `${editDate}T${editTime}`;
+    }
+
+    // Clean ID logic matching the backend expectations and confirmDelete logic
+    let cleanId = editingItem.id;
+    if (cleanId.startsWith('fuel_')) cleanId = cleanId.replace('fuel_', '');
+    else if (cleanId.startsWith('checkin_')) cleanId = cleanId.replace('checkin_', '');
+    else if (cleanId.startsWith('service_')) cleanId = cleanId.replace('service_', '');
+    // For others, keep as is
+
+    try {
+        await api.updateAnchor(cleanId, {
+            date: newDateStr,
+            value: Number(editOdometer),
+            type: editingItem.source,
+            vehicleId
+        });
+        toast.success("Anchor updated successfully");
+        fetchTimelineData();
+        setEditingItem(null);
+    } catch (e) {
+        console.error(e);
+        toast.error("Failed to update anchor");
+    }
+  };
+
+  const confirmDelete = async () => {
+      if (!deleteId) return;
+
+      setReviewingId(deleteId);
+      try {
+          if (deleteId.startsWith('checkin_')) {
+            await api.deleteCheckIn(deleteId.replace('checkin_', ''));
+          } else if (deleteId.startsWith('fuel_')) {
+            await api.deleteFuelEntry(deleteId.replace('fuel_', ''));
+          } else if (deleteId.startsWith('service_')) {
+            await api.deleteMaintenanceLog(deleteId.replace('service_', ''), vehicleId);
+          } else {
+            await api.deleteOdometerReading(deleteId, vehicleId);
+          }
+
+          toast.success("Odometer reading deleted");
+          fetchTimelineData();
+      } catch (error) {
+          console.error(error);
+          toast.error("Failed to delete reading");
+      } finally {
+          setReviewingId(null);
+          setDeleteId(null);
+      }
   };
 
   const getSourceIcon = (source: string) => {
@@ -207,7 +313,7 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                       <div className="flex flex-wrap items-center gap-4 text-sm">
                           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
                              <div className="w-2 h-2 rounded-full bg-emerald-400 mr-2"></div>
-                             Verified: {format(new Date(latestReading.date), 'MMM d, yyyy')}
+                             Verified: {format(parseDateForDisplay(latestReading.date), 'MMM d, yyyy')}
                           </Badge>
                           <Badge variant="outline" className="bg-slate-800 text-slate-300 border-slate-700 px-3 py-1">
                              <Info className="w-3 h-3 mr-2" />
@@ -222,7 +328,11 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                       <Plus className="w-4 h-4 mr-2" />
                       Manual Odometer Entry
                   </Button>
-                  <Button variant="outline" className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 w-full justify-start">
+                  <Button 
+                    variant="outline" 
+                    className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 w-full justify-start"
+                    onClick={fetchTimelineData}
+                  >
                       <RotateCw className="w-4 h-4 mr-2" />
                       Sync Latest Data
                   </Button>
@@ -320,8 +430,8 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                             <React.Fragment key={item.id}>
                             <div className="grid grid-cols-12 px-6 py-4 items-center hover:bg-slate-50 transition-colors group relative z-10 bg-white">
                                 <div className="col-span-3">
-                                    <p className="text-sm font-semibold text-slate-900">{format(new Date(item.date), 'MMM d, yyyy')}</p>
-                                    <p className="text-xs text-slate-400">{format(new Date(item.date), 'HH:mm')}</p>
+                                    <p className="text-sm font-semibold text-slate-900">{format(parseDateForDisplay(item.date), 'MMM d, yyyy')}</p>
+                                    <p className="text-xs text-slate-400">{format(parseDateForDisplay(item.date), 'HH:mm')}</p>
                                 </div>
                                 <div className="col-span-2 flex items-center gap-2">
                                     <div className="p-1.5 rounded-full bg-indigo-100 text-indigo-600">
@@ -363,12 +473,20 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                                                         Mark as Verified
                                                     </DropdownMenuItem>
                                                 )}
+                                                <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                    <Pencil className="mr-2 h-4 w-4 text-slate-500" />
+                                                    Edit Entry
+                                                </DropdownMenuItem>
                                                 {item.isVerified && (
                                                     <DropdownMenuItem onClick={() => handleReview(item.id, 'rejected')}>
                                                         <XCircle className="mr-2 h-4 w-4 text-amber-500" />
                                                         Flag as Unverified
                                                     </DropdownMenuItem>
                                                 )}
+                                                <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600 focus:text-red-600 focus:bg-red-50">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Delete Entry
+                                                </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -499,6 +617,52 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
         startAnchor={manifestGap?.start || null}
         endAnchor={manifestGap?.end || null}
       />
+
+      <Dialog open={!!editingItem} onOpenChange={(open) => !open && setEditingItem(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Edit Audit Anchor</DialogTitle>
+                <DialogDescription>
+                    Update the details for this {editingItem?.source} entry.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Date</label>
+                        <Input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Time</label>
+                        <Input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Odometer (km)</label>
+                    <Input type="number" value={editOdometer} onChange={e => setEditOdometer(e.target.value)} />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setEditingItem(null)}>Cancel</Button>
+                <Button onClick={saveEdit}>Save Changes</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the odometer reading.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

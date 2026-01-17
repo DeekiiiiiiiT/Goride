@@ -627,6 +627,57 @@ app.post("/make-server-37f42386/transactions", async (c) => {
     if (!transaction.timestamp) {
         transaction.timestamp = new Date().toISOString();
     }
+
+    // Auto-Approve Logic for AI Verified Fuel
+    const isFuel = transaction.category === 'Fuel' || transaction.category === 'Fuel Reimbursement';
+    const isAiVerified = transaction.metadata?.odometerMethod === 'ai_verified';
+
+    if (isFuel && isAiVerified && transaction.status === 'Pending') {
+        transaction.status = 'Approved';
+        transaction.isReconciled = true;
+        transaction.metadata = {
+            ...transaction.metadata,
+            approvedAt: new Date().toISOString(),
+            approvalReason: 'Auto-approved via AI Odometer Scan',
+            notes: (transaction.metadata?.notes || '') + ' [AI Verified]'
+        };
+
+        // Create Fuel Entry Anchor
+        // Fix: Extract volume from metadata.fuelVolume if top-level quantity is missing
+        const quantity = Number(transaction.quantity) || Number(transaction.metadata?.fuelVolume) || 0;
+        const amount = Math.abs(Number(transaction.amount) || 0);
+        const pricePerLiter = transaction.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
+        
+        // Ensure quantity is saved to transaction for consistent display
+        if (!transaction.quantity && quantity > 0) {
+            transaction.quantity = quantity;
+        }
+
+        const fuelEntry = {
+            id: crypto.randomUUID(),
+            date: (transaction.date && transaction.time) 
+                ? `${transaction.date}T${transaction.time}` 
+                : (transaction.date || new Date().toISOString().split('T')[0]),
+            type: 'Reimbursement',
+            amount: amount,
+            liters: quantity,
+            pricePerLiter: pricePerLiter,
+            odometer: Number(transaction.odometer) || 0,
+            location: transaction.vendor || transaction.description || 'Reimbursement',
+            stationAddress: transaction.metadata?.stationLocation || '',
+            vehicleId: transaction.vehicleId,
+            driverId: transaction.driverId,
+            cardId: undefined,
+            transactionId: transaction.id,
+            isVerified: true, // Key Requirement: Anchor
+            source: 'Fuel Log'
+        };
+
+        if (fuelEntry.vehicleId) {
+             await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
+        }
+    }
+
     await kv.set(`transaction:${transaction.id}`, transaction);
     return c.json({ success: true, data: transaction });
   } catch (e: any) {
@@ -909,6 +960,29 @@ app.post("/make-server-37f42386/maintenance-logs", async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
+});
+
+// --- FUEL SCENARIOS ---
+app.get("/make-server-37f42386/scenarios", async (c) => {
+  try {
+    const items = await kv.getByPrefix("fuel_scenario:");
+    return c.json(items || []);
+  } catch (e: any) { return c.json({ error: e.message }, 500); }
+});
+
+app.post("/make-server-37f42386/scenarios", async (c) => {
+  try {
+    const item = await c.req.json();
+    if (!item.id) item.id = crypto.randomUUID();
+    await kv.set(`fuel_scenario:${item.id}`, item);
+    return c.json({ success: true, data: item });
+  } catch (e: any) { return c.json({ error: e.message }, 500); }
+});
+
+app.delete("/make-server-37f42386/scenarios/:id", async (c) => {
+  const id = c.req.param("id");
+  try { await kv.del(`fuel_scenario:${id}`); return c.json({ success: true }); }
+  catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
 // Storage Upload Endpoint
@@ -3064,6 +3138,68 @@ app.delete("/make-server-37f42386/odometer-history/:id", async (c) => {
     }
 });
 
+// Update generic anchor (Fuel, Check-in, etc)
+app.patch("/make-server-37f42386/anchors/:id", async (c) => {
+    const id = c.req.param("id");
+    const { date, value, type, vehicleId } = await c.req.json();
+    let key = "";
+    
+    // Determine key prefix based on type
+    // Note: MasterLogTimeline 'source' maps to these types
+    if (type === 'Fuel Log' || type === 'fuel_entry') {
+        key = `fuel_entry:${id}`;
+    } else if (type === 'Check-in' || type === 'checkin' || type === 'Weekly Check-in') {
+         key = `checkin:${id}`;
+    } else if (type === 'Service Log' || type === 'maintenance_log') {
+         if (!vehicleId) return c.json({ error: "Vehicle ID required for Service Logs" }, 400);
+         key = `maintenance_log:${vehicleId}:${id}`;
+    } else {
+         // Fallback for generic odometer readings
+         // Attempt to find the key format. Usually `odometer_reading:{vehicleId}:{id}`
+         if (vehicleId) {
+             key = `odometer_reading:${vehicleId}:${id}`;
+         } else {
+             // Try legacy or simple format?
+             // Since we can't easily guess, we might fail here for Manual entries if vehicleId is missing
+             return c.json({ error: "Vehicle ID required for Manual entries" }, 400);
+         }
+    }
+
+    try {
+        const entry = await kv.get(key);
+        if (!entry) return c.json({ error: "Entry not found" }, 404);
+
+        // Update fields
+        if (date) entry.date = date;
+        if (value) {
+            const numVal = Number(value);
+            // Update all potential fields for odometer to be safe
+            if (entry.odometer !== undefined) entry.odometer = numVal;
+            if (entry.value !== undefined) entry.value = numVal;
+            if (entry.mileage !== undefined) entry.mileage = numVal; // Service logs often use mileage
+        }
+        
+        await kv.set(key, entry);
+
+        // Optional: Update associated Transaction if it exists (for Fuel Logs)
+        if (entry.transactionId) {
+            const txKey = `transaction:${entry.transactionId}`;
+            const tx = await kv.get(txKey);
+            if (tx) {
+                if (date) tx.date = date.split('T')[0]; // Transactions use YYYY-MM-DD
+                // We don't update time on transaction usually, or complex to parse
+                // Also, odometer is sometimes on transaction
+                if (value && tx.odometer !== undefined) tx.odometer = Number(value);
+                await kv.set(txKey, tx);
+            }
+        }
+
+        return c.json({ success: true, data: entry });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 // Claims Endpoints
 app.get("/make-server-37f42386/claims", async (c) => {
   try {
@@ -3701,6 +3837,37 @@ app.post("/make-server-37f42386/check-ins/review", async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
+});
+
+app.delete("/make-server-37f42386/check-ins/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`checkin:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/maintenance-logs/:vehicleId/:id", async (c) => {
+  const vehicleId = c.req.param("vehicleId");
+  const id = c.req.param("id");
+  try {
+    await kv.del(`maintenance_log:${vehicleId}:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete("/make-server-37f42386/fuel-entries/:id", async (c) => {
+    const id = c.req.param("id");
+    try {
+        await kv.del(`fuel_entry:${id}`);
+        return c.json({ success: true });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 Deno.serve(app.fetch);

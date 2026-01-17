@@ -309,6 +309,32 @@ const deleteOdometerHistory = async (c: any) => {
 deleteRoute("/odometer-history/:id", deleteOdometerHistory);
 
 
+// --- FUEL SCENARIOS ---
+const getFuelScenarios = async (c: any) => {
+  try {
+    const items = await getByPrefix("fuel_scenario:");
+    return c.json(items || []);
+  } catch (e: any) { return c.json({ error: e.message }, 500); }
+};
+route("/scenarios", getFuelScenarios);
+
+const postFuelScenario = async (c: any) => {
+  try {
+    const item = await c.req.json();
+    if (!item.id) item.id = crypto.randomUUID();
+    await set(`fuel_scenario:${item.id}`, item);
+    return c.json({ success: true, data: item });
+  } catch (e: any) { return c.json({ error: e.message }, 500); }
+};
+postRoute("/scenarios", postFuelScenario);
+
+const deleteFuelScenario = async (c: any) => {
+  const id = c.req.param("id");
+  try { await del(`fuel_scenario:${id}`); return c.json({ success: true }); }
+  catch (e: any) { return c.json({ error: e.message }, 500); }
+};
+deleteRoute("/scenarios/:id", deleteFuelScenario);
+
 // --- FUEL DISPUTES (Stubbed) ---
 const getFuelDisputes = async (c: any) => {
   try {

@@ -280,6 +280,13 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
     };
   };
 
+  const parseLocalDate = (dateStr: string): Date => {
+    // Parse YYYY-MM-DD manually to create a local Date at 00:00:00
+    // new Date("YYYY-MM-DD") creates UTC midnight, which shifts the date when displayed locally
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -337,9 +344,14 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
 
       const newTx = constructTransactionPayload(baseTx, receiptUrl, odometerProofUrl);
 
-      await api.saveTransaction(newTx);
+      const savedTx = await api.saveTransaction(newTx);
       
-      toast.success("Expense submitted for approval");
+      if (savedTx.status === 'Approved') {
+          toast.success("Expense Auto-Approved & Odometer Verified! 🚀");
+      } else {
+          toast.success("Expense submitted for approval");
+      }
+
       setViewState('list');
       resetForm();
       fetchTransactions();
@@ -607,7 +619,15 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Date</Label>
-                    <Input type="date" value={format(date, 'yyyy-MM-dd')} onChange={(e) => setDate(new Date(e.target.value))} />
+                    <Input 
+                      type="date" 
+                      value={format(date, 'yyyy-MM-dd')} 
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setDate(parseLocalDate(e.target.value));
+                        }
+                      }} 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Time</Label>

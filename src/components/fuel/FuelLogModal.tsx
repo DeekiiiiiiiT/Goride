@@ -23,6 +23,8 @@ interface FuelLogModalProps {
 
 export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, drivers, cards }: FuelLogModalProps) {
     const [activeTab, setActiveTab] = useState('single');
+    const [time, setTime] = useState('12:00');
+
     // Single Entry State
     const [formData, setFormData] = useState<Partial<FuelEntry>>({
         date: new Date().toISOString().split('T')[0],
@@ -79,11 +81,21 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 ...initialData,
                 date: initialData.date.split('T')[0], // Ensure date format for input
             });
+            
+            // Extract Time
+            try {
+                const d = new Date(initialData.date);
+                if (!isNaN(d.getTime())) {
+                    const hours = d.getHours().toString().padStart(2, '0');
+                    const minutes = d.getMinutes().toString().padStart(2, '0');
+                    setTime(`${hours}:${minutes}`);
+                }
+            } catch (e) {
+                console.error("Error parsing date for time extraction", e);
+                setTime('12:00');
+            }
         } else {
             // Reset to defaults when opening fresh
-            // If activeTab logic needs to persist or reset, handle here.
-            // For now, let's keep user's last tab choice or force 'single' only on specific triggers?
-            // Let's not force reset activeTab here unless we want to always start on single.
             setFormData({
                 date: new Date().toISOString().split('T')[0],
                 type: 'Card_Transaction',
@@ -97,6 +109,12 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 driverId: '',
                 cardId: '',
             });
+
+            // Set default time to current time
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            setTime(`${hours}:${minutes}`);
         }
     }, [initialData, isOpen]);
 
@@ -172,9 +190,21 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             return;
         }
 
+        // Combine Date and Time
+        let fullDate = formData.date;
+        try {
+            const timePart = time || '00:00';
+            const dateObj = new Date(`${formData.date}T${timePart}`);
+            if (!isNaN(dateObj.getTime())) {
+                fullDate = dateObj.toISOString();
+            }
+        } catch (e) {
+            console.error("Error constructing date time", e);
+        }
+
         const entry: FuelEntry = {
             id: initialData?.id || crypto.randomUUID(),
-            date: formData.date!,
+            date: fullDate,
             type: formData.type as any,
             amount: Number(formData.amount),
             liters: Number(formData.liters),
@@ -251,14 +281,23 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                         <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="date">Date</Label>
-                                    <div className="relative">
-                                        <Input 
-                                            id="date" 
-                                            type="date"
-                                            value={formData.date}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                                        />
+                                    <Label htmlFor="date">Date & Time</Label>
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <Input 
+                                                id="date" 
+                                                type="date"
+                                                value={formData.date}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                                            />
+                                        </div>
+                                        <div className="w-[120px]">
+                                            <Input 
+                                                type="time"
+                                                value={time}
+                                                onChange={(e) => setTime(e.target.value)}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
@@ -273,6 +312,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                         <SelectContent>
                                             <SelectItem value="Card_Transaction">Fuel Card</SelectItem>
                                             <SelectItem value="Manual_Entry">Cash / Out of Pocket</SelectItem>
+                                            <SelectItem value="Reimbursement">Reimbursement</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -455,6 +495,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                             <SelectContent>
                                                 <SelectItem value="Card_Transaction">Fuel Card</SelectItem>
                                                 <SelectItem value="Manual_Entry">Cash / Out of Pocket</SelectItem>
+                                                <SelectItem value="Reimbursement">Reimbursement</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
