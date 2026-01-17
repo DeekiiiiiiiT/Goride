@@ -79,6 +79,7 @@ import {
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { Trip, DriverMetrics, FinancialTransaction } from '../../types/data';
+import { classifyTollTransaction } from '../../utils/tollTransactionUtils';
 import { format, subDays, isWithinInterval, startOfDay, endOfDay, eachDayOfInterval, differenceInDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { cn } from "../ui/utils";
@@ -153,15 +154,7 @@ interface DriverDetailProps {
   };
 }
 
-// Helper for Toll Ledger Logic (Phase 1 Refactor)
-const getTollTransactionType = (category: string): 'credit' | 'debit' => {
-    // Credit: Reimbursement to driver (Money IN to driver context, or Debt Reduction)
-    // Note: 'Expense' is included here assuming it's a driver expense submitted for reimbursement.
-    if (['Toll Usage', 'Toll', 'Tolls', 'Expense'].includes(category)) return 'credit';
-    // Debit: Charge to driver (Money OUT from driver context, or Debt Increase)
-    // Includes: Adjustment, Claim, Chargeback, etc.
-    return 'debit';
-};
+
 
 export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, vehicleMetrics, onBack, fleetStats }: DriverDetailProps) {
   const [activeTab, setActiveTab] = useState("overview");
@@ -182,7 +175,47 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [claims, setClaims] = useState<any[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
+  // Phase 1: Date Range & Data Context Filtering
+  const { minDate, maxDate, tripIds } = useMemo(() => {
+      if (!trips || trips.length === 0) return { minDate: null, maxDate: null, tripIds: new Set<string>() };
+      
+      const timestamps = trips.map(t => new Date(t.date).getTime());
+      const ids = new Set(trips.map(t => t.id));
+      
+      return {
+          minDate: new Date(Math.min(...timestamps)),
+          maxDate: new Date(Math.max(...timestamps)),
+          tripIds: ids
+      };
+  }, [trips]);
+
+  const dateFilteredTransactions = useMemo(() => {
+      // If no trips loaded, we can't determine context. showing nothing is safer than showing lifetime.
+      if (!minDate || !maxDate) return [];
+
+      const start = startOfDay(minDate);
+      const end = endOfDay(maxDate);
+      
+      // Phase 1: Smart Date Buffering for Orphans
+      // Allow orphans to appear if they are within 48 hours of the trip window.
+      // This catches late-posting tolls that aren't yet linked to a trip.
+      const bufferMs = 48 * 60 * 60 * 1000; 
+      const bufferedStart = new Date(start.getTime() - bufferMs);
+      const bufferedEnd = new Date(end.getTime() + bufferMs);
+
+      return transactions.filter(tx => {
+          // 1. If explicitly linked to a visible trip, always include
+          // This keeps trip-linked items strictly bound to the trip's visibility
+          if (tx.tripId && tripIds.has(tx.tripId)) return true;
+
+          // 2. If Orphan (No tripId OR Trip not in view), check BUFFERED date range
+          const txDate = new Date(tx.date);
+          return txDate >= bufferedStart && txDate <= bufferedEnd;
+      });
+  }, [transactions, minDate, maxDate, tripIds]);
+
   // Phase 3: Filtered Cash Tolls (Expenses & Adjustments)
+  // Phase 2 Update: Data Segregation (Hidden vs Active)
   const cashTollTransactions = useMemo(() => {
       // Create a Lookup Map for Claims (Source -> Claim)
       const claimMap = new Map<string, any>();
@@ -190,70 +223,45 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           if (c.transactionId) {
               claimMap.set(c.transactionId, c);
           }
+          // Also map resolution transaction IDs back to the claim
+          if (c.resolutionTransactionId) {
+              claimMap.set(c.resolutionTransactionId, c);
+          }
       });
 
-      return transactions
-        .map(t => {
-            // Check if this transaction has a linked Claim
+      const processed = dateFilteredTransactions.map(t => {
+            // Find linked claim
             const claim = claimMap.get(t.id);
-            const resolutionReason = claim?.resolutionReason;
-            const resolutionTxId = claim?.resolutionTransactionId;
             
-            // If the claim is explicitly Reimbursed or Written Off, we mark it as 'Resolved'
-            if (resolutionReason && ['Reimbursed', 'Write Off'].includes(resolutionReason)) {
-                return { ...t, status: 'Resolved' }; 
-            }
+            // Classify
+            const classification = classifyTollTransaction(t, claim);
             
-            // If resolution is "Charge Driver":
-            if (resolutionReason === 'Charge Driver') {
-                // 1. If we have the Resolution Transaction, it's Completed.
-                if (resolutionTxId) {
-                    return { ...t, status: 'Completed' };
-                }
-                // 2. If MISSING Resolution Transaction, it's a "Zombie" state (Charge failed).
-                else {
-                    // Mark as Needs Retry
-                    return { ...t, status: 'Action Required', _needsRetry: true, _claimId: claim.id };
-                }
-            }
+            // Attach metadata for the UI
+            return {
+                ...t,
+                _classification: classification,
+                _claimId: claim?.id
+            };
+        });
 
-            return t;
-        })
-        .filter(t => {
-            // Relaxed Status Check: Allow undefined/null or any 'positive' status
-            // If status is explicitly 'Rejected' or 'Void', skip. Otherwise allow.
-            if (t.status === 'Rejected' || t.status === 'Void' || t.status === 'Failed') return false;
-            
-            // SPECIAL CHECK: Show "Retry Charge" transactions even if they have the wrong category/format
-            // This allows us to show the "Fix Format" button for them.
-            if (t.metadata?.source === 'retry_charge') return true;
+      // Split into Active (Valid Financials) and Hidden (Ignored/Pending)
+      const active: FinancialTransaction[] = [];
+      const hidden: FinancialTransaction[] = [];
 
-            // 1. Valid Cash Toll Expense (Credit to Driver)
-            const isTollCategory = ['Toll Usage', 'Toll', 'Tolls', 'Expense'].includes(t.category);
-            // For generic 'Expense', ensure it's toll related
-            if (t.category === 'Expense' && !t.description?.toLowerCase().includes('toll')) return false;
-
-            const isCash = t.paymentMethod?.toLowerCase() === 'cash' || !!t.receiptUrl;
-            const isValidExpense = isTollCategory && isCash;
-
-            // 2. Toll Adjustment / Dispute Chargeback (Debit to Driver)
-            const isAdjustment = ['Adjustment', 'Claim', 'Chargeback'].includes(t.category);
-            // Relax description check for explicit Claims/Chargebacks
-            const isExplicitClaim = ['Claim', 'Chargeback'].includes(t.category);
-            const isTollRelated = isExplicitClaim || 
-                                    t.description?.toLowerCase().includes('toll') || 
-                                    t.description?.toLowerCase().includes('dispute') ||
-                                    t.description?.toLowerCase().includes('refund') ||
-                                    t.description?.toLowerCase().includes('charge'); // Added 'charge' to catch "Charge Driver" txs
-                                    
-            const isValidAdjustment = isAdjustment && isTollRelated;
-
-            return isValidExpense || isValidAdjustment;
+      processed.forEach(t => {
+          const c = t._classification;
+          if (c === 'Ignored' || c === 'Pending_Dispute') {
+              hidden.push(t);
+          } else {
+              active.push(t);
+          }
       });
-  }, [transactions, claims]);
+
+      return { active, hidden };
+  }, [dateFilteredTransactions, claims]);
 
   // Phase 4: Payment Transactions
-  const paymentTransactions = useMemo(() => transactions.filter(t => {
+  const paymentTransactions = useMemo(() => dateFilteredTransactions.filter(t => {
       // Strict Safety: Never show Tag Balance operations in Payment Log
       if (t.paymentMethod === 'Tag Balance') return false;
       if (t.description?.toLowerCase().includes('top-up')) return false;
@@ -272,17 +280,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       let disputes = 0;
       let net = 0;
 
-      cashTollTransactions.forEach(t => {
-          const type = getTollTransactionType(t.category);
+      // Use ACTIVE transactions for financial calculations
+      cashTollTransactions.active.forEach(t => {
+          const classification = t._classification;
           const amount = Math.abs(t.amount);
 
-          if (type === 'debit') {
-              const isResolved = ['Reimbursed', 'Write Off', 'Resolved'].includes(t.status);
-              if (!isResolved) {
-                  disputes += amount;
-                  net -= amount;
-              }
-          } else {
+          if (classification === 'Resolved_Debit') {
+              // This is a Charge to the driver (Reduce Reimbursement)
+              net -= amount;
+              // We might track "disputes" as these charges? 
+              // The original logic tracked "Unresolved Debits" as disputes.
+              // But we are now Filtering OUT unresolved debits (Pending_Dispute).
+              // So 'disputes' metric might be redundant or should represent "Charged Back".
+              disputes += amount; 
+          } else if (classification === 'Standard_Credit' || classification === 'Resolved_Credit') {
+              // This is a Reimbursement (Increase Net)
               net += amount;
           }
       });
@@ -293,6 +305,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterCashOnly, setFilterCashOnly] = useState<boolean>(false);
+  // Phase 3: Hidden Items UI State
+  const [showHidden, setShowHidden] = useState<boolean>(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set()); // Phase 2: Debouncing/Locking
   const tripsPerPage = 10;
 
@@ -353,14 +367,17 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           }
       });
 
+      // Use ACTIVE transactions for the main view
+      const activeTransactions = cashTollTransactions.active;
+
       // Map for quick transaction lookup (needed to find parent's tripId)
-      const txMap = new Map(cashTollTransactions.map(t => [t.id, t]));
+      const txMap = new Map(activeTransactions.map(t => [t.id, t]));
 
       // 1. Index Transactions by TripId
       const txByTrip = new Map<string, FinancialTransaction[]>();
       const orphanTx: FinancialTransaction[] = [];
 
-      cashTollTransactions.forEach(tx => {
+      activeTransactions.forEach(tx => {
           let targetTripId = tx.tripId;
 
           // If no direct tripId, check if it's a child of a transaction that HAS a tripId
@@ -401,7 +418,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       // 3. Handle Orphans (Transactions with tripId that wasn't found in trips list, or no tripId)
       // Note: If we fetched *all* transactions but only *some* trips (pagination?), we might miss some parents.
       // For now, any transaction whose tripId wasn't found in the `trips` array is treated as an orphan.
-      cashTollTransactions.forEach(tx => {
+      activeTransactions.forEach(tx => {
           if (tx.tripId && !tripsWithTx.has(tx.tripId)) {
               // This is a transaction with a tripId, but the trip isn't loaded in the current view.
               // We treat it as an orphan for now.
@@ -421,12 +438,41 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           ...orphanTx.map(tx => ({ type: 'transaction' as const, data: tx }))
       ];
 
-      return unifiedList.sort((a, b) => {
+      const sortedList = unifiedList.sort((a, b) => {
           const dateA = new Date(a.data.date).getTime();
           const dateB = new Date(b.data.date).getTime();
           return dateB - dateA;
       });
-  }, [cashTollTransactions, trips]);
+
+      // Phase 4: Append Hidden Items Group
+      if (showHidden && cashTollTransactions.hidden.length > 0) {
+          const hiddenTrip: Trip = {
+              id: 'hidden-items-group',
+              driverId: driverId,
+              vehicleId: 'system',
+              // Place it at the very bottom (oldest date) or top? Plan says bottom.
+              // We'll use a date far in the past to ensure sort puts it last, or just push it after sort.
+              date: new Date(0).toISOString(), 
+              status: 'Archived', 
+              platform: 'System',
+              amount: 0,
+              distance: 0,
+              duration: 0,
+              startTime: '',
+              endTime: '',
+              route: 'Archived / Ignored Transactions',
+              dropoffLocation: 'Archived / Ignored Transactions'
+          };
+
+          sortedList.push({
+              type: 'trip',
+              data: hiddenTrip,
+              children: cashTollTransactions.hidden
+          });
+      }
+
+      return sortedList;
+  }, [cashTollTransactions, trips, showHidden, driverId]);
 
   const toggleRow = (id: string) => {
       const newSet = new Set(expandedRows);
@@ -1700,6 +1746,30 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             <CardContent>
                                 {ledgerView === 'tolls' ? (
                                     <div className="space-y-4">
+                                        {/* Phase 3: Hidden Items Filter Bar */}
+                                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox 
+                                                        id="show-hidden" 
+                                                        checked={showHidden} 
+                                                        onCheckedChange={(checked) => setShowHidden(checked as boolean)} 
+                                                    />
+                                                    <Label 
+                                                        htmlFor="show-hidden" 
+                                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2 cursor-pointer"
+                                                    >
+                                                        Show Hidden / Ignored
+                                                        {cashTollTransactions.hidden.length > 0 && (
+                                                            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-slate-200 text-slate-600 hover:bg-slate-300">
+                                                                {cashTollTransactions.hidden.length}
+                                                            </Badge>
+                                                        )}
+                                                    </Label>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div className="rounded-md border border-slate-200 overflow-x-auto">
                                             <Table>
                                             <TableHeader>
@@ -1723,11 +1793,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
                                                             // Calculate total toll credit from children (Phase 2)
                                                             const totalTollCredit = children
-                                                                .filter(child => getTollTransactionType(child.category) === 'credit')
+                                                                .filter(child => {
+                                                                    const c = (child as any)._classification;
+                                                                    return c === 'Standard_Credit' || c === 'Resolved_Credit';
+                                                                })
                                                                 .reduce((sum, child) => sum + Math.abs(child.amount), 0);
 
                                                             const totalTollDebit = children
-                                                                .filter(child => getTollTransactionType(child.category) === 'debit')
+                                                                .filter(child => (child as any)._classification === 'Resolved_Debit')
                                                                 .reduce((sum, child) => sum + Math.abs(child.amount), 0);
 
                                                             return (
@@ -1796,12 +1869,23 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
                                                                     {/* CHILD ROWS (Transactions nested under Trip) */}
                                                                     {hasChildren && isExpanded && children.map(child => {
-                                                                        const type = getTollTransactionType(child.category);
-                                                                         const isCredit = type === 'credit';
-                                                                         const isResolvedDebit = !isCredit && ['Reimbursed', 'Write Off', 'Resolved'].includes(child.status);
+                                                                        const classification = (child as any)._classification;
+                                                                        const isResolvedDebit = classification === 'Resolved_Debit';
+                                                                        const isStandardCredit = classification === 'Standard_Credit';
+                                                                        const isResolvedCredit = classification === 'Resolved_Credit';
+                                                                        const isCredit = isStandardCredit || isResolvedCredit;
+                                                                        
+                                                                        // Phase 5: Hidden/Archived Logic
+                                                                        const isHidden = child.status === 'Ignored' || trip.status === 'Archived';
                                                                          
                                                                          return (
-                                                                            <TableRow key={child.id} className="bg-white hover:bg-slate-50 border-l-4 border-l-slate-200">
+                                                                            <TableRow 
+                                                                                key={child.id} 
+                                                                                className={cn(
+                                                                                    "bg-white hover:bg-slate-50 border-l-4 border-l-slate-200",
+                                                                                    isHidden && "opacity-60 bg-slate-50 border-l-slate-300"
+                                                                                )}
+                                                                            >
                                                                                 <TableCell className="pl-12 relative">
                                                                                     {/* Indentation Visuals */}
                                                                                     <div className="absolute left-6 top-0 bottom-1/2 w-px bg-slate-200"></div>
@@ -1820,7 +1904,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                         <TooltipProvider>
                                                                                             <UiTooltip>
                                                                                                 <TooltipTrigger asChild>
-                                                                                                    <span className={cn("text-sm truncate", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-700")}>
+                                                                                                    <span className={cn("text-sm truncate text-slate-700", isHidden && "line-through text-slate-500")}>
                                                                                                         {child.description}
                                                                                                     </span>
                                                                                                 </TooltipTrigger>
@@ -1832,8 +1916,22 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                     </div>
                                                                                 </TableCell>
                                                                                 <TableCell>
-                                                                                    {/* Check for "Zombie" Retry - Needs Fix */}
-                                                                                    {child.metadata?.source === 'retry_charge' && child.category !== 'Adjustment' ? (
+                                                                                    {isHidden ? (
+                                                                                        <TooltipProvider>
+                                                                                            <UiTooltip>
+                                                                                                <TooltipTrigger asChild>
+                                                                                                    <Badge variant="outline" className="text-xs bg-slate-100 text-slate-500 border-slate-200 cursor-help">
+                                                                                                        {child.status}
+                                                                                                    </Badge>
+                                                                                                </TooltipTrigger>
+                                                                                                <TooltipContent>
+                                                                                                    <p>Excluded from calculations (Outside date range or manually ignored).</p>
+                                                                                                </TooltipContent>
+                                                                                            </UiTooltip>
+                                                                                        </TooltipProvider>
+                                                                                    ) : (
+                                                                                        /* Check for "Zombie" Retry - Needs Fix */
+                                                                                        child.metadata?.source === 'retry_charge' && child.category !== 'Adjustment' ? (
                                                                                          <div className="flex items-center gap-2">
                                                                                             <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
                                                                                                 Format Error
@@ -1864,37 +1962,24 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                                 <Trash2 className="h-3 w-3" />
                                                                                             </Button>
                                                                                         </div>
-                                                                                    ) : (child as any)._needsRetry ? (
-                                                                                        <div className="flex items-center gap-2">
-                                                                                            <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
-                                                                                                Action Required
-                                                                                            </Badge>
-                                                                                            {/* Using native button to ensure clickability and avoid component conflicts */}
-                                                                                            <button 
-                                                                                                type="button"
-                                                                                                disabled={processingIds.has((child as any)._claimId)}
-                                                                                                className={cn(
-                                                                                                    "h-6 px-2 text-[10px] font-semibold text-white rounded shadow-sm transition-all relative z-50 flex items-center gap-1",
-                                                                                                    processingIds.has((child as any)._claimId) 
-                                                                                                        ? "bg-slate-400 cursor-not-allowed opacity-75" 
-                                                                                                        : "bg-red-600 hover:bg-red-700 cursor-pointer active:scale-95"
-                                                                                                )}
-                                                                                                onClick={(e) => {
-                                                                                                    e.preventDefault();
-                                                                                                    e.stopPropagation();
-                                                                                                    handleRetryCharge(child);
-                                                                                                }}
-                                                                                                onMouseDown={(e) => e.stopPropagation()}
-                                                                                            >
-                                                                                                {processingIds.has((child as any)._claimId) && <Loader2 className="h-3 w-3 animate-spin" />}
-                                                                                                {processingIds.has((child as any)._claimId) ? "Retrying..." : "Retry Charge"}
-                                                                                            </button>
-                                                                                        </div>
                                                                                     ) : (
                                                                                         <div className="flex items-center gap-2">
-                                                                                            <Badge variant="outline" className={cn("text-xs border-slate-200", isResolvedDebit ? "text-emerald-600 bg-emerald-50 border-emerald-100" : "text-slate-500")}>
-                                                                                                {child.status}
-                                                                                            </Badge>
+                                                                                            {isResolvedDebit && (
+                                                                                                <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                                                                                                    Resolved Charge
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                            {isResolvedCredit && (
+                                                                                                <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                                                                    Reimbursed
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                            {isStandardCredit && (
+                                                                                                <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200">
+                                                                                                    Verified
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                            
                                                                                             {(child.category === 'Adjustment' || child.metadata?.source === 'retry_charge') && (
                                                                                                 // Only allow deletion of manual Adjustments or Retries
                                                                                                 // This prevents accidental deletion of automated Trip transactions
@@ -1913,15 +1998,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                                 </Button>
                                                                                             )}
                                                                                         </div>
-                                                                                    )}
+                                                                                    ))}
                                                                                 </TableCell>
                                                                                 <TableCell className="text-right font-mono">
                                                                                     {!isCredit ? (
-                                                                                        isResolvedDebit ? (
-                                                                                            <span className="text-slate-400 line-through">-${Math.abs(child.amount).toFixed(2)}</span>
-                                                                                        ) : (
-                                                                                            <span className="text-red-600 font-medium">-${Math.abs(child.amount).toFixed(2)}</span>
-                                                                                        )
+                                                                                         <span className="text-red-600 font-medium">-${Math.abs(child.amount).toFixed(2)}</span>
                                                                                     ) : (
                                                                                         <span className="text-slate-300">-</span>
                                                                                     )}
@@ -1941,9 +2022,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                         } else {
                                                             // ORPHAN TRANSACTION ROW (Standard Format)
                                                             const tx = item.data as FinancialTransaction;
-                                                            const type = getTollTransactionType(tx.category);
-                                                            const isCredit = type === 'credit';
-                                                            const isResolvedDebit = !isCredit && ['Reimbursed', 'Write Off', 'Resolved'].includes(tx.status);
+                                                            const classification = (tx as any)._classification;
+                                                            const isResolvedDebit = classification === 'Resolved_Debit';
+                                                            const isStandardCredit = classification === 'Standard_Credit';
+                                                            const isResolvedCredit = classification === 'Resolved_Credit';
+                                                            const isCredit = isStandardCredit || isResolvedCredit;
 
                                                             return (
                                                                 <TableRow key={tx.id} className="hover:bg-slate-50">
@@ -1955,7 +2038,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                             <TooltipProvider>
                                                                                 <UiTooltip>
                                                                                     <TooltipTrigger asChild>
-                                                                                        <span className={cn("font-medium truncate", isResolvedDebit ? "text-slate-400 line-through" : "text-slate-900")}>
+                                                                                        <span className="font-medium truncate text-slate-900">
                                                                                             {tx.description}
                                                                                         </span>
                                                                                     </TooltipTrigger>
@@ -2025,40 +2108,25 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                     <Trash2 className="h-3 w-3" />
                                                                                 </Button>
                                                                             </div>
-                                                                        ) : (tx as any)._needsRetry ? (
-                                                                            <div className="flex items-center gap-2">
-                                                                                <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
-                                                                                    Action Required
-                                                                                </Badge>
-                                                                                {/* Using native button to ensure clickability and avoid component conflicts */}
-                                                                                <button 
-                                                                                    type="button"
-                                                                                    disabled={processingIds.has((tx as any)._claimId)}
-                                                                                    className={cn(
-                                                                                        "h-6 px-2 text-[10px] font-semibold text-white rounded shadow-sm transition-all relative z-50 flex items-center gap-1",
-                                                                                        processingIds.has((tx as any)._claimId) 
-                                                                                            ? "bg-slate-400 cursor-not-allowed opacity-75" 
-                                                                                            : "bg-red-600 hover:bg-red-700 cursor-pointer active:scale-95"
-                                                                                    )}
-                                                                                    onClick={(e) => {
-                                                                                        e.preventDefault();
-                                                                                        e.stopPropagation();
-                                                                                        handleRetryCharge(tx);
-                                                                                    }}
-                                                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                                                >
-                                                                                    {processingIds.has((tx as any)._claimId) && <Loader2 className="h-3 w-3 animate-spin" />}
-                                                                                    {processingIds.has((tx as any)._claimId) ? "Retrying..." : "Retry Charge"}
-                                                                                </button>
-                                                                            </div>
                                                                         ) : (
                                                                             <div className="flex items-center gap-2">
-                                                                                <Badge variant="outline" className={cn("text-slate-500", isResolvedDebit && "text-emerald-600 bg-emerald-50 border-emerald-100")}>
-                                                                                    {tx.status}
-                                                                                </Badge>
+                                                                                {isResolvedDebit && (
+                                                                                    <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                                                                                        Resolved Charge
+                                                                                    </Badge>
+                                                                                )}
+                                                                                {isResolvedCredit && (
+                                                                                    <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                                                        Reimbursed
+                                                                                    </Badge>
+                                                                                )}
+                                                                                {isStandardCredit && (
+                                                                                    <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200">
+                                                                                        Verified
+                                                                                    </Badge>
+                                                                                )}
+
                                                                                 {(tx.category === 'Adjustment' || tx.metadata?.source === 'retry_charge') && (
-                                                                                    // Only allow deletion of manual Adjustments or Retries
-                                                                                    // This prevents accidental deletion of automated Trip transactions
                                                                                     <Button
                                                                                         variant="ghost"
                                                                                         size="icon"
@@ -2078,18 +2146,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                     </TableCell>
                                                                     <TableCell className="text-right font-mono">
                                                                         {!isCredit ? (
-                                                                            isResolvedDebit ? (
-                                                                                 <span className="text-slate-400 line-through">-${Math.abs(tx.amount).toFixed(2)}</span>
-                                                                            ) : (
-                                                                                 <span className="text-red-600 font-bold">-${Math.abs(tx.amount).toFixed(2)}</span>
-                                                                            )
+                                                                             <span className="text-red-600 font-medium">-${Math.abs(tx.amount).toFixed(2)}</span>
                                                                         ) : (
                                                                             <span className="text-slate-300">-</span>
                                                                         )}
                                                                     </TableCell>
                                                                     <TableCell className="text-right font-mono">
                                                                         {isCredit ? (
-                                                                            <span className="text-emerald-600 font-bold">+${Math.abs(tx.amount).toFixed(2)}</span>
+                                                                            <span className="text-emerald-600 font-medium">+${Math.abs(tx.amount).toFixed(2)}</span>
                                                                         ) : (
                                                                             <span className="text-slate-300">-</span>
                                                                         )}

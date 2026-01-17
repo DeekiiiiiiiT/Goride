@@ -57,6 +57,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { toast } from "sonner@2.0.3";
 import { BulkImportTollTransactionsModal } from '../vehicles/BulkImportTollTransactionsModal';
 
 import { 
@@ -69,6 +70,7 @@ import {
     validateFile,
     extractReportDate
 } from '../../utils/csvHelpers';
+import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpers';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState } from '../../types/data';
 import { FuelEntry, FuelCard } from '../../types/fuel';
 import { api } from '../../services/api';
@@ -144,7 +146,36 @@ export function ImportsPage() {
   const [manageFieldsOpen, setManageFieldsOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
   const [disabledColumns, setDisabledColumns] = useState<Record<string, string[]>>({});
-  const [tollImportMode, setTollImportMode] = useState<'usage' | 'topup' | null>(null);
+  const [tollImportMode, setTollImportMode] = useState<'usage' | 'topup' | 'recovery' | null>(null);
+
+  const handleExportBackup = async () => {
+      try {
+          const toastId = toast.loading("Preparing Disaster Recovery Backup...");
+          const rows = await fetchFullTollHistory();
+          
+          if (rows.length === 0) {
+              toast.dismiss(toastId);
+              toast.info("No toll transactions found to export.");
+              return;
+          }
+
+          const csvContent = generateBackupCSV(rows);
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', `toll_disaster_recovery_${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          toast.dismiss(toastId);
+          toast.success(`Exported ${rows.length} records successfully.`);
+      } catch (err) {
+          console.error(err);
+          toast.error("Export failed. Please try again.");
+      }
+  };
 
   // Load Fields
   useEffect(() => {
@@ -834,7 +865,7 @@ export function ImportsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Batch Import</h2>
           <p className="text-slate-500 dark:text-slate-400">
@@ -950,7 +981,9 @@ export function ImportsPage() {
                     { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white' },
                     { id: 'Toll Top-up', icon: <CreditCard className="h-6 w-6" />, color: 'bg-emerald-600 text-white', action: () => setTollImportMode('topup') },
                     { id: 'Toll Usage', icon: <MinusCircle className="h-6 w-6" />, color: 'bg-slate-600 text-white', action: () => setTollImportMode('usage') },
-                ].map(platform => (
+                    { id: 'Disaster Recovery', icon: <CloudDownload className="h-6 w-6" />, color: 'bg-white border-2 border-slate-200 text-slate-600', subtext: 'Export Backup', action: handleExportBackup },
+                    { id: 'Restore Backup', icon: <UploadCloud className="h-6 w-6" />, color: 'bg-rose-50 border-2 border-rose-100 text-rose-600', subtext: 'Import Recovery CSV', action: () => setTollImportMode('recovery') },
+                ].map((platform: any) => (
                     <Card 
                         key={platform.id}
                         onClick={() => {
@@ -969,7 +1002,7 @@ export function ImportsPage() {
                             </div>
                             <div className="text-center">
                                 <h4 className="font-semibold">{platform.id}</h4>
-                                <p className="text-xs text-slate-500 mt-1">CSV Import</p>
+                                <p className="text-xs text-slate-500 mt-1">{platform.subtext || 'CSV Import'}</p>
                             </div>
                         </CardContent>
                     </Card>

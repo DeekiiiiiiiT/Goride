@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Loader2, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownLeft, MinusCircle, Sparkles, UploadCloud } from "lucide-react";
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
+import Papa from 'papaparse';
 
 interface BulkImportTollTransactionsModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ interface BulkImportTollTransactionsModalProps {
   tollTagId?: string;
   tollTagUuid?: string;
   onSuccess: () => void;
-  mode?: 'usage' | 'topup'; // Defaults to 'usage' if not provided
+  mode?: 'usage' | 'topup' | 'recovery'; // Defaults to 'usage' if not provided
 }
 
 interface ParsedTransaction {
@@ -26,7 +27,7 @@ interface ParsedTransaction {
   location: string;
   laneId: string;
   amount: number;
-  type: 'Usage' | 'Top-up' | 'Refund';
+  type: 'Usage' | 'Top-up' | 'Refund' | 'Expense';
   rawDate: string;
   isValid: boolean;
   error?: string;
@@ -37,6 +38,14 @@ interface ParsedTransaction {
   driverName?: string;
   discount?: number;
   paymentAfterDiscount?: number;
+  
+  // Phase 2: Enhanced Import Fields
+  paymentMethod?: string;
+  category?: string;
+  status?: string;
+  vehiclePlate?: string;
+  description?: string;
+  referenceNumber?: string;
 }
 
 export function BulkImportTollTransactionsModal({ 
@@ -95,13 +104,14 @@ export function BulkImportTollTransactionsModal({
 
 
 
-  const matchVehicle = (tagId?: string) => {
+  const matchVehicle = (tagId?: string, plate?: string, driverName?: string, paymentMethod?: string) => {
       let matchedVehicleId = vehicleId; 
       let matchedVehicleName = vehicleName;
       let matchedDriverId = '';
       let matchedDriverName = '';
       let error = '';
 
+      // 1. Tag ID Match (Highest Priority)
       if (tagId) {
           const tag = tollTags.find((t: any) => t.tagNumber === tagId);
           if (tag) {
@@ -112,14 +122,62 @@ export function BulkImportTollTransactionsModal({
                   error = `Tag ${tagId} is unassigned`;
               }
           } else {
-              error = `Tag ${tagId} not found in system`;
+              // Only error if we strictly expect a tag (i.e. not a cash transaction)
+              // If it's a "Cash" transaction, we allow Tag ID to be missing or invalid/dummy if needed, 
+              // but usually Cash won't have Tag ID. If it DOES have Tag ID and it's invalid, maybe still error?
+              // Let's rely on Plate match if Tag fails for Cash.
+              if (paymentMethod !== 'Cash') {
+                  error = `Tag ${tagId} not found in system`;
+              }
           }
-      } else if (!matchedVehicleId) {
-          error = 'Missing Tag ID for auto-match';
+      } else if (!matchedVehicleId && !plate && !driverName) {
+           // Only error about missing Tag ID if NO other identifier exists
+           error = 'Missing Tag ID for auto-match';
+      }
+
+      // 2. Plate Match (If Tag failed or missing, and Plate provided)
+      if (!matchedVehicleId && plate) {
+          const cleanPlate = plate.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          const vehicle = vehicles.find((v: any) => 
+              v.licensePlate?.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanPlate
+          );
+          
+          if (vehicle) {
+              matchedVehicleId = vehicle.id;
+              matchedVehicleName = `${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`;
+              error = ''; // Clear error if Plate matched
+          } else if (!tagId) {
+               // Only error on plate if we didn't have a tag to blame
+               error = `Vehicle Plate ${plate} not found`;
+          }
+      }
+
+      // 3. Driver Name Match (Fallback)
+      if (!matchedVehicleId && driverName) {
+           const cleanName = driverName.toLowerCase();
+           const driver = drivers.find((d: any) => 
+               (d.name && d.name.toLowerCase() === cleanName) || 
+               (d.driverName && d.driverName.toLowerCase() === cleanName)
+           );
+
+           if (driver) {
+               matchedDriverId = driver.id;
+               matchedDriverName = driver.name || driver.driverName;
+               
+               // Find vehicle assigned to this driver
+               const vehicle = vehicles.find((v: any) => v.currentDriverId === driver.id);
+               if (vehicle) {
+                   matchedVehicleId = vehicle.id;
+                   matchedVehicleName = `${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`;
+                   error = '';
+               }
+           } else if (!tagId && !plate) {
+               error = `Driver ${driverName} not found`;
+           }
       }
 
       // Try to resolve driver from vehicle assignment
-      if (matchedVehicleId) {
+      if (matchedVehicleId && !matchedDriverId) {
           const vehicle = vehicles.find((v: any) => v.id === matchedVehicleId);
           if (vehicle && vehicle.currentDriverId) {
               matchedDriverId = vehicle.currentDriverId;
@@ -134,111 +192,175 @@ export function BulkImportTollTransactionsModal({
   };
 
   const parseTransactionsFromText = (text: string): ParsedTransaction[] => {
-      const lines = text.split('\n');
-      return lines
-        .map(line => line.trim())
-        .filter(line => line.length > 0 && !line.toLowerCase().startsWith('tag id') && !line.toLowerCase().startsWith('plaza name')) 
-        .map(line => {
-          // Robust CSV splitting handling quotes
-          let parts: string[] = [];
-          if (line.includes('\t')) {
-              parts = line.split('\t');
-          } else {
-              parts = line.split(',');
-          }
-          
-          parts = parts.map(p => p.trim().replace(/^"|"$/g, ''));
-          
-          let tagId = '';
-          let location = '';
-          let laneId = '';
-          let dateStr = '';
-          let amountStr = '';
-          
-          if (parts.length >= 5) {
-              tagId = parts[0];
-              location = parts[1];
-              laneId = parts[2];
-              dateStr = parts[3];
-              amountStr = parts[4];
-          } else {
-              location = parts[0] || 'Unknown';
-              laneId = parts[1] || '';
-              dateStr = parts[2] || '';
-              amountStr = parts[3] || '';
-          }
-  
-          let isValid = true;
-          let dateObj = new Date();
-          let amount = 0;
-          let error = '';
-  
-          if (!dateStr) {
-              isValid = false;
-              error = 'Missing Date';
-          } else {
-              const d = new Date(dateStr);
-              if (isNaN(d.getTime())) {
-                  isValid = false;
-                  error = 'Invalid Date format';
-              } else {
-                  dateObj = d;
-              }
-          }
-  
-          if (!amountStr) {
-               if (isValid) {
-                   isValid = false;
-                   error = 'Missing Amount';
-               }
-          } else {
-              const cleanAmount = amountStr.replace(/[^0-9.-]/g, '');
-              const parsedAmt = parseFloat(cleanAmount);
-              if (isNaN(parsedAmt)) {
-                  isValid = false;
-                  error = 'Invalid Amount';
-              } else {
-                  amount = parsedAmt;
-              }
-          }
-  
-          let type: 'Usage' | 'Top-up' | 'Refund' = 'Usage';
-          
-          if (mode === 'usage') {
-              type = 'Usage';
-              if (amount > 0) amount = -amount; 
-          } else if (mode === 'topup') {
-              type = 'Top-up';
-              if (amount < 0) amount = Math.abs(amount); 
-          } else {
-              if (amount < 0) {
-                  type = 'Usage'; 
-              } else {
-                  type = 'Top-up';
-              }
-          }
+      // Phase 2: Logic Replacement - Parsing with PapaParse
+      const result = Papa.parse(text, { 
+          header: false, 
+          skipEmptyLines: true 
+      });
+      
+      const rows = result.data as string[][];
 
-          const match = matchVehicle(tagId);
-          if (match.error) {
-              isValid = false;
-              error = match.error;
-          }
+      // Detect format: If header row contains 'Payment Method' or 'Vehicle Plate', it's the Universal Export
+      const headerIndex = rows.findIndex(row => 
+          row.some(cell => (cell || '').toLowerCase().includes('payment method') || (cell || '').toLowerCase().includes('vehicle plate'))
+      );
+      
+      const hasUniversalHeader = headerIndex !== -1;
+      const startIdx = hasUniversalHeader ? headerIndex + 1 : 0;
+
+      return rows.slice(startIdx)
+        .filter(row => {
+             // Basic filtering of repeated headers or invalid rows
+             if (row.length === 0) return false;
+             const firstCell = (row[0] || '').toLowerCase();
+             return !firstCell.startsWith('tag id') && !firstCell.startsWith('plaza name') && !firstCell.startsWith('date');
+        })
+        .map(row => {
+             // Phase 3: Column Mapping & Schema Support
+             const parts = row.map(cell => (cell || '').trim());
+             
+             // Universal Schema: Date, Time, Amount, Type, Category, Description, Payment Method, Status, Vehicle Plate, Driver Name, Tag ID, Lane ID, Reference Number
+             const isUniversal = hasUniversalHeader || parts.length >= 8; 
+
+             let tagId = '';
+             let location = '';
+             let laneId = '';
+             let dateStr = '';
+             let amountStr = '';
+             
+             // Enhanced Fields
+             let paymentMethod = 'Tag Balance';
+             let category = '';
+             let status = '';
+             let vehiclePlate = '';
+             let driverName = '';
+             let typeStr = '';
+             let description = '';
+             let referenceNumber = '';
+
+             if (isUniversal) {
+                 // 0: Date, 1: Time, 2: Amount, 3: Type, 4: Category, 5: Description, 6: Payment Method, 7: Status, 8: Plate, 9: Driver, 10: TagID, 11: LaneID, 12: Ref
+                 dateStr = `${parts[0]} ${parts[1]}`;
+                 amountStr = parts[2];
+                 typeStr = parts[3];
+                 category = parts[4];
+                 description = parts[5];
+                 location = description; 
+                 paymentMethod = parts[6];
+                 status = parts[7];
+                 vehiclePlate = parts[8];
+                 driverName = parts[9];
+                 tagId = parts[10] || '';
+                 laneId = parts[11] || '';
+                 referenceNumber = parts[12] || '';
+             } else {
+                 // Legacy Schema
+                 if (parts.length >= 5) {
+                     tagId = parts[0];
+                     location = parts[1];
+                     laneId = parts[2];
+                     dateStr = parts[3];
+                     amountStr = parts[4];
+                 } else {
+                     location = parts[0] || 'Unknown';
+                     laneId = parts[1] || '';
+                     dateStr = parts[2] || '';
+                     amountStr = parts[3] || '';
+                 }
+             }
+
+             // Phase 4: Data Transformation & Validation
+             let isValid = true;
+             let dateObj = new Date();
+             let amount = 0;
+             let error = '';
+     
+             if (!dateStr || dateStr.trim() === '') {
+                 isValid = false;
+                 error = 'Missing Date';
+             } else {
+                 const d = new Date(dateStr);
+                 if (isNaN(d.getTime())) {
+                     isValid = false;
+                     error = 'Invalid Date format';
+                 } else {
+                     dateObj = d;
+                 }
+             }
+     
+             if (!amountStr) {
+                  if (isValid) {
+                      isValid = false;
+                      error = 'Missing Amount';
+                  }
+             } else {
+                 const cleanAmount = amountStr.replace(/[^0-9.-]/g, '');
+                 const parsedAmt = parseFloat(cleanAmount);
+                 if (isNaN(parsedAmt)) {
+                     isValid = false;
+                     error = 'Invalid Amount';
+                 } else {
+                     amount = parsedAmt;
+                 }
+             }
+
+             if (mode === 'recovery' && !isUniversal) {
+                 isValid = false;
+                 error = 'Format Mismatch: Recovery requires Disaster Recovery Export CSV';
+             }
+     
+             let type: 'Usage' | 'Top-up' | 'Refund' | 'Expense' = 'Usage';
+             
+             if (isUniversal) {
+                 if (typeStr.toLowerCase().includes('usage')) type = 'Usage';
+                 else if (typeStr.toLowerCase().includes('top')) type = 'Top-up';
+                 else if (typeStr.toLowerCase().includes('refund')) type = 'Refund';
+                 else if (typeStr.toLowerCase().includes('expense')) type = 'Expense';
+             } else {
+                 if (mode === 'usage') {
+                     type = 'Usage';
+                     if (amount > 0) amount = -amount; 
+                 } else if (mode === 'topup') {
+                     type = 'Top-up';
+                     if (amount < 0) amount = Math.abs(amount); 
+                 } else {
+                     if (amount < 0) {
+                         type = 'Usage'; 
+                     } else {
+                         type = 'Top-up';
+                     }
+                 }
+             }
+
+             // Phase 5: Vehicle Matching
+             const match = matchVehicle(tagId, vehiclePlate, driverName, paymentMethod);
+             
+             if (match.error && !isUniversal) {
+                 isValid = false;
+                 error = match.error;
+             }
   
-          return {
-            date: dateObj,
-            location,
-            laneId,
-            amount,
-            type,
-            rawDate: dateStr,
-            isValid,
-            error,
-            tagId,
-            vehicleId: match.matchedVehicleId,
-            matchedVehicleName: match.matchedVehicleName,
-            driverId: match.matchedDriverId,
-            driverName: match.matchedDriverName
-          };
+             return {
+                 date: dateObj,
+                 location,
+                 laneId,
+                 amount,
+                 type,
+                 rawDate: dateStr,
+                 isValid,
+                 error: error || undefined,
+                 tagId,
+                 vehicleId: match.matchedVehicleId,
+                 matchedVehicleName: match.matchedVehicleName,
+                 driverId: match.matchedDriverId,
+                 driverName: driverName || match.matchedDriverName,
+                 vehiclePlate,
+                 paymentMethod,
+                 category,
+                 status,
+                 description,
+                 referenceNumber
+             };
         });
   };
 
@@ -322,7 +444,13 @@ export function BulkImportTollTransactionsModal({
                        driverId: match.matchedDriverId,
                        driverName: match.matchedDriverName,
                        discount: tx.discount || 0,
-                       paymentAfterDiscount: tx.paymentAfterDiscount || 0
+                       paymentAfterDiscount: tx.paymentAfterDiscount || 0,
+                       vehiclePlate: tx.vehiclePlate,
+                       paymentMethod: tx.paymentMethod || 'Tag Balance',
+                       category: tx.category,
+                       status: tx.status,
+                       description: tx.description,
+                       referenceNumber: tx.referenceNumber
                    };
                });
                setParsedTx(parsed);
@@ -398,20 +526,29 @@ export function BulkImportTollTransactionsModal({
             }
 
             try {
+                const finalPaymentMethod = tx.paymentMethod || 'Tag Balance';
+                const finalStatus = tx.status || 'Completed';
+                const finalCategory = tx.category || (tx.type === 'Usage' ? 'Toll Usage' : 'Toll Top-up');
+                
+                // Construct description: Use provided description or fallback to Location + Lane
+                const finalDescription = tx.description || (
+                    (tx.type === 'Top-up' && (!tx.location || tx.location === 'Unknown'))
+                        ? `Balance Top-up`
+                        : `${tx.location} ${tx.laneId ? `(${tx.laneId})` : ''}`.trim()
+                );
+
                 await api.saveTransaction({
                     date: tx.date.toISOString(),
                     amount: tx.amount, 
-                    type: tx.type === 'Usage' ? 'Usage' : 'Expense', 
-                    category: tx.type === 'Usage' ? 'Toll Usage' : 'Toll Top-up',
-                    description: (tx.type === 'Top-up' && (!tx.location || tx.location === 'Unknown'))
-                        ? `Balance Top-up`
-                        : `${tx.location} ${tx.laneId ? `(${tx.laneId})` : ''}`.trim(),
+                    type: (tx.type === 'Usage' ? 'Usage' : 'Expense'), // Maps Top-up/Refund to Expense
+                    category: finalCategory,
+                    description: finalDescription,
                     vehicleId: tx.vehicleId,
-                    vehiclePlate: tx.matchedVehicleName || vehicleName || 'Unknown Vehicle',
+                    vehiclePlate: tx.matchedVehicleName || vehicleName || tx.vehiclePlate || 'Unknown Vehicle',
                     driverId: tx.driverId,
                     driverName: tx.driverName,
-                    paymentMethod: 'Tag Balance',
-                    status: 'Completed',
+                    paymentMethod: finalPaymentMethod,
+                    status: finalStatus,
                     isReconciled: false,
                     time: tx.date.toLocaleTimeString(),
                     batchId: currentBatchId,
@@ -424,12 +561,18 @@ export function BulkImportTollTransactionsModal({
                         importDate: new Date().toISOString(),
                         discount: tx.discount,
                         paymentAfterDiscount: tx.paymentAfterDiscount,
-                        originalType: tx.type
+                        originalType: tx.type,
+                        referenceNumber: tx.referenceNumber
                     }
                 });
                 
-                // Aggregate balance change
-                vehicleBalanceChanges[tx.vehicleId] = (vehicleBalanceChanges[tx.vehicleId] || 0) + tx.amount;
+                // Aggregate balance change ONLY if paid by Tag Balance
+                // Cash payments do not affect the Vehicle's "Toll Balance" (which represents the Tag account)
+                // In Recovery Mode, we rely on finalPaymentMethod to be accurate (from Universal CSV).
+                if (finalPaymentMethod !== 'Cash') {
+                    vehicleBalanceChanges[tx.vehicleId] = (vehicleBalanceChanges[tx.vehicleId] || 0) + tx.amount;
+                }
+                
                 successCount++;
             } catch (error) {
                 console.error(`Failed to import tx ${tx.date}`, error);
@@ -494,9 +637,15 @@ export function BulkImportTollTransactionsModal({
     <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && onClose()}>
       <DialogContent className="sm:max-w-[800px] max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Bulk Import {mode === 'usage' ? 'Toll Usage' : 'Top-up'} Transactions</DialogTitle>
+          <DialogTitle>
+            {mode === 'recovery' 
+              ? 'Restore Toll Transactions (Disaster Recovery)' 
+              : `Bulk Import ${mode === 'usage' ? 'Toll Usage' : 'Top-up'} Transactions`}
+          </DialogTitle>
           <DialogDescription>
-             Upload a CSV/Excel file for AI Analysis or paste transactions manually.
+             {mode === 'recovery' 
+               ? 'Upload the "Disaster Recovery" CSV file to restore your full transaction history.'
+               : 'Upload a CSV/Excel file for AI Analysis or paste transactions manually.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -571,8 +720,8 @@ export function BulkImportTollTransactionsModal({
                                 <TableRow>
                                     <TableHead>Date</TableHead>
                                     <TableHead>Tag ID / Vehicle</TableHead>
-                                    {mode === 'usage' && <TableHead>Location</TableHead>}
-                                    {mode === 'usage' && <TableHead>Lane</TableHead>}
+                                    {(mode === 'usage' || mode === 'recovery') && <TableHead>Location</TableHead>}
+                                    {(mode === 'usage' || mode === 'recovery') && <TableHead>Lane</TableHead>}
                                     <TableHead>Type</TableHead>
                                     {mode === 'topup' && <TableHead className="text-right">Discount</TableHead>}
                                     {mode === 'topup' && <TableHead className="text-right">Net Paid</TableHead>}
@@ -594,8 +743,8 @@ export function BulkImportTollTransactionsModal({
                                                 </span>
                                             </div>
                                         </TableCell>
-                                        {mode === 'usage' && <TableCell>{tx.location}</TableCell>}
-                                        {mode === 'usage' && <TableCell>{tx.laneId}</TableCell>}
+                                        {(mode === 'usage' || mode === 'recovery') && <TableCell>{tx.location}</TableCell>}
+                                        {(mode === 'usage' || mode === 'recovery') && <TableCell>{tx.laneId}</TableCell>}
                                         <TableCell>
                                             {tx.isValid && (
                                                 tx.type === 'Usage' ? 
