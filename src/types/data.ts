@@ -397,7 +397,7 @@ export type TransactionCategory =
   // Wallet
   | 'Cash Collection' | 'Float Issue';
 
-export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card' | 'Mobile Money' | 'Check' | 'Other';
+export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card' | 'Mobile Money' | 'Check' | 'Other' | 'Gas Card';
 
 export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled' | 'Void' | 'Verified' | 'Approved' | 'Rejected' | 'Flagged';
 
@@ -433,7 +433,9 @@ export interface FinancialTransaction {
   
   // Expense Specific Fields
   odometer?: number;
+  odometerProofUrl?: string; // Phase 1: Fuel Log Enhancement
   quantity?: number; // Liters/Gallons
+  isFullTank?: boolean; // Phase 1: Fuel Log Enhancement
   unitPrice?: number;
   subType?: string; // Fuel Type (Regular/Diesel) or Service Type (Oil Change)
   vendor?: string; // Service Provider or Station
@@ -715,6 +717,7 @@ export interface TierConfig {
 export interface ExpenseSplitRule {
   id: string;
   category: string; // e.g., 'Fuel'
+  name?: string; // Scenario Name (e.g., "Ride Share", "Personal")
   companyShare: number; // 0-100
   driverShare: number; // 0-100
   isDefault: boolean;

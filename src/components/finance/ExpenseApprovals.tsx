@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
-import { Badge } from "../ui/badge";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
-import { Check, X, AlertCircle, Fuel, Wrench, Receipt, Split, ExternalLink } from "lucide-react";
-import { FinancialTransaction } from "../../types/data";
+import { Check, X, Fuel, Wrench, Receipt, Split } from "lucide-react";
+import { FinancialTransaction, ExpenseSplitRule } from "../../types/data";
 import { api } from "../../services/api";
+import { tierService } from "../../services/tierService";
 import { toast } from "sonner@2.0.3";
 import { format } from "date-fns";
 import {
@@ -19,6 +19,7 @@ import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 interface ExpenseApprovalsProps {
   transactions: FinancialTransaction[];
@@ -26,7 +27,6 @@ interface ExpenseApprovalsProps {
 }
 
 export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsProps) {
-  // Filter for pending expenses
   const pendingExpenses = transactions.filter(t => 
     t.type === 'Expense' && t.status === 'Pending'
   );
@@ -35,11 +35,24 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
   
+  // Rules State
+  const [splitRules, setSplitRules] = useState<ExpenseSplitRule[]>([]);
+  const [selectedRuleId, setSelectedRuleId] = useState<string>('');
+
   // Approval Form State
   const [rejectReason, setRejectReason] = useState("");
   const [splitEnabled, setSplitEnabled] = useState(false);
   const [companyShare, setCompanyShare] = useState(50); // %
   const [adminNotes, setAdminNotes] = useState("");
+
+  useEffect(() => {
+    loadRules();
+  }, []);
+
+  const loadRules = async () => {
+    const rules = await tierService.getSplitRules();
+    setSplitRules(rules.filter(r => r.category === 'Fuel'));
+  };
 
   const handleAction = (tx: FinancialTransaction, action: 'approve' | 'reject') => {
     setSelectedTx(tx);
@@ -48,10 +61,30 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
       setRejectReason("");
       setIsRejectDialogOpen(true);
     } else {
-      // Default split logic: if fuel, maybe enable by default?
-      setSplitEnabled(tx.category === 'Fuel');
-      setCompanyShare(50);
+      const isFuel = tx.category === 'Fuel';
+      setSplitEnabled(isFuel);
+      
+      if (isFuel) {
+        // Try to find a default rule or the first one
+        const defaultRule = splitRules.find(r => r.isDefault) || splitRules[0];
+        if (defaultRule) {
+            setSelectedRuleId(defaultRule.id);
+            setCompanyShare(defaultRule.companyShare);
+        } else {
+            setCompanyShare(50);
+        }
+      } else {
+        setCompanyShare(50);
+      }
       setIsApproveDialogOpen(true);
+    }
+  };
+
+  const handleRuleChange = (ruleId: string) => {
+    setSelectedRuleId(ruleId);
+    const rule = splitRules.find(r => r.id === ruleId);
+    if (rule) {
+        setCompanyShare(rule.companyShare);
     }
   };
 
@@ -60,7 +93,7 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
     try {
       await api.saveTransaction({
         ...selectedTx,
-        status: 'Failed', // or 'Rejected' if allowed by type, but 'Failed'/Void is in type definition
+        status: 'Failed',
         notes: selectedTx.notes + `\n[Admin Rejected]: ${rejectReason}`
       });
       toast.success("Expense Rejected");
@@ -90,6 +123,12 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
         const amount = Math.abs(selectedTx.amount);
         const creditAmount = amount * (companyShare / 100);
         
+        // Add scenario name to description if available
+        const ruleName = splitRules.find(r => r.id === selectedRuleId)?.name || '';
+        const desc = ruleName 
+            ? `Fuel Reimbursement (${ruleName}: ${companyShare}%)`
+            : `Company Share (${companyShare}%) of Fuel Expense`;
+
         const reimbursementTx: Partial<FinancialTransaction> = {
           id: crypto.randomUUID(),
           date: new Date().toISOString().split('T')[0],
@@ -98,7 +137,7 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
           driverName: selectedTx.driverName,
           type: 'Adjustment',
           category: 'Fuel Reimbursement',
-          description: `Company Share (${companyShare}%) of Fuel Expense`,
+          description: desc,
           amount: creditAmount, // Positive
           status: 'Completed',
           paymentMethod: 'Bank Transfer',
@@ -246,6 +285,22 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
                         
                         {splitEnabled && (
                             <div className="space-y-3 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
+                                <div className="space-y-2 mb-4">
+                                    <Label className="text-xs text-indigo-900">Select Scenario</Label>
+                                    <Select value={selectedRuleId} onValueChange={handleRuleChange}>
+                                        <SelectTrigger className="bg-white border-indigo-200">
+                                            <SelectValue placeholder="Select a split scenario" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {splitRules.map(rule => (
+                                                <SelectItem key={rule.id} value={rule.id}>
+                                                    {rule.name} (Co: {rule.companyShare}%)
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
                                 <div className="flex justify-between text-xs text-indigo-900 font-medium">
                                     <span>Driver Share</span>
                                     <span>Company Share ({companyShare}%)</span>
@@ -254,7 +309,7 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
                                     value={[companyShare]} 
                                     min={0} 
                                     max={100} 
-                                    step={5} 
+                                    step={1} 
                                     onValueChange={(val) => setCompanyShare(val[0])}
                                     className="py-2"
                                 />

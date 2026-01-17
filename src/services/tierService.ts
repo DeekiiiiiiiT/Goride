@@ -11,8 +11,8 @@ const DEFAULT_TIERS: TierConfig[] = [
 ];
 
 const DEFAULT_SPLIT_RULES: ExpenseSplitRule[] = [
-    { id: 'fuel_default', category: 'Fuel', companyShare: 50, driverShare: 50, isDefault: true },
-    { id: 'maint_default', category: 'Maintenance', companyShare: 100, driverShare: 0, isDefault: true }
+    { id: 'fuel_default', category: 'Fuel', name: 'Standard Split', companyShare: 50, driverShare: 50, isDefault: true },
+    { id: 'maint_default', category: 'Maintenance', name: 'Standard Maintenance', companyShare: 100, driverShare: 0, isDefault: true }
 ];
 
 const DEFAULT_QUOTA_SETTINGS: QuotaConfig = {
@@ -52,7 +52,14 @@ export const tierService = {
           await this.saveSplitRules(DEFAULT_SPLIT_RULES);
           return DEFAULT_SPLIT_RULES;
       }
-      return prefs.expenseRules;
+      
+      // Migration: Ensure all rules have names
+      const migratedRules = prefs.expenseRules.map(r => ({
+          ...r,
+          name: r.name || (r.category === 'Fuel' ? 'Standard Split' : r.category)
+      }));
+
+      return migratedRules;
     } catch (error) {
        console.error("Failed to load split rules", error);
        return DEFAULT_SPLIT_RULES;

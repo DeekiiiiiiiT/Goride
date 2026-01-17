@@ -1,64 +1,62 @@
-# Fuel Economy Tracking Implementation
+# Fuel Configuration Redesign: Scenario-Based Splits
 
-## 1. Current System Analysis
-The current `GoRide` dashboard tracks vehicle mileage and odometer history but lacks precise fuel consumption data.
-- **Mileage Tracking:** Good. We have daily trips and odometer readings.
-- **Fuel Cost Estimation:** Inaccurate. Currently uses a hardcoded multiplier (`totalDistance * 0.15`) in `VehicleDetail.tsx`.
-- **Fuel Efficiency:** Non-existent. There is no input for fuel volume (liters/gallons) or actual fuel costs.
+## Problem
+The current Fuel Configuration model assumes a single "Fuel" category with a base Company/Driver split, and "Custom Splits" acting as third-party deductions (Pie Chart model). The user requires a **Scenario-based** model where specific situations (e.g., "Ride Share", "Company Errands", "Personal") have their own independent Company vs. Driver split ratios.
 
-To track "real fuel economy" (e.g., L/100km or MPG), the system must correlate **Distance Driven** with **Fuel Consumed**.
+## Solution Overview
+We will transition from a "Single Rule with Sub-splits" to a "Multiple Rules" architecture. Each "Scenario" defined by the user will be stored as a distinct `ExpenseSplitRule`.
 
-## 2. Missing Information
-To implement this feature, we need to start capturing the following data points at every refueling stop:
-1.  **Odometer Reading:** Exact reading at the pump.
-2.  **Volume:** Amount of fuel added (Liters/Gallons).
-3.  **Cost:** Total cost of the transaction (or Price/Unit).
-4.  **Full Tank Indicator:** A boolean flag (`Yes/No`).
-    *   *Why?* You can only calculate accurate efficiency between two "Full Tank" events. If a driver only puts in $10 worth of gas, you don't know how much of the tank was used since the last fill-up.
+## Detailed Implementation Plan
 
-## 3. Proposed Solution
+### Phase 1: Data Model Enhancement
+**Goal:** Support named scenarios in the `ExpenseSplitRule` interface.
 
-### A. New Data Structure (`FuelLog`)
-We should introduce a `FuelLog` type to store refueling events.
+1.  **Update `types/data.ts`**:
+    -   Add optional `name?: string;` to the `ExpenseSplitRule` interface.
+    -   This field will store the user-defined scenario name (e.g., "Ride Share").
 
-```typescript
-export interface FuelLog {
-  id: string;
-  vehicleId: string;
-  date: string;
-  odometer: number;      // Reading at time of fill-up
-  volume: number;        // Liters
-  totalCost: number;     // Currency
-  pricePerUnit?: number; // Calculated or Input
-  isFullTank: boolean;   // Essential for efficiency calc
-  stationName?: string;  // Optional
-  receiptImage?: string; // Optional proof
-}
-```
+### Phase 2: FuelConfiguration UI Redesign
+**Goal:** Implement the requested "Split Box" UI.
 
-### B. UI Enhancements
-1.  **New "Fuel" Tab:** Add a `FuelManager` component in `VehicleDetail` (alongside "Maintenance" and "Odometer").
-2.  **Add Fuel Entry:** A simple form to input the data points above.
-3.  **Fuel History:** A table showing recent fill-ups.
+1.  **Refactor `components/fuel/FuelConfiguration.tsx`**:
+    -   **Load Data**: Fetch all `splitRules` from `tierService`.
+    -   **Filter**: Select all rules where `category === 'Fuel'`.
+    -   **Render**: Display a responsive Grid of "Scenario Cards".
+    -   **Scenario Card Component**:
+        -   **Header**: Editable Text Input for the Scenario Name (mapped to `rule.name`).
+        -   **Body**: A row with two labeled sections: "Company" and "Driver".
+            -   **Company Input**: Number input (0-100), editable.
+            -   **Driver Input**: Number input, read-only/disabled. Value calculated as `100 - companyShare`.
+            -   **Delete Action**: Allow removing a scenario card.
+    -   **Add Action**: "Add Split Column" button creates a new `ExpenseSplitRule` object:
+        ```typescript
+        {
+          id: crypto.randomUUID(),
+          category: 'Fuel',
+          name: 'New Scenario',
+          companyShare: 0,
+          driverShare: 100,
+          isDefault: false
+        }
+        ```
+    -   **Save Action**: Persist the modified array of rules back to `tierService`.
 
-### C. Analytics Updates
-Once we have this data, we can calculate:
-1.  **Real Efficiency (L/100km):** 
-    `((Litres Filled) / (Current Odometer - Previous Odometer)) * 100`
-    *(Only valid if both current and previous fill-ups were "Full Tank")*
-2.  **Real Cost per Km:** 
-    `Total Fuel Cost / Total Distance Driven`
-3.  **Average Fuel Consumption:** 
-    Global average over a selected date range.
+### Phase 3: Migration & Compatibility
+1.  **Handling Existing Data**:
+    -   If the existing configuration uses `customSplits` (the old model), we can theoretically convert them to new Rules on the fly, or simply allow the user to recreate their setup in the new clearer interface.
+    -   Given this is a configuration tool, manual setup is acceptable for the transition.
 
-### D. Integration Plan
-1.  **Create Component:** `components/vehicles/FuelManager.tsx`.
-2.  **Update Interface:** Add `FuelLog` to `types/vehicle.ts`.
-3.  **Update Analytics:** Modify `VehicleDetail.tsx` to replace `totalDistance * 0.15` with `sum(fuelLogs.cost)` for the selected period.
-4.  **Data Storage:** Use the existing KV store pattern: `vehicle:${id}:fuel_logs`.
+### Phase 4: Future Integration (Backend/Approval)
+1.  **Expense Approvals**:
+    -   Update `ExpenseApprovals.tsx` to read these rules.
+    -   When an admin approves a transaction, if the transaction is tagged with a Scenario (e.g. via `notes` or a new `tag` field), auto-populate the split slider with the configured value.
 
-## 4. Next Steps
-When you are ready, I can:
-1.  Create the `FuelManager` component.
-2.  Integrate it into the `VehicleDetail` view.
-3.  Update the financial algorithms to use real data.
+## Visual Reference (User Request)
+-   **Structure**:
+    ```text
+    [ Scenario Name (Editable) ]
+    ----------------------------
+    Company (%)   |   Driver (%)
+    [  50  ]      |   [  50  ]
+    ```
+-   **Behavior**: Editing "Company" automatically updates "Driver" to ensure they sum to 100%. "Driver" field is non-editable.
