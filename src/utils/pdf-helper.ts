@@ -2,9 +2,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 
 // Initialize worker
 if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    // Use a compatible version from a CDN that matches the installed version usually
-    // We'll use a widely compatible version
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+    // Use esm.sh which is reliable in this environment
+    // Use .mjs for newer versions of pdfjs-dist which are likely ESM
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 }
 
 export const convertPdfToImage = async (file: File): Promise<File | null> => {

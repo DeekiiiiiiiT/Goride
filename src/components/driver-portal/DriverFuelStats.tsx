@@ -146,11 +146,11 @@ export function DriverFuelStats() {
                         <div className="space-y-2 text-sm text-indigo-800/80">
                             <div className="flex justify-between">
                                 <span>Personal Usage ({Math.round(report.personalDistance)} km)</span>
-                                <span>${report.personalCost.toFixed(2)}</span>
+                                <span>${report.personalUsageCost.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span>Fuel Misc Share (50%)</span>
-                                <span>${(report.fuelMiscCost > 0 ? report.fuelMiscCost / 2 : 0).toFixed(2)}</span>
+                                <span>${(report.miscellaneousCost > 0 ? report.miscellaneousCost / 2 : 0).toFixed(2)}</span>
                             </div>
                         </div>
                         {existingDispute ? (
@@ -194,15 +194,15 @@ export function DriverFuelStats() {
                         <div className="space-y-2 text-sm text-slate-600">
                             <div className="flex justify-between">
                                 <span>Operating Fuel (Trips)</span>
-                                <span>${report.operatingFuelCost.toFixed(2)}</span>
+                                <span>${report.rideShareCost.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span>Company Misc ({Math.round(report.companyMiscDistance)} km)</span>
-                                <span>${report.companyMiscCost.toFixed(2)}</span>
+                                <span>${report.companyUsageCost.toFixed(2)}</span>
                             </div>
                              <div className="flex justify-between">
                                 <span>Fuel Misc Share (50%)</span>
-                                <span>${(report.fuelMiscCost > 0 ? report.fuelMiscCost / 2 : report.fuelMiscCost).toFixed(2)}</span>
+                                <span>${(report.miscellaneousCost > 0 ? report.miscellaneousCost / 2 : report.miscellaneousCost).toFixed(2)}</span>
                             </div>
                         </div>
                     </CardContent>
@@ -270,24 +270,24 @@ export function DriverFuelStats() {
                              <div className="flex items-center justify-between text-sm">
                                 <span className="text-slate-500">Fuel Efficiency Rating</span>
                                 <span className={
-                                    report.fuelMiscCost > 10 ? "text-rose-600 font-medium" : 
-                                    report.fuelMiscCost < 0 ? "text-emerald-600 font-medium" : 
+                                    report.miscellaneousCost > 10 ? "text-rose-600 font-medium" : 
+                                    report.miscellaneousCost < 0 ? "text-emerald-600 font-medium" : 
                                     "text-amber-600 font-medium"
                                 }>
-                                    {report.fuelMiscCost > 10 ? "Needs Improvement" : 
-                                     report.fuelMiscCost < 0 ? "Excellent" : "Average"}
+                                    {report.miscellaneousCost > 10 ? "Needs Improvement" : 
+                                     report.miscellaneousCost < 0 ? "Excellent" : "Average"}
                                 </span>
                             </div>
                             
                             {/* Leakage Indicator */}
                              <div className="p-3 rounded-md bg-slate-50 border text-xs text-slate-600 leading-relaxed">
-                                {report.fuelMiscCost > 0 ? (
+                                {report.miscellaneousCost > 0 ? (
                                     <div className="flex gap-2">
                                         <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
                                         <div>
                                             <span className="font-semibold text-rose-700">High Usage Detected.</span>
                                             <span className="block mt-1">
-                                                Your actual fuel spend is ${report.fuelMiscCost.toFixed(2)} higher than calculated for your trips. 
+                                                Your actual fuel spend is ${report.miscellaneousCost.toFixed(2)} higher than calculated for your trips. 
                                                 This could be due to idling, heavy traffic, or missing mileage logs. 
                                                 The excess cost is split 50/50.
                                             </span>
@@ -299,7 +299,7 @@ export function DriverFuelStats() {
                                         <div>
                                             <span className="font-semibold text-emerald-700">Great Efficiency!</span>
                                             <span className="block mt-1">
-                                                You are running under budget by ${Math.abs(report.fuelMiscCost).toFixed(2)}. 
+                                                You are running under budget by ${Math.abs(report.miscellaneousCost).toFixed(2)}. 
                                                 Keep up the good driving habits.
                                             </span>
                                         </div>

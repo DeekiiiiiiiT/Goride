@@ -1,6 +1,6 @@
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
-import { FuelEntry, FuelCard, WeeklyFuelReport, MileageAdjustment } from '../types/fuel';
+import { FuelEntry, FuelCard, WeeklyFuelReport, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { WeeklyCheckIn } from '../types/check-in';
 
 // Defaults if missing from Vehicle Profile
@@ -49,7 +49,8 @@ export const FuelCalculationService = {
         trips: Trip[],
         fuelEntries: FuelEntry[],
         adjustments: MileageAdjustment[] = [],
-        checkIns: WeeklyCheckIn[] = []
+        checkIns: WeeklyCheckIn[] = [],
+        scenarios: FuelScenario[] = []
     ): WeeklyFuelReport {
         const startStr = weekStart.toISOString();
         const endStr = weekEnd.toISOString();
@@ -81,11 +82,18 @@ export const FuelCalculationService = {
         const totalCost = vehicleEntries.reduce((sum, e) => sum + e.amount, 0);
         const avgPrice = totalLiters > 0 ? (totalCost / totalLiters) : DEFAULT_FUEL_PRICE;
 
-        // 3. Calculate Operating Fuel (The "Should Be" Cost)
+        // 3. Calculate Ride Share (Operating Fuel - The "Should Be" Cost)
+        // STRICT ISOLATION: This must only include Trips (Business Rides).
+        // No manual adjustments or misc distances should be added here.
         const totalTripDistance = vehicleTrips.reduce((sum, t) => sum + (t.distance || 0), 0);
-        const operatingFuelCost = this.calculateOperatingCost(totalTripDistance, vehicle, avgPrice);
+        
+        // Calculate Cost strictly: Distance * Efficiency * Price
+        const rideShareCost = this.calculateOperatingCost(totalTripDistance, vehicle, avgPrice);
 
-        // 4. Adjustments (Misc & Personal)
+        // 4. Adjustments (Company Usage & Personal)
+        // Phase 3: STRICT ISOLATION for Company Usage
+        // Must strictly filter for 'Company_Misc' type only.
+        // Represents authorized non-trip business operations (e.g., getting maintenance, office errands).
         const companyMiscAdj = vehicleAdjustments.filter(a => a.type === 'Company_Misc');
         const personalAdj = vehicleAdjustments.filter(a => a.type === 'Personal');
 
@@ -150,31 +158,107 @@ export const FuelCalculationService = {
             }
         }
         
-        // Use calculated residual if we found a valid range, otherwise fallback to manual adjustments
+        // Phase 4: Driver Personal Fuel Usage Isolation
+        // This bucket strictly represents fuel used for personal trips.
+        // It combines explicitly logged 'Personal' adjustments + calculated residual distance.
         const personalDistance = calculatedPersonalDistance > 0 
             ? calculatedPersonalDistance 
             : personalAdj.reduce((sum, a) => sum + a.distance, 0);
 
-        const companyMiscCost = this.calculateOperatingCost(companyMiscDistance, vehicle, avgPrice);
-        const personalCost = this.calculateOperatingCost(personalDistance, vehicle, avgPrice);
+        // Phase 3: Calculate Company Usage Cost
+        // This is 100% Company Liability by definition.
+        const companyUsageCost = this.calculateOperatingCost(companyMiscDistance, vehicle, avgPrice);
+        
+        const personalUsageCost = this.calculateOperatingCost(personalDistance, vehicle, avgPrice);
 
-        // 5. The Leakage (Fuel Misc)
-        // Formula: Actual Spend - (Operating + CompanyMisc + Personal)
+        // Phase 4: Miscellaneous (Leakage) Isolation
+        // Formula: Actual Spend - (Ride Share + Company Usage + Personal)
+        // This math ensures that the 4 buckets sum up exactly to the Total Gas Card Cost (ignoring rounding differences).
         // If positive, it's unexplained usage (leakage/theft/idling).
-        // If negative, it means they are hyper-efficient or we missed fuel logs.
-        const fuelMiscCost = totalGasCardCost - (operatingFuelCost + companyMiscCost + personalCost);
+        // If negative, it means they are hyper-efficient or we missed fuel logs (savings).
+        const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + personalUsageCost);
 
-        // 6. The Split
-        // 50/50 rule on the Leakage
-        // Driver Pays: Personal Cost + 50% of Fuel Misc (if positive)
-        // Company Pays: Operating + Company Misc + 50% of Fuel Misc
+        // 6. The Split (Phase 5)
+        let companyShare = 0;
+        let driverShare = 0;
+
+        let scenario = scenarios.find(s => s.id === vehicle.fuelScenarioId);
         
-        // Note: If Fuel Misc is negative (savings), who gets it? 
-        // Typically strict logic: Driver pays 0 on negative misc.
-        const miscSplit = fuelMiscCost > 0 ? (fuelMiscCost / 2) : 0;
-        
-        const driverShare = personalCost + miscSplit;
-        const companyShare = operatingFuelCost + companyMiscCost + (fuelMiscCost > 0 ? miscSplit : fuelMiscCost);
+        // Phase 10: Fallback to System Default Scenario if no specific assignment
+        if (!scenario) {
+            scenario = scenarios.find(s => s.isDefault);
+        }
+
+        const fuelRule = scenario?.rules.find(r => r.category === 'Fuel');
+
+        if (fuelRule) {
+             // Phase 5: Applied Scenario Logic
+             
+             if (fuelRule.coverageType === 'Full') {
+                 // Full Coverage: Company pays for (Ride Share + Company Usage + Misc)
+                 // Personal is always Driver liability.
+                 
+                 // Note: If misc is negative (savings), adding it reduces the company share, which is correct.
+                 companyShare = rideShareCost + companyUsageCost + miscellaneousCost;
+             } 
+             else if (fuelRule.coverageType === 'Percentage') {
+                 // Percentage Split with Granular Control (Phase 10)
+                 
+                 // 1. Resolve Percentages (Use Granular if present, else fall back to Legacy/Defaults)
+                 // Legacy behavior: 'coverageValue' applied to Ride Share & Misc. Company Ops was 100%. Personal was 0%.
+                 
+                 const rideSharePct = (fuelRule.rideShareCoverage ?? fuelRule.coverageValue ?? 100) / 100;
+                 const companyOpsPct = (fuelRule.companyUsageCoverage ?? 100) / 100;
+                 const personalPct = (fuelRule.personalCoverage ?? 0) / 100;
+                 const miscPct = (fuelRule.miscCoverage ?? fuelRule.coverageValue ?? 50) / 100; // Default 50% if totally missing
+                 
+                 // 2. Calculate Components
+                 const coveredRideShare = rideShareCost * rideSharePct;
+                 const coveredCompanyOps = companyUsageCost * companyOpsPct;
+                 const coveredPersonal = personalUsageCost * personalPct;
+                 const coveredMisc = miscellaneousCost * miscPct;
+                 
+                 // 3. Sum Company Share
+                 companyShare = coveredRideShare + coveredCompanyOps + coveredPersonal + coveredMisc;
+             }
+             else if (fuelRule.coverageType === 'Fixed_Amount') {
+                 // Fixed Allowance
+                 // Company pays 100% of Company Usage
+                 // Company pays up to $Allowance for (Ride Share + Misc)
+                 
+                 const allowance = fuelRule.coverageValue || 0;
+                 
+                 // Combine variable business costs
+                 const variableBusinessCost = rideShareCost + miscellaneousCost;
+                 
+                 // Apply cap
+                 // If variable cost is negative (huge savings), we limit company share to just Company Usage + Negative?
+                 // Let's assume allowance is positive cap on positive costs.
+                 const coveredVariable = Math.min(allowance, variableBusinessCost);
+                 
+                 companyShare = companyUsageCost + coveredVariable;
+             }
+             
+             // Driver pays the remainder
+             driverShare = totalGasCardCost - companyShare;
+             
+             // Safety: If Total Spend is 0, shares are 0
+             if (totalGasCardCost === 0) {
+                 companyShare = 0;
+                 driverShare = 0;
+             }
+        } else {
+            // Default Legacy Logic (No Scenario Assigned)
+            // Ride Share: 100% Company
+            // Company Usage: 100% Company
+            // Personal: 100% Driver
+            // Misc: 50% / 50%
+            
+            const miscSplit = miscellaneousCost * 0.5;
+            
+            companyShare = rideShareCost + companyUsageCost + miscSplit;
+            driverShare = totalGasCardCost - companyShare;
+        }
 
         return {
             id: `${vehicle.id}_${startStr.split('T')[0]}_${endStr.split('T')[0]}`,
@@ -186,15 +270,15 @@ export const FuelCalculationService = {
             totalGasCardCost,
             
             totalTripDistance,
-            operatingFuelCost,
+            rideShareCost,
             
             companyMiscDistance,
-            companyMiscCost,
+            companyUsageCost,
             
             personalDistance,
-            personalCost,
+            personalUsageCost,
             
-            fuelMiscCost,
+            miscellaneousCost,
             
             companyShare,
             driverShare,
@@ -213,10 +297,11 @@ export const FuelCalculationService = {
         trips: Trip[],
         fuelEntries: FuelEntry[],
         adjustments: MileageAdjustment[] = [],
-        checkIns: WeeklyCheckIn[] = []
+        checkIns: WeeklyCheckIn[] = [],
+        scenarios: FuelScenario[] = []
     ): WeeklyFuelReport[] {
         return vehicles.map(v => 
-            this.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, checkIns)
+            this.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, checkIns, scenarios)
         );
     }
 };

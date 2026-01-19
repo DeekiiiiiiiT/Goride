@@ -143,10 +143,12 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [step, setStep] = useState(1);
+  const [licenseStep, setLicenseStep] = useState<'front-upload' | 'front-review' | 'back-upload' | 'back-review'>('front-upload');
   
   // Personal Details
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
+  const [middleName2, setMiddleName2] = useState('');
   const [lastName, setLastName] = useState('');
   const [countryCode, setCountryCode] = useState('+1');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -156,12 +158,15 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   const [status, setStatus] = useState('Active');
   
   // New License Details
-  const [licenseNumber, setLicenseNumber] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState(''); // TRN
   const [licenseExpiry, setLicenseExpiry] = useState('');
   const [dob, setDob] = useState('');
+  const [sex, setSex] = useState('');
+  const [collectorate, setCollectorate] = useState('');
   const [licenseClass, setLicenseClass] = useState('');
   const [licenseToDrive, setLicenseToDrive] = useState('');
   const [controlNumber, setControlNumber] = useState('');
+  const [originalIssueDate, setOriginalIssueDate] = useState('');
 
   // Verification
   const [address, setAddress] = useState('');
@@ -172,7 +177,7 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
 
   // -- Actions --
 
-  const handleScanLicense = async () => {
+  const handleScanFront = async () => {
     if (!licenseFront) {
         toast.error("Please upload the front of the Driver's License");
         return;
@@ -180,13 +185,18 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
     
     setIsScanning(true);
     try {
-        // Send both front and back if available
-        const res = await api.parseDocument(licenseFront, 'license', licenseBack || undefined);
+        // Send only front for initial scan
+        const res = await api.parseDocument(licenseFront, 'license', undefined);
         
         if (res.success && res.data) {
             if (res.data.firstName) setFirstName(res.data.firstName);
             if (res.data.lastName) setLastName(res.data.lastName);
-            if (res.data.middleName) setMiddleName(res.data.middleName);
+            if (res.data.middleName) {
+                // Try to split middle names if multiple words
+                const parts = res.data.middleName.split(' ');
+                setMiddleName(parts[0] || '');
+                if (parts.length > 1) setMiddleName2(parts.slice(1).join(' '));
+            }
             
             // Smart Country Code Logic
             let code = res.data.countryCode || '+1';
@@ -201,13 +211,13 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
             // New fields
             if (res.data.licenseNumber) setLicenseNumber(res.data.licenseNumber);
             if (res.data.expirationDate) setLicenseExpiry(res.data.expirationDate);
-            if (res.data.dateOfBirth) setDob(res.data.dateOfBirth);
+            if (res.data.dateOfBirth || res.data.dob) setDob(res.data.dateOfBirth || res.data.dob);
+            if (res.data.sex) setSex(res.data.sex);
             if (res.data.class) setLicenseClass(res.data.class);
-            if (res.data.licenseToDrive) setLicenseToDrive(res.data.licenseToDrive);
-            if (res.data.controlNumber) setControlNumber(res.data.controlNumber);
+            if (res.data.collectorate) setCollectorate(res.data.collectorate);
             
-            toast.success("License scanned successfully!");
-            setStep(2);
+            toast.success("Front license scanned successfully. Please review details.");
+            setLicenseStep('front-review');
         } else {
             throw new Error("Could not extract data");
         }
@@ -218,10 +228,53 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
         } else {
              toast.error("Could not read license. Please verify manually.");
         }
-        setStep(2); // Proceed to manual entry
+        setLicenseStep('front-review'); // Show form to manually enter/verify
     } finally {
         setIsScanning(false);
     }
+  };
+
+  const handleConfirmFront = () => {
+      setLicenseStep('back-upload');
+  };
+
+  const handleScanBack = async () => {
+      if (!licenseBack) {
+          toast.error("Please upload the back of the Driver's License");
+          return;
+      }
+      
+      setIsScanning(true);
+      try {
+          // Send both front and back now for full verification/parsing
+          // The API likely merges data or prioritizes the new file if we structure it right
+          // Re-sending licenseFront ensures context is available if backend is stateless
+          const res = await api.parseDocument(licenseFront || undefined, 'license', licenseBack);
+
+          if (res.success && res.data) {
+              // Merge/Overwrite fields
+              if (res.data.licenseToDrive) setLicenseToDrive(res.data.licenseToDrive);
+              if (res.data.controlNumber) setControlNumber(res.data.controlNumber);
+              if (res.data.nationality) setNationality(res.data.nationality);
+              if (res.data.originalIssueDate) setOriginalIssueDate(res.data.originalIssueDate);
+              
+              toast.success("Back license scanned successfully! Please review.");
+              setLicenseStep('back-review');
+          } else {
+               // Fallback if no data
+               setLicenseStep('back-review');
+          }
+      } catch (error) {
+          console.error("Back scan failed", error);
+          toast.error("Could not scan back of license. Please verify manually.");
+          setLicenseStep('back-review');
+      } finally {
+          setIsScanning(false);
+      }
+  };
+
+  const handleConfirmBack = () => {
+       setStep(2); // Move to final details review
   };
 
   const handleScanAddress = async () => {
@@ -246,20 +299,32 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
       }
   };
 
-  const handleNextStep1 = () => {
-      // Allow skipping scan if files are present
-      if (licenseFront && licenseBack) {
-          setStep(2);
-      } else {
-          toast.error("Both sides of Driver's License are required");
-      }
-  };
-
   const handleNextStep2 = () => {
-      if (!firstName || !lastName) {
-          toast.error("First and Last Name are required");
+      if (!firstName) {
+          toast.error("First Name is required");
           return;
       }
+      if (!lastName) {
+          toast.error("Last Name is required");
+          return;
+      }
+      // Middle Name 2 is optional. Middle Name 1? User said "all fields must be required except middle name 2". 
+      // This implies Middle Name 1 is required?
+      // "Middle Names(some persons have 2 middle names, so please add 2 field for the middle name)"
+      // Usually Middle Name is optional. But if the user insists "all fields must be required", I should probably make Middle Name 1 required?
+      // Wait, "Middle Names" is the category. If someone has no middle name, this would block them.
+      // However, looking at the ID: SADIKI ABAYOMI.
+      // Maybe I should stick to common sense or strictly follow "all fields must be required except middle name 2".
+      // If I make Middle Name 1 required, I block people with no middle name.
+      // But let's assume "all fields *on the form*" and maybe the user assumes everyone has a middle name or I should interpret "all fields" as "all *relevant* fields" or "all other fields".
+      // Actually, standard is Middle Name optional.
+      // But the user instructions are: "all fields must be required except middle name 2". This is specific.
+      // I will make Middle Name 1 required as per instruction.
+      if (!middleName) {
+           toast.error("Middle Name 1 is required");
+           return;
+      }
+
       if (!email) {
           toast.error("Email is required");
           return;
@@ -286,6 +351,14 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
       }
       if (!licenseToDrive) {
           toast.error("License to Drive is required");
+          return;
+      }
+      if (!sex) {
+          toast.error("Sex is required");
+          return;
+      }
+      if (!collectorate) {
+          toast.error("Collectorate is required");
           return;
       }
       if (!controlNumber) {
@@ -350,6 +423,7 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
         licenseToDrive,
         controlNumber,
         nationality,
+        originalIssueDate,
         
         vehicle: 'Unassigned',
         totalTrips: 0,
@@ -379,6 +453,7 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   const handleClose = () => {
     setFirstName('');
     setMiddleName('');
+    setMiddleName2('');
     setLastName('');
     setCountryCode('+1');
     setPhoneNumber('');
@@ -393,10 +468,14 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
     setLicenseNumber('');
     setLicenseExpiry('');
     setDob('');
+    setSex('');
+    setCollectorate('');
     setLicenseClass('');
     setLicenseToDrive('');
     setControlNumber('');
+    setOriginalIssueDate('');
     setStep(1);
+    setLicenseStep('front-upload');
     onClose();
   };
 
@@ -425,205 +504,366 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
 
         <form onSubmit={handleSubmit}>
             
-            {/* STEP 1: LICENSE */}
-            {step === 1 && (
+            {/* STEP 1: LICENSE (Uploads) */}
+            {step === 1 && licenseStep !== 'front-review' && (
                 <div className="space-y-6 py-2 animate-in fade-in slide-in-from-left-4 duration-300">
                     <div>
                         <Label className="block mb-3 font-medium text-slate-900">Upload Driver's License <span className="text-red-500">*</span></Label>
-                        <div className="grid grid-cols-2 gap-4">
-                            <FileUploadZone 
-                                label="Front" 
-                                file={licenseFront} 
-                                onFileSelect={setLicenseFront} 
-                                icon={ScanLine}
-                                required
-                            />
-                            <FileUploadZone 
-                                label="Back" 
-                                file={licenseBack} 
-                                onFileSelect={setLicenseBack} 
-                                icon={ShieldCheck}
-                                required
-                            />
-                        </div>
-                        <p className="text-xs text-slate-500 mt-2">
-                            Upload the front of the license to auto-fill personal details.
-                        </p>
+                        
+                        {licenseStep === 'front-upload' ? (
+                            <div className="space-y-2">
+                                <FileUploadZone 
+                                    label="Front" 
+                                    file={licenseFront} 
+                                    onFileSelect={setLicenseFront} 
+                                    icon={ScanLine}
+                                    required
+                                />
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Upload the front of the license to auto-fill personal details.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-right-4 duration-300">
+                                <FileUploadZone 
+                                    label="Back" 
+                                    file={licenseBack} 
+                                    onFileSelect={setLicenseBack} 
+                                    icon={ShieldCheck}
+                                    required
+                                />
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Upload the back of the license for verification.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
-            {/* STEP 2: DETAILS */}
-            {step === 2 && (
+            {/* STEP 2 (or Front/Back Review): DETAILS */}
+            {(step === 2 || (step === 1 && (licenseStep === 'front-review' || licenseStep === 'back-review'))) && (
                 <div className="space-y-6 py-2 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="bg-emerald-50 p-3 rounded border border-emerald-100 mb-4 flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-emerald-600" />
-                        <span className="text-xs text-emerald-800 font-medium">Details extracted from license. Please verify.</span>
+                        <span className="text-xs text-emerald-800 font-medium">
+                            {step === 1 
+                                ? (licenseStep === 'front-review' 
+                                    ? "Details extracted from front of license. Please review before proceeding." 
+                                    : "Details extracted from back of license. Please review before proceeding.")
+                                : "Details verified. Please confirm to finish."}
+                        </span>
                     </div>
 
-                    {/* Section 1: Personal Info */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1">Personal Information</h4>
+                    {/* Front License Details Specific View */}
+                    {step === 1 && licenseStep === 'front-review' ? (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-4 items-start gap-4">
-                                <Label className="text-right pt-2.5">Name <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3 space-y-3">
-                                    <div className="flex gap-3">
-                                        <Input 
-                                            placeholder="First Name" 
-                                            value={firstName} 
-                                            onChange={(e) => setFirstName(e.target.value)} 
-                                            className="flex-1"
-                                        />
-                                        <Input 
-                                            placeholder="Middle (Optional)" 
-                                            value={middleName} 
-                                            onChange={(e) => setMiddleName(e.target.value)} 
-                                            className="w-[120px]"
+                            <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1">Identity Details</h4>
+                            
+                            {/* Names */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>First Name <span className="text-red-500">*</span></Label>
+                                    <Input value={firstName} onChange={e => setFirstName(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Last Name <span className="text-red-500">*</span></Label>
+                                    <Input value={lastName} onChange={e => setLastName(e.target.value)} />
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Middle Name 1 <span className="text-red-500">*</span></Label>
+                                    <Input value={middleName} onChange={e => setMiddleName(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Middle Name 2</Label>
+                                    <Input value={middleName2} onChange={e => setMiddleName2(e.target.value)} placeholder="Optional" />
+                                </div>
+                            </div>
+
+                            {/* License Info */}
+                            <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1 mt-4">License Information</h4>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>TRN / License No. <span className="text-red-500">*</span></Label>
+                                    <Input value={licenseNumber} onChange={e => setLicenseNumber(e.target.value)} placeholder="e.g. 123456789" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Class <span className="text-red-500">*</span></Label>
+                                    <Input value={licenseClass} onChange={e => setLicenseClass(e.target.value)} placeholder="e.g. CLASS C" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Date of Birth <span className="text-red-500">*</span></Label>
+                                    <Input type="date" value={dob} onChange={e => setDob(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Expiry Date <span className="text-red-500">*</span></Label>
+                                    <Input type="date" value={licenseExpiry} onChange={e => setLicenseExpiry(e.target.value)} />
+                                </div>
+                            </div>
+
+                             <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Sex <span className="text-red-500">*</span></Label>
+                                    <Select value={sex} onValueChange={setSex}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="M">Male</SelectItem>
+                                            <SelectItem value="F">Female</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Collectorate <span className="text-red-500">*</span></Label>
+                                    <Input value={collectorate} onChange={e => setCollectorate(e.target.value)} placeholder="e.g. Spanish Town" />
+                                </div>
+                            </div>
+
+                        </div>
+                    ) : step === 1 && licenseStep === 'back-review' ? (
+                        // Back Review View
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1">Additional License Details</h4>
+                            
+                            <div className="space-y-2">
+                                <Label>License to Drive</Label>
+                                <Input value={licenseToDrive} onChange={e => setLicenseToDrive(e.target.value)} />
+                            </div>
+                            
+                            <div className="space-y-2">
+                                <Label>Original Date of Issue</Label>
+                                <Input type="date" value={originalIssueDate} onChange={e => setOriginalIssueDate(e.target.value)} />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Control No.</Label>
+                                <Input value={controlNumber} onChange={e => setControlNumber(e.target.value)} />
+                            </div>
+                            
+                            <div className="space-y-2">
+                                <Label>Nationality</Label>
+                                <Input value={nationality} onChange={e => setNationality(e.target.value)} />
+                            </div>
+                        </div>
+                    ) : (
+                        // Full Details View (Step 2)
+                        <>
+                            {/* Section 1: Personal Info */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1">Personal Information</h4>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-4 items-start gap-4">
+                                        <Label className="text-right pt-2.5">Name <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3 space-y-3">
+                                            <div className="flex gap-3">
+                                                <Input 
+                                                    placeholder="First Name" 
+                                                    value={firstName} 
+                                                    onChange={(e) => setFirstName(e.target.value)} 
+                                                    className="flex-1"
+                                                />
+                                                <Input 
+                                                    placeholder="Middle 1" 
+                                                    value={middleName} 
+                                                    onChange={(e) => setMiddleName(e.target.value)} 
+                                                    className="w-[100px]"
+                                                />
+                                                 <Input 
+                                                    placeholder="Middle 2" 
+                                                    value={middleName2} 
+                                                    onChange={(e) => setMiddleName2(e.target.value)} 
+                                                    className="w-[100px]"
+                                                />
+                                            </div>
+                                            <Input 
+                                                placeholder="Last Name" 
+                                                value={lastName} 
+                                                onChange={(e) => setLastName(e.target.value)} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">DOB <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3 flex gap-4">
+                                            <Input 
+                                                type="date"
+                                                value={dob}
+                                                onChange={(e) => setDob(e.target.value)}
+                                                className="flex-1"
+                                            />
+                                            <div className="flex items-center gap-2 w-[140px]">
+                                                <Label className="text-xs whitespace-nowrap">Sex</Label>
+                                                <Select value={sex} onValueChange={setSex}>
+                                                    <SelectTrigger className="h-9">
+                                                        <SelectValue placeholder="-" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="M">M</SelectItem>
+                                                        <SelectItem value="F">F</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Phone</Label>
+                                        <div className="col-span-3 flex gap-3">
+                                            <Select value={countryCode} onValueChange={setCountryCode}>
+                                            <SelectTrigger className="w-[110px]">
+                                                <SelectValue placeholder="Code" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {COUNTRY_CODES.map((c) => (
+                                                    <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                            </Select>
+                                            <Input 
+                                                placeholder="555-0123" 
+                                                value={phoneNumber} 
+                                                onChange={(e) => setPhoneNumber(e.target.value)} 
+                                                className="flex-1"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="email" className="text-right">Email <span className="text-red-500">*</span></Label>
+                                        <Input
+                                            id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                                            className="col-span-3" placeholder="driver@example.com"
                                         />
                                     </div>
-                                    <Input 
-                                        placeholder="Last Name" 
-                                        value={lastName} 
-                                        onChange={(e) => setLastName(e.target.value)} 
-                                    />
+
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="password" className="text-right">Password <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3 relative">
+                                            <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                            <Input
+                                                id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                                                className="pl-9" placeholder="Set temporary password"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Nationality <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3 relative">
+                                            <Globe className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                            <Input 
+                                                value={nationality}
+                                                onChange={(e) => setNationality(e.target.value)}
+                                                placeholder="e.g. Jamaican"
+                                                className="pl-9"
+                                            />
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
+                            
+                            {/* Section 2: License Details */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1 mt-2">License Details</h4>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">TRN / Lic # <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3 relative">
+                                            <CreditCard className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                            <Input 
+                                                value={licenseNumber}
+                                                onChange={(e) => setLicenseNumber(e.target.value)}
+                                                className="pl-9"
+                                                placeholder="123456789"
+                                            />
+                                        </div>
+                                    </div>
 
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">DOB <span className="text-red-500">*</span></Label>
-                                <Input 
-                                    type="date"
-                                    value={dob}
-                                    onChange={(e) => setDob(e.target.value)}
-                                    className="col-span-3"
-                                />
-                            </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Collectorate</Label>
+                                        <div className="col-span-3">
+                                            <Input 
+                                                value={collectorate}
+                                                onChange={(e) => setCollectorate(e.target.value)}
+                                                placeholder="e.g. Spanish Town"
+                                            />
+                                        </div>
+                                    </div>
 
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Phone</Label>
-                                <div className="col-span-3 flex gap-3">
-                                    <Select value={countryCode} onValueChange={setCountryCode}>
-                                    <SelectTrigger className="w-[110px]">
-                                        <SelectValue placeholder="Code" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {COUNTRY_CODES.map((c) => (
-                                            <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                    </Select>
-                                    <Input 
-                                        placeholder="555-0123" 
-                                        value={phoneNumber} 
-                                        onChange={(e) => setPhoneNumber(e.target.value)} 
-                                        className="flex-1"
-                                    />
+                                     <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Expires <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3">
+                                            <Input 
+                                                type="date"
+                                                value={licenseExpiry}
+                                                onChange={(e) => setLicenseExpiry(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                     <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Issued</Label>
+                                        <div className="col-span-3">
+                                            <Input 
+                                                type="date"
+                                                value={originalIssueDate}
+                                                onChange={(e) => setOriginalIssueDate(e.target.value)}
+                                                placeholder="Original Issue Date"
+                                            />
+                                        </div>
+                                    </div>
+
+                                     <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Class <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3">
+                                            <Input 
+                                                value={licenseClass}
+                                                onChange={(e) => setLicenseClass(e.target.value)}
+                                                placeholder="e.g. Class C"
+                                            />
+                                        </div>
+                                    </div>
+
+                                     <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Licence to Drive <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3 relative">
+                                            <Car className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                            <Input 
+                                                value={licenseToDrive}
+                                                onChange={(e) => setLicenseToDrive(e.target.value)}
+                                                placeholder="e.g. Motor Car, Motorcycle"
+                                                className="pl-9"
+                                            />
+                                        </div>
+                                    </div>
+
+                                     <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Control No. <span className="text-red-500">*</span></Label>
+                                        <div className="col-span-3 relative">
+                                            <Hash className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                            <Input 
+                                                value={controlNumber}
+                                                onChange={(e) => setControlNumber(e.target.value)}
+                                                placeholder="Enter Control Number"
+                                                className="pl-9"
+                                            />
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
-
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="email" className="text-right">Email <span className="text-red-500">*</span></Label>
-                                <Input
-                                    id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                                    className="col-span-3" placeholder="driver@example.com"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="password" className="text-right">Password <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3 relative">
-                                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input
-                                        id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                        className="pl-9" placeholder="Set temporary password"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Nationality <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3 relative">
-                                    <Globe className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input 
-                                        value={nationality}
-                                        onChange={(e) => setNationality(e.target.value)}
-                                        placeholder="e.g. Jamaican"
-                                        className="pl-9"
-                                    />
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-                    
-                    {/* Section 2: License Details */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1 mt-2">License Details</h4>
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">License # <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3 relative">
-                                    <CreditCard className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input 
-                                        value={licenseNumber}
-                                        onChange={(e) => setLicenseNumber(e.target.value)}
-                                        className="pl-9"
-                                        placeholder="Enter License Number"
-                                    />
-                                </div>
-                            </div>
-
-                             <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Expires <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3">
-                                    <Input 
-                                        type="date"
-                                        value={licenseExpiry}
-                                        onChange={(e) => setLicenseExpiry(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-
-                             <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Class <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3">
-                                    <Input 
-                                        value={licenseClass}
-                                        onChange={(e) => setLicenseClass(e.target.value)}
-                                        placeholder="e.g. C, D"
-                                    />
-                                </div>
-                            </div>
-
-                             <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Licence to Drive <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3 relative">
-                                    <Car className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input 
-                                        value={licenseToDrive}
-                                        onChange={(e) => setLicenseToDrive(e.target.value)}
-                                        placeholder="e.g. Motor Car, Motorcycle"
-                                        className="pl-9"
-                                    />
-                                </div>
-                            </div>
-
-                             <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Control No. <span className="text-red-500">*</span></Label>
-                                <div className="col-span-3 relative">
-                                    <Hash className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input 
-                                        value={controlNumber}
-                                        onChange={(e) => setControlNumber(e.target.value)}
-                                        placeholder="Enter Control Number"
-                                        className="pl-9"
-                                    />
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
+                        </>
+                    )}
 
                 </div>
             )}
@@ -686,28 +926,65 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
                 {step === 1 && (
                     <>
                          <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
-                         <div className="flex gap-2">
-                            {licenseFront && licenseBack && (
-                                <Button type="button" variant="ghost" onClick={handleNextStep1}>
-                                    Skip Scan
+                         
+                         {licenseStep === 'front-upload' ? (
+                             <div className="flex gap-2">
+                                <Button 
+                                    type="button" 
+                                    onClick={handleScanFront} 
+                                    disabled={isScanning || !licenseFront}
+                                    className="bg-slate-900 text-white hover:bg-slate-800 gap-2"
+                                >
+                                    {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-amber-300" />}
+                                    Scan & Continue
                                 </Button>
-                            )}
-                            <Button 
-                                type="button" 
-                                onClick={handleScanLicense} 
-                                disabled={isScanning || !licenseFront}
-                                className="bg-slate-900 text-white hover:bg-slate-800 gap-2"
-                            >
-                                {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-amber-300" />}
-                                Scan & Continue
-                            </Button>
-                         </div>
+                             </div>
+                         ) : licenseStep === 'front-review' ? (
+                             <div className="flex gap-2">
+                                <Button type="button" variant="ghost" onClick={() => setLicenseStep('front-upload')}>Retake</Button>
+                                <Button 
+                                    type="button" 
+                                    onClick={handleConfirmFront} 
+                                    className="bg-slate-900 text-white hover:bg-slate-800 gap-2"
+                                >
+                                    Confirm & Scan Back <ArrowRight className="h-4 w-4" />
+                                </Button>
+                             </div>
+                         ) : licenseStep === 'back-upload' ? (
+                             <div className="flex gap-2">
+                                <Button type="button" variant="ghost" onClick={() => setLicenseStep('front-review')}>Back</Button>
+                                <Button 
+                                    type="button" 
+                                    onClick={handleScanBack} 
+                                    disabled={isScanning || !licenseBack}
+                                    className="bg-slate-900 text-white hover:bg-slate-800 gap-2"
+                                >
+                                    {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-amber-300" />}
+                                    Scan Back & Verify
+                                </Button>
+                             </div>
+                         ) : (
+                             // Back Review
+                             <div className="flex gap-2">
+                                <Button type="button" variant="ghost" onClick={() => setLicenseStep('back-upload')}>Retake Back</Button>
+                                <Button 
+                                    type="button" 
+                                    onClick={handleConfirmBack} 
+                                    className="bg-slate-900 text-white hover:bg-slate-800 gap-2"
+                                >
+                                    Confirm & Review All <ArrowRight className="h-4 w-4" />
+                                </Button>
+                             </div>
+                         )}
                     </>
                 )}
 
                 {step === 2 && (
                      <>
-                        <Button type="button" variant="outline" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4 mr-2" /> Back</Button>
+                        <Button type="button" variant="outline" onClick={() => {
+                            setStep(1);
+                            setLicenseStep('back-upload'); // Go back to upload phase, not review
+                        }}><ArrowLeft className="h-4 w-4 mr-2" /> Back</Button>
                         <Button type="button" onClick={handleNextStep2} className="gap-2">Confirm Details <ArrowRight className="h-4 w-4" /></Button>
                      </>
                 )}

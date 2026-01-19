@@ -966,6 +966,31 @@ app.post("/make-server-37f42386/maintenance-logs", async (c) => {
 app.get("/make-server-37f42386/scenarios", async (c) => {
   try {
     const items = await kv.getByPrefix("fuel_scenario:");
+    
+    // Auto-Seed if empty (Phase 10 Requirement)
+    if (!items || items.length === 0) {
+        const defaultId = crypto.randomUUID();
+        const defaultScenario = {
+            id: defaultId,
+            name: "Standard Fleet Rule (Auto-Generated)",
+            description: "Default granular coverage settings.",
+            isDefault: true,
+            rules: [{
+                id: crypto.randomUUID(),
+                category: "Fuel",
+                coverageType: "Percentage",
+                coverageValue: 50, // Fallback
+                rideShareCoverage: 100,
+                companyUsageCoverage: 100,
+                personalCoverage: 0,
+                miscCoverage: 50,
+                conditions: { requiresReceipt: true }
+            }]
+        };
+        await kv.set(`fuel_scenario:${defaultId}`, defaultScenario);
+        return c.json([defaultScenario]);
+    }
+    
     return c.json(items || []);
   } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
@@ -1035,6 +1060,7 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
   try {
     const body = await c.req.parseBody();
     const file = body['file'];
+    const backFile = body['backFile'];
     const type = body['type'] as string;
 
     if (!file || !(file instanceof File)) return c.json({ error: "No file provided" }, 400);
@@ -1044,22 +1070,46 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
 
     const openai = new OpenAI({ apiKey });
 
-    let prompt = `Extract information from this ${type} document into valid JSON. Do not use markdown.`;
+    let prompt = `Extract information from this ${type} document into valid JSON. Return ONLY the raw JSON object. Do not use markdown formatting (no \`\`\`json). Use ISO 8601 format (YYYY-MM-DD) for all dates.`;
     
     if (type === 'license') {
         prompt += `
-        For 'license':
+        For 'license', extract the following fields into a JSON object with these EXACT keys:
         - firstName, lastName, middleName
-        - licenseNumber, expirationDate (YYYY-MM-DD), dob (YYYY-MM-DD)
-        - state, countryCode, address
-        - class, licenseToDrive
+        - licenseNumber (Driver's License No. or TRN), expirationDate (YYYY-MM-DD), dateOfBirth (YYYY-MM-DD)
+        - address, state, countryCode
+        - class, sex (M or F)
+        - licenseToDrive (Extract the EXACT FULL TEXT under "LICENCE TO DRIVE" or "LICENSE TO DRIVE". e.g. "M/CARS & TRUCKS...". Do NOT abbreviate to "Class C" or similar codes. Copy the text exactly as it appears. If multiple lines, join with a space.)
+        - originalIssueDate (Look for "ORIGINAL DATE OF ISSUE" - YYYY-MM-DD)
+        - collectorate (Look for "COLLECTORATE" label, typically under the TRN or near the top. e.g. "011 SPANISH TOWN")
+        - controlNumber (Look for "CONTROL NO.". The value is a long numeric string (e.g. 0110149740). It might be below the label. Extract ALL digits. Ignore '#' prefix.), nationality
+        
+        Ensure dateOfBirth is used instead of dob.
+
+        CRITICAL PARSING RULE FOR JAMAICAN LICENSES:
+        - The section under "NAME" is structured as:
+          Line 1: LAST NAME (Surname)
+          Line 2: FIRST NAME + MIDDLE NAMES
+        - Example:
+          NAME
+          THOMAS           -> lastName: "THOMAS"
+          SADIKI ABAYOMI   -> firstName: "SADIKI", middleName: "ABAYOMI"
+        - Do NOT assign Line 1 to firstName. Line 1 is ALWAYS the Last Name.
         `;
     } else if (type === 'vehicle_registration') {
         prompt += `
-        For 'vehicle_registration':
-        - ownerName, plateNumber, vin, make, model, year
+        For 'vehicle_registration' (extract strictly):
+        - plate (License Plate No), vin (Chassis No)
+        - mvid (Motor Vehicle ID), laNumber (Licence Authority No), controlNumber
+        - make, model, year
         - expirationDate (YYYY-MM-DD), issueDate (YYYY-MM-DD)
-        - chassisNumber, engineNumber
+        `;
+    } else if (type === 'fitness_certificate') {
+        prompt += `
+        For 'fitness_certificate':
+        - make, model, year, color
+        - bodyType, engineNumber, ccRating
+        - issueDate (YYYY-MM-DD), expirationDate (YYYY-MM-DD)
         `;
     }
 
@@ -1067,15 +1117,25 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
     const dataUrl = `data:${file.type};base64,${base64Data}`;
 
+    const contentPayload: any[] = [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: dataUrl } }
+    ];
+
+    if (backFile && backFile instanceof File) {
+         const backBuffer = await backFile.arrayBuffer();
+         const backBase64 = Buffer.from(backBuffer).toString('base64');
+         const backUrl = `data:${backFile.type};base64,${backBase64}`;
+         contentPayload.push({ type: "text", text: "The following image is the BACK of the document. Use it to extract licenseToDrive, originalIssueDate, controlNumber, and nationality." });
+         contentPayload.push({ type: "image_url", image_url: { url: backUrl } });
+    }
+
     const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
             {
                 role: "user",
-                content: [
-                    { type: "text", text: prompt },
-                    { type: "image_url", image_url: { url: dataUrl } }
-                ]
+                content: contentPayload
             }
         ],
         response_format: { type: "json_object" }
@@ -1370,31 +1430,60 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
   try {
     const { make, model, year, color, bodyType, licensePlate } = await c.req.json();
     
-    // Switch to OpenAI API Key as requested
-    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    // Switch to Gemini/Imagen as requested
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
-        return c.json({ error: "OpenAI API Key not configured" }, 503);
+        return c.json({ error: "Gemini API Key not configured" }, 503);
     }
-    const openai = new OpenAI({ apiKey });
 
-    const prompt = `A hyper-realistic, professional automotive studio photo of a ${year} ${color} ${make} ${model} ${bodyType}. The vehicle is parked on a pristine, high-gloss white showroom floor with distinct reflections beneath the car. The background is a clean, seamless white studio environment. Use a front 3/4 view angle, zoomed in to fill the frame. 8k resolution, soft studio lighting, sharp focus. The vehicle should have no front license plate.`;
+    // Update prompt for better vehicle accuracy
+    const prompt = `Professional studio photography of a ${year} ${color} ${make} ${model} ${bodyType}, automotive photoshoot style. 
+    The car is positioned on a clean, seamless white background with soft reflections on the floor. 
+    Front 3/4 angle view, high resolution, 8k, photorealistic, sharp focus. 
+    Ensure the design matches the specific production year ${year}. No license plates.`;
 
     let imageB64 = null;
     let lastError = null;
 
     try {
-        const dalleResponse = await openai.images.generate({
-          model: "dall-e-3",
-          prompt: prompt,
-          n: 1,
-          size: "1024x1024",
-          quality: "standard",
-          response_format: "b64_json"
-        });
-        imageB64 = dalleResponse.data[0].b64_json;
+        // Using Imagen 4.0 (Production Standard 2026) as requested
+        // Endpoint: Google Generative Language API (Gemini API)
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    instances: [{ prompt: prompt }],
+                    parameters: { 
+                        sampleCount: 1, 
+                        aspectRatio: "1:1"
+                    }
+                })
+            }
+        );
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Google Imagen API Error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        
+        // Handle Imagen response structure
+        // The API returns { predictions: [ { bytesBase64Encoded: "..." } ] }
+        if (data.predictions && data.predictions[0]) {
+             const prediction = data.predictions[0];
+             imageB64 = prediction.bytesBase64Encoded || prediction;
+        }
+
+        if (!imageB64) {
+            throw new Error("No image data received from Gemini/Imagen");
+        }
+
     } catch (e: any) {
         lastError = e.message;
-        console.error("OpenAI DALL-E 3 Failed:", e);
+        console.error("Gemini Imagen Failed:", e);
     }
 
     if (!imageB64) {

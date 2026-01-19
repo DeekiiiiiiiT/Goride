@@ -193,7 +193,9 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
           const isExtractionError = e.message && (
              e.message.includes('Could not extract text') || 
              e.message.includes('scanned image') ||
-             e.message.includes('upload a JPEG/PNG')
+             e.message.includes('upload a JPEG/PNG') ||
+             e.message.includes('Invalid MIME type') ||
+             e.message.includes('Only image types are supported')
           );
 
           if (isPdf && isExtractionError) {
@@ -232,10 +234,11 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       if (registrationFile) {
           attemptedScan = true;
           const data = await scanDocument(registrationFile, 'vehicle_registration');
+          console.log("Registration Scan Result:", data);
           if (data) {
               newData = {
                   ...newData,
-                  licensePlate: (data.plate || newData.licensePlate || '').toUpperCase(),
+                  licensePlate: (data.plate || data.plateNumber || newData.licensePlate || '').toUpperCase(),
                   vin: (data.vin || newData.vin || '').toUpperCase(),
                   mvid: data.mvid || newData.mvid,
                   laNumber: data.laNumber || newData.laNumber,
@@ -251,6 +254,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       if (fitnessFile) {
           attemptedScan = true;
           const data = await scanDocument(fitnessFile, 'fitness_certificate');
+          console.log("Fitness Scan Result:", data);
           if (data) {
               newData = {
                   ...newData,

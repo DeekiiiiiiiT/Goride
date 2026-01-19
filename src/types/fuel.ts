@@ -54,21 +54,22 @@ export interface WeeklyFuelReport {
   // 1. The Truth (Financial)
   totalGasCardCost: number;
   
-  // 2. The Operation (Trips)
+  // 2. The Operation (Trips) -> Ride Share
   totalTripDistance: number;
-  operatingFuelCost: number; // Calculated
+  rideShareCost: number; // Previously operatingFuelCost
   
-  // 3. Known Non-Trip (Adjustments)
+  // 3. Known Non-Trip (Adjustments) -> Company Usage
   companyMiscDistance: number;
-  companyMiscCost: number;
+  companyUsageCost: number; // Previously companyMiscCost
   
+  // 4. Personal -> Driver Personal Fuel Usage
   personalDistance: number;
-  personalCost: number;
+  personalUsageCost: number; // Previously personalCost
   
-  // 4. The Leakage (Remainder)
-  fuelMiscCost: number; // (GasCard - Operating - Misc - Personal)
+  // 5. The Leakage (Remainder) -> Miscellaneous
+  miscellaneousCost: number; // Previously fuelMiscCost (GasCard - RideShare - CompanyUsage - Personal)
   
-  // 5. The Split
+  // 6. The Split
   companyShare: number;
   driverShare: number;
   
@@ -106,9 +107,17 @@ export type FuelCoverageType = 'Percentage' | 'Fixed_Amount' | 'Full';
 
 export interface FuelRule {
   id: string;
-  category: 'Fuel' | 'Maintenance' | 'Tolls';
+  category: 'Fuel'; // Removed Maintenance and Tolls as requested
   coverageType: FuelCoverageType;
   coverageValue: number; // e.g., 50 for 50%, or 100 for $100
+  
+  // Granular Percentages (0-100)
+  // If provided, these override the generic coverageValue for Percentage rules
+  rideShareCoverage?: number; 
+  companyUsageCoverage?: number;
+  personalCoverage?: number;
+  miscCoverage?: number;
+
   conditions?: {
     maxAmount?: number;
     requiresReceipt?: boolean;

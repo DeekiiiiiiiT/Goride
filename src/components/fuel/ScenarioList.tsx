@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Loader2, Plus, Trash2, Edit2, Star, Fuel, Wrench, Ticket, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit2, Star, Fuel, ShieldCheck, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { fuelService } from '../../services/fuelService';
 import { FuelScenario, FuelRule } from '../../types/fuel';
@@ -182,26 +182,6 @@ export function ScenarioList() {
                                 <div className="flex-1">
                                     <div className="text-xs text-orange-800 font-semibold mb-0.5">Fuel</div>
                                     {getRuleSummary(scenario.rules, 'Fuel')}
-                                </div>
-                            </div>
-                            
-                            <div className="p-2 bg-blue-50 rounded-lg flex items-center gap-3">
-                                <div className="bg-blue-100 p-1.5 rounded-md text-blue-600">
-                                    <Wrench className="h-4 w-4" />
-                                </div>
-                                <div className="flex-1">
-                                    <div className="text-xs text-blue-800 font-semibold mb-0.5">Maintenance</div>
-                                    {getRuleSummary(scenario.rules, 'Maintenance')}
-                                </div>
-                            </div>
-
-                            <div className="p-2 bg-purple-50 rounded-lg flex items-center gap-3">
-                                <div className="bg-purple-100 p-1.5 rounded-md text-purple-600">
-                                    <Ticket className="h-4 w-4" />
-                                </div>
-                                <div className="flex-1">
-                                    <div className="text-xs text-purple-800 font-semibold mb-0.5">Tolls</div>
-                                    {getRuleSummary(scenario.rules, 'Tolls')}
                                 </div>
                             </div>
                         </CardContent>

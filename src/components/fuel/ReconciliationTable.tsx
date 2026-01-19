@@ -18,9 +18,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
-import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute } from '../../types/fuel';
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario } from '../../types/fuel';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
+import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -29,6 +30,7 @@ interface ReconciliationTableProps {
     adjustments?: MileageAdjustment[];
     disputes?: FuelDispute[];
     dateRange: DateRange | undefined;
+    scenarios?: FuelScenario[];
     onFinalize?: (reports: WeeklyFuelReport[]) => void;
     onAddAdjustment?: () => void;
     onResolveDispute?: (dispute: FuelDispute) => void;
@@ -41,6 +43,7 @@ export function ReconciliationTable({
     adjustments = [],
     disputes = [],
     dateRange,
+    scenarios = [],
     onFinalize,
     onAddAdjustment,
     onResolveDispute
@@ -61,19 +64,31 @@ export function ReconciliationTable({
             weekEnd, 
             trips, 
             fuelEntries, 
-            adjustments
+            adjustments,
+            [], // Check-ins not passed yet
+            scenarios
         );
-    }, [vehicles, trips, fuelEntries, adjustments, weekStart, weekEnd]);
+    }, [vehicles, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios]);
 
     // Totals
     const totals = useMemo(() => {
         return reports.reduce((acc, r) => ({
             gasCard: acc.gasCard + r.totalGasCardCost,
-            operating: acc.operating + r.operatingFuelCost,
-            misc: acc.misc + r.fuelMiscCost,
+            rideShare: acc.rideShare + r.rideShareCost,
+            companyUsage: acc.companyUsage + r.companyUsageCost,
+            personal: acc.personal + r.personalUsageCost,
+            misc: acc.misc + r.miscellaneousCost,
             company: acc.company + r.companyShare,
             driver: acc.driver + r.driverShare
-        }), { gasCard: 0, operating: 0, misc: 0, company: 0, driver: 0 });
+        }), { 
+            gasCard: 0, 
+            rideShare: 0, 
+            companyUsage: 0, 
+            personal: 0, 
+            misc: 0, 
+            company: 0, 
+            driver: 0 
+        });
     }, [reports]);
 
     const formatCurrency = (val: number) => {
@@ -100,17 +115,19 @@ export function ReconciliationTable({
                 .reduce((sum, e) => sum + e.amount, 0);
 
             return {
-                WeekStart: report.weekStart,
-                WeekEnd: report.weekEnd,
+                WeekStart: format(new Date(report.weekStart), 'yyyy-MM-dd'),
+                WeekEnd: format(new Date(report.weekEnd), 'yyyy-MM-dd'),
                 Vehicle: vehicle?.licensePlate || 'Unknown',
                 DriverID: report.driverId,
-                TotalSpend: report.totalGasCardCost,
-                OperatingCost: report.operatingFuelCost,
-                Leakage: report.fuelMiscCost,
-                CompanyShare: report.companyShare,
-                DriverShare: report.driverShare, // Deduction
-                PaidByDriver: driverSpend,      // Reimbursement Due
-                NetPay: driverSpend - report.driverShare
+                TotalSpend: Number(report.totalGasCardCost.toFixed(2)),
+                RideShare: Number(report.rideShareCost.toFixed(2)),
+                CompanyUsage: Number(report.companyUsageCost.toFixed(2)),
+                PersonalUsage: Number(report.personalUsageCost.toFixed(2)),
+                Miscellaneous: Number(report.miscellaneousCost.toFixed(2)),
+                CompanyShare: Number(report.companyShare.toFixed(2)),
+                DriverShare: Number(report.driverShare.toFixed(2)), 
+                PaidByDriver: Number(driverSpend.toFixed(2)),      
+                NetPay: Number((driverSpend - report.driverShare).toFixed(2))
             };
         });
 
@@ -119,6 +136,9 @@ export function ReconciliationTable({
 
     return (
         <div className="space-y-4">
+            {/* Split Dashboard */}
+            <ScenarioSplitDashboard reports={reports} scenarios={scenarios} vehicles={vehicles} />
+
             {/* Header */}
             <div className="flex items-center justify-between bg-white p-4 rounded-lg border shadow-sm">
                 <div className="flex items-center gap-4">
@@ -161,9 +181,9 @@ export function ReconciliationTable({
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
-                                <TableHead className="w-[250px]">Vehicle / Driver</TableHead>
+                                <TableHead className="w-[200px]">Vehicle / Driver</TableHead>
                                 <TableHead className="w-[100px]">Status</TableHead>
-                                <TableHead className="text-right">
+                                <TableHead className="text-right font-medium text-slate-900 border-l border-r border-slate-200 bg-slate-100">
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <div className="flex items-center justify-end gap-1 cursor-help">
@@ -176,6 +196,62 @@ export function ReconciliationTable({
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
+                                
+                                {/* The 4 New Columns (Breakdown) */}
+                                <TableHead className="text-right text-xs text-slate-500 font-normal">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Ride Share
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Cost derived from Trip Distance.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right text-xs text-slate-500 font-normal">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Company Ops
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Authorized business usage (non-trip).</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right text-xs text-slate-500 font-normal">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Personal
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Personal usage + adjustments.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right text-xs text-slate-500 font-normal border-r border-slate-200">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Misc
+                                                <Info className="h-3 w-3 text-slate-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Unaccounted usage (Leakage).</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                {/* End of Breakdown */}
+
                                 <TableHead className="text-right bg-emerald-50/50">
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -198,7 +274,7 @@ export function ReconciliationTable({
                                             </div>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            <p>Driver's share of costs (Personal KM + Leakage).</p>
+                                            <p>Driver's share of costs.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -220,7 +296,6 @@ export function ReconciliationTable({
                         <TableBody>
                             {reports.map((report) => {
                                 const vehicle = vehicles.find(v => v.id === report.vehicleId);
-                                const hasLeakage = report.fuelMiscCost > 10; 
                                 
                                 // Calculate "Paid by Driver" (Cash/Reimbursement)
                                 const driverSpend = fuelEntries
@@ -272,9 +347,27 @@ export function ReconciliationTable({
                                                 <span className="text-slate-400 text-xs">-</span>
                                             )}
                                         </TableCell>
-                                        <TableCell className="text-right font-medium">
+                                        
+                                        {/* Total Spend */}
+                                        <TableCell className="text-right font-medium border-l border-r border-slate-200 bg-slate-50">
                                             {formatCurrency(report.totalGasCardCost)}
                                         </TableCell>
+
+                                        {/* Breakdown Columns */}
+                                        <TableCell className="text-right text-slate-600 text-sm">
+                                            {formatCurrency(report.rideShareCost)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-600 text-sm">
+                                            {formatCurrency(report.companyUsageCost)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-slate-600 text-sm">
+                                            {formatCurrency(report.personalUsageCost)}
+                                        </TableCell>
+                                        <TableCell className={`text-right text-sm border-r border-slate-200 ${getLeakageColor(report.miscellaneousCost)}`}>
+                                            {formatCurrency(report.miscellaneousCost)}
+                                        </TableCell>
+                                        {/* End Breakdown */}
+
                                         <TableCell className="text-right bg-emerald-50/30 text-emerald-700 font-medium">
                                             {formatCurrency(driverSpend)}
                                         </TableCell>
@@ -290,7 +383,7 @@ export function ReconciliationTable({
                             
                             {reports.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                                    <TableCell colSpan={11} className="h-24 text-center text-slate-500">
                                         No vehicles found.
                                     </TableCell>
                                 </TableRow>
@@ -300,13 +393,18 @@ export function ReconciliationTable({
                             <TableRow>
                                 <TableCell>Totals</TableCell>
                                 <TableCell></TableCell>
-                                <TableCell className="text-right">{formatCurrency(totals.gasCard)}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(totals.operating)}</TableCell>
-                                <TableCell className={`text-right ${getLeakageColor(totals.misc)}`}>
+                                <TableCell className="text-right border-l border-r border-slate-200">{formatCurrency(totals.gasCard)}</TableCell>
+                                
+                                <TableCell className="text-right">{formatCurrency(totals.rideShare)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(totals.companyUsage)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(totals.personal)}</TableCell>
+                                <TableCell className={`text-right border-r border-slate-200 ${getLeakageColor(totals.misc)}`}>
                                     {formatCurrency(totals.misc)}
                                 </TableCell>
-                                <TableCell className="text-right text-blue-700">{formatCurrency(totals.company)}</TableCell>
+
+                                <TableCell className="text-right text-emerald-700">-</TableCell>
                                 <TableCell className="text-right text-amber-700">{formatCurrency(totals.driver)}</TableCell>
+                                <TableCell className="text-right">-</TableCell>
                             </TableRow>
                         </TableFooter>
                     </Table>
@@ -314,18 +412,22 @@ export function ReconciliationTable({
             </Card>
 
             {/* Explanation / Legend */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-600">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-slate-600">
                  <div className="p-3 bg-slate-50 rounded border">
-                     <span className="font-semibold block mb-1">Operating Cost</span>
-                     Calculated based on {vehicles[0]?.fuelSettings?.efficiencyCity || 10}L/100km efficiency × Trip Distance.
+                     <span className="font-semibold block mb-1">Ride Share</span>
+                     Fuel cost for logged trips.
                  </div>
                  <div className="p-3 bg-slate-50 rounded border">
-                     <span className="font-semibold block mb-1">Fuel Misc (Leakage)</span>
-                     Difference between Actual Spend and Operating Cost. Positive values indicate excess consumption.
+                     <span className="font-semibold block mb-1">Company Ops</span>
+                     Authorized business errands & maintenance.
                  </div>
                  <div className="p-3 bg-slate-50 rounded border">
-                     <span className="font-semibold block mb-1">50/50 Split</span>
-                     Leakage is split equally between Company and Driver to incentivize efficiency.
+                     <span className="font-semibold block mb-1">Personal</span>
+                     Personal usage calculated from logs + adjustments.
+                 </div>
+                 <div className="p-3 bg-slate-50 rounded border">
+                     <span className="font-semibold block mb-1">Misc (Leakage)</span>
+                     Unaccounted fuel (Total - All known categories).
                  </div>
             </div>
         </div>

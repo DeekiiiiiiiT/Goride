@@ -15,7 +15,7 @@ import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModa
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
-import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute } from '../types/fuel';
+import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute, FuelScenario } from '../types/fuel';
 import { Trip, FinancialTransaction } from '../types/data';
 import { api } from '../services/api';
 import { fuelService } from '../services/fuelService';
@@ -78,11 +78,12 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
 
   const loadData = async (silent = false) => {
       if (!silent) setIsRefreshing(true);
       try {
-          const [vData, dData, tData, cardsData, logsData, adjsData, disputesData, txData] = await Promise.all([
+          const [vData, dData, tData, cardsData, logsData, adjsData, disputesData, txData, scenariosData] = await Promise.all([
               api.getVehicles().catch(() => []), 
               api.getDrivers().catch(() => []),
               api.getTrips({ limit: 500 }).catch(() => []),
@@ -90,7 +91,8 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
               fuelService.getFuelEntries().catch(() => []),
               fuelService.getMileageAdjustments().catch(() => []),
               FuelDisputeService.getAllDisputes().catch(() => []),
-              api.getTransactions().catch(() => [])
+              api.getTransactions().catch(() => []),
+              fuelService.getFuelScenarios().catch(() => [])
           ]);
           
           setVehicles(vData);
@@ -101,6 +103,7 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
           setAdjustments(adjsData);
           setDisputes(disputesData);
           setTransactions(txData);
+          setScenarios(scenariosData);
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -319,23 +322,25 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
     <FuelLayout 
         title={pageTitle}
         description={pageDescription}
-        onAddTransaction={() => {
+        onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation') ? undefined : () => {
             setEditingLog(null);
             setIsLogModalOpen(true);
         }}
     >
-      <div className="flex justify-end mb-4">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => loadData()} 
-            disabled={isRefreshing}
-            className="text-slate-600 border-slate-200"
-          >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
-          </Button>
-      </div>
+      {(activeTab !== 'configuration' && activeTab !== 'cards') && (
+        <div className="flex justify-end mb-4">
+            <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => loadData()} 
+                disabled={isRefreshing}
+                className="text-slate-600 border-slate-200"
+            >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+            </Button>
+        </div>
+      )}
 
       {activeTab === 'dashboard' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -403,6 +408,7 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
                 adjustments={adjustments}
                 disputes={disputes}
                 dateRange={dateRange}
+                scenarios={scenarios}
                 onFinalize={(reports) => toast.success(`Finalized ${reports.length} reports`)}
                 onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
                 onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
@@ -435,6 +441,7 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
         <div className="space-y-4">
             <FuelLogTable 
                 entries={logs}
+                transactions={transactions}
                 onEdit={(log) => { setEditingLog(log); setIsLogModalOpen(true); }}
                 onDelete={handleDeleteLog}
                 getVehicleName={getVehicleName}
