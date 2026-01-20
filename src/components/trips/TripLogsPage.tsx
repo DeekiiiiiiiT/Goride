@@ -25,6 +25,7 @@ import { TripFilters, TripFilterState } from './TripFilters';
 import { CancellationAnalysis } from './CancellationAnalysis';
 import { RouteAnalysis } from './RouteAnalysis';
 import { ReportGenerator } from './ReportGenerator';
+import { IntegrityDashboard } from './IntegrityDashboard';
 import { TripDetailsDialog } from './TripDetailsDialog';
 import { TripMapDialog } from './TripMapDialog';
 import { TripIssueDialog } from './TripIssueDialog';
@@ -268,10 +269,11 @@ export function TripLogsPage() {
       <TripStatsCard trips={trips} stats={stats} loading={statsLoading} />
 
       <Tabs defaultValue="manifest" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-[700px]">
+        <TabsList className="grid w-full grid-cols-4 max-w-[850px]">
           <TabsTrigger value="manifest">Trip Manifest</TabsTrigger>
           <TabsTrigger value="analysis">Cancellation Analysis</TabsTrigger>
           <TabsTrigger value="routes">Route Analytics</TabsTrigger>
+          <TabsTrigger value="integrity">Data Integrity</TabsTrigger>
         </TabsList>
         
         <TabsContent value="manifest" className="mt-4">
@@ -368,16 +370,28 @@ export function TripLogsPage() {
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-start gap-2 text-sm">
                                         <div className="mt-1 h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                                        <span className="text-slate-700 truncate" title={trip.pickupLocation}>
-                                            {trip.pickupArea || trip.pickupLocation || 'Unknown Pickup'}
-                                        </span>
+                                        {(!trip.pickupLocation || trip.pickupLocation === 'Manual Entry' || trip.pickupLocation.startsWith('Lat:')) && !!trip.startLat ? (
+                                            <span className="text-amber-600 text-xs flex items-center gap-1.5 animate-pulse">
+                                                <Loader2 className="h-3 w-3 animate-spin" /> Resolving...
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-700 truncate" title={trip.pickupLocation}>
+                                                {trip.pickupArea || trip.pickupLocation || 'Unknown Pickup'}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="pl-0.5 ml-0.5 border-l-2 border-slate-100 h-3" />
                                     <div className="flex items-start gap-2 text-sm">
                                         <div className="mt-1 h-2 w-2 rounded-full bg-rose-500 shrink-0" />
-                                        <span className="text-slate-700 truncate" title={trip.dropoffLocation}>
-                                            {trip.dropoffArea || trip.dropoffLocation || 'Unknown Dropoff'}
-                                        </span>
+                                        {(!trip.dropoffLocation || trip.dropoffLocation.startsWith('Lat:')) && !!trip.endLat ? (
+                                            <span className="text-amber-600 text-xs flex items-center gap-1.5 animate-pulse">
+                                                <Loader2 className="h-3 w-3 animate-spin" /> Resolving...
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-700 truncate" title={trip.dropoffLocation}>
+                                                {trip.dropoffArea || trip.dropoffLocation || 'Unknown Dropoff'}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                               </TableCell>
@@ -522,6 +536,10 @@ export function TripLogsPage() {
 
         <TabsContent value="routes">
             <RouteAnalysis trips={trips} />
+        </TabsContent>
+
+        <TabsContent value="integrity">
+            <IntegrityDashboard trips={trips} />
         </TabsContent>
       </Tabs>
       

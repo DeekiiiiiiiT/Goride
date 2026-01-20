@@ -1,4 +1,5 @@
 import { Hono } from "npm:hono";
+import { streamText } from "npm:hono/streaming";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -7,6 +8,7 @@ import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
+import { pMap } from "./concurrency.ts";
 import { Buffer } from "node:buffer";
 
 const app = new Hono();
@@ -17,8 +19,8 @@ const supabase = createClient(
 );
 
 
-// Enable logger
-app.use('*', logger(console.log));
+// Enable logger - DISABLED to prevent OOM on large payloads
+// app.use('*', logger(console.log));
 
 // Enable CORS for all routes and methods
 app.use(
@@ -27,10 +29,80 @@ app.use(
     origin: "*",
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    exposeHeaders: ["Content-Length"],
+    exposeHeaders: ["Content-Length", "X-Cache"],
     maxAge: 600,
   }),
 );
+
+// Phase 8.1: Payload Size Logging & Phase 8.2: Big Data Protection Middleware
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  
+  try {
+    await next();
+  } catch (err: any) {
+    console.error(`[Fatal Error] Request crashed: ${err.message}`);
+    return c.json({ error: "Server Error: Response too large or internal failure" }, 500);
+  }
+
+  const ms = Date.now() - start;
+  const status = c.res.status;
+  const len = c.res.headers.get('Content-Length');
+  
+  // Log large payloads (> 1MB)
+  if (len && parseInt(len) > 1024 * 1024) {
+      console.warn(`[Heavy Payload] ${c.req.method} ${c.req.path} - ${len} bytes - ${ms}ms`);
+  } else if (status >= 400) {
+      console.log(`[Error] ${c.req.method} ${c.req.path} - ${status} - ${ms}ms`);
+  }
+});
+
+// Phase 8.3: Stress Test / Seed Endpoint
+app.post("/make-server-37f42386/test/seed", async (c) => {
+    try {
+        const { count, driverId } = await c.req.json();
+        const numTrips = count || 100;
+        const targetDriverId = driverId || "test-driver-1";
+        
+        console.log(`Seeding ${numTrips} trips for driver ${targetDriverId}...`);
+        
+        const trips = [];
+        const baseDate = new Date();
+        
+        for (let i = 0; i < numTrips; i++) {
+            const date = new Date(baseDate);
+            date.setDate(date.getDate() - Math.floor(Math.random() * 30)); // Last 30 days
+            
+            trips.push({
+                id: crypto.randomUUID(),
+                driverId: targetDriverId,
+                amount: Math.floor(Math.random() * 2000) + 500, // 500 - 2500
+                date: date.toISOString().split('T')[0],
+                requestTime: date.toISOString(),
+                status: 'Completed',
+                platform: Math.random() > 0.5 ? 'Uber' : 'InDrive',
+                distance: Math.floor(Math.random() * 20) + 1,
+                duration: Math.floor(Math.random() * 60) + 10,
+                isManual: false
+            });
+        }
+        
+        // Save in chunks of 100 to avoid KV write limits
+        for (let i = 0; i < trips.length; i += 100) {
+            const chunk = trips.slice(i, i + 100);
+            const keys = chunk.map(t => `trip:${t.id}`);
+            await kv.mset(keys, chunk);
+        }
+        
+        // Invalidate cache
+        await cache.invalidateCacheVersion("stats");
+        await cache.invalidateCacheVersion("performance");
+        
+        return c.json({ success: true, count: numTrips });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
 
 // Health check endpoint
 app.get("/make-server-37f42386/health", (c) => {
@@ -43,41 +115,61 @@ app.get("/make-server-37f42386/maps-config", (c) => {
   return c.json({ apiKey: apiKey || "", timestamp: Date.now() });
 });
 
-// Dashboard Stats Endpoint (Aggregated)
+// Dashboard Stats Endpoint (Aggregated) - Optimized
 app.get("/make-server-37f42386/dashboard/stats", async (c) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayTs = today.getTime();
+    const todayISO = today.toISOString();
 
-    const trips = await kv.getByPrefix("trip:");
-    const drivers = await kv.getByPrefix("driver:");
+    // Query today's trips - Optimized
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const endOfTodayISO = endOfToday.toISOString();
+
+    const { data: tripData, error: tripError } = await supabase
+        .from("kv_store_37f42386")
+        .select("value->amount, value->driverId")
+        .like("key", "trip:%")
+        .or(`value->>date.gte.${todayISO},value->>requestTime.gte.${todayISO}`)
+        .or(`value->>date.lte.${endOfTodayISO},value->>requestTime.lte.${endOfTodayISO}`);
+
+    if (tripError) throw tripError;
+
+    // Get active drivers count directly
+    const { count: activeDriverCount, error: driverError } = await supabase
+        .from("kv_store_37f42386")
+        .select("*", { count: 'exact', head: true })
+        .like("key", "driver:%")
+        .eq("value->>status", "active");
+
+    if (driverError) throw driverError;
     
-    let tripsToday = 0;
+    // Note: When selecting JSON fields directly (value->field), PostgREST returns them as flat keys
+    const trips = tripData || [];
+    
     let revenueToday = 0;
     const activeDriverIds = new Set();
 
-    if (trips && Array.isArray(trips)) {
-        trips.forEach((t: any) => {
-            const tripDate = t.date ? new Date(t.date) : (t.requestTimestamp ? new Date(t.requestTimestamp) : null);
-            if (tripDate && tripDate.getTime() >= todayTs) {
-                tripsToday++;
-                revenueToday += (typeof t.amount === 'number' ? t.amount : 0);
-                if (t.driverId) {
-                    activeDriverIds.add(t.driverId);
-                }
-            }
-        });
-    }
+    trips.forEach((t: any) => {
+        revenueToday += (Number(t.amount) || 0);
+        if (t.driverId) {
+            activeDriverIds.add(t.driverId);
+        }
+    });
 
-    const totalDrivers = drivers && drivers.length > 0 ? drivers.length : 1; 
-    const activeDrivers = activeDriverIds.size;
-    const efficiency = Math.round((activeDrivers / totalDrivers) * 100);
+    const activeDrivers = activeDriverIds.size > 0 ? activeDriverIds.size : (activeDriverCount || 0);
+    // Fallback: If no trips today, show active drivers from DB. If trips exist, show drivers who drove today? 
+    // Usually "Active Drivers" on dashboard means "Drivers currently working".
+    // We'll use the larger of the two to be safe, or just activeDriverCount if we want "Registered Active"
+    
+    const finalActiveDrivers = activeDriverCount || 0;
+    const efficiency = finalActiveDrivers > 0 ? Math.round((activeDrivers / finalActiveDrivers) * 100) : 0;
 
     return c.json({
         date: new Date().toISOString(),
-        activeDrivers: activeDrivers,
-        trips: tripsToday,
+        activeDrivers: finalActiveDrivers,
+        trips: trips.length,
         revenue: revenueToday,
         efficiency: efficiency
     });
@@ -193,10 +285,10 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
         return c.json(cachedStats);
     }
     
-    // Query JSONB value directly
+    // Query specific fields to avoid loading heavy route data
     let query = supabase
         .from("kv_store_37f42386")
-        .select("value")
+        .select("value->status, value->amount, value->cashCollected, value->duration")
         .like("key", "trip:%");
 
     if (driverId) {
@@ -248,7 +340,7 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
         throw error;
     }
 
-    const trips = data?.map((d: any) => d.value) || [];
+    const trips = data || [];
 
     const totalTrips = trips.length;
     const completed = trips.filter((t: any) => t.status === 'Completed').length;
@@ -328,6 +420,7 @@ app.post("/make-server-37f42386/trips", async (c) => {
     
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
+    await cache.invalidateCacheVersion("performance");
     
     return c.json({ success: true, count: processedTrips.length });
   } catch (e: any) {
@@ -336,29 +429,26 @@ app.post("/make-server-37f42386/trips", async (c) => {
   }
 });
 
+// Trips GET Endpoint - Optimized with native Supabase pagination
 app.get("/make-server-37f42386/trips", async (c) => {
   try {
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
-    const limit = limitParam ? parseInt(limitParam) : null;
+    const limit = limitParam ? parseInt(limitParam) : 50; // Default limit
     const offset = offsetParam ? parseInt(offsetParam) : 0;
 
-    let trips = await kv.getByPrefix("trip:");
+    // Direct Supabase query with range for memory efficiency
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "trip:%")
+        .order("value->>date", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+    if (error) throw error;
     
-    // Sort by date descending (Newest first)
-    if (trips && Array.isArray(trips)) {
-        trips.sort((a: any, b: any) => {
-            const timeA = new Date(a.date).getTime();
-            const timeB = new Date(b.date).getTime();
-            return timeB - timeA;
-        });
-        
-        if (limit !== null) {
-            trips = trips.slice(offset, offset + limit);
-        }
-    }
-    
-    return c.json(trips || []);
+    const trips = data?.map((d: any) => d.value) || [];
+    return c.json(trips);
   } catch (e: any) {
     console.error("Error fetching trips:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);
@@ -387,6 +477,7 @@ app.delete("/make-server-37f42386/trips", async (c) => {
     
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
+    await cache.invalidateCacheVersion("performance");
     
     return c.json({ 
         success: true, 
@@ -409,6 +500,7 @@ app.delete("/make-server-37f42386/trips/:id", async (c) => {
     
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
+    await cache.invalidateCacheVersion("performance");
 
     return c.json({ success: true });
   } catch (e: any) {
@@ -434,11 +526,24 @@ app.post("/make-server-37f42386/driver-metrics", async (c) => {
 
 app.get("/make-server-37f42386/driver-metrics", async (c) => {
     try {
-        const metrics = await kv.getByPrefix("driver_metric:");
+        const limitParam = c.req.query("limit");
+        const offsetParam = c.req.query("offset");
+        const limit = limitParam ? parseInt(limitParam) : 100;
+        const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+        const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "driver_metric:%")
+            .range(offset, offset + limit - 1);
+
+        if (error) throw error;
+        
+        const metrics = data?.map((d: any) => d.value) || [];
 
         // ACTION 2: The "Exorcism" (Auto-Cleanup)
         const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
-        const ghostIndex = metrics ? metrics.findIndex((m: any) => (m.driverId === BANNED_UUID || m.id === BANNED_UUID)) : -1;
+        const ghostIndex = metrics.findIndex((m: any) => (m.driverId === BANNED_UUID || m.id === BANNED_UUID));
 
         if (ghostIndex !== -1) {
             console.log(`[Exorcism] Deleting Ghost Driver Metric: ${BANNED_UUID}`);
@@ -446,7 +551,7 @@ app.get("/make-server-37f42386/driver-metrics", async (c) => {
             metrics.splice(ghostIndex, 1);
         }
 
-        return c.json(metrics || []);
+        return c.json(metrics);
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -469,8 +574,21 @@ app.post("/make-server-37f42386/vehicle-metrics", async (c) => {
 
 app.get("/make-server-37f42386/vehicle-metrics", async (c) => {
     try {
-        const metrics = await kv.getByPrefix("vehicle_metric:");
-        return c.json(metrics || []);
+        const limitParam = c.req.query("limit");
+        const offsetParam = c.req.query("offset");
+        const limit = limitParam ? parseInt(limitParam) : 100;
+        const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+        const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "vehicle_metric:%")
+            .range(offset, offset + limit - 1);
+
+        if (error) throw error;
+        
+        const metrics = data?.map((d: any) => d.value) || [];
+        return c.json(metrics);
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -479,8 +597,21 @@ app.get("/make-server-37f42386/vehicle-metrics", async (c) => {
 // Vehicles Endpoints
 app.get("/make-server-37f42386/vehicles", async (c) => {
   try {
-    const vehicles = await kv.getByPrefix("vehicle:");
-    return c.json(vehicles || []);
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = limitParam ? parseInt(limitParam) : 500;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "vehicle:%")
+        .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    
+    const vehicles = data?.map((d: any) => d.value) || [];
+    return c.json(vehicles);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -513,21 +644,32 @@ app.delete("/make-server-37f42386/vehicles/:id", async (c) => {
 // Drivers Endpoints
 app.get("/make-server-37f42386/drivers", async (c) => {
   try {
-    const drivers = await kv.getByPrefix("driver:");
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = limitParam ? parseInt(limitParam) : 500;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "driver:%")
+        .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    
+    const drivers = data?.map((d: any) => d.value) || [];
 
     // ACTION 2: The "Exorcism" (Auto-Cleanup)
-    // Automatically detect and delete the Fleet Owner if they are mistakenly stored as a driver.
     const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
-    const ghostIndex = drivers ? drivers.findIndex((d: any) => d.id === BANNED_UUID) : -1;
+    const ghostIndex = drivers.findIndex((d: any) => d.id === BANNED_UUID);
 
     if (ghostIndex !== -1) {
         console.log(`[Exorcism] Deleting Ghost Driver: ${BANNED_UUID}`);
         await kv.del(`driver:${BANNED_UUID}`);
-        // Remove from response so the UI updates immediately
         drivers.splice(ghostIndex, 1);
     }
 
-    return c.json(drivers || []);
+    return c.json(drivers);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -577,10 +719,15 @@ app.post("/make-server-37f42386/drivers", async (c) => {
 });
 
 // Transactions Endpoints
+// Transactions GET Endpoint - Optimized
 app.get("/make-server-37f42386/transactions", async (c) => {
   try {
     const driverIdsParam = c.req.query("driverIds");
-    const driverIdParam = c.req.query("driverId"); // Legacy support
+    const driverIdParam = c.req.query("driverId");
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = limitParam ? parseInt(limitParam) : 100;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
 
     let query = supabase
         .from("kv_store_37f42386")
@@ -596,18 +743,15 @@ app.get("/make-server-37f42386/transactions", async (c) => {
     }
 
     if (idsToFilter.size > 0) {
-        // Use OR filter for multiple IDs: value->>driverId.eq.ID1,value->>driverId.eq.ID2
         const orConditions = Array.from(idsToFilter)
             .map(id => `value->>driverId.eq.${id}`)
             .join(',');
         query = query.or(orConditions);
     }
 
-    // Sort by date desc (Newest first) and limit
-    // We prioritize 'date' field as per FinancialTransaction schema
     const { data, error } = await query
         .order("value->>date", { ascending: false })
-        .limit(1000);
+        .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
@@ -698,8 +842,21 @@ app.delete("/make-server-37f42386/transactions/:id", async (c) => {
 // Claims Endpoints
 app.get("/make-server-37f42386/claims", async (c) => {
   try {
-    const claims = await kv.getByPrefix("claim:");
-    return c.json(claims || []);
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = limitParam ? parseInt(limitParam) : 100;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "claim:%")
+        .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    
+    const claims = data?.map((d: any) => d.value) || [];
+    return c.json(claims);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -928,16 +1085,14 @@ app.post("/make-server-37f42386/expenses/reject", async (c) => {
 app.get("/make-server-37f42386/maintenance-logs/:vehicleId", async (c) => {
   try {
     const vehicleId = c.req.param("vehicleId");
-    // Get all logs for this vehicle. We assume keys are formatted as maintenance_log:{vehicleId}:{logId}
-    const logs = await kv.getByPrefix(`maintenance_log:${vehicleId}:`);
-    
-    // Sort by date desc
-    logs.sort((a: any, b: any) => {
-        const timeA = new Date(a.date).getTime();
-        const timeB = new Date(b.date).getTime();
-        return timeB - timeA;
-    });
-    
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", `maintenance_log:${vehicleId}:`)
+        .order("value->>date", { ascending: false });
+
+    if (error) throw error;
+    const logs = data?.map((d: any) => d.value) || [];
     return c.json(logs);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -1347,18 +1502,25 @@ app.delete("/make-server-37f42386/fuel-cards/:id", async (c) => {
 });
 
 // Fuel Entries (Logs) Endpoints
+// Fuel Entries (Logs) Endpoints - Optimized
 app.get("/make-server-37f42386/fuel-entries", async (c) => {
   try {
-    const entries = await kv.getByPrefix("fuel_entry:");
-    // Sort by date desc
-    if (entries && Array.isArray(entries)) {
-        entries.sort((a: any, b: any) => {
-            const timeA = new Date(a.date).getTime();
-            const timeB = new Date(b.date).getTime();
-            return timeB - timeA;
-        });
-    }
-    return c.json(entries || []);
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = limitParam ? parseInt(limitParam) : 100;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "fuel_entry:%")
+        .order("value->>date", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    
+    const entries = data?.map((d: any) => d.value) || [];
+    return c.json(entries);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -1390,14 +1552,15 @@ app.delete("/make-server-37f42386/fuel-entries/:id", async (c) => {
 // Mileage Adjustments Endpoints
 app.get("/make-server-37f42386/mileage-adjustments", async (c) => {
   try {
-    const adjustments = await kv.getByPrefix("fuel_adjustment:");
-     // Sort by week desc
-    if (adjustments && Array.isArray(adjustments)) {
-        adjustments.sort((a: any, b: any) => {
-            return (b.week || "").localeCompare(a.week || "");
-        });
-    }
-    return c.json(adjustments || []);
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "fuel_adjustment:%")
+        .order("value->>week", { ascending: false });
+
+    if (error) throw error;
+    const adjustments = data?.map((d: any) => d.value) || [];
+    return c.json(adjustments);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -1533,8 +1696,14 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
 // Toll Tag Endpoints
 app.get("/make-server-37f42386/toll-tags", async (c) => {
   try {
-    const tags = await kv.getByPrefix("toll_tag:");
-    return c.json(tags || []);
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "toll_tag:%");
+
+    if (error) throw error;
+    const tags = data?.map((d: any) => d.value) || [];
+    return c.json(tags);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -1571,17 +1740,22 @@ app.delete("/make-server-37f42386/toll-tags/:id", async (c) => {
 // Notifications endpoints
 app.get("/make-server-37f42386/notifications", async (c) => {
   try {
-    const notifications = await kv.getByPrefix("notification:");
-    if (Array.isArray(notifications)) {
-        // Sort by timestamp desc safely
-        notifications.sort((a: any, b: any) => {
-            const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
-            const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
-            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
-        });
-        return c.json(notifications);
-    }
-    return c.json([]);
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = limitParam ? parseInt(limitParam) : 50;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "notification:%")
+        .order("value->>timestamp", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    
+    const notifications = data?.map((d: any) => d.value) || [];
+    return c.json(notifications);
   } catch (e: any) {
     console.error("Error fetching notifications:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);
@@ -1656,14 +1830,15 @@ app.delete("/make-server-37f42386/alert-rules/:id", async (c) => {
 // Batch Management Endpoints
 app.get("/make-server-37f42386/batches", async (c) => {
   try {
-    const batches = await kv.getByPrefix("batch:");
-    // Sort by uploadDate desc
-    if (Array.isArray(batches)) {
-        batches.sort((a: any, b: any) => {
-            return new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime();
-        });
-    }
-    return c.json(batches || []);
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "batch:%")
+        .order("value->>uploadDate", { ascending: false });
+
+    if (error) throw error;
+    const batches = data?.map((d: any) => d.value) || [];
+    return c.json(batches);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -1685,77 +1860,62 @@ app.post("/make-server-37f42386/batches", async (c) => {
 app.delete("/make-server-37f42386/batches/:id", async (c) => {
   const batchId = c.req.param("id");
   try {
-    // 1. Get all trips to find which ones belong to this batch
-    // Note: This is inefficient for large datasets but necessary without secondary indexes
-    const allTrips = await kv.getByPrefix("trip:");
+    // 1. Get trips belonging to this batch using native Supabase filters
+    const { data: tripData, error: tripError } = await supabase
+        .from("kv_store_37f42386")
+        .select("key")
+        .like("key", "trip:%")
+        .eq("value->>batchId", batchId);
+
+    if (tripError) throw tripError;
+    const tripsToDelete = tripData?.map(d => d.key) || [];
     
-    // 2. Filter trips belonging to this batch
-    const tripsToDelete = (allTrips || []).filter((t: any) => t.batchId === batchId);
-    
-    // 3. Delete the trips
+    // 2. Delete trips in chunks
     if (tripsToDelete.length > 0) {
-        const keys = tripsToDelete.map((t: any) => `trip:${t.id}`);
-        // Chunk deletion to avoid size limits
-        const chunkSize = 100;
-        for (let i = 0; i < keys.length; i += chunkSize) {
-            const chunk = keys.slice(i, i + chunkSize);
-            if (chunk.length > 0) await kv.mdel(chunk);
+        for (let i = 0; i < tripsToDelete.length; i += 100) {
+            await kv.mdel(tripsToDelete.slice(i, i + 100));
         }
     }
 
-    // 4. Delete transactions belonging to this batch
-    const allTransactions = await kv.getByPrefix("transaction:");
-    const transactionsToDelete = (allTransactions || []).filter((t: any) => t.batchId === batchId);
+    // 3. Get transactions belonging to this batch
+    const { data: txData, error: txError } = await supabase
+        .from("kv_store_37f42386")
+        .select("key")
+        .like("key", "transaction:%")
+        .eq("value->>batchId", batchId);
+
+    if (txError) throw txError;
+    const transactionsToDelete = txData?.map(d => d.key) || [];
     
     if (transactionsToDelete.length > 0) {
-        const txKeys = transactionsToDelete.map((t: any) => `transaction:${t.id}`);
-        // Chunk deletion
-        const chunkSize = 100;
-        for (let i = 0; i < txKeys.length; i += chunkSize) {
-             const chunk = txKeys.slice(i, i + chunkSize);
-             if (chunk.length > 0) await kv.mdel(chunk);
+        for (let i = 0; i < transactionsToDelete.length; i += 100) {
+             await kv.mdel(transactionsToDelete.slice(i, i + 100));
         }
     }
     
-    // 5. Ghost Data Cleanup
-    // Since DriverMetrics and VehicleMetrics do not always have batchId, they can become "ghosts" 
-    // if all source data is deleted. We check if the database is effectively empty of source data.
-    const remainingTrips = await kv.getByPrefix("trip:");
-    // We can also check transactions, but trips are the primary source for metrics usually.
-    const remainingTransactions = await kv.getByPrefix("transaction:");
-    
-    // Filter out the ones we just deleted (in case of race conditions or if getByPrefix is slightly stale, though usually it's consistent)
-    // Actually, getByPrefix might return the ones we just deleted if consistency is eventual? 
-    // But we awaited mdel, so it should be fine. 
-    // Just in case, let's filter just to be super safe.
-    const activeTrips = (remainingTrips || []).filter((t: any) => t.batchId !== batchId);
-    const activeTransactions = (remainingTransactions || []).filter((t: any) => t.batchId !== batchId);
+    // 4. Ghost Data Cleanup
+    const { count: tripCount } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "trip:%");
+    const { count: txCount } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "transaction:%");
 
-    if (activeTrips.length === 0 && activeTransactions.length === 0) {
+    if (tripCount === 0 && txCount === 0) {
         console.log("No source data remaining. Cleaning up ghost metrics...");
         const metricPrefixes = ["driver_metric:", "vehicle_metric:", "organization_metric:"];
-        
         for (const prefix of metricPrefixes) {
-             const items = await kv.getByPrefix(prefix);
+             const { data: items } = await supabase.from("kv_store_37f42386").select("key").like("key", `${prefix}%`);
              if (items && items.length > 0) {
-                 const keys = items.map((item: any) => {
-                     // Handle both ID structures just in case
-                     return `${prefix}${item.id}`; 
-                 });
-                 
-                 // Chunk deletion
-                 const chunkSize = 100;
-                 for (let i = 0; i < keys.length; i += chunkSize) {
-                    const chunk = keys.slice(i, i + chunkSize);
-                    if (chunk.length > 0) await kv.mdel(chunk);
-                 }
+                 const keys = items.map(d => d.key);
+                 for (let i = 0; i < keys.length; i += 100) await kv.mdel(keys.slice(i, i + 100));
              }
         }
     }
 
-    // 6. Delete the batch record itself
+    // 5. Delete the batch record itself
     await kv.del(`batch:${batchId}`);
     
+    // Invalidate caches
+    await cache.invalidateCacheVersion("stats");
+    await cache.invalidateCacheVersion("performance");
+
     return c.json({ 
         success: true, 
         deletedTrips: tripsToDelete.length,
@@ -1768,7 +1928,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
   }
 });
 
-// Admin: Preview Data Reset Endpoint
+// Admin: Preview Data Reset Endpoint - Optimized
 app.post("/make-server-37f42386/preview-reset", async (c) => {
   try {
     const { type, startDate, endDate, targets, driverId } = await c.req.json();
@@ -1777,101 +1937,121 @@ app.post("/make-server-37f42386/preview-reset", async (c) => {
         return c.json({ error: "Missing required parameters" }, 400);
     }
     
-    const start = new Date(startDate).getTime(); // Use UTC start of day (00:00) to ensure we catch date-only timestamps and early EST uploads
-    const end = new Date(endDate).getTime() + (30 * 60 * 60 * 1000); // UTC End of Day + 6h buffer (covers full EST day + margin)
+    const start = new Date(startDate).toISOString();
+    const end = new Date(endDate).toISOString();
     
     const items: any[] = [];
 
     if (type === 'upload') {
-        const batches = await kv.getByPrefix("batch:");
-        const targetBatches = (batches || []).filter((b: any) => {
-            const uploadTime = new Date(b.uploadDate).getTime();
-            return uploadTime >= start && uploadTime < end;
-        });
+        const { data: batchData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "batch:%")
+            .gte("value->>uploadDate", start)
+            .lte("value->>uploadDate", end);
 
+        const targetBatches = batchData?.map((d: any) => d.value) || [];
         const batchIds = targetBatches.map((b: any) => b.id);
         
         if (batchIds.length > 0) {
-            const allTrips = await kv.getByPrefix("trip:");
-            const allTxs = await kv.getByPrefix("transaction:");
-            
-            let trips = (allTrips || []).filter((t: any) => batchIds.includes(t.batchId));
-            let txs = (allTxs || []).filter((t: any) => batchIds.includes(t.batchId));
-            
-            if (driverId) {
-                trips = trips.filter((t: any) => t.driverId === driverId);
-                txs = txs.filter((t: any) => t.driverId === driverId);
+            // Fetch trips and txs for these batches using native Supabase filters
+            if (targets.includes('trips')) {
+                let query = supabase
+                    .from("kv_store_37f42386")
+                    .select("value->id, value->platform, value->distance, value->amount, value->driverName, value->batchId, value->date, value->requestTimestamp")
+                    .like("key", "trip:%")
+                    .in("value->>batchId", batchIds);
+                
+                if (driverId) query = query.eq("value->>driverId", driverId);
+                
+                const { data: trips } = await query;
+                (trips || []).forEach((t: any) => {
+                    items.push({
+                        id: t.id,
+                        key: `trip:${t.id}`,
+                        type: 'Trip',
+                        date: t.date || t.requestTimestamp,
+                        description: `${t.platform} - ${t.distance || 0}km`,
+                        amount: t.amount,
+                        driverName: t.driverName || 'Unknown',
+                        batchId: t.batchId
+                    });
+                });
             }
 
-            if (targets.includes('trips')) {
-                 trips.forEach((t: any) => items.push({
-                     id: t.id,
-                     key: `trip:${t.id}`,
-                     type: 'Trip',
-                     date: t.date || t.requestTimestamp,
-                     description: `${t.platform} - ${t.distance || 0}km`,
-                     amount: t.amount,
-                     driverName: t.driverName || 'Unknown',
-                     batchId: t.batchId
-                 }));
-            }
             if (targets.includes('transactions')) {
-                 txs.forEach((t: any) => items.push({
-                     id: t.id,
-                     key: `transaction:${t.id}`,
-                     type: 'Transaction',
-                     date: t.date || t.timestamp,
-                     description: t.description || 'Toll/Expense',
-                     amount: t.amount,
-                     driverName: t.driverName || 'Unknown',
-                     batchId: t.batchId,
-                     receiptUrl: t.receiptUrl
-                 }));
+                let query = supabase
+                    .from("kv_store_37f42386")
+                    .select("value->id, value->description, value->amount, value->driverName, value->batchId, value->date, value->timestamp, value->receiptUrl")
+                    .like("key", "transaction:%")
+                    .in("value->>batchId", batchIds);
+                
+                if (driverId) query = query.eq("value->>driverId", driverId);
+                
+                const { data: txs } = await query;
+                (txs || []).forEach((t: any) => {
+                    items.push({
+                        id: t.id,
+                        key: `transaction:${t.id}`,
+                        type: 'Transaction',
+                        date: t.date || t.timestamp,
+                        description: t.description || 'Toll/Expense',
+                        amount: t.amount,
+                        driverName: t.driverName || 'Unknown',
+                        batchId: t.batchId,
+                        receiptUrl: t.receiptUrl
+                    });
+                });
             }
         }
     } else {
+        // Record Date mode - Direct query by date
         if (targets.includes('trips')) {
-            let trips = await kv.getByPrefix("trip:");
-            if (driverId) {
-                trips = (trips || []).filter((t: any) => t.driverId === driverId);
-            }
+            let query = supabase
+                .from("kv_store_37f42386")
+                .select("value->id, value->platform, value->distance, value->amount, value->driverName, value->date, value->requestTimestamp")
+                .like("key", "trip:%")
+                .or(`value->>date.gte.${start},value->>requestTime.gte.${start}`)
+                .or(`value->>date.lte.${end},value->>requestTime.lte.${end}`);
+            
+            if (driverId) query = query.eq("value->>driverId", driverId);
+            
+            const { data: trips } = await query;
             (trips || []).forEach((t: any) => {
-                const date = t.date || t.requestTimestamp;
-                const time = new Date(date).getTime();
-                if (time >= start && time < end) {
-                    items.push({
-                         id: t.id,
-                         key: `trip:${t.id}`,
-                         type: 'Trip',
-                         date: date,
-                         description: `${t.platform} - ${t.distance || 0}km`,
-                         amount: t.amount,
-                         driverName: t.driverName || 'Unknown'
-                    });
-                }
+                items.push({
+                    id: t.id,
+                    key: `trip:${t.id}`,
+                    type: 'Trip',
+                    date: t.date || t.requestTimestamp,
+                    description: `${t.platform} - ${t.distance || 0}km`,
+                    amount: t.amount,
+                    driverName: t.driverName || 'Unknown'
+                });
             });
         }
         
         if (targets.includes('transactions')) {
-            let txs = await kv.getByPrefix("transaction:");
-             if (driverId) {
-                txs = (txs || []).filter((t: any) => t.driverId === driverId);
-            }
+            let query = supabase
+                .from("kv_store_37f42386")
+                .select("value->id, value->description, value->amount, value->driverName, value->date, value->timestamp, value->receiptUrl")
+                .like("key", "transaction:%")
+                .gte("value->>date", start)
+                .lte("value->>date", end);
+            
+            if (driverId) query = query.eq("value->>driverId", driverId);
+            
+            const { data: txs } = await query;
             (txs || []).forEach((t: any) => {
-                const date = t.date || t.timestamp;
-                const time = new Date(date).getTime();
-                if (time >= start && time < end) {
-                    items.push({
-                         id: t.id,
-                         key: `transaction:${t.id}`,
-                         type: 'Transaction',
-                         date: date,
-                         description: t.description || 'Toll/Expense',
-                         amount: t.amount,
-                         driverName: t.driverName || 'Unknown',
-                         receiptUrl: t.receiptUrl
-                    });
-                }
+                items.push({
+                    id: t.id,
+                    key: `transaction:${t.id}`,
+                    type: 'Transaction',
+                    date: t.date || t.timestamp,
+                    description: t.description || 'Toll/Expense',
+                    amount: t.amount,
+                    driverName: t.driverName || 'Unknown',
+                    receiptUrl: t.receiptUrl
+                });
             });
         }
     }
@@ -1884,20 +2064,13 @@ app.post("/make-server-37f42386/preview-reset", async (c) => {
   }
 });
 
-// Admin: Reset Data By Date Endpoint
+// Admin: Reset Data By Date Endpoint - Optimized
 app.post("/make-server-37f42386/reset-by-date", async (c) => {
   try {
     const { type, startDate, endDate, targets, driverId, preview, keys } = await c.req.json();
     
     // Mode 1: Direct Deletion by Keys
     if (keys && Array.isArray(keys) && keys.length > 0) {
-        // We need to fetch items first to check for receipts to delete
-        // Note: kv.mget returns values. We assume keys correspond to these values.
-        // If we want to be safe, we can just fetch everything.
-        // However, for storage cleanup, we just need the values.
-        
-        // Chunk the read if too large (Supabase limit might be an issue, but usually fine for <1000)
-        // We'll process in chunks of 100 for safety
         const filesToDelete: string[] = [];
         const chunkSize = 100;
         
@@ -1917,11 +2090,9 @@ app.post("/make-server-37f42386/reset-by-date", async (c) => {
                 }
             });
             
-            // Delete keys
             await kv.mdel(chunkKeys);
         }
 
-        // Delete Files
         if (filesToDelete.length > 0) {
             const bucketName = "make-37f42386-docs";
             const fileChunkSize = 50;
@@ -1939,125 +2110,83 @@ app.post("/make-server-37f42386/reset-by-date", async (c) => {
         return c.json({ error: "Missing required parameters" }, 400);
     }
     
-    // Timezone Logic
-    let start = new Date(startDate).getTime();
-    let end = new Date(endDate).getTime() + (24 * 60 * 60 * 1000);
-
-    if (type === 'upload') {
-         // Widened window to catch "today" uploads across timezones
-         // Start from 24h before to catch late previous day (UTC) and go 48h after
-         start = start - (24 * 60 * 60 * 1000); 
-         end = end + (24 * 60 * 60 * 1000); 
-    } 
+    const start = new Date(startDate).toISOString();
+    const end = new Date(endDate).toISOString();
     
     const candidates: { key: string, data: any, type: 'trip' | 'transaction' | 'fuel_entry' }[] = [];
-    let batchesDeleted = 0;
 
     if (type === 'upload') {
-        const batches = await kv.getByPrefix("batch:");
-        const targetBatches = (batches || []).filter((b: any) => {
-            if (!b.uploadDate) return false;
-            const uploadTime = new Date(b.uploadDate).getTime();
-            if (isNaN(uploadTime)) return false;
-            return uploadTime >= start && uploadTime < end;
-        });
+        const { data: batchData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "batch:%")
+            .gte("value->>uploadDate", start)
+            .lte("value->>uploadDate", end);
 
-        const batchIds = targetBatches.map((b: any) => b.id);
+        const batchIds = batchData?.map((d: any) => d.value.id) || [];
         
         if (batchIds.length > 0) {
-            const allTrips = await kv.getByPrefix("trip:");
-            const allTxs = await kv.getByPrefix("transaction:");
-            const allFuel = await kv.getByPrefix("fuel_entry:");
-            
-            let tripsToProcess = (allTrips || []).filter((t: any) => batchIds.includes(t.batchId));
-            let txsToProcess = (allTxs || []).filter((t: any) => batchIds.includes(t.batchId));
-            let fuelToProcess = (allFuel || []).filter((f: any) => batchIds.includes(f.batchId));
-            
-            if (driverId) {
-                tripsToProcess = tripsToProcess.filter((t: any) => t.driverId === driverId);
-                txsToProcess = txsToProcess.filter((t: any) => t.driverId === driverId);
-                fuelToProcess = fuelToProcess.filter((f: any) => f.driverId === driverId);
-            }
-
+            // Trips
             if (targets.includes('trips')) {
-                 tripsToProcess.forEach((t: any) => candidates.push({ key: `trip:${t.id}`, data: t, type: 'trip' }));
+                let query = supabase.from("kv_store_37f42386").select("key, value->id, value->date, value->requestTimestamp, value->platform, value->pickupLocation, value->dropoffLocation, value->amount, value->driverId, value->driverName").like("key", "trip:%").in("value->>batchId", batchIds);
+                if (driverId) query = query.eq("value->>driverId", driverId);
+                const { data } = await query;
+                (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'trip' }));
             }
-            if (targets.includes('tolls')) {
-                const tolls = txsToProcess.filter((t: any) => 
-                    (t.category && (t.category.includes('Toll') || t.description?.toLowerCase().includes('toll')))
-                );
-                tolls.forEach((t: any) => candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' }));
-            }
+            // Fuel Entries
             if (targets.includes('fuel')) {
-                fuelToProcess.forEach((f: any) => candidates.push({ key: `fuel_entry:${f.id}`, data: f, type: 'fuel_entry' }));
-                const fuelTxs = txsToProcess.filter((t: any) => 
-                    (t.category === 'Fuel' || t.description?.toLowerCase().includes('fuel'))
-                );
-                fuelTxs.forEach((t: any) => candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' }));
+                let query = supabase.from("kv_store_37f42386").select("key, value->id, value->date, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "fuel_entry:%").in("value->>batchId", batchIds);
+                if (driverId) query = query.eq("value->>driverId", driverId);
+                const { data } = await query;
+                (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'fuel_entry' }));
             }
-            if (targets.includes('transactions')) {
-                 txsToProcess.forEach((t: any) => {
-                     if (!candidates.some(c => c.key === `transaction:${t.id}`)) {
-                         candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
-                     }
-                 });
+            // Transactions (Tolls/Other)
+            if (targets.includes('transactions') || targets.includes('tolls')) {
+                let query = supabase.from("kv_store_37f42386").select("key, value->id, value->date, value->timestamp, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "transaction:%").in("value->>batchId", batchIds);
+                if (driverId) query = query.eq("value->>driverId", driverId);
+                const { data } = await query;
+                (data || []).forEach((d: any) => {
+                    const isToll = d.category?.includes('Toll') || d.description?.toLowerCase().includes('toll');
+                    if (targets.includes('transactions') || (targets.includes('tolls') && isToll)) {
+                        candidates.push({ key: d.key, data: d, type: 'transaction' });
+                    }
+                });
             }
         }
     } else {
-        // Record Date
+        // Record Date mode
         if (targets.includes('trips')) {
-            let trips = await kv.getByPrefix("trip:");
-            if (driverId) {
-                trips = (trips || []).filter((t: any) => t.driverId === driverId);
-            }
-            (trips || []).forEach((t: any) => {
-                const date = t.date || t.requestTimestamp;
-                const time = new Date(date).getTime();
-                if (time >= start && time < end) {
-                    candidates.push({ key: `trip:${t.id}`, data: t, type: 'trip' });
-                }
-            });
+            let query = supabase.from("kv_store_37f42386").select("key, value->id, value->date, value->requestTimestamp, value->platform, value->pickupLocation, value->dropoffLocation, value->amount, value->driverId, value->driverName").like("key", "trip:%")
+                .or(`value->>date.gte.${start},value->>requestTime.gte.${start}`)
+                .or(`value->>date.lte.${end},value->>requestTime.lte.${end}`);
+            if (driverId) query = query.eq("value->>driverId", driverId);
+            const { data } = await query;
+            (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'trip' }));
         }
         
-        if (targets.includes('tolls') || targets.includes('fuel') || targets.includes('transactions')) {
-            let txs = await kv.getByPrefix("transaction:");
-            if (driverId) {
-                txs = (txs || []).filter((t: any) => t.driverId === driverId);
-            }
-            (txs || []).forEach((t: any) => {
-                const date = t.date || t.timestamp;
-                const time = new Date(date).getTime();
-                if (time >= start && time < end) {
-                    const isToll = t.category && (t.category.includes('Toll') || t.description?.toLowerCase().includes('toll'));
-                    const isFuel = t.category === 'Fuel' || t.description?.toLowerCase().includes('fuel');
-                    
-                    if (targets.includes('tolls') && isToll) {
-                         candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
-                    } else if (targets.includes('fuel') && isFuel) {
-                         candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
-                    } else if (targets.includes('transactions')) {
-                        candidates.push({ key: `transaction:${t.id}`, data: t, type: 'transaction' });
-                    }
+        if (targets.includes('transactions') || targets.includes('tolls') || targets.includes('fuel')) {
+            let query = supabase.from("kv_store_37f42386").select("key, value->id, value->date, value->timestamp, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "transaction:%")
+                .gte("value->>date", start).lte("value->>date", end);
+            if (driverId) query = query.eq("value->>driverId", driverId);
+            const { data } = await query;
+            (data || []).forEach((d: any) => {
+                const isToll = d.category?.includes('Toll') || d.description?.toLowerCase().includes('toll');
+                const isFuel = d.category === 'Fuel' || d.description?.toLowerCase().includes('fuel');
+                if (targets.includes('transactions') || (targets.includes('tolls') && isToll) || (targets.includes('fuel') && isFuel)) {
+                    candidates.push({ key: d.key, data: d, type: 'transaction' });
                 }
             });
         }
 
         if (targets.includes('fuel')) {
-             let fuelEntries = await kv.getByPrefix("fuel_entry:");
-             if (driverId) {
-                fuelEntries = (fuelEntries || []).filter((f: any) => f.driverId === driverId);
-             }
-             (fuelEntries || []).forEach((f: any) => {
-                const date = f.date;
-                const time = new Date(date).getTime();
-                if (time >= start && time < end) {
-                    candidates.push({ key: `fuel_entry:${f.id}`, data: f, type: 'fuel_entry' });
-                }
-             });
+            let query = supabase.from("kv_store_37f42386").select("key, value->id, value->date, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "fuel_entry:%")
+                .gte("value->>date", start).lte("value->>date", end);
+            if (driverId) query = query.eq("value->>driverId", driverId);
+            const { data } = await query;
+            (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'fuel_entry' }));
         }
     }
 
-    // Return Preview
     if (preview) {
         return c.json({
             success: true,
@@ -2076,43 +2205,28 @@ app.post("/make-server-37f42386/reset-by-date", async (c) => {
             }))
         });
     }
-    // Execute Bulk Deletion (Legacy / Confirm All)
+
+    // Execute Deletion
     const keysToDelete = candidates.map(c => c.key);
     const filesToDelete: string[] = [];
-    
     candidates.forEach(c => {
         const url = c.data.receiptUrl || c.data.invoiceUrl;
         if (url && typeof url === 'string' && url.includes('make-37f42386-docs')) {
              const parts = url.split('make-37f42386-docs/');
-             if (parts.length > 1) {
-                 filesToDelete.push(parts[1].split('?')[0]);
-             }
+             if (parts.length > 1) filesToDelete.push(parts[1].split('?')[0]);
         }
     });
 
     if (keysToDelete.length > 0) {
-        const chunkSize = 100;
-        for (let i = 0; i < keysToDelete.length; i += chunkSize) {
-            const chunk = keysToDelete.slice(i, i + chunkSize);
-            if (chunk.length > 0) await kv.mdel(chunk);
-        }
+        for (let i = 0; i < keysToDelete.length; i += 100) await kv.mdel(keysToDelete.slice(i, i + 100));
     }
 
     if (filesToDelete.length > 0) {
         const bucketName = "make-37f42386-docs";
-        const fileChunkSize = 50;
-        for (let i = 0; i < filesToDelete.length; i += fileChunkSize) {
-            const chunk = filesToDelete.slice(i, i + fileChunkSize);
-            await supabase.storage.from(bucketName).remove(chunk);
-        }
+        for (let i = 0; i < filesToDelete.length; i += 50) await supabase.storage.from(bucketName).remove(filesToDelete.slice(i, i + 50));
     }
 
-    return c.json({ 
-        success: true, 
-        deletedCount: keysToDelete.length,
-        filesDeletedCount: filesToDelete.length,
-        batchesDeleted: batchesDeleted
-    });
+    return c.json({ success: true, deletedCount: keysToDelete.length, filesDeletedCount: filesToDelete.length });
 
   } catch (e: any) {
     console.error("Reset by date error:", e);
@@ -3011,17 +3125,18 @@ app.post("/make-server-37f42386/parse-inspection", async (c) => {
     }
 });
 
-// Odometer History Endpoints
+// Odometer History Endpoints - Optimized
 app.get("/make-server-37f42386/odometer-history/:vehicleId", async (c) => {
   try {
     const vehicleId = c.req.param("vehicleId");
-    const history = await kv.getByPrefix(`odometer_reading:${vehicleId}:`);
-    
-    // Sort by date desc
-    history.sort((a: any, b: any) => {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
-    
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", `odometer_reading:${vehicleId}:`)
+        .order("value->>date", { ascending: false });
+
+    if (error) throw error;
+    const history = data?.map((d: any) => d.value) || [];
     return c.json(history);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -3484,8 +3599,15 @@ app.post("/make-server-37f42386/delete-user", async (c) => {
 // Fuel Dispute Endpoints
 app.get("/make-server-37f42386/fuel-disputes", async (c) => {
   try {
-    const disputes = await kv.getByPrefix("fuel_dispute:");
-    return c.json(disputes || []);
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "fuel_dispute:%")
+        .order("value->>createdAt", { ascending: false });
+
+    if (error) throw error;
+    const disputes = data?.map((d: any) => d.value) || [];
+    return c.json(disputes);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -3668,37 +3790,214 @@ app.post("/make-server-37f42386/map-match", async (c) => {
   }
 });
 
-// Performance Report Endpoint
+// Performance Report Endpoint - Optimized with Streaming (Phase 6) & Caching (Phase 7)
 app.get("/make-server-37f42386/performance-report", async (c) => {
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    const dailyRideTarget = parseInt(c.req.query("dailyRideTarget") || "10");
+    const dailyEarningsTarget = parseInt(c.req.query("dailyEarningsTarget") || "0");
+    const summaryOnly = c.req.query("summaryOnly") === "true";
+    const limit = parseInt(c.req.query("limit") || "100");
+    const offset = parseInt(c.req.query("offset") || "0");
+    
+    if (!startDate || !endDate) {
+        return c.json({ error: "startDate and endDate are required" }, 400);
+    }
+
+    // Phase 7.1: Caching Strategy
     try {
-        const startDate = c.req.query("startDate");
-        const endDate = c.req.query("endDate");
+        const cacheParams = { startDate, endDate, dailyRideTarget, dailyEarningsTarget, summaryOnly, limit, offset };
+        const version = await cache.getCacheVersion("performance");
+        const cacheKey = await cache.generateKey(`performance:${version}`, cacheParams);
         
-        if (!startDate || !endDate) {
-            return c.json({ error: "startDate and endDate are required" }, 400);
+        const cachedData = await cache.getCache(cacheKey);
+        if (cachedData) {
+            c.header("X-Cache", "HIT");
+            return c.json(cachedData);
         }
-
-        // Fetch Data
-        const trips = await kv.getByPrefix("trip:");
-        const drivers = await kv.getByPrefix("driver:");
         
-        // Use Defaults or Query Params for Quota
-        // In future phase, fetch from kv_store
-        const dailyRideTarget = parseInt(c.req.query("dailyRideTarget") || "10");
-        const dailyEarningsTarget = parseInt(c.req.query("dailyEarningsTarget") || "0");
+        c.header("X-Cache", "MISS");
 
-        const report = generatePerformanceReport(
-            Array.isArray(trips) ? trips : [], 
-            Array.isArray(drivers) ? drivers : [], 
-            startDate, 
-            endDate,
-            { dailyRideTarget, dailyEarningsTarget }
-        );
-        
-        return c.json(report);
+        return streamText(c, async (stream) => {
+            // Helper for safe streaming to handle Broken Pipe
+            const safeWrite = async (content: string): Promise<boolean> => {
+                try {
+                    await stream.write(content);
+                    return true;
+                } catch (writeErr: any) {
+                    if (writeErr.message.includes("broken pipe") || 
+                        writeErr.name === "EPIPE" || 
+                        writeErr.name === "Http" || 
+                        writeErr.name === "BadResource") {
+                        console.warn(`Stream Client disconnected (${writeErr.name}) - Stopping stream`);
+                        return false;
+                    }
+                    // Log unexpected errors but still return false to stop the loop safely
+                    console.error("Unexpected stream write error:", writeErr);
+                    return false;
+                }
+            };
+
+            try {
+                // Buffer for caching
+                const cachedReports: any[] = [];
+
+                // 1. Get total count of drivers first (for pagination metadata)
+                const { count: totalDrivers, error: countError } = await supabase
+                    .from("kv_store_37f42386")
+                    .select("key", { count: 'exact', head: true })
+                    .like("key", "driver:%");
+
+                if (countError) throw countError;
+
+                // Log Start
+                const reqStart = Date.now();
+                console.log(`[Performance Report] Starting processing for offset ${offset}, limit ${limit}`);
+
+                // Start JSON response
+                if (!await safeWrite(`{"data": [`)) return;
+
+                // 2. Fetch Drivers for the requested page
+                // We still fetch the full page of drivers requested (e.g., 100)
+                let { data: driverData, error: driverError } = await supabase
+                    .from("kv_store_37f42386")
+                    .select("value->id, value->name, value->driverId, value->uberDriverId, value->inDriveDriverId")
+                    .like("key", "driver:%")
+                    .range(offset, offset + limit - 1);
+
+                if (driverError) throw driverError;
+
+                let driversPage = (driverData as any) || [];
+                // Free raw driver response
+                (driverData as any) = null;
+
+                let firstItem = true;
+
+                // 3. Process drivers in chunks (Throttled via pMap)
+                const CHUNK_SIZE = 10; 
+                let driverChunks = [];
+                for (let i = 0; i < driversPage.length; i += CHUNK_SIZE) {
+                    driverChunks.push(driversPage.slice(i, i + CHUNK_SIZE));
+                }
+                // Free driversPage as it is now chunked
+                (driversPage as any) = null;
+
+                // Circuit Breaker State
+                let failureCount = 0;
+                const MAX_FAILURES = 3;
+
+                // Define the processor for a single chunk
+                const processChunk = async (driverChunk: any[], chunkIndex: number) => {
+                    // Circuit Breaker Check
+                    if (failureCount >= MAX_FAILURES) {
+                        console.warn("Circuit Breaker Open: Skipping chunk due to previous failures");
+                        return;
+                    }
+
+                    const driverIds = new Set<string>();
+                    driverChunk.forEach((d: any) => {
+                        if (d.id) driverIds.add(d.id);
+                        if (d.driverId) driverIds.add(d.driverId);
+                        if (d.uberDriverId) driverIds.add(d.uberDriverId);
+                        if (d.inDriveDriverId) driverIds.add(d.inDriveDriverId);
+                    });
+
+                    if (driverIds.size === 0) return;
+
+                    const chunkStart = Date.now();
+
+                    // Fetch raw trips
+                    let { data: tripData, error: tripError } = await supabase
+                        .from("kv_store_37f42386")
+                        .select("value->id, value->amount, value->date, value->driverId, value->status")
+                        .like("key", "trip:%")
+                        .in("value->>driverId", Array.from(driverIds))
+                        .or(`value->>date.gte.${startDate},value->>requestTime.gte.${startDate}`)
+                        .or(`value->>date.lte.${endDate},value->>requestTime.lte.${endDate}`);
+
+                    if (tripError) {
+                        console.error(`[Chunk Error] Failed to fetch trips. Drivers: ${driverIds.size}`, tripError);
+                        failureCount++; // Increment failure count
+                        return;
+                    }
+                    
+                    const tripCount = (tripData as any)?.length || 0;
+
+                    // Aggregate immediately
+                    const report = generatePerformanceReport(
+                        (tripData as any) || [], 
+                        driverChunk, 
+                        startDate, 
+                        endDate,
+                        { dailyRideTarget, dailyEarningsTarget },
+                        summaryOnly
+                    );
+                    
+                    // Explicitly free heavy trip data to prevent OOM
+                    (tripData as any) = null;
+
+                    console.log(`[Chunk] Processed ${driverIds.size} drivers. Trips: ${tripCount}. Duration: ${Date.now() - chunkStart}ms`);
+
+                    // Stream items INDIVIDUALLY to reduce memory pressure
+                    for (const reportItem of report) {
+                        let prefix = "";
+                        if (!firstItem) {
+                            prefix = ",";
+                        }
+                        const itemStr = prefix + JSON.stringify(reportItem);
+                        
+                        // CRITICAL FIX: Check if write succeeded
+                        const success = await safeWrite(itemStr);
+                        if (!success) {
+                            console.warn(`[Chunk] Stream broken during write. Aborting processing.`);
+                            throw new Error("StreamAborted");
+                        }
+                        
+                        firstItem = false;
+                    }
+
+                    // Add to cache buffer
+                    cachedReports.push(...report);
+                };
+
+                // Execute with concurrency limit of 1 (Serial)
+                // specific error handling for StreamAborted to exit cleanly
+                try {
+                    await pMap(driverChunks, processChunk, { concurrency: 1 });
+                } catch (err: any) {
+                    if (err.message === "StreamAborted") {
+                        console.warn("Processing halted due to client disconnection.");
+                        return; // Exit function cleanly, do not try to write footer
+                    }
+                    throw err; // Re-throw real errors
+                }
+
+                // End JSON response
+                const resultMetadata = { total: totalDrivers || 0, limit, offset };
+                if (!await safeWrite(`], "total": ${totalDrivers || 0}, "limit": ${limit}, "offset": ${offset}}`)) return;
+                
+                console.log(`[Performance Report] Completed in ${Date.now() - reqStart}ms`);
+
+                // 7. Save to Cache (Async) - Step 7.3: Increase TTL for summary data
+                const ttl = summaryOnly ? 600 : 300; // 10 mins for summary, 5 mins for details
+                const finalResponse = {
+                    data: cachedReports,
+                    ...resultMetadata
+                };
+                
+                // We don't await this to keep the response fast, but Deno Deploy might kill background tasks?
+                // Better to await it or use specific background pattern.
+                await cache.setCache(cacheKey, finalResponse, ttl);
+
+            } catch (e: any) {
+                console.error("Stream Error:", e);
+                // If we already started the stream, we can't change the status code.
+                await safeWrite(`]}`); // Try to close valid JSON even if empty
+            }
+        });
     } catch (e: any) {
-        console.error("Performance Report Error:", e);
-        return c.json({ error: e.message }, 500);
+        console.error("Cache Error:", e);
+        return c.json({ error: "Internal Server Error" }, 500);
     }
 });
 
@@ -3768,8 +4067,14 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
 // Fleet Equipment Endpoints
 app.get("/make-server-37f42386/fleet/equipment/all", async (c) => {
     try {
-        const equipment = await kv.getByPrefix("equipment:");
-        return c.json(equipment || []);
+        const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "equipment:%");
+
+        if (error) throw error;
+        const equipment = data?.map((d: any) => d.value) || [];
+        return c.json(equipment);
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -3796,8 +4101,14 @@ app.post("/make-server-37f42386/fleet/equipment/bulk", async (c) => {
 // Inventory Endpoints
 app.get("/make-server-37f42386/inventory", async (c) => {
     try {
-        const inventory = await kv.getByPrefix("inventory:");
-        return c.json(inventory || []);
+        const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "inventory:%");
+
+        if (error) throw error;
+        const inventory = data?.map((d: any) => d.value) || [];
+        return c.json(inventory);
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -3849,23 +4160,28 @@ app.post("/make-server-37f42386/templates", async (c) => {
 });
 
 
-// Weekly Check-Ins Endpoints
+// Weekly Check-Ins Endpoints - Optimized
 app.get("/make-server-37f42386/check-ins", async (c) => {
   try {
     const driverId = c.req.query("driverId");
     const weekStart = c.req.query("weekStart");
+    const limit = parseInt(c.req.query("limit") || "100");
     
-    const checkIns = await kv.getByPrefix("checkin:");
+    let query = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "checkin:%");
     
-    let filtered = checkIns || [];
-    if (driverId) {
-        filtered = filtered.filter((c: any) => c.driverId === driverId);
-    }
-    if (weekStart) {
-        filtered = filtered.filter((c: any) => c.weekStart === weekStart);
-    }
+    if (driverId) query = query.eq("value->>driverId", driverId);
+    if (weekStart) query = query.eq("value->>weekStart", weekStart);
     
-    return c.json(filtered);
+    const { data, error } = await query
+        .order("value->>timestamp", { ascending: false })
+        .limit(limit);
+
+    if (error) throw error;
+    const checkIns = data?.map((d: any) => d.value) || [];
+    return c.json(checkIns);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -3959,4 +4275,21 @@ app.delete("/make-server-37f42386/fuel-entries/:id", async (c) => {
     }
 });
 
-Deno.serve(app.fetch);
+Deno.serve(async (req) => {
+  try {
+    return await app.fetch(req);
+  } catch (err: any) {
+    console.error("Critical Server Error:", err);
+    return new Response(JSON.stringify({ 
+      error: "Internal Server Error", 
+      message: err.message,
+      stack: err.stack 
+    }), {
+      status: 500,
+      headers: { 
+        "Content-Type": "application/json", 
+        "Access-Control-Allow-Origin": "*" 
+      }
+    });
+  }
+});

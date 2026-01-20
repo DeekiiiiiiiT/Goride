@@ -248,14 +248,11 @@ export const api = {
   },
 
   async getTrips(options?: { limit?: number, offset?: number }): Promise<Trip[]> {
-    let url = `${API_ENDPOINTS.fleet}/trips`;
-    const params = new URLSearchParams();
-    if (options?.limit !== undefined) params.append('limit', options.limit.toString());
-    if (options?.offset !== undefined) params.append('offset', options.offset.toString());
+    // Default to a reasonable limit to prevent server crashes on large datasets
+    const limit = options?.limit ?? 500;
+    const offset = options?.offset ?? 0;
     
-    if (params.toString()) {
-        url += `?${params.toString()}`;
-    }
+    let url = `${API_ENDPOINTS.fleet}/trips?limit=${limit}&offset=${offset}`;
 
     const response = await fetchWithRetry(url, {
         headers: {
@@ -881,10 +878,13 @@ export const api = {
     return { transaction: txToSave, trip };
   },
 
-  async getPerformanceReport(startDate: string, endDate: string, options?: { dailyRideTarget?: number, dailyEarningsTarget?: number }): Promise<any[]> {
+  async getPerformanceReport(startDate: string, endDate: string, options?: { dailyRideTarget?: number, dailyEarningsTarget?: number, summaryOnly?: boolean, limit?: number, offset?: number }): Promise<{ data: any[], total: number, limit: number, offset: number }> {
     const params = new URLSearchParams({ startDate, endDate });
     if (options?.dailyRideTarget) params.append('dailyRideTarget', options.dailyRideTarget.toString());
     if (options?.dailyEarningsTarget) params.append('dailyEarningsTarget', options.dailyEarningsTarget.toString());
+    if (options?.summaryOnly !== undefined) params.append('summaryOnly', options.summaryOnly.toString());
+    if (options?.limit !== undefined) params.append('limit', options.limit.toString());
+    if (options?.offset !== undefined) params.append('offset', options.offset.toString());
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/performance-report?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }

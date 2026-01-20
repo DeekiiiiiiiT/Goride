@@ -351,6 +351,10 @@ function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
    const isCash = (Math.abs(Number(trip.cashCollected || 0)) > 0) || amount < 0 || ['goride', 'private', 'cash'].includes((trip.platform || '').toLowerCase());
    const date = new Date(trip.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 
+   const isResolving = (loc: string | undefined, lat: number | undefined) => {
+       return (!loc || loc === 'Manual Entry' || loc.startsWith('Lat:')) && !!lat;
+   };
+
    return (
       <Card 
         className="hover:border-indigo-300 dark:hover:border-indigo-700 cursor-pointer transition-colors group"
@@ -382,11 +386,6 @@ function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
                </div>
                <span className={cn(
                    "font-bold text-slate-900 dark:text-slate-100",
-                   // If it's a cash trip with negative balance (deduction), maybe keep it neutral or specific color?
-                   // User asked for the icon primarily. Let's keep the text neutral if negative, or standard style.
-                   // Actually, usually negative numbers are red, positive green.
-                   // But here negative means "Cash in hand", so it's not "bad".
-                   // Let's stick to neutral color to avoid confusion, or maybe emerald if positive earnings.
                )}>
                    ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                </span>
@@ -398,11 +397,25 @@ function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
                
                <div className="flex items-start gap-3">
                   <div className="h-2.5 w-2.5 rounded-full bg-red-500 mt-1.5 shrink-0 relative z-10" />
-                  <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{trip.pickupLocation || 'Unknown'}</p>
+                  {isResolving(trip.pickupLocation, trip.startLat) ? (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600 animate-pulse font-medium">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Resolving location...
+                      </div>
+                  ) : (
+                      <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{trip.pickupLocation || 'Unknown'}</p>
+                  )}
                </div>
                <div className="flex items-start gap-3">
                   <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 mt-1.5 shrink-0 relative z-10" />
-                  <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{trip.dropoffLocation || 'Unknown'}</p>
+                  {isResolving(trip.dropoffLocation, trip.endLat) ? (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600 animate-pulse font-medium">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Resolving location...
+                      </div>
+                  ) : (
+                      <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{trip.dropoffLocation || 'Unknown'}</p>
+                  )}
                </div>
             </div>
          </CardContent>

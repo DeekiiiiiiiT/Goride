@@ -28,9 +28,9 @@ interface TripTimerProps {
     duration: number; // minutes
     startDate: string; // YYYY-MM-DD
     startLocation?: string;
-    startCoords?: { lat: number; lon: number };
+    pickupCoords?: { lat: number; lon: number };
     endLocation?: string;
-    endCoords?: { lat: number; lon: number };
+    dropoffCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
     stops?: TripStop[]; // Phase 2: Multi-Stop Support
     totalWaitTime?: number; // Phase 2: Wait Time Tracking
@@ -251,17 +251,23 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     // Try to get location
     try {
       const position = await getCurrentPosition();
-      const address = await reverseGeocode(position.latitude, position.longitude);
-      
       session.startCoords = { lat: position.latitude, lon: position.longitude };
-      session.startLocation = address;
+      
+      // Try geocode but don't block if it fails
+      try {
+          const address = await reverseGeocode(position.latitude, position.longitude);
+          session.startLocation = address;
+          toast.success("Location detected: " + address.split(',')[0]);
+      } catch (e) {
+          console.warn("Initial geocode failed, using coords", e);
+          session.startLocation = `Lat: ${position.latitude.toFixed(5)}, Lon: ${position.longitude.toFixed(5)}`;
+      }
       
       setStartCoords(session.startCoords);
       setStartLocation(session.startLocation);
-      toast.success("Location detected: " + address.split(',')[0]);
     } catch (error) {
       console.error("GPS Error:", error);
-      toast.warning("Could not detect location. You can enter it manually.");
+      toast.warning("Could not detect location. Starting trip with manual entry fallback.");
     }
 
     // Start timer logic
@@ -341,19 +347,25 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     // Capture End Location
     let endLocationStr: string | undefined = undefined;
     let endCoordsObj: { lat: number; lon: number } | undefined = undefined;
+    let geocodeError: string | undefined = undefined;
+    let resolutionMethod: 'instant' | 'pending' = 'instant';
 
     // Robust Start Location Recovery
     // If startLocation is missing (e.g. GPS failed at start), try to recover from startCoords or route
     let finalStartLocation = startLocation;
     let finalStartCoords = startCoords;
+    let startGeocodeFailed = false;
 
     if (!finalStartLocation) {
+        startGeocodeFailed = true;
         // Try startCoords first
         if (finalStartCoords) {
              try {
                  finalStartLocation = await reverseGeocode(finalStartCoords.lat, finalStartCoords.lon);
-             } catch (e) {
+                 startGeocodeFailed = false;
+             } catch (e: any) {
                  console.error("Failed to recover start location from coords", e);
+                 geocodeError = `Pickup: ${e.message}`;
              }
         } 
         // Fallback to first route point
@@ -362,8 +374,10 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             finalStartCoords = { lat: firstPoint.lat, lon: firstPoint.lon };
             try {
                 finalStartLocation = await reverseGeocode(firstPoint.lat, firstPoint.lon);
-            } catch (e) {
+                startGeocodeFailed = false;
+            } catch (e: any) {
                 console.error("Failed to recover start location from route", e);
+                geocodeError = `Pickup: ${e.message}`;
             }
         }
     }
@@ -373,21 +387,37 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         endCoordsObj = { lat: position.latitude, lon: position.longitude };
         
         if (isOnline) {
-          const address = await reverseGeocode(position.latitude, position.longitude);
-          endLocationStr = address;
-          toast.success("Dropoff location detected: " + address.split(',')[0]);
+          try {
+            const address = await reverseGeocode(position.latitude, position.longitude);
+            endLocationStr = address;
+            toast.success("Dropoff location detected: " + address.split(',')[0]);
+          } catch (e: any) {
+            console.error("Failed to geocode dropoff", e);
+            resolutionMethod = 'pending';
+            geocodeError = geocodeError ? `${geocodeError} | Dropoff: ${e.message}` : `Dropoff: ${e.message}`;
+            endLocationStr = `Lat: ${position.latitude.toFixed(5)}, Lon: ${position.longitude.toFixed(5)}`;
+          }
         } else {
           endLocationStr = `Lat: ${position.latitude.toFixed(5)}, Lon: ${position.longitude.toFixed(5)}`;
+          resolutionMethod = 'pending';
+          geocodeError = "Offline: Geocode pending";
           toast.info("Offline: Dropoff location recorded");
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error("Failed to get dropoff location", e);
+        resolutionMethod = 'pending';
+        geocodeError = geocodeError ? `${geocodeError} | Dropoff: GPS Failed` : "Dropoff: GPS Failed";
         // Fallback: use last point from route if available
         if (route.length > 0) {
             const lastPoint = route[route.length - 1];
             endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lng };
             endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${lastPoint.lng.toFixed(5)}`;
         }
+    }
+
+    // If start geocode failed, overall resolution is pending
+    if (startGeocodeFailed) {
+        resolutionMethod = 'pending';
     }
 
     // Phase 3: Snap to Road
@@ -426,14 +456,17 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       duration: durationMinutes,
       startDate: formatDate(startObj),
       startLocation: finalStartLocation || undefined,
-      startCoords: finalStartCoords || undefined,
+      pickupCoords: finalStartCoords || undefined,
       endLocation: endLocationStr,
-      endCoords: endCoordsObj,
+      dropoffCoords: endCoordsObj,
       route: processedRoute, // Pass processed route
       stops: finalStops,
       totalWaitTime: finalStops.reduce((acc, stop) => acc + stop.durationSeconds, 0),
       distance: processedDistanceKm,
-      isOffline: !isOnline
+      isOffline: !isOnline,
+      resolutionMethod: resolutionMethod,
+      resolutionTimestamp: resolutionMethod === 'instant' ? new Date().toISOString() : undefined,
+      geocodeError: geocodeError
     };
 
     // Clean up

@@ -31,6 +31,7 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
 import { format, isSameWeek } from "date-fns";
 import { DriverOverview } from './DriverOverview';
+import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 
 export function DriverDashboard() {
   const { user } = useAuth();
@@ -65,9 +66,9 @@ export function DriverDashboard() {
     duration: number;
     startDate: string;
     startLocation?: string;
-    startCoords?: { lat: number; lon: number };
+    pickupCoords?: { lat: number; lon: number };
     endLocation?: string;
-    endCoords?: { lat: number; lon: number };
+    dropoffCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
     stops?: TripStop[];
     totalWaitTime?: number;
@@ -197,11 +198,21 @@ export function DriverDashboard() {
                 cumulativeEarnings: monthlyEarnings
             });
 
-            // Get Most Recent Trip
             if (myTrips.length > 0) {
                 // Sort desc
                 myTrips.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setRecentTrip(myTrips[0]);
+
+                // Phase 1 Fix: Background Address Resolution
+                // If we found trips for this driver, check if any need address resolution
+                resolveMissingTripAddresses(myTrips).then(resolved => {
+                    if (resolved.length > 0) {
+                        console.log(`[Dashboard] Resolved ${resolved.length} trip addresses in background.`);
+                        // Optionally refresh specific local state if needed, 
+                        // but since it's background and saved to API, 
+                        // next refresh or specific UI updates will pick it up.
+                    }
+                }).catch(err => console.error("Background address resolution failed:", err));
             }
 
       } catch (error) {
@@ -235,9 +246,9 @@ export function DriverDashboard() {
     duration: number;
     startDate: string;
     startLocation?: string;
-    startCoords?: { lat: number; lon: number };
+    pickupCoords?: { lat: number; lon: number };
     endLocation?: string;
-    endCoords?: { lat: number; lon: number };
+    dropoffCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
     stops?: TripStop[];
     totalWaitTime?: number;
@@ -252,9 +263,9 @@ export function DriverDashboard() {
       date: data.startDate, // Add date field for ManualTripForm mapping
       time: data.startTime, // Add time field for ManualTripForm mapping
       pickupLocation: data.startLocation,
-      pickupCoords: data.startCoords,
+      pickupCoords: data.pickupCoords,
       endLocation: data.endLocation, // Pass through
-      endCoords: data.endCoords, // Pass through
+      dropoffCoords: data.dropoffCoords, // Pass through
       route: data.route,
       stops: data.stops,
       totalWaitTime: data.totalWaitTime,

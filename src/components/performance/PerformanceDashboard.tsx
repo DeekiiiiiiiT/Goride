@@ -24,7 +24,10 @@ export function PerformanceDashboard() {
   });
   const [appliedSettings, setAppliedSettings] = useState(settings);
 
-  const { data: drivers, loading, error, dateRange, setDateRange, refresh } = usePerformanceReport(appliedSettings);
+  const { data: drivers, loading, error, dateRange, setDateRange, refresh } = usePerformanceReport({
+    ...appliedSettings,
+    summaryOnly: true
+  });
   
   const stats = getDriverStats(drivers);
   const atRiskDrivers = getAtRiskDrivers(drivers);

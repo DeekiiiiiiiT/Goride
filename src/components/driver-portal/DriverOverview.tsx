@@ -163,74 +163,19 @@ export function DriverOverview({
       )}
 
       {!metrics && !recentTrip && !loading && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div>
-                      <h4 className="font-semibold text-amber-900 text-sm">No Data Found</h4>
-                      <p className="text-xs text-amber-700 mt-1">
-                          We couldn't find any trips or metrics linked to <strong>{driverRecord?.driverName || driverRecord?.name || user?.email}</strong>.
-                      </p>
-                      <p className="text-xs text-amber-700 mt-2">
-                          <strong>Troubleshooting:</strong><br/>
-                          1. Ensure your name in the Admin Dashboard matches your profile name exactly.<br/>
-                          2. Ask your fleet manager to check your Driver ID.<br/>
-                          3. Current Resolved ID: <code className="bg-amber-100 px-1 rounded">{driverRecord?.id || 'N/A'}</code>
-                      </p>
-
-                      {/* Debug List */}
-                      {debugDrivers.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-amber-200">
-                             <p className="text-xs font-semibold text-amber-900 mb-1">System Debug - Available Drivers:</p>
-                             <div className="max-h-40 overflow-y-auto bg-amber-100/50 p-2 rounded text-[10px] font-mono text-amber-900">
-                                {debugDrivers.map(d => (
-                                   <div key={d.id} className="mb-1 border-b border-amber-200/50 pb-1 last:border-0">
-                                      <span className="font-bold">"{d.driverName || d.name}"</span> 
-                                      <span className="opacity-75"> • ID: {d.id} • Legacy: {d.driverId}</span>
-                                   </div>
-                                ))}
-                             </div>
-                             <p className="text-[10px] text-amber-700 mt-1">
-                                Comparing against profile name: <strong>"{user?.user_metadata?.name || user?.email}"</strong>
-                             </p>
-                          </div>
-                      )}
-
-                      {/* Unclaimed Trip IDs */}
-                      {unclaimedTripIds.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-amber-200">
-                             <p className="text-xs font-semibold text-amber-900 mb-1">Trip Data Found - Action Required:</p>
-                             <div className="flex flex-wrap gap-2 items-center mt-1">
-                                {unclaimedTripIds.slice(0, 20).map(id => (
-                                   <div key={id} className="flex items-center gap-2 p-1 bg-white border border-amber-300 rounded shadow-sm">
-                                       <span className="text-xs font-mono font-bold text-slate-700">
-                                           {id.slice(0, 8)}...
-                                       </span>
-                                       {driverRecord && id !== driverRecord.driverId && (
-                                           <Button 
-                                             size="sm"
-                                             variant="destructive"
-                                             onClick={() => onClaimId(id)}
-                                             disabled={!!isFixing}
-                                             className="h-6 text-[10px] px-2"
-                                           >
-                                             {isFixing === id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Link Identity"}
-                                           </Button>
-                                       )}
-                                   </div>
-                                ))}
-                                {unclaimedTripIds.length > 20 && <span className="text-[10px] text-amber-700 self-center">...and {unclaimedTripIds.length - 20} more</span>}
-                             </div>
-                             <p className="text-[10px] text-amber-900 mt-2 font-medium">
-                                Your account is currently pointing to an empty Legacy ID ({driverRecord?.driverId?.slice(0,8)}...).
-                                <br/>
-                                Click the red <span className="text-red-600 font-bold">"Link Identity"</span> button above to connect your account to the found data.
-                             </p>
-                          </div>
-                      )}
+          <Card className="border-dashed border-2 border-slate-200 bg-slate-50/50">
+              <CardContent className="p-8 flex flex-col items-center text-center space-y-4">
+                  <div className="h-16 w-16 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 mb-2">
+                      <Car className="h-8 w-8" />
                   </div>
-              </div>
-          </div>
+                  <div>
+                      <h3 className="text-lg font-bold text-slate-900">Start Your First Trip</h3>
+                      <p className="text-sm text-slate-500 mt-1 max-w-[280px] mx-auto">
+                          Welcome to the fleet! Complete your first trip to see your earnings, ratings, and performance stats appear here.
+                      </p>
+                  </div>
+              </CardContent>
+          </Card>
       )}
 
       {/* Today's Stats Breakdown */}

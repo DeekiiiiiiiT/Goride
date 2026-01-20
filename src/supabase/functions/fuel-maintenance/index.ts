@@ -277,4 +277,14 @@ app.delete("/fuel-maintenance/scenarios/:id", async (c) => {
   catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
-Deno.serve(app.fetch);
+Deno.serve(async (req) => {
+  try {
+    return await app.fetch(req);
+  } catch (err: any) {
+    console.error("Critical Server Error:", err);
+    return new Response(JSON.stringify({ error: "Internal Server Error", message: err.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+    });
+  }
+});

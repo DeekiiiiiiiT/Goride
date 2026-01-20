@@ -124,21 +124,20 @@ app.get("/fleet-management/trips", async (c) => {
   try {
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
-    const limit = limitParam ? parseInt(limitParam) : null;
+    const limit = limitParam ? parseInt(limitParam) : 50;
     const offset = offsetParam ? parseInt(offsetParam) : 0;
 
-    let trips = await kv.getByPrefix("trip:");
-    if (trips && Array.isArray(trips)) {
-        trips.sort((a: any, b: any) => {
-            const timeA = new Date(a.date).getTime();
-            const timeB = new Date(b.date).getTime();
-            return timeB - timeA;
-        });
-        if (limit !== null) {
-            trips = trips.slice(offset, offset + limit);
-        }
-    }
-    return c.json(trips || []);
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "trip:%")
+        .order("value->>date", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    
+    const trips = data?.map((d: any) => d.value) || [];
+    return c.json(trips);
   } catch (e: any) {
     console.error("Error fetching trips:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);
@@ -412,4 +411,20 @@ app.get("/fleet-management/dashboard/stats", async (c) => {
   }
 });
 
-Deno.serve(app.fetch);
+Deno.serve(async (req) => {
+  try {
+    return await app.fetch(req);
+  } catch (err: any) {
+    console.error("Critical Server Error:", err);
+    return new Response(JSON.stringify({ 
+      error: "Internal Server Error", 
+      message: err.message 
+    }), {
+      status: 500,
+      headers: { 
+        "Content-Type": "application/json", 
+        "Access-Control-Allow-Origin": "*" 
+      }
+    });
+  }
+});

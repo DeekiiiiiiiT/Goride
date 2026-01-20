@@ -20,15 +20,21 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
   const dailyStats = useMemo(() => {
     const stats: Record<string, { date: string; earnings: number; trips: number; count: number }> = {};
     
+    // Check if history is available for at least one driver
+    const hasHistory = drivers.some(d => d.history && d.history.length > 0);
+    if (!hasHistory) return [];
+
     drivers.forEach(d => {
-      d.history.forEach(day => {
-        if (!stats[day.date]) {
-          stats[day.date] = { date: day.date, earnings: 0, trips: 0, count: 0 };
-        }
-        stats[day.date].earnings += day.earnings;
-        stats[day.date].trips += day.trips;
-        stats[day.date].count += 1;
-      });
+      if (d.history) {
+        d.history.forEach(day => {
+          if (!stats[day.date]) {
+            stats[day.date] = { date: day.date, earnings: 0, trips: 0, count: 0 };
+          }
+          stats[day.date].earnings += day.earnings;
+          stats[day.date].trips += day.trips;
+          stats[day.date].count += 1;
+        });
+      }
     });
 
     return Object.values(stats)
@@ -60,44 +66,51 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
         </CardHeader>
         <CardContent>
           <div style={{ width: '100%', height: '300px', minWidth: '300px', minHeight: '300px', display: 'block', position: 'relative' }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={300}>
-              <BarChart data={dailyStats}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="dateShort" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                <Tooltip 
-                  cursor={{ fill: '#f4f4f5' }}
-                  content={({ active, payload, label }) => {
-                     if (active && payload && payload.length) {
-                      return (
-                        <div className="rounded-lg border bg-background p-2 shadow-sm">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="flex flex-col">
-                              <span className="text-[0.70rem] uppercase text-muted-foreground">
-                                Date
-                              </span>
-                              <span className="font-bold text-muted-foreground">
-                                {label}
-                              </span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[0.70rem] uppercase text-muted-foreground">
-                                Revenue
-                              </span>
-                              <span className="font-bold">
-                                ${payload[0].value?.toLocaleString()}
-                              </span>
+            {dailyStats.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={300}>
+                <BarChart data={dailyStats}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="dateShort" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                  <Tooltip 
+                    cursor={{ fill: '#f4f4f5' }}
+                    content={({ active, payload, label }) => {
+                       if (active && payload && payload.length) {
+                        return (
+                          <div className="rounded-lg border bg-background p-2 shadow-sm">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="flex flex-col">
+                                <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                  Date
+                                </span>
+                                <span className="font-bold text-muted-foreground">
+                                  {label}
+                                </span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                  Revenue
+                                </span>
+                                <span className="font-bold">
+                                  ${payload[0].value?.toLocaleString()}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )
-                    }
-                    return null
-                  }}
-                />
-                <Bar dataKey="earnings" fill="#0f172a" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+                        )
+                      }
+                      return null
+                    }}
+                  />
+                  <Bar dataKey="earnings" fill="#0f172a" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <p>Daily history not available in summary view.</p>
+                <p className="text-sm">Select a specific driver for detailed analysis.</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

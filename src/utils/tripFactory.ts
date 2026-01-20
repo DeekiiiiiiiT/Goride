@@ -18,6 +18,11 @@ export interface ManualTripInput {
   stops?: TripStop[];
   totalWaitTime?: number; // seconds
   isLiveRecorded?: boolean; // Context flag: true if coming from live timer
+  pickupCoords?: { lat: number; lon: number };
+  dropoffCoords?: { lat: number; lon: number };
+  resolutionMethod?: 'instant' | 'background' | 'manual' | 'pending';
+  resolutionTimestamp?: string;
+  geocodeError?: string;
 }
 
 export function createManualTrip(data: ManualTripInput, driverId: string, driverName?: string): Trip {
@@ -61,8 +66,12 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     driverName: driverName,
     amount: amount,
     status: 'Completed',
-    pickupLocation: data.pickupLocation || 'Manual Entry',
-    dropoffLocation: data.dropoffLocation || '',
+    pickupLocation: data.pickupLocation || (data.pickupCoords ? '' : 'Manual Entry'),
+    dropoffLocation: data.dropoffLocation || (data.dropoffCoords ? '' : ''),
+    startLat: data.pickupCoords?.lat,
+    startLng: data.pickupCoords?.lon,
+    endLat: data.dropoffCoords?.lat,
+    endLng: data.dropoffCoords?.lon,
     distance: data.distance || 0,
     vehicleId: data.vehicleId,
     notes: data.notes || '',
@@ -88,6 +97,9 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     
     // Metadata
     isManual: data.isLiveRecorded ? false : true,
-    batchId: data.isLiveRecorded ? 'live_driver_app' : 'manual_entry'
+    batchId: data.isLiveRecorded ? 'live_driver_app' : 'manual_entry',
+    resolutionMethod: data.resolutionMethod,
+    resolutionTimestamp: data.resolutionTimestamp,
+    geocodeError: data.geocodeError
   } as Trip;
 }

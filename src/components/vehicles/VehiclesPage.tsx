@@ -66,6 +66,7 @@ export function VehiclesPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [manualVehicles, setManualVehicles] = useState<Vehicle[]>([]);
   const [vehicleMetrics, setVehicleMetrics] = useState<import('../../types/data').VehicleMetrics[]>([]);
+  const [allDrivers, setAllDrivers] = useState<any[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -91,14 +92,16 @@ export function VehiclesPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tripsData, vehiclesData, metricsData] = await Promise.all([
+        const [tripsData, vehiclesData, metricsData, driversData] = await Promise.all([
             api.getTrips(),
             api.getVehicles().catch(() => []),
-            api.getVehicleMetrics().catch(() => [])
+            api.getVehicleMetrics().catch(() => []),
+            api.getDrivers().catch(() => [])
         ]);
         setTrips(tripsData);
         setManualVehicles(vehiclesData);
         setVehicleMetrics(metricsData);
+        setAllDrivers(driversData);
       } catch (err) {
         console.error("Failed to fetch data for vehicles page", err);
       } finally {
@@ -166,8 +169,9 @@ export function VehiclesPage() {
         return {
             ...vehicle,
             status: isInactive ? 'Inactive' : 'Active',
-            currentDriverId: lastTrip?.driverId || vehicle.currentDriverId,
-            currentDriverName: lastTrip?.driverName || vehicle.currentDriverName,
+            // Prioritize manual/current assignment over historical trip logs
+            currentDriverId: vehicle.currentDriverId || lastTrip?.driverId,
+            currentDriverName: vehicle.currentDriverName || lastTrip?.driverName,
             metrics: {
                 ...vehicle.metrics,
                 todayEarnings: todayEarnings || vehicle.metrics?.todayEarnings || 0,
@@ -213,12 +217,52 @@ export function VehiclesPage() {
     }
   };
 
-  const handleAssignDriver = (vehicleId: string, driverId: string) => {
-    // In a real app, we would call an API here
-    console.log(`Assigning driver ${driverId} to vehicle ${vehicleId}`);
-    // For now, we'll just close the modal and maybe update local state if needed
-    // But since data is derived from trips, a mock assignment won't show up unless we update the trip data
-    setIsAssignModalOpen(false);
+  const handleAssignDriver = async (vehicleId: string, driverId: string) => {
+    // 1. Find driver details
+    const driver = allDrivers.find(d => (d.id === driverId) || (d.driverId === driverId));
+    const driverName = driver ? (driver.name || driver.driverName) : 'Unknown Driver';
+
+    // Find the vehicle to update
+    const vehicleToUpdate = manualVehicles.find(v => v.id === vehicleId);
+    if (!vehicleToUpdate) {
+        console.error("Vehicle not found for assignment");
+        return;
+    }
+
+    const updatedVehicle = {
+        ...vehicleToUpdate,
+        currentDriverId: driverId,
+        currentDriverName: driverName,
+        status: 'Active' // Reactivate vehicle on assignment
+    };
+
+    // 2. Optimistically update local state to reflect assignment immediately
+    setManualVehicles(prev => prev.map(v => {
+        if (v.id === vehicleId) {
+            return updatedVehicle;
+        }
+        return v;
+    }));
+
+    try {
+        // 3. Persist to API
+        await api.saveVehicle(updatedVehicle);
+        
+        console.log(`Assigned driver ${driverId} (${driverName}) to vehicle ${vehicleId}`);
+        
+        toast.success("Driver assigned successfully", {
+            description: `${driverName} is now assigned to the vehicle.`
+        });
+        
+        setIsAssignModalOpen(false);
+    } catch (error) {
+        console.error("Failed to save driver assignment", error);
+        toast.error("Failed to save assignment", {
+            description: "The change could not be saved to the server."
+        });
+        // Revert on failure
+        setManualVehicles(prev => prev.map(v => v.id === vehicleId ? vehicleToUpdate : v));
+    }
   };
 
   const handleLogService = (id: string) => {
@@ -525,6 +569,7 @@ export function VehiclesPage() {
         onClose={() => setIsAssignModalOpen(false)}
         vehicle={vehicleToAssign}
         trips={trips}
+        allDrivers={allDrivers}
         onAssign={handleAssignDriver}
       />
 

@@ -13,7 +13,7 @@ import { Search, User, Check, AlertCircle, TrendingUp, DollarSign, Star, Info } 
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Badge } from "../ui/badge";
 import { Vehicle } from '../../types/vehicle';
-import { Trip } from '../../types/data';
+import { Trip, DriverMetrics } from '../../types/data';
 import { cn } from "../ui/utils";
 import { toast } from "sonner@2.0.3";
 
@@ -22,6 +22,7 @@ interface DriverAssignmentModalProps {
   onClose: () => void;
   vehicle: Vehicle | null;
   trips: Trip[];
+  allDrivers?: any[];
   onAssign: (vehicleId: string, driverId: string) => void;
 }
 
@@ -37,37 +38,113 @@ interface DriverSummary {
   isCompatible: boolean;
 }
 
-export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, onAssign }: DriverAssignmentModalProps) {
+export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDrivers = [], onAssign }: DriverAssignmentModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
 
-  // Derived drivers list from trips
+  // Derived drivers list from trips and allDrivers source of truth
   const drivers: DriverSummary[] = useMemo(() => {
     const driverMap = new Map<string, DriverSummary>();
     
+    // 1. Populate from Source of Truth (allDrivers)
+    // Handle both DriverProfile (id, name) and DriverMetrics (driverId, driverName) shapes
+    allDrivers.forEach(d => {
+       const id = d.id || d.driverId;
+       const name = d.name || d.driverName;
+       
+       if (!id) return;
+       
+       driverMap.set(id, {
+           id: id,
+           name: name || 'Unknown Driver',
+           rating: d.ratingLast4Weeks || ((d.tripsCompleted || d.totalTrips || 0) > 0 ? 4.8 : 0),
+           totalTrips: d.tripsCompleted || d.totalTrips || 0,
+           totalEarnings: d.totalEarnings || 0,
+           acceptanceRate: (d.acceptanceRate || 0.85) * (d.acceptanceRate > 1 ? 1 : 100), // Handle both 0-1 and 0-100
+           status: (d.onlineHours > 0 || d.status === 'Active') ? 'Available' : 'Offline',
+           isCompatible: true
+       });
+    });
+
+    // 2. Augment with Trip Data (and handle legacy/unmapped drivers)
     trips.forEach(trip => {
       if (!trip.driverId || trip.driverId === 'unknown') return;
       
-      if (!driverMap.has(trip.driverId)) {
-        driverMap.set(trip.driverId, {
+      let driver = driverMap.get(trip.driverId);
+      
+      // If not found by ID, try to find by Name (Deduplication Strategy)
+      if (!driver) {
+         // Check if any existing driver has this name (case-insensitive)
+         const tripDriverName = (trip.driverName || '').toLowerCase().trim();
+         
+         if (tripDriverName) {
+            for (const existingDriver of driverMap.values()) {
+                const dbName = (existingDriver.name || '').toLowerCase().trim();
+                
+                // 1. Exact Match
+                if (dbName === tripDriverName) {
+                    driver = existingDriver;
+                    break;
+                }
+                
+                // 2. Fuzzy Match (Token overlap)
+                // This handles cases like "Kenny Gregory Rattray" (DB) matching "Kenny Rattray" (Trip)
+                const dbParts = dbName.split(/\s+/);
+                const tripParts = tripDriverName.split(/\s+/);
+                
+                // If the names are multi-word, check for subset match
+                if (dbParts.length > 1 && tripParts.length > 1) {
+                    // Check if all parts of trip name exist in DB name
+                    const tripInDb = tripParts.every(part => dbParts.includes(part));
+                    if (tripInDb) {
+                        driver = existingDriver;
+                        break;
+                    }
+                    
+                    // Check if all parts of DB name exist in trip name
+                    const dbInTrip = dbParts.every(part => tripParts.includes(part));
+                    if (dbInTrip) {
+                        driver = existingDriver;
+                        break;
+                    }
+                }
+            }
+         }
+      }
+
+      // If still not found, create a new entry (legacy driver found in trips but not in DB)
+      if (!driver) {
+        driver = {
           id: trip.driverId,
           name: trip.driverName || 'Unknown Driver',
-          rating: 4.5 + (Math.random() * 0.5), // Mock rating
+          rating: 4.5, // Default for unknown
           totalTrips: 0,
           totalEarnings: 0,
-          acceptanceRate: 85 + (Math.random() * 15), // Mock rate
-          status: Math.random() > 0.3 ? 'Available' : 'Offline',
+          acceptanceRate: 0,
+          status: 'Offline',
           isCompatible: true
-        });
+        };
+        // Only add if we have a valid ID to key by
+        // Use the trip.driverId as the key
+        driverMap.set(trip.driverId, driver);
       }
       
-      const driver = driverMap.get(trip.driverId)!;
+      // Update stats
+      // Note: If we found the driver via Name match but they had a different ID in the map,
+      // we are updating the object reference in the map.
+      // However, we are NOT adding the *bad* ID to the map.
+      // So trips with the "bad" ID will contribute to the "good" driver's stats.
       driver.totalTrips += 1;
       driver.totalEarnings += trip.amount || 0;
     });
     
-    return Array.from(driverMap.values());
-  }, [trips]);
+    // Filter out Unknown Drivers
+    return Array.from(driverMap.values()).filter(d => 
+        d.id !== 'unknown' && 
+        d.name !== 'Unknown Driver' &&
+        !d.name.toLowerCase().includes('unknown driver')
+    );
+  }, [trips, allDrivers]);
 
   const filteredDrivers = drivers.filter(d => 
     d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -79,7 +156,6 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, onAssig
   const handleAssign = () => {
     if (vehicle && selectedDriverId) {
       onAssign(vehicle.id, selectedDriverId);
-      toast.success(`Driver ${selectedDriver?.name} assigned to ${vehicle.licensePlate}`);
       onClose();
     }
   };
@@ -142,8 +218,14 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, onAssig
                           {selectedDriverId === driver.id && <Check className="h-4 w-4 text-indigo-600" />}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                           <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                             <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" /> {driver.rating.toFixed(1)}
+                           <span className="text-[10px] text-slate-500 flex items-center gap-0.5 min-w-[30px]">
+                             {driver.rating > 0 ? (
+                               <>
+                                 <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" /> {driver.rating.toFixed(1)}
+                               </>
+                             ) : (
+                               <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded-sm">NEW</span>
+                             )}
                            </span>
                            <span className="text-[10px] text-slate-300">•</span>
                            <span className={cn(

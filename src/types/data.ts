@@ -59,6 +59,12 @@ export interface Trip {
   tripRating?: number; // 1-5
   dayOfWeek?: string; // Mon-Sun
   
+  // Coordinate Persistence (Phase 1 Fix)
+  startLat?: number;
+  startLng?: number;
+  endLat?: number;
+  endLng?: number;
+  
   // Phase 2 (Static Import Reconstruction): Fleet Efficiency
   onTripHours?: number;   // Period 3
   toTripHours?: number;   // Period 2
@@ -72,6 +78,11 @@ export interface Trip {
   // Phase 6: Anchor Period Tracking
   anchorPeriodId?: string; // Links to the startAnchor ID
   isPersonal?: boolean;    // Explicitly marked as personal if not from platform
+
+  // Phase 6: Metadata Schema Extension
+  resolutionMethod?: 'instant' | 'background' | 'manual' | 'pending';
+  resolutionTimestamp?: string; // ISO date string
+  geocodeError?: string;
 
   [key: string]: any; // Allow dynamic properties
 }

@@ -46,12 +46,15 @@ interface ManualTripFormProps {
     pickupLocation?: string;
     pickupCoords?: { lat: number; lon: number };
     endLocation?: string;
-    endCoords?: { lat: number; lon: number };
+    dropoffCoords?: { lat: number; lon: number };
     route?: RoutePoint[];
     stops?: TripStop[];
     totalWaitTime?: number;
     distance?: number;
     isLiveRecorded?: boolean;
+    resolutionMethod?: 'instant' | 'background' | 'manual' | 'pending';
+    resolutionTimestamp?: string;
+    geocodeError?: string;
   };
 }
 
@@ -81,7 +84,10 @@ export function ManualTripForm({
     vehicleId: defaultVehicleId || '',
     route: [],
     stops: [],
-    totalWaitTime: 0
+    totalWaitTime: 0,
+    pickupCoords: undefined,
+    dropoffCoords: undefined,
+    resolutionMethod: 'manual'
   });
   
   const [selectedDriverId, setSelectedDriverId] = useState<string>(currentDriverId || '');
@@ -120,15 +126,20 @@ export function ManualTripForm({
           route: initialData.route || [],
           stops: initialData.stops || [],
           totalWaitTime: initialData.totalWaitTime || 0,
-          isLiveRecorded: initialData.isLiveRecorded
+          isLiveRecorded: initialData.isLiveRecorded,
+          pickupCoords: initialData.pickupCoords,
+          dropoffCoords: initialData.dropoffCoords,
+          resolutionMethod: initialData.resolutionMethod,
+          resolutionTimestamp: initialData.resolutionTimestamp,
+          geocodeError: initialData.geocodeError
         });
         if (initialData.pickupCoords) {
           setPickupCoords(initialData.pickupCoords);
         } else {
           setPickupCoords(null);
         }
-        if (initialData.endCoords) {
-          setDropoffCoords(initialData.endCoords);
+        if (initialData.dropoffCoords) {
+          setDropoffCoords(initialData.dropoffCoords);
         } else {
           setDropoffCoords(null);
         }
@@ -146,7 +157,10 @@ export function ManualTripForm({
           vehicleId: defaultVehicleId || '',
           route: [],
           stops: [],
-          totalWaitTime: 0
+          totalWaitTime: 0,
+          pickupCoords: undefined,
+          dropoffCoords: undefined,
+          resolutionMethod: 'manual'
         });
         setPickupCoords(null);
         setDropoffCoords(null);
@@ -215,7 +229,18 @@ export function ManualTripForm({
   };
 
   const handleInputChange = (field: keyof ManualTripInput, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // If manually editing location, mark as manual resolution
+      if (field === 'pickupLocation' || field === 'dropoffLocation') {
+        newData.resolutionMethod = 'manual';
+        newData.resolutionTimestamp = new Date().toISOString();
+        newData.geocodeError = undefined; // Clear error on manual fix
+      }
+      
+      return newData;
+    });
   };
 
   const handleOpenNavigation = () => {
@@ -426,7 +451,10 @@ export function ManualTripForm({
                       onChange={(e) => handleInputChange('pickupLocation', e.target.value)}
                       onAddressSelect={(addr, lat, lon) => {
                         handleInputChange('pickupLocation', addr);
-                        if (lat && lon) setPickupCoords({ lat, lon });
+                        if (lat && lon) {
+                          setPickupCoords({ lat, lon });
+                          handleInputChange('pickupCoords', { lat, lon });
+                        }
                       }}
                       showLocationButton={true}
                    />
@@ -440,7 +468,10 @@ export function ManualTripForm({
                       onChange={(e) => handleInputChange('dropoffLocation', e.target.value)}
                       onAddressSelect={(addr, lat, lon) => {
                         handleInputChange('dropoffLocation', addr);
-                        if (lat && lon) setDropoffCoords({ lat, lon });
+                        if (lat && lon) {
+                          setDropoffCoords({ lat, lon });
+                          handleInputChange('dropoffCoords', { lat, lon });
+                        }
                       }}
                       showNavigationButton={!!formData.dropoffLocation}
                       onNavigateClick={handleOpenNavigation}
