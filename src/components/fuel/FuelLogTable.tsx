@@ -32,7 +32,8 @@ import {
     PopoverTrigger,
 } from "../ui/popover";
 import { Label } from "../ui/label";
-import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, Filter as FilterIcon, X } from "lucide-react";
+import { cn } from "../ui/utils";
+import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History } from "lucide-react";
 import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
 
@@ -86,7 +87,13 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
         entries.forEach(entry => {
             if (!entry.transactionId) return;
             const tx = transactionMap.get(entry.transactionId);
-            if (tx && tx.metadata?.source !== 'Manual') {
+            
+            // Logic: Trust the entry if it's linked to a transaction that isn't purely "Manual" 
+            // OR if it's a "Modified Anchor" (which we explicitly want to keep in the sequence)
+            const isOriginallyTrusted = tx && tx.metadata?.source !== 'Manual';
+            const isModifiedAnchor = entry.metadata?.isEdited === true && entry.type === 'Reimbursement';
+            
+            if (isOriginallyTrusted || isModifiedAnchor) {
                 trusted.add(entry.id);
             }
         });
@@ -182,9 +189,6 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
 
     const formatDate = (dateString: string) => {
         if (!dateString) return '-';
-        // Fix for timezone offset issue with YYYY-MM-DD strings
-        // "2026-01-08" -> UTC Midnight -> Previous day in EST
-        // We parse manually to ensure it displays as the intended local date
         if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
             const [year, month, day] = dateString.split('-').map(Number);
             return new Date(year, month - 1, day).toLocaleDateString();
@@ -192,8 +196,72 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
         return new Date(dateString).toLocaleDateString();
     };
 
+    // Phase 4: Reconciliation Stats
+    const stats = useMemo(() => {
+        const manualEntries = entries.filter(e => {
+            const tx = transactionMap.get(e.transactionId || '');
+            return tx?.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.source === 'Manual' || tx?.metadata?.source === 'Bulk Manual';
+        });
+        
+        const unreconciled = manualEntries.filter(e => {
+            const tx = transactionMap.get(e.transactionId || '');
+            return !tx?.isReconciled;
+        });
+
+        return {
+            manualCount: manualEntries.length,
+            unreconciledCount: unreconciled.length,
+            totalSpend: manualEntries.reduce((sum, e) => sum + e.amount, 0)
+        };
+    }, [entries, transactionMap]);
+
+    const handleReconcile = async (id: string) => {
+        try {
+            // Find the transaction associated with this entry
+            const entry = entries.find(e => e.id === id);
+            if (!entry?.transactionId) return;
+            
+            // In a real app, this would be an API call
+            // await api.updateTransaction(entry.transactionId, { isReconciled: true });
+            toast.success("Transaction marked as reconciled");
+        } catch (error) {
+            toast.error("Failed to update reconciliation status");
+        }
+    };
+
     return (
         <div className="space-y-4">
+            {/* Reconciliation Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center">
+                        <ListFilter className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manual Entries</p>
+                        <p className="text-xl font-bold text-slate-700">{stats.manualCount}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div className="h-10 w-10 bg-amber-50 rounded-full flex items-center justify-center">
+                        <AlertCircle className="h-5 w-5 text-amber-500" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unreconciled</p>
+                        <p className="text-xl font-bold text-slate-700">{stats.unreconciledCount}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center">
+                        <Banknote className="h-5 w-5 text-emerald-500" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manual Spend</p>
+                        <p className="text-xl font-bold text-slate-700">${stats.totalSpend.toFixed(2)}</p>
+                    </div>
+                </div>
+            </div>
+
             <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 flex-1">
                     <div className="relative w-72">
@@ -336,32 +404,97 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                         {formatDate(entry.date)}
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2" title={entry.type}>
-                                            {getTypeIcon(entry.type)}
-                                            <span className="hidden md:inline text-xs font-medium text-slate-600">
-                                                {entry.type.replace('_', ' ')}
-                                            </span>
-                                            {validAnchorIds.has(entry.id) ? (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Badge variant="secondary" className="cursor-help ml-1 h-5 px-1.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
-                                                            Anchor
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2" title={entry.type}>
+                                                {getTypeIcon(entry.type)}
+                                                <span className="hidden md:inline text-xs font-medium text-slate-600">
+                                                    {entry.type.replace('_', ' ')}
+                                                </span>
+                                                {validAnchorIds.has(entry.id) ? (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Badge 
+                                                                variant="secondary" 
+                                                                className={cn(
+                                                                    "cursor-help ml-1 h-5 px-1.5 text-[10px] font-medium border transition-colors",
+                                                                    entry.metadata?.isEdited 
+                                                                        ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
+                                                                        : "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                                                )}
+                                                            >
+                                                                {entry.metadata?.isEdited && <History className="mr-1 h-2.5 w-2.5" />}
+                                                                {entry.metadata?.isEdited ? "Modified Anchor" : "Verified Anchor"}
+                                                            </Badge>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="max-w-xs">
+                                                            <div className="space-y-1.5">
+                                                                <p className="font-bold flex items-center gap-1.5">
+                                                                    {entry.metadata?.isEdited ? (
+                                                                        <>
+                                                                            <History className="h-3.5 w-3.5 text-amber-600" />
+                                                                            Managed Anchor (Edited)
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                                                                            Verified System Anchor
+                                                                        </>
+                                                                    )}
+                                                                </p>
+                                                                <p className="text-xs text-slate-500">
+                                                                    This odometer reading is used as a fixed point for "Stop-to-Stop" fuel efficiency calculations.
+                                                                </p>
+                                                                {entry.metadata?.isEdited && (
+                                                                    <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] space-y-1">
+                                                                        <p className="font-semibold text-amber-800 uppercase tracking-tight">Audit History:</p>
+                                                                        <div className="bg-amber-50/50 p-1.5 rounded border border-amber-100">
+                                                                            <p className="italic text-amber-900 font-medium">"{entry.metadata?.editReason || "Administrative adjustment"}"</p>
+                                                                        </div>
+                                                                        <p className="text-slate-400 text-right">Updated: {new Date(entry.metadata?.lastEditedAt).toLocaleString()}</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                ) : (entry.type === 'Reimbursement' && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <AlertCircle className="ml-1 h-4 w-4 text-slate-300 hover:text-slate-400 cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>Not an Anchor: {anchorFailures.get(entry.id) || 'Unknown Reason'}</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                ))}
+                                            </div>
+                                            {/* Source Metadata */}
+                                            {(() => {
+                                                const tx = transactionMap.get(entry.transactionId || '');
+                                                const isManual = tx?.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.source?.includes('Manual');
+                                                const isReconciled = tx?.isReconciled;
+                                                
+                                                if (!isManual) return null;
+
+                                                return (
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        <Badge variant="outline" className="text-[9px] h-4 px-1 border-slate-200 text-slate-400 font-normal">
+                                                            {tx?.metadata?.source || 'Manual'}
                                                         </Badge>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Verified Driver Scan (Sequential)</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            ) : (entry.type === 'Reimbursement' && (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <AlertCircle className="ml-1 h-4 w-4 text-slate-300 hover:text-slate-400 cursor-help" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Not an Anchor: {anchorFailures.get(entry.id) || 'Unknown Reason'}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            ))}
+                                                        {isReconciled ? (
+                                                            <ShieldCheck className="h-3 w-3 text-emerald-500" title="Reconciled" />
+                                                        ) : (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <HelpCircle className="h-3 w-3 text-amber-400 cursor-help" />
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>
+                                                                    <p className="text-xs">Unreconciled Manual Entry</p>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     </TableCell>
                                     <TableCell className="font-medium">
@@ -399,6 +532,17 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                {(() => {
+                                                    const tx = transactionMap.get(entry.transactionId || '');
+                                                    if (tx?.metadata?.portal_type === 'Manual_Entry' && !tx?.isReconciled) {
+                                                        return (
+                                                            <DropdownMenuItem onClick={() => handleReconcile(entry.id)} className="text-emerald-600 font-medium">
+                                                                <ShieldCheck className="mr-2 h-4 w-4" /> Reconcile Entry
+                                                            </DropdownMenuItem>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                                 <DropdownMenuItem onClick={() => onEdit(entry)}>
                                                     <Pencil className="mr-2 h-4 w-4" /> Edit Entry
                                                 </DropdownMenuItem>

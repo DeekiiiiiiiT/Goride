@@ -25,24 +25,44 @@ interface FuelReimbursementTableProps {
     onRequestSubmit?: () => void;
     onEdit?: (transaction: FinancialTransaction) => void;
     onDelete?: (id: string) => void;
+    onViewDriverLedger?: (driverId: string) => void;
 }
 
-export function FuelReimbursementTable({ transactions, onApprove, onReject, onRequestSubmit, onEdit, onDelete }: FuelReimbursementTableProps) {
+export function FuelReimbursementTable({ 
+    transactions, 
+    onApprove, 
+    onReject, 
+    onRequestSubmit, 
+    onEdit, 
+    onDelete,
+    onViewDriverLedger 
+}: FuelReimbursementTableProps) {
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [notes, setNotes] = useState('');
     const [action, setAction] = useState<'approve' | 'reject' | null>(null);
 
+    // Find the settlement transaction for a given source ID
+    const findSettlementTx = (sourceId: string) => {
+        return transactions.find(t => 
+            t.metadata?.sourceId === sourceId && 
+            t.metadata?.settlementType === 'RideShare_Cash_Offset'
+        );
+    };
+
     // Filter mainly for Reimbursements. 
-    // Also include Expenses if they are pending cash logic? Phase 3 uses "Reimbursement" type explicitly.
+    // We exclude automated transactions to avoid "duplication" in the UI, 
+    // as settlements are linked to and visible within the primary log entry.
     const pending = transactions.filter(t => 
         t.status === 'Pending' && 
-        (t.type === 'Reimbursement' || (t.type === 'Expense' && t.paymentMethod === 'Cash')) &&
+        !t.metadata?.automated &&
+        (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || (t.type === 'Expense' && t.paymentMethod === 'Cash')) &&
         (t.category === 'Fuel' || t.category === 'Fuel Reimbursement')
     );
     const history = transactions.filter(t => 
         (t.status === 'Approved' || t.status === 'Rejected') && 
-        (t.type === 'Reimbursement' || (t.type === 'Expense' && t.paymentMethod === 'Cash')) &&
+        !t.metadata?.automated &&
+        (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || (t.type === 'Expense' && t.paymentMethod === 'Cash')) &&
         (t.category === 'Fuel' || t.category === 'Fuel Reimbursement')
     );
 
@@ -94,6 +114,7 @@ export function FuelReimbursementTable({ transactions, onApprove, onReject, onRe
                         <TableHead>Date</TableHead>
                         <TableHead>Driver</TableHead>
                         <TableHead>Amount</TableHead>
+                        <TableHead>Settled</TableHead>
                         <TableHead>Details</TableHead>
                         <TableHead>Receipt</TableHead>
                         <TableHead>Status</TableHead>
@@ -124,6 +145,23 @@ export function FuelReimbursementTable({ transactions, onApprove, onReject, onRe
                                 </TableCell>
                                 <TableCell className="font-semibold text-slate-900">
                                     ${Math.abs(tx.amount).toFixed(2)}
+                                </TableCell>
+                                <TableCell>
+                                    {tx.status === 'Approved' ? (
+                                        (() => {
+                                            const settlement = findSettlementTx(tx.id);
+                                            return settlement ? (
+                                                <div className="flex flex-col">
+                                                    <span className="text-emerald-600 font-semibold">${settlement.amount.toFixed(2)}</span>
+                                                    <span className="text-[10px] text-slate-400">Ledger Sync: OK</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-400 text-xs italic">Pending sync</span>
+                                            );
+                                        })()
+                                    ) : (
+                                        <span className="text-slate-300">-</span>
+                                    )}
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex flex-col max-w-[200px]">
@@ -212,7 +250,7 @@ export function FuelReimbursementTable({ transactions, onApprove, onReject, onRe
                     {onRequestSubmit && (
                         <Button onClick={onRequestSubmit} size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
                             <Plus className="h-4 w-4 mr-2" />
-                            Submit Expense
+                            Log Receipt / Manual Entry
                         </Button>
                     )}
                 </div>
@@ -286,6 +324,47 @@ export function FuelReimbursementTable({ transactions, onApprove, onReject, onRe
                                     <div className="space-y-1">
                                         <Label className="text-slate-500 text-xs uppercase tracking-wider">Notes</Label>
                                         <p className="text-sm text-slate-700 bg-slate-50 p-2 rounded">{selectedTx.description}</p>
+                                    </div>
+                                )}
+
+                                {/* Phase 3: Settlement Summary */}
+                                {selectedTx.status === 'Approved' && (
+                                    <div className="mt-4 p-4 border border-emerald-100 bg-emerald-50/50 rounded-xl space-y-3">
+                                        <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
+                                            <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
+                                                <Check className="h-3 w-3" />
+                                            </div>
+                                            Settlement Processed
+                                        </div>
+                                        
+                                        {(() => {
+                                            const settlement = findSettlementTx(selectedTx.id);
+                                            if (!settlement) return <p className="text-xs text-slate-500 italic">No automated settlement found in ledger history.</p>;
+                                            
+                                            return (
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                        <div className="text-slate-500">Coverage Applied:</div>
+                                                        <div className="font-medium text-right">{settlement.metadata?.coveragePercent?.toFixed(0)}%</div>
+                                                        <div className="text-slate-500">Auto-Credit Amount:</div>
+                                                        <div className="font-bold text-right text-emerald-600">${settlement.amount.toFixed(2)}</div>
+                                                        <div className="text-slate-500">Ledger Entry:</div>
+                                                        <div className="font-mono text-right truncate">{settlement.id.split('-')[0]}...</div>
+                                                    </div>
+                                                    
+                                                    {onViewDriverLedger && (
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            className="w-full mt-2 text-xs h-8 bg-white"
+                                                            onClick={() => onViewDriverLedger(selectedTx.driverId!)}
+                                                        >
+                                                            View Driver Ledger
+                                                        </Button>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                 )}
                             </div>

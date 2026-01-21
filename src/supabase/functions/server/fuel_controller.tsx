@@ -1,6 +1,5 @@
+
 import { Hono } from "npm:hono";
-import { cors } from "npm:hono/cors";
-import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 
@@ -11,22 +10,10 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-app.use('*', logger(console.log));
-app.use(
-  "/*",
-  cors({
-    origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    exposeHeaders: ["Content-Length"],
-    maxAge: 600,
-  }),
-);
-
-app.get("/fuel-maintenance/health", (c) => c.json({ status: "ok" }));
+const BASE_PATH = "/make-server-37f42386";
 
 // --- FUEL CARDS ---
-app.get("/fuel-maintenance/fuel-cards", async (c) => {
+app.get(`${BASE_PATH}/fuel-cards`, async (c) => {
   try {
     const cards = await kv.getByPrefix("fuel_card:");
     return c.json(cards || []);
@@ -35,7 +22,7 @@ app.get("/fuel-maintenance/fuel-cards", async (c) => {
   }
 });
 
-app.post("/fuel-maintenance/fuel-cards", async (c) => {
+app.post(`${BASE_PATH}/fuel-cards`, async (c) => {
   try {
     const card = await c.req.json();
     if (!card.id) card.id = crypto.randomUUID();
@@ -46,7 +33,7 @@ app.post("/fuel-maintenance/fuel-cards", async (c) => {
   }
 });
 
-app.delete("/fuel-maintenance/fuel-cards/:id", async (c) => {
+app.delete(`${BASE_PATH}/fuel-cards/:id`, async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`fuel_card:${id}`);
@@ -57,7 +44,7 @@ app.delete("/fuel-maintenance/fuel-cards/:id", async (c) => {
 });
 
 // --- FUEL ENTRIES ---
-app.get("/fuel-maintenance/fuel-entries", async (c) => {
+app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
     const entries = await kv.getByPrefix("fuel_entry:");
     if (entries && Array.isArray(entries)) {
@@ -69,7 +56,7 @@ app.get("/fuel-maintenance/fuel-entries", async (c) => {
   }
 });
 
-app.post("/fuel-maintenance/fuel-entries", async (c) => {
+app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
@@ -80,7 +67,7 @@ app.post("/fuel-maintenance/fuel-entries", async (c) => {
   }
 });
 
-app.delete("/fuel-maintenance/fuel-entries/:id", async (c) => {
+app.delete(`${BASE_PATH}/fuel-entries/:id`, async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`fuel_entry:${id}`);
@@ -91,7 +78,7 @@ app.delete("/fuel-maintenance/fuel-entries/:id", async (c) => {
 });
 
 // --- MILEAGE ADJUSTMENTS ---
-app.get("/fuel-maintenance/mileage-adjustments", async (c) => {
+app.get(`${BASE_PATH}/mileage-adjustments`, async (c) => {
   try {
     const adjustments = await kv.getByPrefix("fuel_adjustment:");
     if (adjustments && Array.isArray(adjustments)) {
@@ -103,7 +90,7 @@ app.get("/fuel-maintenance/mileage-adjustments", async (c) => {
   }
 });
 
-app.post("/fuel-maintenance/mileage-adjustments", async (c) => {
+app.post(`${BASE_PATH}/mileage-adjustments`, async (c) => {
   try {
     const adj = await c.req.json();
     if (!adj.id) adj.id = crypto.randomUUID();
@@ -114,7 +101,7 @@ app.post("/fuel-maintenance/mileage-adjustments", async (c) => {
   }
 });
 
-app.delete("/fuel-maintenance/mileage-adjustments/:id", async (c) => {
+app.delete(`${BASE_PATH}/mileage-adjustments/:id`, async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`fuel_adjustment:${id}`);
@@ -125,7 +112,7 @@ app.delete("/fuel-maintenance/mileage-adjustments/:id", async (c) => {
 });
 
 // --- MAINTENANCE LOGS ---
-app.get("/fuel-maintenance/maintenance-logs/:vehicleId", async (c) => {
+app.get(`${BASE_PATH}/maintenance-logs/:vehicleId`, async (c) => {
   try {
     const vehicleId = c.req.param("vehicleId");
     const logs = await kv.getByPrefix(`maintenance_log:${vehicleId}:`);
@@ -136,7 +123,7 @@ app.get("/fuel-maintenance/maintenance-logs/:vehicleId", async (c) => {
   }
 });
 
-app.post("/fuel-maintenance/maintenance-logs", async (c) => {
+app.post(`${BASE_PATH}/maintenance-logs`, async (c) => {
   try {
     const log = await c.req.json();
     if (!log.id) log.id = crypto.randomUUID();
@@ -149,7 +136,7 @@ app.post("/fuel-maintenance/maintenance-logs", async (c) => {
 });
 
 // --- TOLL TAGS ---
-app.get("/fuel-maintenance/toll-tags", async (c) => {
+app.get(`${BASE_PATH}/toll-tags`, async (c) => {
   try {
     const tags = await kv.getByPrefix("toll_tag:");
     return c.json(tags || []);
@@ -158,7 +145,7 @@ app.get("/fuel-maintenance/toll-tags", async (c) => {
   }
 });
 
-app.post("/fuel-maintenance/toll-tags", async (c) => {
+app.post(`${BASE_PATH}/toll-tags`, async (c) => {
   try {
     const tag = await c.req.json();
     if (!tag.id) tag.id = crypto.randomUUID();
@@ -170,7 +157,7 @@ app.post("/fuel-maintenance/toll-tags", async (c) => {
   }
 });
 
-app.delete("/fuel-maintenance/toll-tags/:id", async (c) => {
+app.delete(`${BASE_PATH}/toll-tags/:id`, async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`toll_tag:${id}`);
@@ -181,7 +168,7 @@ app.delete("/fuel-maintenance/toll-tags/:id", async (c) => {
 });
 
 // --- ODOMETER HISTORY ---
-app.get("/fuel-maintenance/odometer-history/:vehicleId", async (c) => {
+app.get(`${BASE_PATH}/odometer-history/:vehicleId`, async (c) => {
   try {
     const vehicleId = c.req.param("vehicleId");
     const history = await kv.getByPrefix(`odometer_reading:${vehicleId}:`);
@@ -192,7 +179,7 @@ app.get("/fuel-maintenance/odometer-history/:vehicleId", async (c) => {
   }
 });
 
-app.post("/fuel-maintenance/odometer-history", async (c) => {
+app.post(`${BASE_PATH}/odometer-history`, async (c) => {
   try {
     const reading = await c.req.json();
     if (!reading.id) reading.id = crypto.randomUUID();
@@ -206,14 +193,14 @@ app.post("/fuel-maintenance/odometer-history", async (c) => {
 });
 
 // --- FUEL DISPUTES (Stubbed) ---
-app.get("/fuel-maintenance/fuel-disputes", async (c) => {
+app.get(`${BASE_PATH}/fuel-disputes`, async (c) => {
   try {
     const items = await kv.getByPrefix("fuel_dispute:");
     return c.json(items || []);
   } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
-app.post("/fuel-maintenance/fuel-disputes", async (c) => {
+app.post(`${BASE_PATH}/fuel-disputes`, async (c) => {
   try {
     const item = await c.req.json();
     if (!item.id) item.id = crypto.randomUUID();
@@ -222,14 +209,14 @@ app.post("/fuel-maintenance/fuel-disputes", async (c) => {
   } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
-app.delete("/fuel-maintenance/fuel-disputes/:id", async (c) => {
+app.delete(`${BASE_PATH}/fuel-disputes/:id`, async (c) => {
   const id = c.req.param("id");
   try { await kv.del(`fuel_dispute:${id}`); return c.json({ success: true }); }
   catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
 // --- FUEL SCENARIOS ---
-app.get("/fuel-maintenance/scenarios", async (c) => {
+app.get(`${BASE_PATH}/scenarios`, async (c) => {
   try {
     let items = await kv.getByPrefix("fuel_scenario:");
     
@@ -258,27 +245,23 @@ app.get("/fuel-maintenance/scenarios", async (c) => {
   } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
-app.post("/fuel-maintenance/scenarios", async (c) => {
+app.post(`${BASE_PATH}/scenarios`, async (c) => {
   try {
     const item = await c.req.json();
     if (!item.id) item.id = crypto.randomUUID();
-    if (item.isDefault) {
-        // Unset other defaults (naive implementation: fetch all, update if needed)
-        // For KV, this is expensive. We'll trust the client or handle it later.
-    }
     await kv.set(`fuel_scenario:${item.id}`, item);
     return c.json({ success: true, data: item });
   } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
-app.delete("/fuel-maintenance/scenarios/:id", async (c) => {
+app.delete(`${BASE_PATH}/scenarios/:id`, async (c) => {
   const id = c.req.param("id");
   try { await kv.del(`fuel_scenario:${id}`); return c.json({ success: true }); }
   catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
 // --- RECONCILIATION FINALIZATION ---
-app.post("/fuel-maintenance/reconciliation/finalize", async (c) => {
+app.post(`${BASE_PATH}/reconciliation/finalize`, async (c) => {
   try {
     const { reports } = await c.req.json();
     if (!reports || !Array.isArray(reports)) return c.json({ error: "Reports array required" }, 400);
@@ -349,14 +332,26 @@ app.post("/fuel-maintenance/reconciliation/finalize", async (c) => {
   }
 });
 
-Deno.serve(async (req) => {
-  try {
-    return await app.fetch(req);
-  } catch (err: any) {
-    console.error("Critical Server Error:", err);
-    return new Response(JSON.stringify({ error: "Internal Server Error", message: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-    });
-  }
+// Update Anchor (Generic PATCH endpoint that was previously in API config but missing)
+app.patch(`${BASE_PATH}/anchors/:id`, async (c) => {
+    try {
+        const id = c.req.param("id");
+        const payload = await c.req.json();
+        
+        // We assume anchors are fuel entries with odometer readings
+        // Fetch existing
+        const entry = await kv.get(`fuel_entry:${id}`);
+        if (!entry) return c.json({ error: "Anchor not found" }, 404);
+        
+        // Update fields
+        const updated = { ...entry, ...payload };
+        if (payload.value) updated.odometer = payload.value; // Map 'value' to 'odometer'
+        
+        await kv.set(`fuel_entry:${id}`, updated);
+        return c.json(updated);
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
 });
+
+export default app;

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FuelEntry, FuelCard } from '../../types/fuel';
-import { CalendarIcon, Plus, X } from 'lucide-react';
+import { CalendarIcon, Plus, X, History } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 
 interface FuelLogModalProps {
@@ -25,6 +25,16 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
     const [activeTab, setActiveTab] = useState('single');
     const [time, setTime] = useState('12:00');
 
+    const stations = [
+        "TotalEnergies",
+        "Texaco",
+        "Rubis",
+        "FESCO",
+        "Petcom",
+        "Thrifty Gas",
+        "Cool Oasis"
+    ];
+
     // Single Entry State
     const [formData, setFormData] = useState<Partial<FuelEntry>>({
         date: new Date().toISOString().split('T')[0],
@@ -38,6 +48,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         vehicleId: '',
         driverId: '',
         cardId: '',
+        editReason: '',
     });
 
     // Bulk Entry State
@@ -203,6 +214,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         }
 
         const entry: FuelEntry = {
+            ...initialData, // Preserve original fields like transactionId, paymentSource, etc.
             id: initialData?.id || crypto.randomUUID(),
             date: fullDate,
             type: formData.type as any,
@@ -212,9 +224,10 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             odometer: Number(formData.odometer),
             location: formData.location || '',
             stationAddress: formData.stationAddress || '',
-            vehicleId: formData.vehicleId,
-            driverId: formData.driverId,
+            vehicleId: formData.vehicleId as string,
+            driverId: formData.driverId as string,
             cardId: formData.type === 'Card_Transaction' ? formData.cardId : undefined,
+            editReason: formData.editReason,
         };
 
         onSave(entry);
@@ -421,12 +434,22 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="location">Gas Station Name</Label>
-                                    <Input 
-                                        id="location" 
-                                        placeholder="Enter gas station name (e.g. Fortune Texaco)"
-                                        value={formData.location}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                                    />
+                                    <Select 
+                                        value={formData.location} 
+                                        onValueChange={(val) => setFormData(prev => ({ ...prev, location: val }))}
+                                    >
+                                        <SelectTrigger id="location">
+                                            <SelectValue placeholder="Select Gas Station" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {stations.map(station => (
+                                                <SelectItem key={station} value={station}>{station}</SelectItem>
+                                            ))}
+                                            {formData.location && !stations.includes(formData.location) && (
+                                                <SelectItem value={formData.location}>{formData.location}</SelectItem>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <div className="space-y-2 col-span-2">
                                     <Label htmlFor="stationAddress">Gas Station Location</Label>
@@ -438,6 +461,22 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                         onAddressSelect={(address) => setFormData(prev => ({ ...prev, stationAddress: address }))}
                                     />
                                 </div>
+                                {initialData && (
+                                    <div className="space-y-2 col-span-2 mt-2 p-3 bg-amber-50 border border-amber-100 rounded-md">
+                                        <Label htmlFor="editReason" className="text-amber-900 font-bold text-xs uppercase flex items-center gap-2">
+                                            <History className="w-3 h-3" />
+                                            Audit Change Reason
+                                        </Label>
+                                        <Textarea 
+                                            id="editReason" 
+                                            placeholder="Explain why this anchor value is being changed (e.g., Driver typo, OCR error correction)"
+                                            value={formData.editReason || ''}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, editReason: e.target.value }))}
+                                            className="bg-white border-amber-200 text-sm h-20"
+                                        />
+                                        <p className="text-[10px] text-amber-700 italic">This reason will be visible in the audit history for this anchor.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </TabsContent>
@@ -555,12 +594,22 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                 />
                                             </div>
                                             <div className="col-span-3">
-                                                <Input 
-                                                    placeholder="Gas Station"
-                                                    value={entry.location}
-                                                    onChange={(e) => updateBulkEntry(entry.id, 'location', e.target.value)}
-                                                    className="h-9 text-sm px-2"
-                                                />
+                                                <Select 
+                                                    value={entry.location} 
+                                                    onValueChange={(val) => updateBulkEntry(entry.id, 'location', val)}
+                                                >
+                                                    <SelectTrigger className="h-9 text-sm px-2">
+                                                        <SelectValue placeholder="Select Station" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {stations.map(station => (
+                                                            <SelectItem key={station} value={station}>{station}</SelectItem>
+                                                        ))}
+                                                        {entry.location && !stations.includes(entry.location) && (
+                                                            <SelectItem value={entry.location}>{entry.location}</SelectItem>
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                             <div className="col-span-3">
                                                 <LocationInput 

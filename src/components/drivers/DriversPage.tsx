@@ -95,7 +95,7 @@ interface DriverProfile {
   linkedTrips?: Trip[];
 }
 
-export function DriversPage() {
+export function DriversPage({ initialDriverId }: { initialDriverId?: string | null }) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [manualDrivers, setManualDrivers] = useState<DriverProfile[]>([]);
   const [importedMetrics, setImportedMetrics] = useState<import('../../types/data').DriverMetrics[]>([]);
@@ -104,7 +104,14 @@ export function DriversPage() {
   const [loading, setLoading] = useState(true);
   
   // Navigation State
-  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(initialDriverId || null);
+
+  // Update selected driver if initialDriverId changes
+  useEffect(() => {
+    if (initialDriverId) {
+      setSelectedDriverId(initialDriverId);
+    }
+  }, [initialDriverId]);
 
   // Filtering & Pagination State
   const [searchQuery, setSearchQuery] = useState('');

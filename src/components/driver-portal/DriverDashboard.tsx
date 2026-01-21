@@ -25,7 +25,9 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';
-import { api } from '../../services/api';
+import { fuelService } from '../../services/fuelService';
+import { settlementService } from '../../services/settlementService';
+import { FuelEntry } from '../../types/fuel';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
@@ -111,18 +113,22 @@ export function DriverDashboard() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // 1. Fetch Metrics
-        const allMetrics = await api.getDriverMetrics();
-        // Filter for current user or resolved driver (checking both ID and legacy driverId)
+        // 1. Fetch Metrics & Drivers first (Small payloads)
+        const [allMetrics, drivers] = await Promise.all([
+            api.getDriverMetrics().catch(() => []),
+            api.getDrivers().catch(() => [])
+        ]);
+
         const myMetrics = allMetrics.find(m => 
             m.driverId === user.id || 
             (driverRecord?.id && m.driverId === driverRecord.id) ||
             (driverRecord?.driverId && m.driverId === driverRecord.driverId)
         );
         if (myMetrics) setMetrics(myMetrics);
+        setDebugDrivers(drivers);
 
-        // 2. Fetch Trips for Earnings & Recent Activity
-        const allTrips = await api.getTrips();
+        // 2. Fetch Trips for Earnings (Medium payload, route stripped server-side)
+        const allTrips = await api.getTrips({ limit: 100 }).catch(() => []);
         const myTrips = allTrips.filter(t => 
             t.driverId === user.id || 
             (driverRecord?.id && t.driverId === driverRecord.id) ||
@@ -301,53 +307,50 @@ export function DriverDashboard() {
           // @ts-ignore - receiving custom field from form
           const method = data.paymentMethod || 'reimbursement';
           
-          let type = 'Expense';
-          let payMethod = 'Cash';
-          let status = 'Pending';
-          
+          let entryMode: 'Anchor' | 'Floating' = data.odometer ? 'Anchor' : 'Floating';
+          let paymentSource: any = 'Personal';
+
           if (method === 'reimbursement') {
-              type = 'Reimbursement';
-              payMethod = 'Cash';
-              status = 'Pending';
+              paymentSource = 'RideShare_Cash';
           } else if (method === 'card') {
-              type = 'Card_Transaction';
-              payMethod = 'Fuel Card';
-              status = 'Approved';
+              paymentSource = 'Gas_Card';
           } else if (method === 'personal') {
-              type = 'Personal';
-              payMethod = 'Personal Cash';
-              status = 'Approved';
+              paymentSource = 'Personal';
           }
 
-          const newTx: Partial<FinancialTransaction> = {
-            id: crypto.randomUUID(),
-            driverId: user?.id,
-            driverName: driverRecord?.name || user?.email,
-            date: data.date || new Date().toISOString(),
-            time: format(new Date(), 'HH:mm:ss'),
-            type: type,
-            category: 'Fuel',
-            amount: -Math.abs(data.totalCost || 0),
-            description: data.notes || `Fuel Refill: ${data.liters}L`,
-            status: status,
-            paymentMethod: payMethod,
-            quantity: data.liters,
-            odometer: data.odometer,
-            receiptUrl: data.receiptUrl,
-            // Unified Timeline Metadata
-            source: 'Fuel Log',
-            isVerified: true
+          // 1. Save Fuel Entry (Core Record)
+          const fuelEntry: Partial<FuelEntry> = {
+              id: crypto.randomUUID(),
+              date: data.date || new Date().toISOString(),
+              driverId: user?.id,
+              vehicleId: driverRecord?.assignedVehicleId || driverRecord?.vehicleId || data.vehicleId,
+              amount: data.totalCost || 0,
+              liters: data.liters || 0,
+              pricePerLiter: (data.totalCost && data.liters) ? (data.totalCost / data.liters) : 0,
+              odometer: data.odometer || null,
+              location: data.notes || 'Fuel Refill',
+              type: method === 'card' ? 'Card_Transaction' : 'Manual_Entry',
+              entryMode: entryMode,
+              paymentSource: paymentSource,
+              source: 'Driver Portal'
           } as any;
 
-          await api.saveTransaction(newTx);
+          const savedEntry = await fuelService.saveFuelEntry(fuelEntry as FuelEntry);
+
+          // 2. Process Settlement (Financial Ledger)
+          const scenarios = await fuelService.getFuelScenarios();
+          await settlementService.processFuelSettlement(savedEntry, scenarios);
           
-          const successMsg = method === 'reimbursement' 
-                ? "Reimbursement requested!" 
+          const successMsg = paymentSource === 'RideShare_Cash' 
+                ? "Fuel logged and cash liability reduced!" 
                 : "Fuel log saved successfully!";
 
           toast.success(successMsg, {
-              description: `Logged ${data.liters}L at ${data.odometer}km.`
+              description: `Logged ${data.liters}L at ${data.odometer || 'Legacy'}km.`
           });
+
+          // Refresh dashboard to show new balance
+          setTimeout(() => window.location.reload(), 1500);
       } catch (e) {
           console.error("Failed to save fuel log", e);
           toast.error("Failed to save fuel log");

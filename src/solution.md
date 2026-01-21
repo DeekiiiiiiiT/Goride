@@ -1,57 +1,64 @@
-# Optimization Plan: Broken Pipe & Connection Closed Errors
+# Implementation Roadmap: Odometer Anchor & Legacy Receipt System
 
-## Problem Analysis
-The server is crashing (`Http: connection closed`) because our previous optimization (Parallel Data Fetching) was too aggressive. Firing all database queries simultaneously for hundreds of drivers exhausts the Edge Function's memory or CPU limits. We need to implement **Concurrency Control** (throttling) and robust error handling.
+This document outlines the multi-phase implementation for the automated driver management system, focusing on "Anchor Window" reconciliation and historical cash receipt integration.
 
----
+## Phase 1: Data Model & Schema Enhancement (COMPLETE)
+**Goal**: Establish the structural difference between "Anchor" events and "Floating" entries.
+1. **Update `FuelEntry` Type**: Added `entryMode: 'Anchor' | 'Floating'` and `paymentSource` fields.
+2. **Update `OdometerBucket` Structure**: Replaced `fuelEntryId` with `associatedReceipts: string[]` to support accumulation.
+3. **Database Nullability**: Updated types to allow `odometer: null` for `Floating` entries.
+4. **FuelLog Type Update**: Synchronized `FuelLog` types in the data core.
 
-## Phase 1: Implement Concurrency Control Utility
-**Goal:** Create a reusable utility to limit the number of simultaneous asynchronous operations.
-- [ ] **Step 1.1:** Create `pMap` (Parallel Map) utility function.
-    - Input: Array of items, Iterator function, Concurrency limit (integer).
-    - Logic: Use `Promise.all` with a tracking mechanism or a library-like implementation to ensure only `N` promises are active at once.
-    - Error Handling: Ensure failures in one item don't crash the entire batch (optional, but good for stability).
-- [ ] **Step 1.2:** Integrate `pMap` into `/supabase/functions/server/index.tsx`.
-    - Place the function at the top of the file or in a utility helper.
+## Phase 2: The "Stop-to-Stop" Accumulator Engine
+**Goal**: Build the logic that "sandwiches" multiple legacy receipts between two verified odometer scans.
+1. **Sorted Event Timeline**: Modify `calculateOdometerBuckets` to fetch both `Anchor` and `Floating` entries for a vehicle.
+2. **Window Boundary Logic**: Implement a "window search" that identifies all non-odometer receipts that fall between two chronological odometer anchors.
+3. **Volume & Cost Aggregation**: Calculate the sum of `liters` and `amount` for every entry in the window (Start Anchor -> Floating Receipts -> End Anchor).
+4. **Efficiency Math Correction**: Update variance calculation to compare total accumulated liters against the total distance between the two anchors.
+5. **Partial Window Management**: Handle "Open Windows" (data since the last scan) and ensure they are marked as `Partial`.
 
-## Phase 2: Refactor Driver Fetching with Throttling
-**Goal:** Replace the "Fire All" strategy with the "Throttled" strategy.
-- [ ] **Step 2.1:** Modify the `performance-report` endpoint.
-    - Locate the "Parallel Data Fetching" block.
-    - Replace `driverChunks.map(...)` with `await pMap(driverChunks, processChunk, { concurrency: 3 })`.
-    - **Note:** A concurrency of 3 is a safe starting point for Supabase Edge Functions.
-- [ ] **Step 2.2:** Verify the `processChunk` logic ensures independent error handling per chunk.
+## Phase 3: Automated Financial Settlement & Ledger Sync
+**Goal**: Automatically credit the driver's cash-on-hand liability when fuel is purchased with RideShare cash.
+1. **Settlement Trigger**: Create a service listener that detects whenever a `RideShare_Cash` fuel entry is approved or scanned.
+2. **Ledger Credit Creation**: Integrate with the financial engine to automatically post a `Credit` transaction to the driver's ledger.
+3. **Liability Offset Logic**: Ensure the credit specifically offsets "Cash Collected" categories to reduce the driver's net debt to the organization.
+4. **Cost-Sharing Application**: Apply dynamic "Scenario Rules" during settlement (e.g., if the company pays 80%, only credit 80% of the receipt to the driver's liability).
+5. **Transaction Linking**: Store the `transactionId` on the fuel entry to provide a direct audit link between the receipt and the ledger entry.
 
-## Phase 3: Enhance Stream Reliability
-**Goal:** Prevent the "Broken Pipe" error from filling logs when the client disconnects early.
-- [ ] **Step 3.1:** Refactor the `stream.write` loop.
-    - Implement a `safeWrite` helper function inside the route.
-    - Logic: Try to write; if error is "EPIPE" or "connection closed", return a generic "STOP" signal.
-    - Logic: If "STOP" signal received, break the main loop immediately to stop processing.
+## Phase 4: Gap Analysis & Automated Deduction Triggers
+**Goal**: Identify "unexplained distance" and trigger penalties for mileage leakage.
+1. **Distance Delta Calculation**: Implement `OdometerDelta - Sum(LoggedTrips)` logic to find mileage gaps.
+2. **Leakage Thresholding**: Define configurable percentage/km thresholds for "Acceptable Variance" vs. "Flagged Leakage".
+3. **Deduction Engine**: Automatically generate a "Unexplained Distance Charge" in the driver's settlement if the gap exceeds the threshold.
+4. **Audit Trail**: Attach the specific `OdometerBucket` ID to the deduction transaction for transparent disputes.
 
-## Phase 4: Optimize Memory via Strict Garbage Collection
-**Goal:** Reduce memory footprint between chunks.
-- [ ] **Step 4.1:** Explicitly nullify large variables after use.
-    - Set `tripData = null` immediately after `generatePerformanceReport`.
-    - Set `chunkReport = null` after writing to stream.
-- [ ] **Step 4.2:** Ensure the global `cachedReports` buffer is managed correctly or removed if not strictly needed for the final response (since we are streaming). *Correction: We need it for the cache set at the end.*
+## Phase 5: Reconciliation & Bucket Health UI (Admin)
+**Goal**: Provide a high-level view of fleet health using the new bucketing logic.
+1. **Bucket Visualizer**: Update the Odometer Tab to show grouped receipts inside each bucket row.
+2. **Health Indicator (Emerald/Amber/Red)**: Display status based on both fuel variance and distance gaps.
+3. **Drill-down View**: Allow admins to click a bucket to see the specific trips and receipts that formed that window.
+4. **Bulk Verification**: Implement an admin action to "Finalize" a bucket, locking it against future changes.
 
-## Phase 5: Implement Circuit Breaker for DB Queries
-**Goal:** Fail gracefully if the database is overwhelmed.
-- [ ] **Step 5.1:** Add timeout logic to individual DB queries.
-    - If a single chunk query takes > 5 seconds, abort it and return an empty result for that chunk (logged as "Timeout").
-    - This prevents one "poison" chunk from stalling the entire stream until the global timeout.
+## Phase 6: Driver Portal Transparency
+**Goal**: Show drivers how their fuel logs are affecting their earnings and debt.
+1. **Settlement Visibility**: Add a "Fuel Offsets" section to the driver's weekly earnings view.
+2. **Balance Real-time Update**: Ensure the "Cash-on-Hand" counter decreases immediately after a successful fuel scan.
+3. **Reconciliation Status**: Show drivers if their recent logs are "Pending Reconciliation" or "Verified".
 
-## Phase 6: Granular Logging & Observability
-**Goal:** Pinpoint exactly where the crash happens if it persists.
-- [ ] **Step 6.1:** Add "Checkpoint" logs.
-    - Log: "Starting processing chunk X/Y".
-    - Log: "Finished processing chunk X/Y - Memory Usage: [if available]".
-    - Log: "Stream write successful for chunk X".
-- [ ] **Step 6.2:** Wrap the entire handler in a top-level `try/catch` that logs the specific error type (OOM vs Timeout).
+## Phase 7: Proactive Compliance Alerts
+**Goal**: Use notifications to ensure drivers don't skip scans.
+1. **Missing Scan Detector**: Detect if a vehicle has moved significant distance (trips) without a corresponding fuel/odo entry.
+2. **Push Notifications**: Send reminders to drivers if they are nearing the "Max Window Distance" without an anchor scan.
+3. **Blocking Logic (Optional)**: Flag drivers in the admin dashboard who consistently have high "Floating" counts without anchors.
 
-## Phase 7: Final Load Test & Tuning
-**Goal:** Validate the fix.
-- [ ] **Step 7.1:** (Manual) User verifies by refreshing the report page.
-- [ ] **Step 7.2:** (Conditional) If safe, increase concurrency to 5. If crashes recur, decrease to 2.
-- [ ] **Step 7.3:** Clean up debug logs from Phase 6 to keep production clean.
+## Phase 8: Fleet Efficiency & ROI Reporting
+**Goal**: Aggregated data for long-term fleet management.
+1. **L/100km Trending**: Show true vehicle efficiency over time using the cleaned "Stop-to-Stop" data.
+2. **Station Performance Analysis**: Identify stations where fuel quality might be causing efficiency drops.
+3. **Driver Behavior Scoring**: Create a "Compliance Score" based on scan frequency and variance accuracy.
+
+## Phase 9: System Hardening & Edge Cases
+**Goal**: Handle technical complexities like vehicle swaps and odometer roll-overs.
+1. **Vehicle Swap Logic**: Ensure buckets are correctly closed when a driver changes vehicles.
+2. **Odometer Correction Utility**: Build a tool for admins to fix "fat-finger" odometer typos that break subsequent buckets.
+3. **Final System Audit**: Stress test the accumulator engine with high volumes of back-filled legacy data.

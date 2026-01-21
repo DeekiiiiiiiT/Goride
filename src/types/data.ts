@@ -375,9 +375,11 @@ export interface FuelLog {
   driverId: string;
   vehicleId: string;
   date: string;
-  odometer: number;
+  odometer?: number | null;
   liters: number;
   totalCost: number;
+  entryMode: 'Anchor' | 'Floating';
+  paymentSource: 'RideShare_Cash' | 'Gas_Card' | 'Personal' | 'Petty_Cash';
   receiptUrl?: string;
   notes?: string;
 }

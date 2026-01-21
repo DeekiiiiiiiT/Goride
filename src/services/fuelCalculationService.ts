@@ -1,307 +1,341 @@
+/**
+ * Shared utility for fuel-related calculations to ensure consistency across components.
+ */
+
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, OdometerBucket } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
-import { FuelEntry, FuelCard, WeeklyFuelReport, MileageAdjustment, FuelScenario } from '../types/fuel';
-import { WeeklyCheckIn } from '../types/check-in';
-
-// Defaults if missing from Vehicle Profile
-const DEFAULT_EFFICIENCY_L_100KM = 10; // ~23 MPG
-const DEFAULT_FUEL_PRICE = 1.75; // $ per Liter
 
 export const FuelCalculationService = {
-
     /**
-     * Calculates the estimated fuel cost for a given distance.
-     * Handles L/100km and MPG conversions.
+     * Calculates volume (liters) based on total cost and price per unit.
      */
-    calculateOperatingCost(
-        distanceKm: number, 
-        vehicle: Vehicle, 
-        pricePerLiter: number = DEFAULT_FUEL_PRICE
-    ): number {
-        if (!vehicle.fuelSettings) {
-            // Fallback
-            return (distanceKm / 100) * DEFAULT_EFFICIENCY_L_100KM * pricePerLiter;
+    calculateVolume: (amount: number | string, pricePerLiter: number | string): number | null => {
+        const amt = typeof amount === 'string' ? parseFloat(amount) : amount;
+        const prc = typeof pricePerLiter === 'string' ? parseFloat(pricePerLiter) : pricePerLiter;
+
+        if (amt > 0 && prc > 0) {
+            return parseFloat((amt / prc).toFixed(2));
         }
-
-        const { efficiencyCity, efficiencyHighway, fuelType } = vehicle.fuelSettings;
-
-        // Simplified: Use City efficiency for all calculations for now (conservative)
-        // In future: Use Trip type or speed to blend City/Highway
-        let efficiency = efficiencyCity || DEFAULT_EFFICIENCY_L_100KM;
-
-        // If user entered MPG (assuming < 50 usually means MPG is unlikely for gas cars? No, 20-30 is MPG. 
-        // 5-15 is L/100km. If it's > 15, likely MPG. 
-        // Better: We should have a unit flag. 
-        // For now, assuming the inputs are normalized to L/100km by the UI or Profile.
-        // If not, we'd add logic here.
-        
-        const litersUsed = (distanceKm / 100) * efficiency;
-        return litersUsed * pricePerLiter;
+        return null;
     },
 
     /**
-     * Aggregates data for a specific period and vehicle to produce the reconciliation row.
+     * Calculates price per liter based on total cost and volume.
      */
-    calculateReconciliation(
+    calculatePricePerLiter: (amount: number | string, liters: number | string): number | null => {
+        const amt = typeof amount === 'string' ? parseFloat(amount) : amount;
+        const lts = typeof liters === 'string' ? parseFloat(liters) : liters;
+
+        if (amt > 0 && lts > 0) {
+            return parseFloat((amt / lts).toFixed(3));
+        }
+        return null;
+    },
+
+    /**
+     * Calculates total cost based on volume and price per unit.
+     */
+    calculateTotalCost: (liters: number | string, pricePerLiter: number | string): number | null => {
+        const lts = typeof liters === 'string' ? parseFloat(liters) : liters;
+        const prc = typeof pricePerLiter === 'string' ? parseFloat(pricePerLiter) : pricePerLiter;
+
+        if (lts > 0 && prc > 0) {
+            return parseFloat((lts * prc).toFixed(2));
+        }
+        return null;
+    },
+
+    /**
+     * Formats a fuel amount for display.
+     */
+    formatCurrency: (value: number): string => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+        }).format(value);
+    },
+
+    /**
+     * Generates a reconciliation report for a single vehicle.
+     */
+    calculateReconciliation: (
         vehicle: Vehicle,
         weekStart: Date,
         weekEnd: Date,
         trips: Trip[],
         fuelEntries: FuelEntry[],
-        adjustments: MileageAdjustment[] = [],
-        checkIns: WeeklyCheckIn[] = [],
+        adjustments: MileageAdjustment[],
         scenarios: FuelScenario[] = []
-    ): WeeklyFuelReport {
-        const startStr = weekStart.toISOString();
-        const endStr = weekEnd.toISOString();
+    ): WeeklyFuelReport => {
+        const startStr = weekStart.toISOString().split('T')[0];
+        const endStr = weekEnd.toISOString().split('T')[0];
 
-        // 1. Filter Data for this Vehicle & Period
-        const vehicleTrips = trips.filter(t => 
-            t.vehicleId === vehicle.id && 
-            t.date && t.date >= startStr && t.date <= endStr
-        );
+        // 1. Find the active scenario for this vehicle
+        const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) || 
+                             scenarios.find(s => s.isDefault) || 
+                             scenarios[0];
 
+        // Helper to get rule for a specific category
+        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'personal' | 'misc', amount: number) => {
+            if (!activeScenario) return { company: amount, driver: 0 }; // Default to company pays all if no scenario
+
+            const rule = activeScenario.rules.find(r => r.category === 'Fuel');
+            if (!rule) return { company: amount, driver: 0 };
+
+            // Determine specific percentage/value for this sub-category
+            let coveragePercent = rule.coverageValue;
+            if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
+            if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
+            if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
+            if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
+
+            if (rule.coverageType === 'Full') {
+                return { company: amount, driver: 0 };
+            } else if (rule.coverageType === 'Percentage') {
+                const companyPay = amount * (coveragePercent / 100);
+                return { company: companyPay, driver: amount - companyPay };
+            } else if (rule.coverageType === 'Fixed_Amount') {
+                const companyPay = Math.min(amount, rule.coverageValue);
+                return { company: companyPay, driver: amount - companyPay };
+            }
+
+            return { company: amount, driver: 0 };
+        };
+
+        // 2. Filter data for this vehicle and week
         const vehicleEntries = fuelEntries.filter(e => 
             e.vehicleId === vehicle.id && 
-            e.date >= startStr && e.date <= endStr
+            e.date >= startStr && 
+            e.date <= endStr
+        );
+
+        const vehicleTrips = trips.filter(t => 
+            t.vehicleId === vehicle.id && 
+            t.date >= startStr && 
+            t.date <= endStr &&
+            t.status === 'Completed'
         );
 
         const vehicleAdjustments = adjustments.filter(a => 
             a.vehicleId === vehicle.id && 
-            a.date >= startStr && a.date <= endStr
+            a.date >= startStr && 
+            a.date <= endStr
         );
 
-        // 2. Calculate Gas Card Charges (Actual Spend)
-        // Updated: Now includes 'Reimbursement' as Company Cost (Phase 1 Fuel Logic)
-        const totalGasCardCost = vehicleEntries
-            .filter(e => e.type === 'Card_Transaction' || e.type === 'Reimbursement')
-            .reduce((sum, e) => sum + e.amount, 0);
-
-        // Determine average fuel price for this week (weighted average)
-        const totalLiters = vehicleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
-        const totalCost = vehicleEntries.reduce((sum, e) => sum + e.amount, 0);
-        const avgPrice = totalLiters > 0 ? (totalCost / totalLiters) : DEFAULT_FUEL_PRICE;
-
-        // 3. Calculate Ride Share (Operating Fuel - The "Should Be" Cost)
-        // STRICT ISOLATION: This must only include Trips (Business Rides).
-        // No manual adjustments or misc distances should be added here.
+        // 3. Aggregate Costs
+        const totalGasCardCost = vehicleEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        
+        // 4. Aggregate Distances
         const totalTripDistance = vehicleTrips.reduce((sum, t) => sum + (t.distance || 0), 0);
+        const companyMiscDistance = vehicleAdjustments
+            .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
+            .reduce((sum, a) => sum + (a.distance || 0), 0);
+        const personalDistance = vehicleAdjustments
+            .filter(a => a.type === 'Personal')
+            .reduce((sum, a) => sum + (a.distance || 0), 0);
+
+        // 5. Calculate Costs (Simple estimation logic)
+        // In a real system, this would use vehicle MPG. Using a default 10km/L and $1.50/L for estimation.
+        const estKmL = 10; 
+        const estPrice = 1.50;
         
-        // Calculate Cost strictly: Distance * Efficiency * Price
-        const rideShareCost = this.calculateOperatingCost(totalTripDistance, vehicle, avgPrice);
+        const rideShareCost = (totalTripDistance / estKmL) * estPrice;
+        const companyUsageCost = (companyMiscDistance / estKmL) * estPrice;
+        const personalUsageCost = (personalDistance / estKmL) * estPrice;
 
-        // 4. Adjustments (Company Usage & Personal)
-        // Phase 3: STRICT ISOLATION for Company Usage
-        // Must strictly filter for 'Company_Misc' type only.
-        // Represents authorized non-trip business operations (e.g., getting maintenance, office errands).
-        const companyMiscAdj = vehicleAdjustments.filter(a => a.type === 'Company_Misc');
-        const personalAdj = vehicleAdjustments.filter(a => a.type === 'Personal');
-
-        const companyMiscDistance = companyMiscAdj.reduce((sum, a) => sum + a.distance, 0);
-        
-        // Phase 2: Residual Personal KM Calculation
-        // Priority 1: Use Weekly Check-Ins (Start/End of Week)
-        // Priority 2: Use Fuel Logs (Phase 1 Logic)
-        
-        let derivedTotalDistance = 0;
-        let calculatedPersonalDistance = 0;
-        let method = 'Manual';
-
-        // Filter check-ins for this vehicle
-        const vehicleCheckIns = checkIns
-            .filter(c => c.vehicleId === vehicle.id)
-            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-        // We need a check-in roughly at weekStart and weekEnd
-        // weekStart is usually Monday 00:00. weekEnd is Sunday 23:59.
-        // We look for check-ins within a reasonable window (e.g. +/- 3 days of the boundary)
-        const findClosestCheckIn = (targetDate: Date) => {
-            const targetTime = targetDate.getTime();
-            return vehicleCheckIns.find(c => {
-                const checkTime = new Date(c.timestamp).getTime();
-                const diffDays = Math.abs(checkTime - targetTime) / (1000 * 60 * 60 * 24);
-                return diffDays <= 3; // within 3 days
-            });
-        };
-
-        const startCheckIn = findClosestCheckIn(weekStart);
-        // For end of week, we ideally want the check-in of the *next* Monday
-        const nextMonday = new Date(weekEnd);
-        nextMonday.setDate(nextMonday.getDate() + 1);
-        const endCheckIn = findClosestCheckIn(nextMonday);
-
-        if (startCheckIn && endCheckIn && endCheckIn.odometer > startCheckIn.odometer) {
-             derivedTotalDistance = endCheckIn.odometer - startCheckIn.odometer;
-             method = 'CheckIn';
-        } else {
-            // Fallback: Fuel Logs (Phase 1)
-            const odometers = vehicleEntries
-                .map(e => e.odometer)
-                .filter(o => o !== undefined && o > 0)
-                .sort((a, b) => a - b);
-            
-            if (odometers.length >= 2) {
-                const minOdo = odometers[0];
-                const maxOdo = odometers[odometers.length - 1];
-                derivedTotalDistance = maxOdo - minOdo;
-                method = 'FuelLog';
-            }
-        }
-        
-        if (derivedTotalDistance > 0) {
-             // Formula: Personal = Total - (Business Trips + Authorized Misc)
-            const businessTotal = totalTripDistance + companyMiscDistance;
-            
-            // Only apply residual if valid (positive)
-            if (derivedTotalDistance > businessTotal) {
-                calculatedPersonalDistance = derivedTotalDistance - businessTotal;
-            }
-        }
-        
-        // Phase 4: Driver Personal Fuel Usage Isolation
-        // This bucket strictly represents fuel used for personal trips.
-        // It combines explicitly logged 'Personal' adjustments + calculated residual distance.
-        const personalDistance = calculatedPersonalDistance > 0 
-            ? calculatedPersonalDistance 
-            : personalAdj.reduce((sum, a) => sum + a.distance, 0);
-
-        // Phase 3: Calculate Company Usage Cost
-        // This is 100% Company Liability by definition.
-        const companyUsageCost = this.calculateOperatingCost(companyMiscDistance, vehicle, avgPrice);
-        
-        const personalUsageCost = this.calculateOperatingCost(personalDistance, vehicle, avgPrice);
-
-        // Phase 4: Miscellaneous (Leakage) Isolation
-        // Formula: Actual Spend - (Ride Share + Company Usage + Personal)
-        // This math ensures that the 4 buckets sum up exactly to the Total Gas Card Cost (ignoring rounding differences).
-        // If positive, it's unexplained usage (leakage/theft/idling).
-        // If negative, it means they are hyper-efficient or we missed fuel logs (savings).
+        // 6. Calculate Leakage (Miscellaneous)
         const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + personalUsageCost);
 
-        // 6. The Split (Phase 5)
-        let companyShare = 0;
-        let driverShare = 0;
+        // 7. Split Costs dynamically using Scenario Rules
+        const rideShareSplit = getCoverage('rideShare', rideShareCost);
+        const companyUsageSplit = getCoverage('companyUsage', companyUsageCost);
+        const personalSplit = getCoverage('personal', personalUsageCost);
+        const miscSplit = getCoverage('misc', miscellaneousCost);
 
-        let scenario = scenarios.find(s => s.id === vehicle.fuelScenarioId);
-        
-        // Phase 10: Fallback to System Default Scenario if no specific assignment
-        if (!scenario) {
-            scenario = scenarios.find(s => s.isDefault);
-        }
+        const companyShare = rideShareSplit.company + companyUsageSplit.company + personalSplit.company + miscSplit.company;
+        const driverShare = rideShareSplit.driver + companyUsageSplit.driver + personalSplit.driver + miscSplit.driver;
 
-        const fuelRule = scenario?.rules.find(r => r.category === 'Fuel');
+        // 8. Calculate Health Status (Phase 4)
+        const buckets = FuelCalculationService.calculateOdometerBuckets(vehicle, vehicleEntries, vehicleTrips, vehicleAdjustments);
+        let healthStatus: 'Emerald' | 'Amber' | 'Red' = 'Emerald';
+        let healthScore = 100;
 
-        if (fuelRule) {
-             // Phase 5: Applied Scenario Logic
-             
-             if (fuelRule.coverageType === 'Full') {
-                 // Full Coverage: Company pays for (Ride Share + Company Usage + Misc)
-                 // Personal is always Driver liability.
-                 
-                 // Note: If misc is negative (savings), adding it reduces the company share, which is correct.
-                 companyShare = rideShareCost + companyUsageCost + miscellaneousCost;
-             } 
-             else if (fuelRule.coverageType === 'Percentage') {
-                 // Percentage Split with Granular Control (Phase 10)
-                 
-                 // 1. Resolve Percentages (Use Granular if present, else fall back to Legacy/Defaults)
-                 // Legacy behavior: 'coverageValue' applied to Ride Share & Misc. Company Ops was 100%. Personal was 0%.
-                 
-                 const rideSharePct = (fuelRule.rideShareCoverage ?? fuelRule.coverageValue ?? 100) / 100;
-                 const companyOpsPct = (fuelRule.companyUsageCoverage ?? 100) / 100;
-                 const personalPct = (fuelRule.personalCoverage ?? 0) / 100;
-                 const miscPct = (fuelRule.miscCoverage ?? fuelRule.coverageValue ?? 50) / 100; // Default 50% if totally missing
-                 
-                 // 2. Calculate Components
-                 const coveredRideShare = rideShareCost * rideSharePct;
-                 const coveredCompanyOps = companyUsageCost * companyOpsPct;
-                 const coveredPersonal = personalUsageCost * personalPct;
-                 const coveredMisc = miscellaneousCost * miscPct;
-                 
-                 // 3. Sum Company Share
-                 companyShare = coveredRideShare + coveredCompanyOps + coveredPersonal + coveredMisc;
-             }
-             else if (fuelRule.coverageType === 'Fixed_Amount') {
-                 // Fixed Allowance
-                 // Company pays 100% of Company Usage
-                 // Company pays up to $Allowance for (Ride Share + Misc)
-                 
-                 const allowance = fuelRule.coverageValue || 0;
-                 
-                 // Combine variable business costs
-                 const variableBusinessCost = rideShareCost + miscellaneousCost;
-                 
-                 // Apply cap
-                 // If variable cost is negative (huge savings), we limit company share to just Company Usage + Negative?
-                 // Let's assume allowance is positive cap on positive costs.
-                 const coveredVariable = Math.min(allowance, variableBusinessCost);
-                 
-                 companyShare = companyUsageCost + coveredVariable;
-             }
-             
-             // Driver pays the remainder
-             driverShare = totalGasCardCost - companyShare;
-             
-             // Safety: If Total Spend is 0, shares are 0
-             if (totalGasCardCost === 0) {
-                 companyShare = 0;
-                 driverShare = 0;
-             }
-        } else {
-            // Default Legacy Logic (No Scenario Assigned)
-            // Ride Share: 100% Company
-            // Company Usage: 100% Company
-            // Personal: 100% Driver
-            // Misc: 50% / 50%
-            
-            const miscSplit = miscellaneousCost * 0.5;
-            
-            companyShare = rideShareCost + companyUsageCost + miscSplit;
-            driverShare = totalGasCardCost - companyShare;
+        if (buckets.length === 0 && vehicleEntries.length > 0) {
+            healthStatus = 'Red';
+            healthScore = 0;
+        } else if (buckets.some(b => b.status === 'Anomaly')) {
+            healthStatus = 'Amber';
+            healthScore = 70;
+            // Check for severe anomalies
+            if (buckets.some(b => b.unaccountedDistance > (b.endOdometer - b.startOdometer) * 0.3)) {
+                healthStatus = 'Red';
+                healthScore = 40;
+            }
         }
 
         return {
-            id: `${vehicle.id}_${startStr.split('T')[0]}_${endStr.split('T')[0]}`,
-            weekStart: startStr,
-            weekEnd: endStr,
+            id: `${vehicle.id}_${startStr}`,
+            weekStart: weekStart.toISOString(),
+            weekEnd: weekEnd.toISOString(),
             vehicleId: vehicle.id,
-            driverId: vehicle.currentDriverId || 'unassigned',
-            
+            driverId: vehicle.currentDriverId || '',
             totalGasCardCost,
-            
             totalTripDistance,
             rideShareCost,
-            
             companyMiscDistance,
             companyUsageCost,
-            
             personalDistance,
             personalUsageCost,
-            
             miscellaneousCost,
-            
             companyShare,
             driverShare,
-            
-            status: 'Draft'
+            status: 'Draft',
+            healthStatus,
+            healthScore,
+            metadata: {
+                scenarioName: activeScenario?.name || 'Standard (Fallback)',
+                scenarioId: activeScenario?.id
+            }
         };
     },
 
     /**
-     * Batch generator for multiple vehicles
+     * Generates reconciliation reports for the entire fleet.
      */
-    generateFleetReport(
+    generateFleetReport: (
         vehicles: Vehicle[],
         weekStart: Date,
         weekEnd: Date,
         trips: Trip[],
         fuelEntries: FuelEntry[],
-        adjustments: MileageAdjustment[] = [],
-        checkIns: WeeklyCheckIn[] = [],
-        scenarios: FuelScenario[] = []
-    ): WeeklyFuelReport[] {
+        adjustments: MileageAdjustment[],
+        checkIns: any[],
+        scenarios: FuelScenario[]
+    ): WeeklyFuelReport[] => {
         return vehicles.map(v => 
-            this.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, checkIns, scenarios)
+            FuelCalculationService.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, scenarios)
         );
+    },
+
+    /**
+     * Groups fuel entries and trips into odometer-based buckets.
+     * Each bucket represents the distance traveled between two verified odometer scans (Anchors),
+     * accumulating any "Floating" receipts that occurred between those scans.
+     */
+    calculateOdometerBuckets: (
+        vehicle: Vehicle,
+        fuelEntries: FuelEntry[],
+        trips: Trip[],
+        adjustments: MileageAdjustment[] = []
+    ): OdometerBucket[] => {
+        // 1. Separate entries into Anchors (Verified Odo) and Floating (Legacy/Cash)
+        // We consider an entry an "Anchor" if it has a valid odometer reading.
+        const anchors = fuelEntries
+            .filter(e => e.vehicleId === vehicle.id && e.odometer !== undefined && e.odometer !== null)
+            .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+
+        const floating = fuelEntries
+            .filter(e => e.vehicleId === vehicle.id && (e.odometer === undefined || e.odometer === null));
+
+        if (anchors.length < 2) return [];
+
+        const buckets: OdometerBucket[] = [];
+        const avgEfficiency = vehicle.fuelSettings?.efficiencyCity || 10; 
+
+        for (let i = 0; i < anchors.length - 1; i++) {
+            const startAnchor = anchors[i];
+            const endAnchor = anchors[i + 1];
+
+            const startOdo = startAnchor.odometer || 0;
+            const endOdo = endAnchor.odometer || 0;
+            const bucketDistance = endOdo - startOdo;
+
+            if (bucketDistance <= 0) continue;
+
+            // 2. Identify "Floating" receipts that fall within this anchor window
+            // We use dates as the boundary for these legacy receipts.
+            const windowReceipts = floating.filter(f => 
+                f.date >= startAnchor.date && f.date <= endAnchor.date
+            );
+
+            // 3. Accumulate Volume & Cost
+            // The fuel that "filled" this distance includes all mid-window receipts PLUS the closing anchor's fuel.
+            const totalLiters = (endAnchor.liters || 0) + windowReceipts.reduce((sum, r) => sum + (r.liters || 0), 0);
+            const totalCost = (endAnchor.amount || 0) + windowReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+            
+            const associatedReceipts = [endAnchor.id, ...windowReceipts.map(r => r.id)];
+
+            // 4. Find trips that belong to this bucket
+            const bucketTrips = trips.filter(t => {
+                const tripStart = t.startOdometer || 0;
+                const tripEnd = t.endOdometer || 0;
+                // If trip has odometers, use them. If not, use date range as fallback
+                if (t.startOdometer && t.endOdometer) {
+                    return t.vehicleId === vehicle.id && tripStart >= startOdo && tripEnd <= endOdo;
+                }
+                return t.vehicleId === vehicle.id && t.date >= startAnchor.date && t.date <= endAnchor.date;
+            });
+
+            // 5. Find adjustments in this bucket
+            const bucketAdjustments = adjustments.filter(a => {
+                return a.vehicleId === vehicle.id && a.date >= startAnchor.date && a.date <= endAnchor.date;
+            });
+
+            // 6. Calculate Distances
+            const rideShareDistance = bucketTrips.reduce((sum, t) => sum + (t.distance || 0), 0);
+            const personalDistance = bucketAdjustments
+                .filter(a => a.type === 'Personal')
+                .reduce((sum, a) => sum + (a.distance || 0), 0);
+            const companyMiscDistance = bucketAdjustments
+                .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
+                .reduce((sum, a) => sum + (a.distance || 0), 0);
+
+            const accountedDistance = rideShareDistance + personalDistance + companyMiscDistance;
+            const unaccountedDistance = Math.max(0, bucketDistance - accountedDistance);
+
+            // 7. Efficiency Variance
+            const expectedFuelLiters = (bucketDistance / 100) * avgEfficiency;
+            const varianceLiters = totalLiters - expectedFuelLiters;
+            const variancePercent = expectedFuelLiters > 0 ? (varianceLiters / expectedFuelLiters) * 100 : 0;
+
+            // 8. Phase 4: Deduction Recommendation
+            // Deduction = Gap * (Total Cost in Bucket / Total Distance in Bucket)
+            // This charges the driver the actual cost of fuel for the unlogged distance.
+            let deductionRecommendation = 0;
+            let deductionReason = "";
+
+            if (unaccountedDistance > 10) { // Threshold: 10km gap
+                deductionRecommendation = Number((unaccountedDistance * (totalCost / bucketDistance)).toFixed(2));
+                deductionReason = `Unaccounted distance gap of ${unaccountedDistance.toLocaleString()}km identified between odometer anchors.`;
+            }
+
+            buckets.push({
+                id: `bucket_${vehicle.id}_${startOdo}_${endOdo}`,
+                vehicleId: vehicle.id,
+                startOdometer: startOdo,
+                endOdometer: endOdo,
+                startDate: startAnchor.date,
+                endDate: endAnchor.date,
+                actualFuelLiters: totalLiters,
+                actualFuelCost: totalCost,
+                associatedReceipts,
+                closingEntryId: endAnchor.id,
+                totalTripDistance: rideShareDistance,
+                tripsCount: bucketTrips.length,
+                expectedFuelLiters,
+                varianceLiters,
+                variancePercent,
+                rideShareDistance,
+                personalDistance,
+                companyMiscDistance,
+                unaccountedDistance,
+                deductionRecommendation: deductionRecommendation > 0 ? deductionRecommendation : undefined,
+                deductionReason: deductionReason || undefined,
+                status: (unaccountedDistance > (bucketDistance * 0.1) || Math.abs(variancePercent) > 20) ? 'Anomaly' : 'Complete'
+            });
+        }
+
+        return buckets;
     }
 };

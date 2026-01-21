@@ -141,5 +141,21 @@ export const fuelService = {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to delete fuel scenario");
+  },
+
+  // --- Phase 4: Finalization & Ledger ---
+  async finalizeReconciliation(reports: any[]): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/reconciliation/finalize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ reports })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to finalize reconciliation");
+    }
   }
 };

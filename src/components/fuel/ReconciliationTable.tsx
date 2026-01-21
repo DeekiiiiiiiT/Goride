@@ -11,14 +11,36 @@ import {
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
-import { CalendarIcon, FileCheck, AlertCircle, TrendingUp, Info, Download } from "lucide-react";
+import { 
+    CalendarIcon, 
+    FileCheck, 
+    AlertCircle, 
+    TrendingUp, 
+    Info, 
+    Download, 
+    History,
+    CheckCircle2,
+    AlertTriangle,
+    ShieldCheck
+} from "lucide-react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { Progress } from "../ui/progress";
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
-import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario } from '../../types/fuel';
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket } from '../../types/fuel';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
@@ -34,6 +56,7 @@ interface ReconciliationTableProps {
     onFinalize?: (reports: WeeklyFuelReport[]) => void;
     onAddAdjustment?: () => void;
     onResolveDispute?: (dispute: FuelDispute) => void;
+    onViewBuckets?: (vehicle: Vehicle) => void;
 }
 
 export function ReconciliationTable({ 
@@ -46,8 +69,11 @@ export function ReconciliationTable({
     scenarios = [],
     onFinalize,
     onAddAdjustment,
-    onResolveDispute
+    onResolveDispute,
+    onViewBuckets
 }: ReconciliationTableProps) {
+    const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
+
     // Handle invalid/loading date range
     if (!dateRange || !dateRange.from) {
         return <div className="p-8 text-center text-slate-500">Select a date range to view reconciliation reports.</div>;
@@ -110,7 +136,7 @@ export function ReconciliationTable({
                     e.vehicleId === report.vehicleId && 
                     e.date >= report.weekStart && 
                     e.date <= report.weekEnd &&
-                    (e.type === 'Reimbursement' || e.type === 'Manual_Entry')
+                    (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
                 )
                 .reduce((sum, e) => sum + e.amount, 0);
 
@@ -164,7 +190,7 @@ export function ReconciliationTable({
                         <Download className="mr-2 h-4 w-4" />
                         Export
                     </Button>
-                    <Button onClick={() => onFinalize?.(reports)}>
+                    <Button onClick={() => setIsFinalizeDialogOpen(true)} disabled={reports.length === 0}>
                         <FileCheck className="mr-2 h-4 w-4" />
                         Finalize
                     </Button>
@@ -181,7 +207,8 @@ export function ReconciliationTable({
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
-                                <TableHead className="w-[200px]">Vehicle / Driver</TableHead>
+                                <TableHead className="w-[180px]">Vehicle / Driver</TableHead>
+                                <TableHead className="w-[120px] text-center">Data Health</TableHead>
                                 <TableHead className="w-[100px]">Status</TableHead>
                                 <TableHead className="text-right font-medium text-slate-900 border-l border-r border-slate-200 bg-slate-100">
                                     <Tooltip>
@@ -303,7 +330,7 @@ export function ReconciliationTable({
                                         e.vehicleId === report.vehicleId && 
                                         e.date >= report.weekStart && 
                                         e.date <= report.weekEnd &&
-                                        (e.type === 'Reimbursement' || e.type === 'Manual_Entry')
+                                        (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
                                     )
                                     .reduce((sum, e) => sum + e.amount, 0);
 
@@ -320,16 +347,57 @@ export function ReconciliationTable({
                                 return (
                                     <TableRow key={report.id}>
                                         <TableCell>
-                                            <div className="flex flex-col">
-                                                <span className="font-medium text-slate-900">
-                                                    {vehicle?.licensePlate || 'Unknown'} 
-                                                    <span className="text-slate-400 font-normal ml-2">
-                                                        ({vehicle?.model})
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium text-slate-900">
+                                                            {vehicle?.licensePlate || 'Unknown'} 
+                                                        </span>
+                                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 border-slate-200 text-slate-500 bg-slate-50/50">
+                                                            {report.metadata?.scenarioName || 'Standard'}
+                                                        </Badge>
+                                                    </div>
+                                                    <span className="text-xs text-slate-500">
+                                                        {vehicle?.model} • {report.driverId || 'Unassigned'}
                                                     </span>
-                                                </span>
-                                                <span className="text-xs text-slate-500">
-                                                    {report.driverId || 'Unassigned'}
-                                                </span>
+                                                </div>
+                                                {onViewBuckets && vehicle && (
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-8 w-8 text-slate-400 hover:text-blue-600"
+                                                                    onClick={() => onViewBuckets(vehicle)}
+                                                                >
+                                                                    <History className="h-4 w-4" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>View Odometer Buckets</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-col items-center justify-center gap-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    {report.healthStatus === 'Emerald' ? (
+                                                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                                    ) : report.healthStatus === 'Amber' ? (
+                                                        <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                                    ) : (
+                                                        <AlertCircle className="h-4 w-4 text-rose-500" />
+                                                    )}
+                                                    <span className={`text-[10px] font-bold uppercase ${
+                                                        report.healthStatus === 'Emerald' ? 'text-emerald-600' :
+                                                        report.healthStatus === 'Amber' ? 'text-amber-600' : 'text-rose-600'
+                                                    }`}>
+                                                        {report.healthStatus}
+                                                    </span>
+                                                </div>
+                                                <Progress value={report.healthScore} className="h-1 w-12" />
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -430,6 +498,49 @@ export function ReconciliationTable({
                      Unaccounted fuel (Total - All known categories).
                  </div>
             </div>
+
+            {/* Finalize Confirmation */}
+            <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                            Finalize Reconciliation Statements
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="text-sm text-muted-foreground">
+                                This will freeze the data for this period and post the final net amounts to each driver's main ledger. 
+                                <div className="mt-4 p-3 bg-slate-50 rounded border border-slate-200 text-slate-900 space-y-2">
+                                    <div className="flex justify-between text-sm">
+                                        <span>Total Fleet Spend:</span>
+                                        <span className="font-bold">{formatCurrency(totals.gasCard)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span>Company Share:</span>
+                                        <span className="font-bold">{formatCurrency(totals.company)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm border-t pt-2 text-rose-600">
+                                        <span>Driver Deductions (Net):</span>
+                                        <span className="font-bold">{formatCurrency(totals.driver)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={() => {
+                                onFinalize?.(reports);
+                                setIsFinalizeDialogOpen(false);
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                            Process Ledger Entries
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

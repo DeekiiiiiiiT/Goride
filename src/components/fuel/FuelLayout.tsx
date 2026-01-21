@@ -20,12 +20,7 @@ export function FuelLayout({ children, onAddTransaction, title = "Fuel Managemen
           <p className="text-slate-500 mt-1">{description}</p>
         </div>
         <div className="flex items-center gap-2">
-           {onAddTransaction && (
-               <Button onClick={onAddTransaction}>
-                  <Fuel className="h-4 w-4 mr-2" />
-                  Add Transaction
-               </Button>
-           )}
+            {/* Manual entries are now consolidated into the "Log Receipt / Manual Entry" flow within the reimbursement section */}
         </div>
       </div>
 

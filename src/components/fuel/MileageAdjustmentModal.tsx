@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
@@ -82,6 +82,9 @@ export function MileageAdjustmentModal({
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Add Mileage Adjustment</DialogTitle>
+                    <DialogDescription>
+                        Correct mileage variances to ensure accurate fuel cost allocation.
+                    </DialogDescription>
                 </DialogHeader>
                 
                 <div className="grid gap-4 py-4">

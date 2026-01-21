@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw } from 'lucide-react';
+import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
@@ -10,15 +10,25 @@ import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { ReportsPage } from '../components/fuel/ReportsPage';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
 import { ReconciliationTable } from '../components/fuel/ReconciliationTable';
+import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
 import { DatePickerWithRange } from '../components/ui/date-range-picker';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "../components/ui/sheet";
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute, FuelScenario } from '../types/fuel';
+import { Vehicle } from '../types/vehicle';
 import { Trip, FinancialTransaction } from '../types/data';
 import { api } from '../services/api';
 import { fuelService } from '../services/fuelService';
+import { settlementService } from '../services/settlementService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { toast } from "sonner@2.0.3";
 import { startOfWeek, endOfWeek } from "date-fns";
@@ -34,7 +44,11 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 
-export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: string }) {
+export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: { 
+    defaultTab?: string, 
+    onViewDriverLedger?: (driverId: string) => void,
+    onTabChange?: (tab: string) => void
+}) {
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   useEffect(() => {
@@ -74,36 +88,66 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   const [isResolutionModalOpen, setIsResolutionModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Phase 3: Bucket View State
+  const [selectedBucketVehicle, setSelectedBucketVehicle] = useState<Vehicle | null>(null);
+  const [isBucketSheetOpen, setIsBucketSheetOpen] = useState(false);
+
   // Assignment Data
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
 
+  // Effect to reload trips when Date Range changes
+  useEffect(() => {
+    const fetchTripsForRange = async () => {
+        if (!dateRange?.from) return;
+        try {
+            // Using getTripsFiltered is more efficient and accurate for reconciliation than raw getTrips
+            const response = await api.getTripsFiltered({
+                startDate: dateRange.from.toISOString(),
+                endDate: dateRange.to?.toISOString() || new Date().toISOString(),
+                limit: 1500 // Cap at 1500 to prevent browser lag, but cover the week
+            });
+            setTrips(response.data || []);
+        } catch (e) {
+            console.error("Failed to fetch trips for range", e);
+            // Don't toast error here to avoid spamming on mount if it fails silently
+        }
+    };
+    fetchTripsForRange();
+  }, [dateRange]);
+
   const loadData = async (silent = false) => {
       if (!silent) setIsRefreshing(true);
       try {
-          const [vData, dData, tData, cardsData, logsData, adjsData, disputesData, txData, scenariosData] = await Promise.all([
-              api.getVehicles().catch(() => []), 
+          // Fetch critical configuration and identifiers first
+          const [vData, dData, scenariosData] = await Promise.all([
+              api.getVehicles().catch(() => []),
               api.getDrivers().catch(() => []),
-              api.getTrips({ limit: 500 }).catch(() => []),
+              fuelService.getFuelScenarios().catch(() => [])
+          ]);
+
+          setVehicles(vData);
+          setDrivers(dData);
+          setScenarios(scenariosData);
+
+          // Fetch operational data in secondary batch to prevent Edge Function timeout
+          // Note: Trips are now handled by the dateRange effect, but we fetch a small batch here for initial state if needed
+          // or just rely on the effect. To be safe and populate "Dashboard" stats immediately without waiting for date range effect:
+          const [cardsData, logsData, adjsData, disputesData, txData] = await Promise.all([
               fuelService.getFuelCards().catch(() => []),
               fuelService.getFuelEntries().catch(() => []),
               fuelService.getMileageAdjustments().catch(() => []),
               FuelDisputeService.getAllDisputes().catch(() => []),
               api.getTransactions().catch(() => []),
-              fuelService.getFuelScenarios().catch(() => [])
           ]);
           
-          setVehicles(vData);
-          setDrivers(dData);
-          setTrips(tData);
           setCards(cardsData);
           setLogs(logsData);
           setAdjustments(adjsData);
           setDisputes(disputesData);
           setTransactions(txData);
-          setScenarios(scenariosData);
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -155,22 +199,68 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
               // Bulk Mode
               const promises = entryOrEntries.map(entry => fuelService.saveFuelEntry(entry));
               const savedLogs = await Promise.all(promises);
+              
+              // Process settlements for bulk entries
+              const scenariosData = await fuelService.getFuelScenarios();
+              for (const log of savedLogs) {
+                  await settlementService.processFuelSettlement(log, scenariosData);
+              }
+              
               setLogs(prev => [...savedLogs, ...prev]);
-              toast.success(`Successfully recorded ${savedLogs.length} transactions`);
+              toast.success(`Successfully recorded ${savedLogs.length} transactions and processed settlements`);
           } else {
               // Single Mode
               const entry = entryOrEntries;
-              const savedLog = await fuelService.saveFuelEntry(entry);
+              
+              // Phase 1: Foundation & Persistence
+              // If we are editing, we should mark it as edited in metadata
+              const payload = editingLog ? {
+                  ...entry,
+                  metadata: {
+                      ...(entry as any).metadata,
+                      isEdited: true,
+                      lastEditedAt: new Date().toISOString(),
+                      editReason: (entry as any).editReason
+                  }
+              } : entry;
+
+              const savedLog = await fuelService.saveFuelEntry(payload);
+              
+              // Process settlement
+              const scenariosData = await fuelService.getFuelScenarios();
+              await settlementService.processFuelSettlement(savedLog, scenariosData);
+
               if (editingLog) {
+                  // Also update the associated transaction in the ledger if it exists
+                  if (savedLog.transactionId) {
+                      try {
+                          const existingTx = transactions.find(t => t.id === savedLog.transactionId);
+                          if (existingTx) {
+                              await api.saveTransaction({
+                                  ...existingTx,
+                                  metadata: {
+                                      ...existingTx.metadata,
+                                      isEdited: true,
+                                      lastEditedAt: new Date().toISOString(),
+                                      editReason: (entry as any).editReason
+                                  }
+                              });
+                          }
+                      } catch (e) {
+                          console.error("Failed to update associated ledger transaction metadata", e);
+                      }
+                  }
+                  
                   setLogs(prev => prev.map(l => l.id === savedLog.id ? savedLog : l));
-                  toast.success("Transaction updated");
+                  toast.success("Transaction updated & settlement re-calculated");
               } else {
                   setLogs(prev => [savedLog, ...prev]);
-                  toast.success("Transaction recorded");
+                  toast.success("Transaction recorded & ledger credit posted");
               }
           }
           setIsLogModalOpen(false);
           setEditingLog(null);
+          loadData(true); // Full reload to refresh ledger balances
       } catch (e) {
           console.error(e);
           toast.error("Failed to save transaction(s)");
@@ -193,7 +283,16 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
       try {
           const updated = await api.approveExpense(id, notes);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
-          toast.success("Reimbursement Approved");
+          
+          // Phase 3: Automated Financial Settlement
+          // If it was a fuel reimbursement, trigger the credit settlement
+          if (updated.category === 'Fuel' || updated.category === 'Fuel Reimbursement') {
+              const scenariosData = await fuelService.getFuelScenarios();
+              await settlementService.processFuelSettlement(updated, scenariosData);
+              toast.success("Reimbursement Approved & Ledger Credit Posted");
+          } else {
+              toast.success("Reimbursement Approved");
+          }
       } catch (e) {
           console.error(e);
           toast.error("Failed to approve reimbursement");
@@ -214,14 +313,22 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
   const handleSaveExpense = async (transactionData: any) => {
       try {
           const savedTx = await api.saveTransaction(transactionData);
+          
+          // If admin saves as 'Approved' immediately, process settlement
+          if (savedTx.status === 'Approved' && (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement')) {
+              const scenariosData = await fuelService.getFuelScenarios();
+              await settlementService.processFuelSettlement(savedTx, scenariosData);
+          }
+
           if (editingExpense) {
               setTransactions(prev => prev.map(t => t.id === savedTx.id ? savedTx : t));
               toast.success("Expense updated");
           } else {
               setTransactions(prev => [savedTx, ...prev]);
-              toast.success("Expense request submitted");
+              toast.success("Expense recorded and settled");
           }
           setEditingExpense(null);
+          loadData(true);
       } catch (e) {
           console.error(e);
           toast.error("Failed to save expense");
@@ -293,6 +400,20 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
 
   // Calculate Spend
   const weeklySpend = logs.reduce((sum, log) => sum + log.amount, 0);
+
+  const handleFinalize = async (reports: WeeklyFuelReport[]) => {
+      try {
+          setIsRefreshing(true);
+          await fuelService.finalizeReconciliation(reports);
+          toast.success(`Successfully finalized ${reports.length} statements and posted to ledger.`);
+          await loadData(true); // Reload everything
+      } catch (e: any) {
+          console.error(e);
+          toast.error(`Finalization failed: ${e.message}`);
+      } finally {
+          setIsRefreshing(false);
+      }
+  };
 
   // Determine Page Title and Description based on activeTab
   let pageTitle = "Fuel Management";
@@ -388,6 +509,7 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
               onRequestSubmit={() => { setEditingExpense(null); setIsSubmitExpenseModalOpen(true); }}
               onEdit={handleEditExpense}
               onDelete={handleDeleteExpense}
+              onViewDriverLedger={onViewDriverLedger}
           />
       )}
 
@@ -409,9 +531,10 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
                 disputes={disputes}
                 dateRange={dateRange}
                 scenarios={scenarios}
-                onFinalize={(reports) => toast.success(`Finalized ${reports.length} reports`)}
+                onFinalize={handleFinalize}
                 onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
                 onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
+                onViewBuckets={(vehicle) => { setSelectedBucketVehicle(vehicle); setIsBucketSheetOpen(true); }}
             />
         </div>
       )}
@@ -521,6 +644,33 @@ export function FuelManagement({ defaultTab = 'dashboard' }: { defaultTab?: stri
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Phase 3: Odometer Bucket Sheet */}
+      <Sheet open={isBucketSheetOpen} onOpenChange={setIsBucketSheetOpen}>
+        <SheetContent className="sm:max-w-[900px] overflow-y-auto">
+          <SheetHeader className="mb-6">
+            <SheetTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-blue-600" />
+              Stop-to-Stop Reconciliation
+            </SheetTitle>
+            <SheetDescription>
+              Detailed odometer-anchored analysis for {selectedBucketVehicle?.licensePlate} ({selectedBucketVehicle?.model})
+            </SheetDescription>
+          </SheetHeader>
+          
+          {selectedBucketVehicle && (
+            <BucketReconciliationView 
+              vehicle={selectedBucketVehicle}
+              fuelEntries={logs}
+              trips={trips}
+              transactions={transactions}
+              adjustments={adjustments}
+              onClose={() => setIsBucketSheetOpen(false)}
+              onRefresh={() => loadData(true)}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
     </FuelLayout>
   );

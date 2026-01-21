@@ -46,7 +46,9 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
       if (existingScript) {
           // Check if it has the necessary libraries
           const src = existingScript.src;
-          if (!src.includes('places')) {
+          // We now use importLibrary for places, so we just need geometry in the libraries param if using legacy
+          // But actually, we should just check if geometry is there as a baseline.
+          if (!src.includes('geometry')) {
              console.log("Removing existing Google Maps script missing 'places' library");
              existingScript.remove();
              // Force cleanup of google object if it exists but is incomplete?
@@ -89,8 +91,9 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
       }
 
       const script = document.createElement('script');
-      // loading=async is required for importLibrary
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&loading=async&libraries=places,geometry`; 
+      // Use v=weekly and include places in libraries to ensure legacy parts don't break
+      // while we transition to modern importLibrary pattern.
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&loading=async&v=weekly&libraries=geometry,places`; 
       script.async = true;
       script.defer = true;
       script.id = 'google-maps-script';
@@ -203,56 +206,41 @@ export const searchAddress = async (query: string): Promise<AddressResult[]> => 
   try {
     await loadGoogleMapsApi();
 
-    // Try modern API if available
+    // Try modern API (AutocompleteSuggestion)
+    // This is the new Places Library (v3.54+)
+    // We prioritize this to avoid Deprecation warnings for AutocompleteService
     if (window.google?.maps?.importLibrary) {
         try {
             const { AutocompleteSuggestion } = await google.maps.importLibrary("places") as any;
-            if (AutocompleteSuggestion && AutocompleteSuggestion.fetchAutocompleteSuggestions) {
+            
+            if (AutocompleteSuggestion) {
+                // Static method on the class
                 const request = {
                     input: query,
                     includedRegionCodes: ['jm'],
                 };
-                const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-                return suggestions.map((suggestion: any) => ({
-                    display_name: suggestion.placePrediction?.text?.text || suggestion.placePrediction?.mainText?.text || "Unknown Location",
-                    lat: '', 
-                    lon: '', 
-                    place_id: suggestion.placePrediction?.placeId || suggestion.placePrediction?.place, 
-                }));
+                
+                const response = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+                const suggestions = response.suggestions || [];
+                
+                if (suggestions.length > 0) {
+                    return suggestions.map((suggestion: any) => ({
+                        display_name: suggestion.placePrediction?.text?.text || suggestion.placePrediction?.mainText?.text || "Unknown Location",
+                        lat: '', 
+                        lon: '', 
+                        place_id: suggestion.placePrediction?.placeId || suggestion.placePrediction?.place?.split('/').pop(), 
+                    }));
+                }
             }
         } catch (e) {
-            console.warn("Modern Places API failed, trying legacy:", e);
+            console.error("Modern AutocompleteSuggestion failed:", e);
+            // If the modern API fails completely (e.g. network or specific account restriction), 
+            // we have no choice but to return empty or try a different fallback if available.
+            // But we avoid AutocompleteService to stop the error reported by the user.
         }
     }
     
-    // Legacy fallback
-    return new Promise((resolve) => {
-       if (!window.google?.maps?.places?.AutocompleteService) {
-           console.error("Google Maps Places library not loaded");
-           resolve([]);
-           return;
-       }
-       const autocompleteService = new window.google.maps.places.AutocompleteService();
-       autocompleteService.getPlacePredictions(
-        {
-          input: query,
-          componentRestrictions: { country: 'jm' },
-        },
-        (predictions: any[], status: string) => {
-          if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
-             resolve([]);
-             return;
-          }
-          const results: AddressResult[] = predictions.map(prediction => ({
-            display_name: prediction.description,
-            lat: '',
-            lon: '',
-            place_id: prediction.place_id
-          }));
-          resolve(results);
-        }
-       );
-    });
+    return [];
 
   } catch (error) {
     console.error("Address search error:", error);
@@ -283,35 +271,11 @@ export const getPlaceDetails = async (placeId: string): Promise<{ lat: number; l
                 }
             }
         } catch (e) {
-             console.warn("Modern Place Details API failed, trying legacy:", e);
+             console.error("Modern Place Details API failed:", e);
         }
     }
 
-    // Legacy fallback
-    return new Promise((resolve) => {
-        if (!window.google?.maps?.places?.PlacesService) {
-             resolve(null);
-             return;
-        }
-        // Need a dummy element for PlacesService
-        const dummyNode = document.createElement('div');
-        const placesService = new window.google.maps.places.PlacesService(dummyNode);
-        
-        placesService.getDetails({
-            placeId: placeId,
-            fields: ['geometry', 'formatted_address', 'name']
-        }, (place: any, status: string) => {
-            if (status === window.google.maps.places.PlacesServiceStatus.OK && place && place.geometry && place.geometry.location) {
-                resolve({
-                    lat: place.geometry.location.lat(),
-                    lon: place.geometry.location.lng(),
-                    address: place.formatted_address || place.name
-                });
-            } else {
-                resolve(null);
-            }
-        });
-    });
+    return null;
 
   } catch (error) {
     console.error("Get place details error:", error);

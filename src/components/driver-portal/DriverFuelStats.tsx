@@ -37,19 +37,15 @@ export function DriverFuelStats() {
             const end = endOfWeek(targetDate, { weekStartsOn: 1 }); // Sunday
 
             // Fetch necessary data
-            // In a real app, we'd have optimized endpoints for this.
-            // For now, we fetch lists and filter client-side (MVP approach).
-            const [vehicles, trips, entries, adjustments] = await Promise.all([
+            const [vehicles, trips, entries, adjustments, scenarios] = await Promise.all([
                 api.getVehicles(),
                 api.getTrips(),
                 fuelService.getFuelEntries(),
-                fuelService.getMileageAdjustments()
+                fuelService.getMileageAdjustments(),
+                fuelService.getFuelScenarios()
             ]);
 
             // Find driver's vehicle
-            // This assumes the driver is assigned to a vehicle in the vehicle record
-            // OR we check the trips/entries to find the vehicle they used most recently.
-            // For now, let's look for a vehicle where currentDriverId matches.
             const myVehicle = vehicles.find((v: any) => v.currentDriverId === driverRecord?.id || v.currentDriverId === driverRecord?.driverId);
 
             if (!myVehicle) {
@@ -64,7 +60,8 @@ export function DriverFuelStats() {
                 end,
                 trips,
                 entries,
-                adjustments
+                adjustments,
+                scenarios
             );
 
             setReport(weeklyReport);
@@ -149,9 +146,14 @@ export function DriverFuelStats() {
                                 <span>${report.personalUsageCost.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span>Fuel Misc Share (50%)</span>
-                                <span>${(report.miscellaneousCost > 0 ? report.miscellaneousCost / 2 : 0).toFixed(2)}</span>
+                                <span>Fuel Misc Share</span>
+                                <span>${(report.driverShare - report.personalUsageCost).toFixed(2)}</span>
                             </div>
+                        </div>
+                        <div className="mt-4 pt-2 border-t border-indigo-200/50">
+                            <p className="text-[10px] text-indigo-600/70 font-medium uppercase tracking-wider">
+                                Applied Rule: {report.metadata?.scenarioName || 'Standard'}
+                            </p>
                         </div>
                         {existingDispute ? (
                             <div className="mt-4 p-3 bg-white rounded border border-slate-200 shadow-sm flex items-center justify-between">
@@ -201,8 +203,8 @@ export function DriverFuelStats() {
                                 <span>${report.companyUsageCost.toFixed(2)}</span>
                             </div>
                              <div className="flex justify-between">
-                                <span>Fuel Misc Share (50%)</span>
-                                <span>${(report.miscellaneousCost > 0 ? report.miscellaneousCost / 2 : report.miscellaneousCost).toFixed(2)}</span>
+                                <span>Fuel Misc Share</span>
+                                <span>${(report.companyShare - report.rideShareCost - report.companyUsageCost).toFixed(2)}</span>
                             </div>
                         </div>
                     </CardContent>
@@ -289,7 +291,7 @@ export function DriverFuelStats() {
                                             <span className="block mt-1">
                                                 Your actual fuel spend is ${report.miscellaneousCost.toFixed(2)} higher than calculated for your trips. 
                                                 This could be due to idling, heavy traffic, or missing mileage logs. 
-                                                The excess cost is split 50/50.
+                                                The excess cost is split based on the "{report.metadata?.scenarioName}" rules.
                                             </span>
                                         </div>
                                     </div>

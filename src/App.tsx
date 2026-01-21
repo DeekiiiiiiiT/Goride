@@ -33,6 +33,9 @@ function AppContent() {
   const { user, role, loading, signOut } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverPage, setDriverPage] = useState('dashboard');
+  const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
+
+  // ... (rest of the state logic)
 
   // OAuth Callback Handler
   React.useEffect(() => {
@@ -115,7 +118,7 @@ function AppContent() {
     <AppLayout currentPage={currentPage} onNavigate={setCurrentPage} onLogout={handleLogout}>
       {currentPage === 'dashboard' && <Dashboard />}
       {currentPage === 'imports' && <ImportsPage />}
-      {currentPage === 'drivers' && <DriversPage />}
+      {currentPage === 'drivers' && <DriversPage initialDriverId={driverIdForDetail} />}
       {currentPage === 'vehicles' && <VehiclesPage />}
       {currentPage === 'fleet' && <FleetPage />}
       {currentPage === 'trips' && <TripLogsPage />}
@@ -139,7 +142,14 @@ function AppContent() {
                 currentPage === 'fuel-configuration' ? 'configuration' :
                 'dashboard'
             }
-            onTabChange={(t) => setCurrentPage(t === 'dashboard' ? 'fuel-overview' : `fuel-${t}`)}
+            onTabChange={(t) => {
+                setCurrentPage(t === 'dashboard' ? 'fuel-overview' : `fuel-${t}`);
+                setDriverIdForDetail(null);
+            }}
+            onViewDriverLedger={(driverId) => {
+                setDriverIdForDetail(driverId);
+                setCurrentPage('drivers');
+            }}
         />
       )}
 

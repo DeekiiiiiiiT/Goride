@@ -22,15 +22,26 @@ export interface FuelEntry {
   liters?: number; // Volume
   pricePerLiter?: number;
   
-  odometer?: number;
+  odometer?: number | null;
   location?: string; // Station Name/Address
   stationAddress?: string; // Specific location/address
   
   type: 'Card_Transaction' | 'Manual_Entry' | 'Reimbursement';
+  entryMode: 'Anchor' | 'Floating'; // Anchor = Verified Odo, Floating = Legacy/Cash without Odo
+  paymentSource: 'RideShare_Cash' | 'Gas_Card' | 'Personal' | 'Petty_Cash';
+  
   isFlagged?: boolean; // If capacity exceeded or outlier
   
   // Link to financial transaction
   transactionId?: string;
+
+  // Phase 2: Audit Metadata
+  metadata?: {
+    isEdited?: boolean;
+    lastEditedAt?: string;
+    editReason?: string;
+    [key: string]: any;
+  };
 }
 
 export interface MileageAdjustment {
@@ -74,7 +85,48 @@ export interface WeeklyFuelReport {
   driverShare: number;
   
   status: 'Draft' | 'Finalized';
+  healthStatus?: 'Emerald' | 'Amber' | 'Red';
+  healthScore?: number; // 0-100
   finalizedAt?: string;
+  metadata?: any;
+}
+
+export interface OdometerBucket {
+  id: string;
+  vehicleId: string;
+  startOdometer: number;
+  endOdometer: number;
+  startDate: string;
+  endDate: string;
+  
+  // Fuel Data
+  actualFuelLiters: number;
+  actualFuelCost: number;
+  associatedReceipts: string[]; // List of FuelEntry IDs (Floating and Anchor) that fall in this window
+  closingEntryId?: string; // The specific anchor entry that closed this bucket
+  
+  // Trip Data
+  totalTripDistance: number;
+  tripsCount: number;
+  
+  // Performance
+  expectedFuelLiters: number; // based on vehicle MPG/Efficiency
+  varianceLiters: number;
+  variancePercent: number;
+  
+  // Attribution
+  rideShareDistance: number;
+  personalDistance: number;
+  companyMiscDistance: number;
+  unaccountedDistance: number; // The "Jump" or "Gap" (Bucket Range - sum of all trips)
+  
+  // Phase 4: Deduction Triggers
+  deductionRecommendation?: number;
+  deductionReason?: string;
+  isDeductionPosted?: boolean;
+  deductionTransactionId?: string;
+
+  status: 'Complete' | 'Partial' | 'Anomaly';
 }
 
 export type DisputeStatus = 'Open' | 'Resolved' | 'Rejected';
@@ -122,6 +174,21 @@ export interface FuelRule {
     maxAmount?: number;
     requiresReceipt?: boolean;
   };
+}
+
+export interface BulkFuelExpenseEntry {
+  id: string;
+  date: string;
+  time: string;
+  amount: number;
+  liters: number;
+  pricePerLiter: number;
+  odometer: number;
+  location: string;
+  stationAddress: string;
+  receiptUrl?: string;
+  notes?: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
 }
 
 export interface FuelScenario {
