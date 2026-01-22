@@ -35,11 +35,22 @@ export interface FuelEntry {
   // Link to financial transaction
   transactionId?: string;
 
+  // Phase 7: Audit Status
+  auditStatus?: 'Clear' | 'Observing' | 'Flagged' | 'Auto-Resolved';
+  
   // Phase 2: Audit Metadata
   metadata?: {
     isEdited?: boolean;
     lastEditedAt?: string;
     editReason?: string;
+    
+    // Phase 7: Advanced Predictive Metadata
+    observationReason?: string;
+    observationStartedAt?: string;
+    expectedAnchorDate?: string;
+    predictedEconomy?: number;
+    varianceFromBaseline?: number;
+    
     [key: string]: any;
   };
 }

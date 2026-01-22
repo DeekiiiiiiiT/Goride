@@ -18,12 +18,13 @@ export interface ScanResult {
 interface OdometerScannerProps {
     onScanComplete: (result: ScanResult) => void;
     onCancel: () => void;
+    lastOdometer?: number; // Added for verification
     className?: string;
 }
 
 type ScannerStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY';
 
-export function OdometerScanner({ onScanComplete, onCancel, className }: OdometerScannerProps) {
+export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, className }: OdometerScannerProps) {
     const [step, setStep] = useState<ScannerStep>('CAPTURE');
     const [odometer, setOdometer] = useState<string>('');
     const [photo, setPhoto] = useState<File | null>(null);
@@ -32,7 +33,12 @@ export function OdometerScanner({ onScanComplete, onCancel, className }: Odomete
     const [scanResult, setScanResult] = useState<{ reading: number | null, confidence: string } | null>(null);
     const [manualReason, setManualReason] = useState<string>('');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [isVerifying, setIsVerifying] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const odometerValue = parseFloat(odometer) || 0;
+    const isDecreasing = lastOdometer > 0 && odometerValue > 0 && odometerValue < lastOdometer;
+    const isHighJump = lastOdometer > 0 && odometerValue > (lastOdometer + 1500); // Flag > 1500km since last entry
 
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -89,8 +95,35 @@ export function OdometerScanner({ onScanComplete, onCancel, className }: Odomete
         });
     };
 
-    const handleManualSubmit = () => {
+    const handleManualSubmit = async () => {
         if (!odometer || !photo) return;
+        
+        // Final sanity check before AI verification
+        if (isDecreasing) return;
+
+        setIsVerifying(true);
+        try {
+            // Call the AI verification endpoint to check if the manual entry is a typo
+            const verification = await api.verifyOdometerWithAI(
+                odometerValue, 
+                lastOdometer || 0,
+                0 // distance placeholder
+            );
+
+            if (!verification.isValid && verification.confidence > 0.8) {
+                setErrorMsg(`AI Audit: ${verification.message}`);
+                if (verification.correction) {
+                    setOdometer(verification.correction.toString());
+                    setErrorMsg(`${verification.message}. We've suggested a correction.`);
+                }
+                setIsVerifying(false);
+                return;
+            }
+        } catch (err) {
+            console.error("Verification failed", err);
+        }
+
+        setIsVerifying(false);
         onScanComplete({
             reading: parseFloat(odometer),
             photo: photo,
@@ -222,11 +255,32 @@ export function OdometerScanner({ onScanComplete, onCancel, className }: Odomete
                                 </div>
                             </div>
 
+                            {/* Verification Nudges */}
+                            {isDecreasing && (
+                                <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex gap-3 items-start animate-shake">
+                                    <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                                    <div className="text-xs text-red-900">
+                                        <p className="font-bold">Impossible Reading</p>
+                                        <p className="opacity-80">This reading ({odometerValue} km) is lower than your last recorded mileage ({lastOdometer} km). Please verify and retake the photo.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {isHighJump && (
+                                <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex gap-3 items-start">
+                                    <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
+                                    <div className="text-xs text-orange-900">
+                                        <p className="font-bold">Significant Mileage Jump</p>
+                                        <p className="opacity-80">You've logged over 1,500km since your last entry. If this is correct, please proceed. Otherwise, please check for typos.</p>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex gap-3">
                                 <Button variant="outline" className="flex-1" onClick={() => setStep('MANUAL_ENTRY')}>
                                     No, it's wrong
                                 </Button>
-                                <Button className="flex-1" onClick={handleConfirmAI}>
+                                <Button className="flex-1" onClick={handleConfirmAI} disabled={isDecreasing}>
                                     Yes, Confirm
                                 </Button>
                             </div>
@@ -259,7 +313,20 @@ export function OdometerScanner({ onScanComplete, onCancel, className }: Odomete
                                         />
                                         <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">km</div>
                                     </div>
+                                    {lastOdometer > 0 && (
+                                        <p className="text-[10px] text-slate-500 font-medium">Last recorded: {lastOdometer.toLocaleString()} km</p>
+                                    )}
                                 </div>
+
+                                {/* Verification Nudges */}
+                                {isDecreasing && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex gap-3 items-start">
+                                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                                        <p className="text-[11px] text-red-900 leading-tight">
+                                            <b>Mileage cannot decrease.</b> Current entry is less than last recorded ({lastOdometer} km).
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="space-y-2">
                                     <Label htmlFor="manual-reason" className="text-slate-700">Reason for Override</Label>
@@ -279,8 +346,13 @@ export function OdometerScanner({ onScanComplete, onCancel, className }: Odomete
                                     <RotateCcw className="w-4 h-4 mr-2" />
                                     Retake Photo
                                 </Button>
-                                <Button className="flex-1" onClick={handleManualSubmit} disabled={!odometer}>
-                                    Submit
+                                <Button className="flex-1" onClick={handleManualSubmit} disabled={!odometer || isDecreasing || isVerifying}>
+                                    {isVerifying ? (
+                                        <>
+                                            <RotateCcw className="w-4 h-4 mr-2 animate-spin" />
+                                            Verifying...
+                                        </>
+                                    ) : 'Submit'}
                                 </Button>
                             </div>
                         </div>

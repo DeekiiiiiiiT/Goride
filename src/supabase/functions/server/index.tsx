@@ -214,6 +214,130 @@ app.post("/make-server-37f42386/ai/verify-odometer", async (c) => {
     }
 });
 
+// --- VEHICLE TANK STATUS (Phase 4) ---
+app.get("/make-server-37f42386/vehicles/:id/tank-status", async (c) => {
+    try {
+        const vehicleId = c.req.param("id");
+        
+        // 1. Get Vehicle for Capacity
+        const vehicle = await kv.get(`vehicle:${vehicleId}`);
+        if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+        
+        const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0;
+
+        // 2. Get Last Transactions to calculate current cumulative
+        const { data: lastTxData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "transaction:%")
+            .eq("value->>vehicleId", vehicleId)
+            .order("value->>date", { ascending: false })
+            .limit(15);
+        
+        const lastTransactions = (lastTxData || []).map((d: any) => d.value);
+        
+        let cumulative = 0;
+        let lastAnchorFound = false;
+        let lastOdometer = 0;
+        
+        // Find the last odometer across ALL transactions for this vehicle
+        const lastTxWithOdo = lastTransactions.find(tx => Number(tx.odometer) > 0);
+        lastOdometer = lastTxWithOdo ? Number(lastTxWithOdo.odometer) : 0;
+
+        for (const tx of lastTransactions) {
+            if (tx.metadata?.isAnchor || tx.metadata?.isFullTank || tx.metadata?.isSoftAnchor) {
+                lastAnchorFound = true;
+                // Don't break yet, we want to know when it happened? 
+                // Actually for "Current Progress" we just need the liters added since then.
+                break;
+            }
+            cumulative += (Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0);
+        }
+
+        return c.json({
+            vehicleId,
+            tankCapacity,
+            lastOdometer,
+            currentCumulative: Number(cumulative.toFixed(2)),
+            progressPercent: tankCapacity > 0 ? Number(((cumulative / tankCapacity) * 100).toFixed(1)) : 0,
+            status: cumulative > (tankCapacity * 0.85) ? 'Approaching Capacity' : 'Normal',
+            isAnomaly: cumulative > (tankCapacity * 1.05)
+        });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// --- FUEL AUDIT DASHBOARD (Phase 6) ---
+app.get("/make-server-37f42386/admin/fuel-audit/summary", async (c) => {
+    try {
+        const { data: txData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "transaction:%");
+        
+        const transactions = (txData || []).map((d: any) => d.value);
+        const fuelTx = transactions.filter(t => t.category === 'Fuel');
+
+        const summary = {
+            totalFuelTransactions: fuelTx.length,
+            flaggedCount: fuelTx.filter(t => t.metadata?.integrityStatus === 'warning' || t.metadata?.integrityStatus === 'critical').length,
+            criticalCount: fuelTx.filter(t => t.metadata?.integrityStatus === 'critical').length,
+            resolvedCount: fuelTx.filter(t => t.metadata?.auditStatus === 'resolved' || t.metadata?.auditStatus === 'Auto-Resolved').length,
+            observingCount: fuelTx.filter(t => t.metadata?.auditStatus === 'Observing').length,
+            pendingReview: fuelTx.filter(t => (t.metadata?.integrityStatus === 'warning' || t.metadata?.integrityStatus === 'critical') && !['resolved', 'Auto-Resolved', 'Observing'].includes(t.metadata?.auditStatus || '')).length
+        };
+
+        return c.json(summary);
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.get("/make-server-37f42386/admin/fuel-audit/flagged", async (c) => {
+    try {
+        const { data: txData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "transaction:%")
+            .order("value->>date", { ascending: false });
+        
+        const transactions = (txData || []).map((d: any) => d.value);
+        const flagged = transactions.filter(t => 
+            t.category === 'Fuel' && 
+            (
+                t.metadata?.integrityStatus === 'warning' || 
+                t.metadata?.integrityStatus === 'critical' ||
+                t.metadata?.auditStatus === 'Observing'
+            )
+        );
+
+        return c.json(flagged);
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/admin/fuel-audit/resolve", async (c) => {
+    try {
+        const { transactionId, status, note } = await c.req.json();
+        const tx = await kv.get(`transaction:${transactionId}`);
+        if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+        tx.metadata = {
+            ...tx.metadata,
+            auditStatus: status, // 'resolved', 'disputed', 'rejected'
+            auditNote: note,
+            auditedAt: new Date().toISOString()
+        };
+
+        await kv.set(`transaction:${transactionId}`, tx);
+        return c.json({ success: true });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 // Health check endpoint
 app.get("/make-server-37f42386/health", (c) => {
   return c.json({ status: "ok" });
@@ -906,6 +1030,130 @@ app.post("/make-server-37f42386/transactions", async (c) => {
     // Auto-Approve Logic for AI Verified Fuel
     const isFuel = transaction.category === 'Fuel' || transaction.category === 'Fuel Reimbursement';
     const isAiVerified = transaction.metadata?.odometerMethod === 'ai_verified';
+
+    if (isFuel) {
+        // --- CUMULATIVE LITERS & INTEGRITY LOGIC (Phase 1 & 2) ---
+        const vehicleId = transaction.vehicleId;
+        const volume = Number(transaction.quantity) || Number(transaction.metadata?.fuelVolume) || 0;
+        
+        if (vehicleId) {
+            // Fetch vehicle for tank capacity
+            const vehicle = await kv.get(`vehicle:${vehicleId}`);
+            const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0;
+
+            // Fetch last transactions to calculate cumulative
+            const { data: lastTxData } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "transaction:%")
+                .eq("value->>vehicleId", vehicleId)
+                .order("value->>date", { ascending: false })
+                .limit(10);
+            
+            const lastTransactions = (lastTxData || []).map((d: any) => d.value);
+            
+            // Find the last "Anchor" (Full Tank or Soft Anchor)
+            let cumulative = volume;
+            let lastAnchorOdo = 0;
+            let lastAnchorTx = null;
+            
+            for (const tx of lastTransactions) {
+                // Check for various anchor types
+                if (tx.metadata?.isFullTank || tx.metadata?.isAnchor || tx.metadata?.isSoftAnchor) {
+                    lastAnchorOdo = Number(tx.odometer) || 0;
+                    lastAnchorTx = tx;
+                    break;
+                }
+                cumulative += (Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0);
+            }
+
+            // Calculate distance since last anchor
+            const currentOdo = Number(transaction.odometer) || 0;
+            const distanceSinceAnchor = (currentOdo > 0 && lastAnchorOdo > 0) ? (currentOdo - lastAnchorOdo) : 0;
+
+            transaction.metadata = {
+                ...transaction.metadata,
+                cumulativeLitersAtEntry: Number(cumulative.toFixed(2)),
+                tankCapacityAtEntry: tankCapacity,
+                distanceSinceAnchor: distanceSinceAnchor,
+                integrityStatus: 'valid'
+            };
+
+            // Rule 1: Tank Overflow (> 5% buffer)
+            if (tankCapacity > 0 && cumulative > (tankCapacity * 1.05)) {
+                transaction.metadata.integrityStatus = 'critical';
+                transaction.metadata.anomalyReason = 'Tank Overflow Detected';
+            }
+
+            // Step 2.3: Rule 2 - Soft Anchor Reset
+            // If we are at > 85% of tank capacity and driver didn't check full tank,
+            // we mark this as a soft anchor to "reset" the next window and prevent
+            // math errors from cascading indefinitely.
+            if (!transaction.metadata?.isFullTank && tankCapacity > 0 && cumulative > (tankCapacity * 0.85)) {
+                transaction.metadata.isSoftAnchor = true;
+                transaction.metadata.isAnchor = true; // Unified flag for logic
+                transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
+                transaction.metadata.softAnchorNote = 'Auto-reset: Cumulative volume reached 85% of tank capacity.';
+            } else if (transaction.metadata?.isFullTank) {
+                transaction.metadata.isAnchor = true;
+            }
+
+            // --- Phase 3: Fuel Economy & Velocity Algorithms ---
+            
+            // Step 3.1: Real-time Economy Calculation (L/100km)
+            // We only calculate this when we hit an anchor (Full Tank or Soft Anchor) 
+            // because we need a complete window to be accurate.
+            if (transaction.metadata.isAnchor && distanceSinceAnchor > 0) {
+                const consumption = (cumulative / distanceSinceAnchor) * 100;
+                transaction.metadata.calculatedEconomy = Number(consumption.toFixed(2));
+                
+                // Compare against baseline (Toyota Roomy ~6.5L/100km)
+                const baseline = Number(vehicle?.fuelSettings?.efficiencyCity) || 6.5; 
+                if (consumption > (baseline * 1.25)) {
+                    transaction.metadata.integrityStatus = 'warning';
+                    transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' High Fuel Consumption Detected;';
+                }
+            }
+
+            // Step 3.3: Fragmented Purchase Detection
+            // Flag small purchases (< 5L) which are often used to mask larger theft
+            if (volume > 0 && volume < 5) {
+                transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
+                transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' Fragmented Purchase (<5L);';
+            }
+
+            // Check for high frequency (more than 2 entries in 24h)
+            const entriesLast24h = lastTransactions.filter(tx => {
+                const txDate = new Date(tx.date);
+                const now = new Date();
+                return (now.getTime() - txDate.getTime()) < (24 * 60 * 60 * 1000);
+            }).length;
+
+            if (entriesLast24h >= 2) {
+                transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
+                transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' High Transaction Frequency;';
+            }
+
+            // Step 3.2: Fuel Velocity Check ($ spend per km)
+            // Look at total spend vs distance over the last 10 entries
+            if (lastTransactions.length >= 3) {
+                const totalSpendInWindow = lastTransactions.reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), Math.abs(Number(transaction.amount) || 0));
+                const minOdo = Math.min(...lastTransactions.map(tx => Number(tx.odometer)).filter(o => o > 0));
+                const totalDistInWindow = (currentOdo > 0 && minOdo > 0) ? (currentOdo - minOdo) : 0;
+                
+                if (totalDistInWindow > 50) { // Only calculate if we have significant distance
+                    const velocity = totalSpendInWindow / totalDistInWindow;
+                    transaction.metadata.fuelVelocity = Number(velocity.toFixed(3));
+                    
+                    // Flag if spend rate is > $0.25/km (approx based on typical fleet benchmarks)
+                    if (velocity > 0.25) {
+                        transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
+                        transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' High Fuel Velocity ($/km);';
+                    }
+                }
+            }
+        }
+    }
 
     if (isFuel && isAiVerified && transaction.status === 'Pending') {
         transaction.status = 'Approved';

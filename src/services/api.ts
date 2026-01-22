@@ -399,6 +399,41 @@ export const api = {
       return response.json();
   },
 
+  async getVehicleTankStatus(vehicleId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${vehicleId}/tank-status`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch tank status");
+    return response.json();
+  },
+
+  // Fuel Audit Endpoints (Phase 6)
+  async getFuelAuditSummary() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/summary`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch audit summary");
+    return response.json();
+  },
+
+  async getFlaggedTransactions() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/flagged`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch flagged transactions");
+    return response.json();
+  },
+
+  async resolveFuelAnomaly(transactionId: string, status: 'resolved' | 'disputed' | 'rejected', note: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/resolve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId, status, note })
+    });
+    if (!response.ok) throw new Error("Failed to resolve anomaly");
+    return response.json();
+  },
+
   async getVehicles() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -628,6 +663,31 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to fetch dashboard stats");
     return response.json();
+  },
+
+  async runFuelBackfill() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-integrity`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to run fuel backfill");
+    return response.json();
+  },
+
+  // --- Synchronization Helpers (Phase 1) ---
+  async getLinkedFuelEntry(idOrTransactionId: string): Promise<any | null> {
+    if (!idOrTransactionId) return null;
+    try {
+      const entriesResponse = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      });
+      if (!entriesResponse.ok) return null;
+      const entries = await entriesResponse.json();
+      return entries.find((e: any) => e.id === idOrTransactionId || e.transactionId === idOrTransactionId) || null;
+    } catch (e) {
+      console.error("Error fetching linked fuel entry:", e);
+      return null;
+    }
   },
 
   async getFinancials() {
@@ -919,12 +979,11 @@ export const api = {
   },
 
   async getFuelEntriesByVehicle(vehicleId: string): Promise<any[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&limit=1000`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    const entries = await response.json();
-    return entries.filter((e: any) => e.vehicleId === vehicleId);
+    return response.json();
   },
 
   async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {
@@ -934,6 +993,48 @@ export const api = {
     if (!response.ok) throw new Error("Failed to fetch check-ins");
     const checkIns = await response.json();
     return checkIns.filter((c: any) => c.vehicleId === vehicleId);
+  },
+
+  async runChaosSeeder(count: number, vehicleId?: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/chaos-seeder`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ count, vehicleId })
+    });
+    if (!response.ok) throw new Error("Chaos seeder failed");
+    return response.json();
+  },
+
+  async purgeSyntheticData() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/purge-synthetic`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        }
+    });
+    if (!response.ok) throw new Error("Purge failed");
+    return response.json();
+  },
+
+  async backfillFuelIntegrity() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-integrity`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Backfill failed");
+    return response.json();
+  },
+
+  async lockTransaction(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/transactions/${id}/lock`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to lock transaction");
+    return response.json();
   },
 
   async deleteCheckIn(id: string) {

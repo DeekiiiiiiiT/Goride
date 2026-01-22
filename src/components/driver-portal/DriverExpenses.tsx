@@ -67,6 +67,7 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
   // Wizard State
   const [viewState, setViewState] = useState<ViewState>(defaultOpen ? 'category_select' : 'list');
   const [fuelEntry, setFuelEntry] = useState<FuelEntryState>({});
+  const [tankStatus, setTankStatus] = useState<any>(null);
   
   const [isScanning, setIsScanning] = useState(false);
 
@@ -407,10 +408,16 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
     }
   };
 
-  const handleCategorySelect = (cat: string) => {
+  const handleCategorySelect = async (cat: string) => {
     setCategory(cat);
     if (cat === 'Fuel') {
       setViewState('odometer_scan');
+      // Fetch tank status early
+      if (driverRecord?.assignedVehicleId) {
+        api.getVehicleTankStatus(driverRecord.assignedVehicleId)
+          .then(setTankStatus)
+          .catch(console.error);
+      }
     } else {
       setViewState('entry_details');
     }
@@ -602,6 +609,7 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
           {viewState === 'odometer_scan' && (
             <div className="p-0 min-h-[400px]">
               <OdometerScanner 
+                lastOdometer={tankStatus?.lastOdometer}
                 onScanComplete={handleOdometerScanComplete}
                 onCancel={goBack}
               />
@@ -668,6 +676,12 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                         onPriceChange={(p) => setFuelEntry(prev => ({ ...prev, pricePerLiter: p }))}
                         isFullTank={fuelEntry.isFullTank || false}
                         onFullTankChange={(c) => setFuelEntry(prev => ({ ...prev, isFullTank: c }))}
+                        currentVolume={(() => {
+                            const p = parseFloat(fuelEntry.pricePerLiter || '0');
+                            const a = parseFloat(amount || '0');
+                            return (p > 0 && a > 0) ? Number((a / p).toFixed(2)) : 0;
+                        })()}
+                        tankStatus={tankStatus}
                       />
                   </div>
                 )}

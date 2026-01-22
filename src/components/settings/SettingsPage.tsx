@@ -57,6 +57,8 @@ import { Separator } from "../ui/separator";
 
 import { DataResetModal } from '../admin/DataResetModal';
 
+import { SystemHardeningPanel } from '../admin/SystemHardeningPanel';
+
 export function SettingsPage() {
   return (
     <div className="space-y-6">
@@ -74,6 +76,7 @@ export function SettingsPage() {
             <TabsTrigger value="alerts">Alert Rules</TabsTrigger>
             <TabsTrigger value="tiers">Tier Config</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="hardening">System Hardening</TabsTrigger>
             <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
             <TabsTrigger value="help">Help & Training</TabsTrigger>
           </TabsList>
@@ -93,6 +96,10 @@ export function SettingsPage() {
 
         <TabsContent value="integrations">
           <IntegrationsPanel />
+        </TabsContent>
+
+        <TabsContent value="hardening">
+          <SystemHardeningPanel />
         </TabsContent>
 
         <TabsContent value="maintenance">

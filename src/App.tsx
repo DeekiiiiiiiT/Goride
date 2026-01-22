@@ -131,15 +131,17 @@ function AppContent() {
       {currentPage === 'tier-config' && <TierConfigPage />}
       {currentPage === 'performance' && <PerformanceDashboard />}
       
-      {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
+      {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance'].includes(currentPage) && (
         <FuelManagement 
             defaultTab={
                 currentPage === 'fuel-reconciliation' ? 'reconciliation' :
                 currentPage === 'fuel-reimbursements' ? 'reimbursements' :
+                currentPage === 'fuel-audit' ? 'audit' :
                 currentPage === 'fuel-cards' ? 'cards' :
                 currentPage === 'fuel-logs' ? 'logs' :
                 currentPage === 'fuel-reports' ? 'reports' :
                 currentPage === 'fuel-configuration' ? 'configuration' :
+                currentPage === 'fuel-maintenance' ? 'maintenance' :
                 'dashboard'
             }
             onTabChange={(t) => {

@@ -123,7 +123,8 @@ export const settlementService = {
       vehicleId: vehicleId,
       type: 'Reimbursement',
       category: 'Fuel Reimbursement',
-      description: `Auto-Credit: Fuel Settlement (${location})`,
+      description: `Fuel Reimbursement: ${location || 'Unknown Station'} - ${liters}L @ $${(amount/liters).toFixed(3)}/L`,
+      merchant: location,
       amount: Number(creditAmount.toFixed(2)), 
       paymentMethod: 'Cash',
       status: 'Approved', 
@@ -140,7 +141,8 @@ export const settlementService = {
         // Carry over audit flags if it's an update
         isEdited: (entryOrTx as any).metadata?.isEdited || existingTx?.metadata?.isEdited,
         lastEditedAt: (entryOrTx as any).metadata?.lastEditedAt || existingTx?.metadata?.lastEditedAt,
-        editReason: (entryOrTx as any).metadata?.editReason || existingTx?.metadata?.editReason
+        editReason: (entryOrTx as any).metadata?.editReason || existingTx?.metadata?.editReason,
+        syncSource: 'fuel_log'
       }
     };
 

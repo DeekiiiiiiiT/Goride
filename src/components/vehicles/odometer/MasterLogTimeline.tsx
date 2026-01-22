@@ -103,16 +103,68 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
         .filter(r => r.isVerified)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+      if (verifiedOnly.length < 2) {
+          setReports({});
+          return;
+      }
+
+      // Optimization Phase 8: Batch fetch all trips for the vehicle to avoid O(N) sequential calls
+      // This solves the performance bottleneck after running Chaos Seeder
+      const allTripsResponse = await api.getTripsFiltered({ 
+          vehicleId, 
+          limit: 5000 // High limit for batch processing
+      });
+      const allTrips = allTripsResponse.data || [];
+
       const newReports: Record<string, MileageReport> = {};
+      
       for (let i = 0; i < verifiedOnly.length - 1; i++) {
         const start = verifiedOnly[i];
         const end = verifiedOnly[i+1];
-        try {
-            const report = await mileageCalculationService.calculatePeriodMileage(vehicleId, start, end);
-            newReports[`${start.id}_${end.id}`] = report;
-        } catch (e) {
-            console.error("Report calc error", e);
+        
+        // Filter trips locally from the batch
+        const startTime = new Date(start.date).getTime();
+        const endTime = new Date(end.date).getTime();
+        
+        const periodTrips = allTrips.filter((t: Trip) => {
+            const tTime = new Date(t.date).getTime();
+            // Prioritize anchorPeriodId tag if available (from Phase 6 logic)
+            if (t.metadata?.anchorPeriodId) {
+                return t.metadata.anchorPeriodId === start.id;
+            }
+            return tTime >= startTime && tTime <= endTime;
+        });
+
+        const totalDistance = end.value - start.value;
+        const platformDistance = periodTrips.reduce((sum: number, trip: Trip) => sum + (trip.distance || 0), 0);
+        const personalDistance = Math.max(0, totalDistance - platformDistance);
+        const personalPercentage = totalDistance > 0 ? (personalDistance / totalDistance) * 100 : 0;
+
+        let anomalyDetected = false;
+        let anomalyReason = undefined;
+
+        if (totalDistance < 0) {
+            anomalyDetected = true;
+            anomalyReason = "End odometer is lower than start odometer.";
+        } else if (totalDistance - platformDistance < -1) {
+            anomalyDetected = true;
+            anomalyReason = `Platform distance exceeds total physical distance.`;
         }
+
+        newReports[`${start.id}_${end.id}`] = {
+            vehicleId,
+            periodStart: start.date,
+            periodEnd: end.date,
+            startOdometer: start.value,
+            endOdometer: end.value,
+            totalDistance,
+            platformDistance,
+            personalDistance,
+            personalPercentage,
+            anomalyDetected,
+            anomalyReason,
+            tripCount: periodTrips.length
+        };
       }
       setReports(newReports);
     } catch (error) {

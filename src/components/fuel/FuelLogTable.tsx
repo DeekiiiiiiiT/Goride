@@ -518,7 +518,42 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                         {entry.pricePerLiter ? `$${entry.pricePerLiter.toFixed(3)}` : '-'}
                                     </TableCell>
                                     <TableCell className="font-semibold text-slate-900">
-                                        ${entry.amount.toFixed(2)}
+                                        <div className="flex flex-col">
+                                            <span>${entry.amount.toFixed(2)}</span>
+                                            {(() => {
+                                                const tx = transactionMap.get(entry.transactionId || '');
+                                                if (!tx) return null;
+                                                
+                                                const amountMismatch = Math.abs(entry.amount - Math.abs(tx.amount)) > 0.01;
+                                                
+                                                return (
+                                                    <div className="flex items-center gap-1 mt-1">
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Badge variant="outline" className={cn(
+                                                                    "text-[8px] h-3.5 px-1 font-bold tracking-tighter uppercase",
+                                                                    amountMismatch ? "border-amber-500 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-400"
+                                                                )}>
+                                                                    {amountMismatch ? "Mismatch" : "Linked"}
+                                                                </Badge>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                {amountMismatch ? (
+                                                                    <div className="space-y-1">
+                                                                        <p className="font-bold text-amber-600">Financial Mismatch Detected</p>
+                                                                        <p className="text-xs text-slate-500">Log: ${entry.amount.toFixed(2)}</p>
+                                                                        <p className="text-xs text-slate-500">Ledger: ${Math.abs(tx.amount).toFixed(2)}</p>
+                                                                        <p className="text-[10px] text-slate-400 mt-1 italic">Edits may be out of sync.</p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-xs">Synchronized with Financial Ledger</p>
+                                                                )}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         {entry.odometer?.toLocaleString()} km

@@ -17,6 +17,7 @@ import {
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "../ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Separator } from "../ui/separator";
 import { 
@@ -81,7 +82,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
 
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
-  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage);
+  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance'].includes(currentPage);
   const isDrivingOpen = ['drivers', 'tier-config', 'performance'].includes(currentPage);
 
   return (
@@ -186,6 +187,16 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
                   <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-audit'} onClick={() => onNavigate?.('fuel-audit')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span className="flex items-center gap-2">
+                            Audit Trail
+                            <Badge className="bg-orange-500 text-white border-none h-4 px-1 text-[8px]">New</Badge>
+                        </span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reconciliation'} onClick={() => onNavigate?.('fuel-reconciliation')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Reconciliation</span>
@@ -217,6 +228,13 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-configuration'} onClick={() => onNavigate?.('fuel-configuration')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Configuration</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-maintenance'} onClick={() => onNavigate?.('fuel-maintenance')}>
+                      <button className="w-full text-left cursor-pointer text-amber-600 font-medium">
+                        <span>Maintenance</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

@@ -157,5 +157,21 @@ export const fuelService = {
       const error = await response.json();
       throw new Error(error.message || "Failed to finalize reconciliation");
     }
+  },
+
+  // --- Synchronization Helpers (Phase 1) ---
+  async getLinkedTransaction(transactionId: string): Promise<any | null> {
+    if (!transactionId) return null;
+    try {
+      // We import api dynamically or use fetch to avoid circular dependency
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/../financial-operations/transactions/${transactionId}`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      });
+      if (!response.ok) return null;
+      return response.json();
+    } catch (e) {
+      console.error("Error fetching linked transaction:", e);
+      return null;
+    }
   }
 };

@@ -61,6 +61,7 @@ export function DriverDashboard() {
   const [debugDrivers, setDebugDrivers] = useState<any[]>([]);
   const [unclaimedTripIds, setUnclaimedTripIds] = useState<string[]>([]);
   const [isFixing, setIsFixing] = useState<string | null>(null);
+  const [flaggedCount, setFlaggedCount] = useState(0);
 
   // Trip Timer State
   const [tripInitialData, setTripInitialData] = useState<{
@@ -115,9 +116,10 @@ export function DriverDashboard() {
       try {
         setLoading(true);
         // 1. Fetch Metrics & Drivers first (Small payloads)
-        const [allMetrics, drivers] = await Promise.all([
+        const [allMetrics, drivers, flaggedTx] = await Promise.all([
             api.getDriverMetrics().catch(() => []),
-            api.getDrivers().catch(() => [])
+            api.getDrivers().catch(() => []),
+            api.getFlaggedTransactions().catch(() => [])
         ]);
 
         const myMetrics = allMetrics.find(m => 
@@ -127,6 +129,13 @@ export function DriverDashboard() {
         );
         if (myMetrics) setMetrics(myMetrics);
         setDebugDrivers(drivers);
+
+        // Calculate Flagged Count for this driver
+        const myFlagged = flaggedTx.filter((tx: any) => 
+            tx.driverId === user.id || 
+            (driverRecord?.id && tx.driverId === driverRecord.id)
+        );
+        setFlaggedCount(myFlagged.length);
 
         // 2. Fetch Trips for Earnings (Medium payload, route stripped server-side)
         const allTrips = await api.getTrips({ limit: 100 }).catch(() => []);
@@ -433,6 +442,7 @@ export function DriverDashboard() {
               isFixing={isFixing}
               onClaimId={handleClaimId}
               onAction={handleAction}
+              flaggedCount={flaggedCount}
             />
             
             <TripTimer onComplete={handleTripComplete} />

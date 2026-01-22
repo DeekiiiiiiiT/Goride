@@ -43,28 +43,313 @@ app.delete(`${BASE_PATH}/fuel-cards/:id`, async (c) => {
   }
 });
 
-// --- FUEL ENTRIES ---
+// --- SCALABILITY & PERFORMANCE (Phase 8) ---
 app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
-    const entries = await kv.getByPrefix("fuel_entry:");
-    if (entries && Array.isArray(entries)) {
-        entries.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const limit = parseInt(c.req.query("limit") || "100");
+    const offset = parseInt(c.req.query("offset") || "0");
+    const vehicleId = c.req.query("vehicleId");
+
+    // Phase 8: Direct Supabase query with pagination for performance
+    let query = supabase
+        .from("kv_store_37f42386")
+        .select("value", { count: 'exact' })
+        .like("key", "fuel_entry:%");
+
+    if (vehicleId) {
+        query = query.eq("value->>vehicleId", vehicleId);
     }
-    return c.json(entries || []);
+
+    query = query.order("value->>date", { ascending: false })
+                 .range(offset, offset + limit - 1);
+
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    const entries = (data || []).map((d: any) => d.value);
+    
+    // Add pagination headers
+    c.header("X-Total-Count", String(count || 0));
+    
+    return c.json(entries);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
+});
+
+// Phase 8 Step 3: Chaos Seeder Endpoint
+app.post(`${BASE_PATH}/admin/chaos-seeder`, async (c) => {
+    try {
+        const { count = 500, vehicleId } = await c.req.json();
+        console.log(`[Chaos] Generating ${count} synthetic entries...`);
+        
+        const vehicles = vehicleId ? [await kv.get(`vehicle:${vehicleId}`)] : await kv.getByPrefix("vehicle:");
+        if (!vehicles.length) throw new Error("No vehicles found to seed");
+
+        const entries = [];
+        const baseDate = new Date();
+
+        for (let i = 0; i < count; i++) {
+            const vehicle = vehicles[Math.floor(Math.random() * vehicles.length)];
+            const date = new Date(baseDate);
+            date.setMinutes(date.getMinutes() - (i * 120)); // Every 2 hours
+            
+            const isAnomaly = Math.random() > 0.95; // 5% chance of anomaly
+            const liters = isAnomaly ? 85 : 45; // 85L is usually over capacity for standard cars
+
+            entries.push({
+                id: crypto.randomUUID(),
+                date: date.toISOString(),
+                vehicleId: vehicle.id,
+                driverId: "chaos-driver-1",
+                amount: liters * 1.5,
+                liters: liters,
+                pricePerLiter: 1.5,
+                odometer: 100000 + (i * 50),
+                type: 'Card_Transaction',
+                entryMode: 'Floating',
+                paymentSource: 'Gas_Card',
+                metadata: {
+                    isSynthetic: true,
+                    chaosBatch: 'phase-8-stress'
+                }
+            });
+        }
+
+        // Chunked write
+        for (let i = 0; i < entries.length; i += 50) {
+            const chunk = entries.slice(i, i + 50);
+            const keys = chunk.map(e => `fuel_entry:${e.id}`);
+            await kv.mset(keys, chunk);
+        }
+
+        return c.json({ success: true, count: entries.length });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Phase 8 Cleanup: Purge Synthetic Data
+app.post(`${BASE_PATH}/admin/purge-synthetic`, async (c) => {
+    try {
+        console.log("[Purge] Removing all synthetic test data...");
+        
+        // Use direct Supabase delete with JSON filtering for performance
+        const { count, error } = await supabase
+            .from("kv_store_37f42386")
+            .delete({ count: 'exact' })
+            .like("key", "fuel_entry:%")
+            .eq("value->metadata->>isSynthetic", "true");
+
+        if (error) throw error;
+
+        return c.json({ success: true, count: count || 0 });
+    } catch (e: any) {
+        console.error("[Purge Error]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Phase 8 Step 4: Ledger Locking
+app.patch(`${BASE_PATH}/transactions/:id/lock`, async (c) => {
+    try {
+        const id = c.req.param("id");
+        const tx = await kv.get(`transaction:${id}`);
+        if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+        tx.isLocked = true;
+        tx.lockedAt = new Date().toISOString();
+        tx.metadata = { ...tx.metadata, status: 'Finalized' };
+
+        await kv.set(`transaction:${id}`, tx);
+        return c.json({ success: true, data: tx });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
+
+    // Phase 8.2: Server-Side Validation & Integrity Protection
+    // We prevent manipulation of "valid" statuses and calculate integrity server-side
+    
+    // 1. Fetch Vehicle to check tank capacity
+    if (entry.vehicleId) {
+        const vehicle = await kv.get(`vehicle:${entry.vehicleId}`);
+        if (vehicle) {
+            const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0;
+            
+            // 2. Fetch recent entries to calculate current cumulative
+            const allEntries = await kv.getByPrefix("fuel_entry:");
+            const vehicleEntries = allEntries
+                .filter((e: any) => e.vehicleId === entry.vehicleId && e.id !== entry.id)
+                .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            let cumulative = 0;
+            for (const ve of vehicleEntries) {
+                if (ve.metadata?.isAnchor || ve.metadata?.isFullTank || ve.metadata?.isSoftAnchor) break;
+                cumulative += (Number(ve.liters) || 0);
+            }
+
+            const newCumulative = cumulative + (Number(entry.liters) || 0);
+            
+            // Phase 7: Advanced Predictive Baseline Logic
+            // Fetch vehicle efficiency baseline (rolling average or spec)
+            let predictedEconomy = 10; // Default L/100km
+            if (vehicle?.fuelSettings?.targetEfficiency) {
+                predictedEconomy = Number(vehicle.fuelSettings.targetEfficiency);
+            }
+
+            // 3. Rule 1 - Tank Overflow Detection (Phase 2 & 8.2)
+            // Use 5% expansion buffer
+            const overflowThreshold = tankCapacity * 1.05;
+            
+            if (tankCapacity > 0 && newCumulative > overflowThreshold) {
+                // Phase 7: Wait-and-See Observation
+                // Instead of immediate Critical flag, if it's within a "High Velocity" window (but not physically impossible)
+                // we might use 'observing'. But Overflow (>105% tank) is physically impossible -> Flagged.
+                entry.metadata = {
+                    ...entry.metadata,
+                    integrityStatus: 'critical',
+                    auditStatus: 'Flagged',
+                    anomalyReason: 'Tank Overflow',
+                    cumulativeLitersAtEntry: newCumulative,
+                    flaggedAt: new Date().toISOString()
+                };
+                entry.isFlagged = true;
+                entry.auditStatus = 'Flagged';
+            } else if (tankCapacity > 0 && newCumulative > (tankCapacity * 0.85)) {
+                // Rule 2 - Approaching Capacity -> Start Observation
+                // Phase 7: Mark as 'Observing' to avoid premature alerts
+                entry.metadata = {
+                    ...entry.metadata,
+                    integrityStatus: 'warning',
+                    auditStatus: 'Observing',
+                    observationReason: 'High Cumulative Volume (Wait for Anchor)',
+                    cumulativeLitersAtEntry: newCumulative,
+                    observationStartedAt: new Date().toISOString()
+                };
+                entry.auditStatus = 'Observing';
+            } else {
+                entry.metadata = {
+                    ...entry.metadata,
+                    integrityStatus: 'valid',
+                    auditStatus: 'Clear',
+                    cumulativeLitersAtEntry: newCumulative
+                };
+                entry.auditStatus = 'Clear';
+            }
+
+            // Phase 7: Auto-Resolution Loop
+            // If this entry IS a full tank (Anchor), attempt to resolve previous 'Observing' entries
+            if (entry.metadata?.isFullTank || entry.metadata?.isAnchor) {
+                const pendingObservations = vehicleEntries.filter((e: any) => e.auditStatus === 'Observing');
+                if (pendingObservations.length > 0) {
+                    // Logic: Get last anchor before these observations
+                    const lastAnchor = vehicleEntries.find((e: any) => (e.metadata?.isFullTank || e.metadata?.isAnchor) && e.id !== entry.id);
+                    if (lastAnchor && entry.odometer && lastAnchor.odometer) {
+                        const distance = entry.odometer - lastAnchor.odometer;
+                        const totalLitersInWindow = pendingObservations.reduce((sum: number, e: any) => sum + (Number(e.liters) || 0), 0) + (Number(entry.liters) || 0);
+                        const actualEconomy = (totalLitersInWindow / distance) * 100;
+                        
+                        // If actual economy is within 15% of predicted, auto-resolve
+                        const variance = Math.abs(actualEconomy - predictedEconomy) / predictedEconomy;
+                        if (variance < 0.15) {
+                            for (const po of pendingObservations) {
+                                po.auditStatus = 'Auto-Resolved';
+                                po.metadata = {
+                                    ...po.metadata,
+                                    resolvedAt: new Date().toISOString(),
+                                    actualEconomy: Number(actualEconomy.toFixed(2)),
+                                    predictedEconomy: predictedEconomy
+                                };
+                                await kv.set(`fuel_entry:${po.id}`, po);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     await kv.set(`fuel_entry:${entry.id}`, entry);
     return c.json({ success: true, data: entry });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
+});
+
+// --- Phase 8.1: Backfill Integrity Job ---
+app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
+    try {
+        console.log("[Backfill] Starting Fuel Integrity Backfill...");
+        
+        const vehicles = await kv.getByPrefix("vehicle:");
+        const allEntries = await kv.getByPrefix("fuel_entry:");
+        
+        let processedCount = 0;
+        let anomalyCount = 0;
+
+        for (const vehicle of vehicles) {
+            const vehicleId = vehicle.id;
+            const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0;
+            
+            if (tankCapacity <= 0) continue;
+
+            const vehicleEntries = allEntries
+                .filter((e: any) => e.vehicleId === vehicleId)
+                .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+            let runningCumulative = 0;
+
+            for (const entry of vehicleEntries) {
+                // If this entry is an anchor (Full Tank), it resets the cumulative to its own volume
+                if (entry.metadata?.isFullTank || entry.metadata?.isAnchor) {
+                    runningCumulative = Number(entry.liters) || 0;
+                } else {
+                    runningCumulative += Number(entry.liters) || 0;
+                }
+
+                // Check Integrity
+                const overflowThreshold = tankCapacity * 1.05;
+                const status = runningCumulative > overflowThreshold ? 'critical' : 
+                               runningCumulative > (tankCapacity * 0.85) ? 'warning' : 'valid';
+                
+                const updatedMetadata = {
+                    ...(entry.metadata || {}),
+                    cumulativeLitersAtEntry: Number(runningCumulative.toFixed(2)),
+                    integrityStatus: status,
+                    anomalyReason: status === 'critical' ? 'Tank Overflow' : 
+                                   status === 'warning' ? 'Approaching Capacity' : null,
+                    backfilledAt: new Date().toISOString()
+                };
+
+                const updatedEntry = {
+                    ...entry,
+                    metadata: updatedMetadata,
+                    isFlagged: status === 'critical'
+                };
+
+                if (status === 'critical') anomalyCount++;
+                
+                await kv.set(`fuel_entry:${entry.id}`, updatedEntry);
+                processedCount++;
+            }
+        }
+
+        return c.json({ 
+            success: true, 
+            processed: processedCount, 
+            anomaliesDetected: anomalyCount,
+            timestamp: new Date().toISOString()
+        });
+    } catch (e: any) {
+        console.error("[Backfill Error]", e);
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 app.delete(`${BASE_PATH}/fuel-entries/:id`, async (c) => {

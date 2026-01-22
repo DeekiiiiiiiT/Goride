@@ -35,6 +35,7 @@ import {
 import { Trip, DriverMetrics, TierConfig, DriverGoals } from '../../types/data';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { useAuth } from '../auth/AuthContext';
+import { DriverFuelDisputes } from './DriverFuelDisputes';
 
 interface DriverOverviewProps {
   tierState: {
@@ -61,6 +62,7 @@ interface DriverOverviewProps {
   isFixing: string | null;
   onClaimId: (id: string) => void;
   onAction: (action: string) => void;
+  flaggedCount?: number;
 }
 
 export function DriverOverview({
@@ -75,12 +77,49 @@ export function DriverOverview({
   debugDrivers,
   isFixing,
   onClaimId,
-  onAction
+  onAction,
+  flaggedCount = 0
 }: DriverOverviewProps) {
   const { user } = useAuth();
 
   return (
     <div className="space-y-6">
+      {/* Fuel Integrity Alert - Sticky Nudge (Phase 7) */}
+      {flaggedCount > 0 && (
+          <Drawer>
+              <DrawerTrigger asChild>
+                  <button className="w-full bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center gap-4 text-left animate-pulse shadow-sm">
+                      <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+                          <ShieldAlert className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1">
+                          <p className="text-sm font-bold text-orange-900">Action Required: {flaggedCount} Fuel Flag{flaggedCount > 1 ? 's' : ''}</p>
+                          <p className="text-[10px] text-orange-700 font-medium uppercase tracking-tight">Your recent fuel logs have mathematical inconsistencies</p>
+                      </div>
+                      <div className="bg-orange-600 text-white p-1 rounded-full">
+                          <ChevronRight className="w-4 h-4" />
+                      </div>
+                  </button>
+              </DrawerTrigger>
+              <DrawerContent>
+                  <div className="mx-auto w-full max-w-md">
+                      <DrawerHeader>
+                          <DrawerTitle>Fuel Integrity Audit</DrawerTitle>
+                          <DrawerDescription>Review and resolve flagged transactions to ensure accurate payroll.</DrawerDescription>
+                      </DrawerHeader>
+                      <div className="p-4 overflow-y-auto max-h-[70vh]">
+                          <DriverFuelDisputes />
+                      </div>
+                      <DrawerFooter>
+                          <DrawerClose asChild>
+                              <Button variant="outline">Close Audit</Button>
+                          </DrawerClose>
+                      </DrawerFooter>
+                  </div>
+              </DrawerContent>
+          </Drawer>
+      )}
+
       {/* Phase 2: Driver Home Screen Header */}
       {tierState.current && (
          <Card className="border-0 shadow-xl overflow-hidden relative">
