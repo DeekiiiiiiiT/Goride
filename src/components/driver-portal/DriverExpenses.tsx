@@ -51,9 +51,10 @@ interface FuelEntryState {
   odometerProof?: File;
   odometerMethod?: string;
   paymentMethod?: 'gas_card' | 'personal_cash';
-  volume?: string;
+  pricePerLiter?: string;
   isFullTank?: boolean;
   manualReason?: string;
+  volume?: string; // Kept for backward compatibility/internal calculation
 }
 
 function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
@@ -257,13 +258,23 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
     const finalOdometer = isFuel ? fuelEntry.odometerReading : (odometer ? parseInt(odometer) : undefined);
 
     // 4. Construct Metadata
+    const fuelPrice = fuelEntry.pricePerLiter ? parseFloat(fuelEntry.pricePerLiter) : undefined;
+    const rawAmount = Math.abs(parseFloat(amount || '0'));
+    
+    // Auto-calculate volume if price is provided, otherwise fallback to existing volume (if any)
+    let calculatedVolume = fuelEntry.volume ? parseFloat(fuelEntry.volume) : undefined;
+    if (isFuel && !isGasCard && fuelPrice && fuelPrice > 0) {
+        calculatedVolume = Number((rawAmount / fuelPrice).toFixed(2));
+    }
+
     const metadata = {
         plaza,
         lane,
         vehicleClass,
         collector,
         // Fuel Specifics
-        fuelVolume: (isFuel && fuelEntry.volume) ? parseFloat(fuelEntry.volume) : undefined,
+        fuelVolume: calculatedVolume,
+        pricePerLiter: fuelPrice,
         isFullTank: (isFuel) ? fuelEntry.isFullTank : undefined,
         odometerMethod: (isFuel) ? fuelEntry.odometerMethod : undefined,
         odometerProofUrl: (isFuel) ? odometerProofUrl : undefined,
@@ -305,8 +316,16 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
 
     // specific validation for Cash Fuel
     if (category === 'Fuel' && !isGasCard) {
-        if (!fuelEntry.volume) {
-             toast.error("Please enter fuel volume");
+        const price = parseFloat(fuelEntry.pricePerLiter || '0');
+        if (!fuelEntry.pricePerLiter || isNaN(price) || price <= 0) {
+             toast.error("Please enter a valid fuel price");
+             return;
+        }
+        
+        // Basic Sanity Check: Price shouldn't be suspiciously low (e.g. $0.10)
+        // Adjusting threshold to 0.50 as a reasonable minimum for most regions
+        if (price < 0.50) {
+             toast.error("Fuel price seems too low. Please verify.");
              return;
         }
     }
@@ -608,43 +627,45 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
               {/* For now, just a placeholder to complete Phase 3 */}
               <div className="space-y-4">
                 <div className="space-y-2">
-                    <Label>Merchant / Vendor</Label>
+                    <Label>{category === 'Fuel' ? 'Gas Station name' : 'Merchant / Vendor'}</Label>
                     <Input 
-                        placeholder="e.g. Shell, mechanic, etc." 
+                        placeholder={category === 'Fuel' ? 'e.g. Shell, Caltex, etc.' : 'e.g. Shell, mechanic, etc.'} 
                         value={merchant} 
                         onChange={e => setMerchant(e.target.value)} 
                     />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Date</Label>
-                    <Input 
-                      type="date" 
-                      value={format(date, 'yyyy-MM-dd')} 
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          setDate(parseLocalDate(e.target.value));
-                        }
-                      }} 
-                    />
+                {category !== 'Fuel' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Date</Label>
+                      <Input 
+                        type="date" 
+                        value={format(date, 'yyyy-MM-dd')} 
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            setDate(parseLocalDate(e.target.value));
+                          }
+                        }} 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Time</Label>
+                      <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Time</Label>
-                    <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-                  </div>
-                </div>
+                )}
 
                 {category === 'Fuel' && fuelEntry.paymentMethod === 'personal_cash' && (
                   <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label>Amount ($)</Label>
-                        <Input type="number" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
+                        <Label>Cash Spent ($)</Label>
+                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
                       </div>
                       
                       <FuelCashInputs 
-                        volume={fuelEntry.volume || ''}
-                        onVolumeChange={(v) => setFuelEntry(prev => ({ ...prev, volume: v }))}
+                        pricePerLiter={fuelEntry.pricePerLiter || ''}
+                        onPriceChange={(p) => setFuelEntry(prev => ({ ...prev, pricePerLiter: p }))}
                         isFullTank={fuelEntry.isFullTank || false}
                         onFullTankChange={(c) => setFuelEntry(prev => ({ ...prev, isFullTank: c }))}
                       />
@@ -655,7 +676,7 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                    <div className="space-y-4">
                       <div className="space-y-2">
                         <Label>Amount ($)</Label>
-                        <Input type="number" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
+                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
                       </div>
 
                       <div className="space-y-2">
@@ -693,13 +714,14 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                   <>
                     <div className="space-y-2">
                       <Label>Amount ($)</Label>
-                      <Input type="number" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
+                      <Input type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
                     </div>
                     {category === 'Maintenance' && (
                       <div className="space-y-2">
                         <Label>Odometer (km)</Label>
                         <Input 
                             type="number" 
+                            inputMode="decimal"
                             placeholder="Current reading" 
                             value={odometer}
                             onChange={e => setOdometer(e.target.value)}
@@ -709,22 +731,26 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                   </>
                 )}
 
-                <div className="space-y-2">
-                  <Label>Notes</Label>
-                  <Textarea 
-                    placeholder="Add details about this expense..."
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                  />
-                </div>
+                {category !== 'Fuel' && (
+                  <div className="space-y-2">
+                    <Label>Notes</Label>
+                    <Textarea 
+                      placeholder="Add details about this expense..."
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                    />
+                  </div>
+                )}
 
-                <ReceiptUploader 
-                    onFileSelect={handleFileChange}
-                    onClear={handleClearReceipt}
-                    previewUrl={receiptPreview}
-                    isScanning={isScanning}
-                    fileName={receiptFile?.name}
-                />
+                {category !== 'Fuel' && (
+                  <ReceiptUploader 
+                      onFileSelect={handleFileChange}
+                      onClear={handleClearReceipt}
+                      previewUrl={receiptPreview}
+                      isScanning={isScanning}
+                      fileName={receiptFile?.name}
+                  />
+                )}
               </div>
 
               <Button className="w-full" size="lg" disabled={isSubmitting}>

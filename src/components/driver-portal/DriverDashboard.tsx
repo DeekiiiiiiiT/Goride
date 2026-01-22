@@ -25,6 +25,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { settlementService } from '../../services/settlementService';
 import { FuelEntry } from '../../types/fuel';

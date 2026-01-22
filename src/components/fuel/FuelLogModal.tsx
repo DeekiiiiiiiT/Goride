@@ -88,9 +88,12 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
     useEffect(() => {
         if (initialData) {
             setActiveTab('single');
+            const priceFromMetadata = initialData.metadata?.pricePerLiter;
             setFormData({
                 ...initialData,
                 date: initialData.date.split('T')[0], // Ensure date format for input
+                pricePerLiter: initialData.pricePerLiter || (typeof priceFromMetadata === 'number' ? priceFromMetadata : 0),
+                editReason: initialData.metadata?.editReason || '',
             });
             
             // Extract Time
@@ -227,7 +230,12 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             vehicleId: formData.vehicleId as string,
             driverId: formData.driverId as string,
             cardId: formData.type === 'Card_Transaction' ? formData.cardId : undefined,
-            editReason: formData.editReason,
+            paymentSource: formData.type === 'Card_Transaction' ? 'Gas_Card' : 'RideShare_Cash',
+            metadata: {
+                ...(initialData?.metadata || {}),
+                pricePerLiter: Number(formData.pricePerLiter),
+                editReason: formData.editReason,
+            }
         };
 
         onSave(entry);
@@ -409,7 +417,6 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="price">Price / L ($)</Label>
                                     <Input 
                                         id="price" 
                                         type="number" 
@@ -546,7 +553,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                 <div className="grid grid-cols-12 gap-2 text-xs font-medium text-slate-500 px-2">
                                     <div className="col-span-2">Date</div>
                                     <div className="col-span-1">Amount ($)</div>
-                                    <div className="col-span-1">Price / L ($)</div>
+                                    <div className="col-span-1">Fuel Price</div>
                                     <div className="col-span-1">Odometer</div>
                                     <div className="col-span-3">Gas Station Name</div>
                                     <div className="col-span-3">Location Address</div>

@@ -217,10 +217,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               const payload = editingLog ? {
                   ...entry,
                   metadata: {
-                      ...(entry as any).metadata,
+                      ...entry.metadata,
                       isEdited: true,
                       lastEditedAt: new Date().toISOString(),
-                      editReason: (entry as any).editReason
+                      editReason: entry.metadata?.editReason
                   }
               } : entry;
 
@@ -242,7 +242,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                                       ...existingTx.metadata,
                                       isEdited: true,
                                       lastEditedAt: new Date().toISOString(),
-                                      editReason: (entry as any).editReason
+                                      editReason: entry.metadata?.editReason
                                   }
                               });
                           }

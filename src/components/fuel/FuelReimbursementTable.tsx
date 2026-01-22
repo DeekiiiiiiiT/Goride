@@ -174,7 +174,16 @@ export function FuelReimbursementTable({
                                             )}
                                         </div>
                                         {tx.odometer && <span className="text-xs text-slate-500">Odo: {tx.odometer} km</span>}
-                                        {tx.quantity && <span className="text-xs text-slate-500">Vol: {tx.quantity} L</span>}
+                                        <div className="flex gap-2">
+                                            {tx.quantity && <span className="text-xs text-slate-500">Vol: {tx.quantity} L</span>}
+                                            {(tx.metadata?.pricePerLiter || (tx.quantity && tx.amount)) && (
+                                                <span className="text-xs text-slate-400">
+                                                    @{tx.metadata?.pricePerLiter 
+                                                        ? Number(tx.metadata.pricePerLiter).toFixed(3) 
+                                                        : (Math.abs(tx.amount) / tx.quantity!).toFixed(2)}/L
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </TableCell>
                                 <TableCell>
@@ -313,9 +322,11 @@ export function FuelReimbursementTable({
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-500">Rate:</span>
                                         <span className="font-mono">
-                                            {selectedTx.quantity && selectedTx.amount 
-                                                ? `$${(Math.abs(selectedTx.amount) / selectedTx.quantity).toFixed(2)}/L` 
-                                                : '-'}
+                                            {selectedTx.metadata?.pricePerLiter 
+                                                ? `$${Number(selectedTx.metadata.pricePerLiter).toFixed(3)}/L` 
+                                                : (selectedTx.quantity && selectedTx.amount 
+                                                    ? `$${(Math.abs(selectedTx.amount) / selectedTx.quantity).toFixed(2)}/L` 
+                                                    : '-')}
                                         </span>
                                     </div>
                                 </div>

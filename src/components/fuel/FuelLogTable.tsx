@@ -85,15 +85,22 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
     const trustedEntryIds = useMemo(() => {
         const trusted = new Set<string>();
         entries.forEach(entry => {
+            // Logic: Trust the entry if it's a "Modified Anchor" (Admin override)
+            // This MUST come before the transactionId guard to allow repairing orphaned records
+            const isModifiedAnchor = (entry.metadata?.isEdited === true || !!entry.metadata?.editReason) && entry.type === 'Reimbursement';
+            
+            if (isModifiedAnchor) {
+                trusted.add(entry.id);
+                return;
+            }
+
             if (!entry.transactionId) return;
             const tx = transactionMap.get(entry.transactionId);
             
             // Logic: Trust the entry if it's linked to a transaction that isn't purely "Manual" 
-            // OR if it's a "Modified Anchor" (which we explicitly want to keep in the sequence)
             const isOriginallyTrusted = tx && tx.metadata?.source !== 'Manual';
-            const isModifiedAnchor = entry.metadata?.isEdited === true && entry.type === 'Reimbursement';
             
-            if (isOriginallyTrusted || isModifiedAnchor) {
+            if (isOriginallyTrusted) {
                 trusted.add(entry.id);
             }
         });
@@ -384,6 +391,7 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                             <TableHead>Vehicle</TableHead>
                             <TableHead>Driver</TableHead>
                             <TableHead>Volume (L)</TableHead>
+                            <TableHead>Price/L</TableHead>
                             <TableHead>Cost ($)</TableHead>
                             <TableHead>Odometer</TableHead>
                             <TableHead>Gas Station</TableHead>
@@ -505,6 +513,9 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                     </TableCell>
                                     <TableCell>
                                         {entry.liters?.toFixed(1)} L
+                                    </TableCell>
+                                    <TableCell>
+                                        {entry.pricePerLiter ? `$${entry.pricePerLiter.toFixed(3)}` : '-'}
                                     </TableCell>
                                     <TableCell className="font-semibold text-slate-900">
                                         ${entry.amount.toFixed(2)}
