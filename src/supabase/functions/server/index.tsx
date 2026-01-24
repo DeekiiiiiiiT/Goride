@@ -277,15 +277,15 @@ app.get("/make-server-37f42386/admin/fuel-audit/summary", async (c) => {
             .like("key", "transaction:%");
         
         const transactions = (txData || []).map((d: any) => d.value);
-        const fuelTx = transactions.filter(t => t.category === 'Fuel');
+        const fuelTx = transactions.filter(t => t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
 
         const summary = {
             totalFuelTransactions: fuelTx.length,
-            flaggedCount: fuelTx.filter(t => t.metadata?.integrityStatus === 'warning' || t.metadata?.integrityStatus === 'critical').length,
-            criticalCount: fuelTx.filter(t => t.metadata?.integrityStatus === 'critical').length,
-            resolvedCount: fuelTx.filter(t => t.metadata?.auditStatus === 'resolved' || t.metadata?.auditStatus === 'Auto-Resolved').length,
+            flaggedCount: fuelTx.filter(t => (t.metadata?.integrityStatus === 'warning' || t.metadata?.integrityStatus === 'critical') && !t.metadata?.isHealed).length,
+            criticalCount: fuelTx.filter(t => t.metadata?.integrityStatus === 'critical' && !t.metadata?.isHealed).length,
+            resolvedCount: fuelTx.filter(t => t.metadata?.auditStatus === 'resolved' || t.metadata?.auditStatus === 'Auto-Resolved' || t.metadata?.isHealed).length,
             observingCount: fuelTx.filter(t => t.metadata?.auditStatus === 'Observing').length,
-            pendingReview: fuelTx.filter(t => (t.metadata?.integrityStatus === 'warning' || t.metadata?.integrityStatus === 'critical') && !['resolved', 'Auto-Resolved', 'Observing'].includes(t.metadata?.auditStatus || '')).length
+            pendingReview: fuelTx.filter(t => (t.metadata?.integrityStatus === 'warning' || t.metadata?.integrityStatus === 'critical') && !t.metadata?.isHealed && !['resolved', 'Auto-Resolved', 'Observing'].includes(t.metadata?.auditStatus || '')).length
         };
 
         return c.json(summary);
@@ -304,10 +304,9 @@ app.get("/make-server-37f42386/admin/fuel-audit/flagged", async (c) => {
         
         const transactions = (txData || []).map((d: any) => d.value);
         const flagged = transactions.filter(t => 
-            t.category === 'Fuel' && 
+            (t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && 
             (
-                t.metadata?.integrityStatus === 'warning' || 
-                t.metadata?.integrityStatus === 'critical' ||
+                (t.metadata?.integrityStatus === 'warning' || t.metadata?.integrityStatus === 'critical') && !t.metadata?.isHealed ||
                 t.metadata?.auditStatus === 'Observing'
             )
         );
@@ -1420,7 +1419,13 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
             vehicleId: tx.vehicleId, // Must be present to link to vehicle stats
             driverId: tx.driverId,
             cardId: undefined, // Not a card transaction
-            transactionId: tx.id // Link back to original transaction
+            transactionId: tx.id, // Link back to original transaction
+            metadata: {
+                portal_type: tx.metadata?.portal_type || 'Manual_Entry',
+                isManual: tx.metadata?.isManual ?? (tx.paymentMethod === 'Cash' || tx.metadata?.portal_type === 'Manual_Entry'),
+                sourceId: tx.id,
+                source: tx.metadata?.source || 'Manual Approval'
+            }
         };
 
         // Only save if we have a vehicleId (Critical for fleet stats)

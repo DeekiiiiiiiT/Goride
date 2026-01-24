@@ -26,7 +26,7 @@ export interface FuelEntry {
   location?: string; // Station Name/Address
   stationAddress?: string; // Specific location/address
   
-  type: 'Card_Transaction' | 'Manual_Entry' | 'Reimbursement';
+  type: 'Card_Transaction' | 'Manual_Entry' | 'Fuel_Manual_Entry' | 'Reimbursement';
   entryMode: 'Anchor' | 'Floating'; // Anchor = Verified Odo, Floating = Legacy/Cash without Odo
   paymentSource: 'RideShare_Cash' | 'Gas_Card' | 'Personal' | 'Petty_Cash';
   

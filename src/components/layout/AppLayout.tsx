@@ -329,7 +329,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
       <SidebarFooter className="p-4 border-t border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <Avatar className="h-9 w-9">
-            <AvatarImage src="https://github.com/shadcn.png" />
+            <AvatarImage src="https://images.unsplash.com/photo-1701463387028-3947648f1337?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBwcm9maWxlJTIwcGhvdG8lMjBhdmF0YXJ8ZW58MXx8fHwxNzY5MTM2NTYzfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral" />
             <AvatarFallback>JD</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">

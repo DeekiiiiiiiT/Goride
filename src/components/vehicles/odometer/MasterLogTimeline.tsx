@@ -310,9 +310,25 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
         if (confidenceFilter !== 'any') {
             if (confidenceFilter === 'high' && !item.isVerified) return false;
         }
+        
+        // Date Range - Use the same parsing logic as display to avoid UTC shifts
+        const itemDate = parseDateForDisplay(item.date).getTime();
+        
+        if (dateRange.from) {
+            const [y, m, d] = dateRange.from.split('-').map(Number);
+            const fromDate = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+            if (itemDate < fromDate) return false;
+        }
+        
+        if (dateRange.to) {
+            const [y, m, d] = dateRange.to.split('-').map(Number);
+            const toDate = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+            if (itemDate > toDate) return false;
+        }
+        
         return true;
     });
-  }, [history, searchTerm, sourceFilter, confidenceFilter]);
+  }, [history, searchTerm, sourceFilter, confidenceFilter, dateRange]);
 
   // Calculate Verified Coverage
   // Since we removed projections, coverage is now 100% of the displayed items are anchors. 
@@ -423,11 +439,21 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
 
                       <div className="space-y-1">
                            <label className="text-[10px] font-bold text-slate-400 uppercase">From</label>
-                           <Input type="date" className="h-9 w-[130px] text-xs" />
+                           <Input 
+                                type="date" 
+                                className="h-9 w-[130px] text-xs" 
+                                value={dateRange.from}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                           />
                       </div>
                       <div className="space-y-1">
                            <label className="text-[10px] font-bold text-slate-400 uppercase">To</label>
-                           <Input type="date" className="h-9 w-[130px] text-xs" />
+                           <Input 
+                                type="date" 
+                                className="h-9 w-[130px] text-xs" 
+                                value={dateRange.to}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                           />
                       </div>
                       
                       <div className="pt-5">
@@ -435,6 +461,7 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                             setSearchTerm('');
                             setSourceFilter('all');
                             setConfidenceFilter('any');
+                            setDateRange({ from: '', to: '' });
                         }}>
                             Reset
                         </Button>

@@ -157,7 +157,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     const fetchData = async () => {
       try {
         const [tripsData, driversData, metricsData, vehicleMetricsData] = await Promise.all([
-             api.getTrips(),
+             api.getTrips({ limit: 2000 }),
              api.getDrivers().catch(() => []),
              api.getDriverMetrics().catch(() => []),
              api.getVehicleMetrics().catch(() => [])
@@ -216,11 +216,22 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
             matchedManualDriver = externalIdMap.get(trip.driverId)!;
         }
         
-        // STRATEGY 2: Match by Name (Fallback)
+        // STRATEGY 2: Match by Name (Fuzzy/Failsafe)
         if (!matchedManualDriver && trip.driverName) {
-            const normalizedName = trip.driverName.toLowerCase().trim();
-            if (manualDriverMap.has(normalizedName)) {
-                matchedManualDriver = manualDriverMap.get(normalizedName)!;
+            const normalizedTripName = trip.driverName.toLowerCase().trim();
+            
+            // Check for exact name match
+            if (manualDriverMap.has(normalizedTripName)) {
+                matchedManualDriver = manualDriverMap.get(normalizedTripName)!;
+            } else {
+                // Check if any manual driver name is a prefix of the trip name 
+                // (handles "NAME 5179KZ" or "NAME (ID)")
+                for (const [manualName, manualDriver] of manualDriverMap.entries()) {
+                    if (normalizedTripName.startsWith(manualName) || manualName.startsWith(normalizedTripName)) {
+                        matchedManualDriver = manualDriver;
+                        break;
+                    }
+                }
             }
         }
 

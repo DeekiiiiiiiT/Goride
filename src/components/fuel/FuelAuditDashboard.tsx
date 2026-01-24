@@ -16,7 +16,8 @@ import {
     ChevronDown,
     ChevronUp,
     BarChart3,
-    Fuel
+    Fuel,
+    Lock
 } from "lucide-react";
 import { api } from "../../services/api";
 import { format } from "date-fns";
@@ -73,7 +74,8 @@ export function FuelAuditDashboard() {
         }
     };
 
-    const getStatusColor = (status: string, auditStatus?: string) => {
+    const getStatusColor = (status: string, auditStatus?: string, isHealed?: boolean) => {
+        if (isHealed) return 'bg-blue-50 text-blue-700 border-blue-200';
         if (auditStatus === 'Observing') return 'bg-blue-100 text-blue-700 border-blue-200';
         if (auditStatus === 'Auto-Resolved') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
         
@@ -198,8 +200,10 @@ export function FuelAuditDashboard() {
                                         onClick={() => setSelectedId(selectedId === tx.id ? null : tx.id)}
                                     >
                                         <div className="flex items-center gap-4">
-                                            <div className={`p-2 rounded-full border ${getStatusColor(tx.metadata?.integrityStatus, tx.metadata?.auditStatus)}`}>
-                                                {tx.metadata?.auditStatus === 'Observing' ? (
+                                            <div className={`p-2 rounded-full border ${getStatusColor(tx.metadata?.integrityStatus, tx.metadata?.auditStatus, tx.metadata?.isHealed)}`}>
+                                                {tx.metadata?.isHealed ? (
+                                                    <ShieldCheck className="w-4 h-4" />
+                                                ) : tx.metadata?.auditStatus === 'Observing' ? (
                                                     <Clock className="w-4 h-4" />
                                                 ) : tx.metadata?.auditStatus === 'Auto-Resolved' ? (
                                                     <CheckCircle2 className="w-4 h-4" />
@@ -215,11 +219,16 @@ export function FuelAuditDashboard() {
                                                     {tx.metadata?.auditStatus === 'Observing' && (
                                                         <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 text-[10px] h-5">WAIT-AND-SEE</Badge>
                                                     )}
+                                                    {tx.metadata?.isHealed && (
+                                                        <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] h-5">HEALED</Badge>
+                                                    )}
                                                 </div>
                                                 <p className="text-sm text-slate-600 truncate">
-                                                    {tx.metadata?.auditStatus === 'Observing' 
-                                                        ? 'Observation Active: Awaiting next Full Tank for reconciliation.' 
-                                                        : tx.metadata?.anomalyReason || 'Mathematical Inconsistency Detected'}
+                                                    {tx.metadata?.isHealed 
+                                                        ? 'System Healed: Data drift corrected via integrity audit.'
+                                                        : tx.metadata?.auditStatus === 'Observing' 
+                                                            ? 'Observation Active: Awaiting next Full Tank for reconciliation.' 
+                                                            : tx.metadata?.anomalyReason || 'Mathematical Inconsistency Detected'}
                                                 </p>
                                             </div>
                                             <div className="text-right shrink-0">

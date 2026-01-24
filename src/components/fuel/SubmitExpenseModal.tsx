@@ -48,7 +48,9 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         "FESCO",
         "Petcom",
         "Thrifty Gas",
-        "Cool Oasis"
+        "Cool Oasis",
+        "Jampet",
+        "Independent"
     ];
 
     const [entries, setEntries] = useState<any[]>([{
@@ -113,14 +115,16 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     useEffect(() => {
         if (isOpen && initialData) {
             setActiveTab("single");
+            const formattedDate = initialData.date ? initialData.date.split('T')[0] : '';
             setCommonData({
                 driverId: initialData.driverId || '',
                 vehicleId: initialData.vehicleId || '',
-                date: initialData.date || '',
+                date: formattedDate,
+                paymentSource: initialData.metadata?.paymentSource || 'driver_cash',
             });
             setEntries([{
                 id: initialData.id || crypto.randomUUID(),
-                date: initialData.date || '',
+                date: formattedDate,
                 time: initialData.time || '',
                 amount: initialData.amount ? Math.abs(initialData.metadata?.totalCost || initialData.amount).toString() : '',
                 pricePerLiter: initialData.metadata?.pricePerLiter ? initialData.metadata.pricePerLiter.toString() : '',
@@ -426,18 +430,34 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             return;
         }
 
+        if (!commonData.vehicleId) {
+            toast.error("Please select a vehicle");
+            return;
+        }
+
+        if (!commonData.date) {
+            toast.error("Please select a date");
+            return;
+        }
+
+        if (!commonData.paymentSource) {
+            toast.error("Please select a payment source");
+            return;
+        }
+
         const validEntries = entries.filter(e => e.amount && parseFloat(e.amount) > 0);
+        
         if (validEntries.length === 0) {
             toast.error("Please enter at least one valid amount");
             return;
         }
 
-        // Validate Odometer is present for all valid entries
-        // const missingOdometer = validEntries.some(e => !e.odometer || parseFloat(e.odometer) <= 0);
-        // if (missingOdometer) {
-        //     toast.error("Odometer reading is required for all fuel entries");
-        //     return;
-        // }
+        // Validate that all entries have a Price Per Liter
+        const missingPrice = validEntries.find(e => !e.pricePerLiter || parseFloat(e.pricePerLiter) <= 0);
+        if (missingPrice) {
+            toast.error("Price per liter is required for all entries");
+            return;
+        }
 
         setIsSubmitting(true);
         try {
@@ -445,12 +465,15 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             const driver = drivers.find(d => d.id === commonData.driverId);
             const vehicle = vehicles.find(v => v.id === commonData.vehicleId);
 
-            // Using for...of for sequential execution to be safer with network/concurrency
-            for (const entry of validEntries) {
+            // Sequential submission to avoid race conditions in ledger/settlement
+            for (let i = 0; i < validEntries.length; i++) {
+                const entry = validEntries[i];
                 const pSource = entry.paymentSource || commonData.paymentSource;
                 const amountVal = parseFloat(entry.amount);
-                
                 const netAmount = pSource === 'driver_cash' ? amountVal : 0;
+                
+                // Only refresh on the VERY LAST entry to ensure UI only updates once
+                const isLast = i === validEntries.length - 1;
 
                 const transactionData = {
                     id: entry.id,
@@ -475,18 +498,22 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         pricePerLiter: entry.pricePerLiter ? parseFloat(entry.pricePerLiter) : undefined,
                         source: entries.length > 1 ? 'Bulk Manual' : 'Manual',
                         portal_type: 'Manual_Entry',
+                        isManual: true,
                         paymentSource: pSource,
                         totalCost: amountVal,
-                        // Persistence of Flagging
                         isFlagged: entry.isFlagged,
                         flagReason: entry.flagReason
                     },
                     isReconciled: false
                 };
-                await onSave(transactionData);
+                
+                // Cast to any to bypass type check since we added a new param
+                await (onSave as any)(transactionData, isLast);
             }
 
-            toast.success(`Successfully submitted ${validEntries.length} expense(s)`);
+            toast.success(validEntries.length > 1 
+                ? `Successfully submitted batch of ${validEntries.length} expenses` 
+                : "Expense successfully submitted");
             onClose();
         } catch (error) {
             console.error('Submit error:', error);
@@ -532,7 +559,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="driver" className="text-xs">Driver</Label>
+                                <Label htmlFor="driver" className="text-xs">Driver <span className="text-red-500">*</span></Label>
                                 <Select 
                                     value={commonData.driverId} 
                                     onValueChange={(val) => setCommonData(prev => ({ ...prev, driverId: val }))}
@@ -548,7 +575,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="vehicle" className="text-xs">Vehicle</Label>
+                                <Label htmlFor="vehicle" className="text-xs">Vehicle <span className="text-red-500">*</span></Label>
                                 <Select 
                                     value={commonData.vehicleId} 
                                     onValueChange={(val) => setCommonData(prev => ({ ...prev, vehicleId: val }))}
@@ -565,7 +592,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="date" className="text-xs">Date</Label>
+                                    <Label htmlFor="date" className="text-xs">Date <span className="text-red-500">*</span></Label>
                                     <button 
                                         onClick={() => setCommonData(prev => ({ ...prev, date: getLocalDateString() }))}
                                         className="text-[10px] text-blue-600 hover:underline"
@@ -585,7 +612,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
 
                         <div className="grid grid-cols-1 gap-4 mt-2 border-t border-slate-200/60 pt-3">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-bold uppercase text-slate-400">Paid By</Label>
+                                <Label className="text-[10px] font-bold uppercase text-slate-400">Paid By <span className="text-red-500">*</span></Label>
                                 <Select 
                                     value={commonData.paymentSource} 
                                     onValueChange={(val) => setCommonData(prev => ({ ...prev, paymentSource: val }))}
@@ -607,7 +634,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         <TabsContent value="single" className="mt-0 space-y-4">
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="amount">Amount ($)</Label>
+                                    <Label htmlFor="amount">Amount ($) <span className="text-red-500">*</span></Label>
                                     <Input 
                                         id="amount" 
                                         type="number" 
@@ -618,7 +645,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="price">Price ($/L)</Label>
+                                    <Label htmlFor="price">Price ($/L) <span className="text-red-500">*</span></Label>
                                     <Input 
                                         id="price" 
                                         type="number" 

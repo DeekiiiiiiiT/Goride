@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2 } from 'lucide-react';
+import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
@@ -59,8 +59,18 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
     setActiveTab(defaultTab);
   }, [defaultTab]);
 
-  // Date Range State (Default: Current Week)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+  // Decoupled Date Range States for specific audit views
+  const [logDateRange, setLogDateRange] = useState<DateRange | undefined>({
+      from: startOfWeek(new Date(), { weekStartsOn: 1 }),
+      to: endOfWeek(new Date(), { weekStartsOn: 1 })
+  });
+
+  const [reimbursementDateRange, setReimbursementDateRange] = useState<DateRange | undefined>({
+      from: startOfWeek(new Date(), { weekStartsOn: 1 }),
+      to: endOfWeek(new Date(), { weekStartsOn: 1 })
+  });
+
+  const [reconciliationDateRange, setReconciliationDateRange] = useState<DateRange | undefined>({
       from: startOfWeek(new Date(), { weekStartsOn: 1 }),
       to: endOfWeek(new Date(), { weekStartsOn: 1 })
   });
@@ -105,15 +115,15 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
 
-  // Effect to reload trips when Date Range changes
+  // Effect to reload trips when Reconciliation Date Range changes
   useEffect(() => {
     const fetchTripsForRange = async () => {
-        if (!dateRange?.from) return;
+        if (!reconciliationDateRange?.from) return;
         try {
             // Using getTripsFiltered is more efficient and accurate for reconciliation than raw getTrips
             const response = await api.getTripsFiltered({
-                startDate: dateRange.from.toISOString(),
-                endDate: dateRange.to?.toISOString() || new Date().toISOString(),
+                startDate: reconciliationDateRange.from.toISOString(),
+                endDate: reconciliationDateRange.to?.toISOString() || new Date().toISOString(),
                 limit: 1500 // Cap at 1500 to prevent browser lag, but cover the week
             });
             setTrips(response.data || []);
@@ -123,7 +133,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
         }
     };
     fetchTripsForRange();
-  }, [dateRange]);
+  }, [reconciliationDateRange]);
 
   const loadData = async (silent = false) => {
       if (!silent) setIsRefreshing(true);
@@ -239,25 +249,33 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               await settlementService.processFuelSettlement(savedLog, scenariosData);
 
               if (editingLog) {
-                  // Also update the associated transaction in the ledger if it exists (Phase 3: Sync)
-                  if (savedLog.transactionId) {
+                  // Phase 13: Financial Ledger Sync Hardening (Step 13.1)
+                  const transactionId = savedLog.transactionId;
+                  const existingTx = transactions.find(t => (transactionId && t.id === transactionId) || t.metadata?.sourceId === savedLog.id);
+                  
+                  if (existingTx) {
                       try {
-                          const existingTx = transactions.find(t => t.id === savedLog.transactionId);
-                          if (existingTx) {
-                              await api.saveTransaction({
-                                  ...existingTx,
-                                  amount: savedLog.amount,
-                                  date: savedLog.date,
-                                  description: `Fuel: ${savedLog.location || 'Unknown Station'} - ${savedLog.liters}L @ $${(savedLog.amount / (savedLog.liters || 1)).toFixed(3)}/L`,
-                                  metadata: {
-                                      ...existingTx.metadata,
-                                      isEdited: true,
-                                      lastEditedAt: new Date().toISOString(),
-                                      editReason: entry.metadata?.editReason,
-                                      syncSource: 'fuel_log'
-                                  }
-                              });
-                          }
+                          await api.saveTransaction({
+                              ...existingTx,
+                              // Preserve the sign of the original transaction while updating the magnitude
+                              amount: existingTx.amount < 0 ? -Math.abs(savedLog.amount) : Math.abs(savedLog.amount),
+                              date: savedLog.date.split('T')[0],
+                              description: `Fuel: ${savedLog.location || 'Unknown Station'} - ${savedLog.liters}L @ $${(savedLog.amount / (savedLog.liters || 1)).toFixed(3)}/L`,
+                              driverId: savedLog.driverId,
+                              vehicleId: savedLog.vehicleId,
+                              driverName: getDriverName(savedLog.driverId),
+                              odometer: savedLog.odometer,
+                              quantity: savedLog.liters,
+                              metadata: {
+                                  ...existingTx.metadata,
+                                  isEdited: true,
+                                  lastEditedAt: new Date().toISOString(),
+                                  editReason: entry.metadata?.editReason,
+                                  syncSource: 'fuel_log',
+                                  odometer: savedLog.odometer,
+                                  fuelVolume: savedLog.liters
+                              }
+                          });
                       } catch (e) {
                           console.error("Failed to sync changes to associated financial transaction", e);
                       }
@@ -318,65 +336,70 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       }
   };
 
-  const handleSaveExpense = async (transactionData: any) => {
-      setIsSyncing(true);
-      try {
-          const savedTx = await api.saveTransaction(transactionData);
-          
-          // If admin saves as 'Approved' immediately, process settlement
-          if (savedTx.status === 'Approved' && (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement')) {
-              const scenariosData = await fuelService.getFuelScenarios();
-              await settlementService.processFuelSettlement(savedTx, scenariosData);
-          }
+    const handleSaveExpense = async (transactionData: any, shouldRefresh = true) => {
+        setIsSyncing(true);
+        try {
+            const savedTx = await api.saveTransaction(transactionData);
+            
+            // If admin saves as 'Approved' immediately, process settlement
+            if (savedTx.status === 'Approved' && (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement')) {
+                const scenariosData = await fuelService.getFuelScenarios();
+                await settlementService.processFuelSettlement(savedTx, scenariosData);
+            }
 
-          if (editingExpense) {
-              // Phase 4: Transaction-to-Log Edit Synchronization
-              if (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement') {
-                  const linkedLog = logs.find(l => l.transactionId === savedTx.id || l.id === savedTx.metadata?.sourceId);
-                  if (linkedLog) {
-                      try {
-                          const updatedLog = {
-                              ...linkedLog,
-                              amount: Math.abs(savedTx.amount),
-                              date: savedTx.date.includes('T') ? savedTx.date : `${savedTx.date}T${savedTx.time || '12:00:00'}`,
-                              location: savedTx.merchant || linkedLog.location,
-                              metadata: {
-                                  ...linkedLog.metadata,
-                                  isEdited: true,
-                                  lastEditedAt: new Date().toISOString(),
-                                  syncSource: 'financial_transaction'
-                              }
-                          };
-                          
-                          // Maintain mathematical integrity: recalculate price per liter based on new amount
-                          if (updatedLog.liters && updatedLog.liters > 0) {
-                              updatedLog.pricePerLiter = Number((updatedLog.amount / updatedLog.liters).toFixed(3));
-                              if (updatedLog.metadata) updatedLog.metadata.pricePerLiter = updatedLog.pricePerLiter;
-                          }
+            if (editingExpense) {
+                // ... logic to sync with logs ...
+                if (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement') {
+                    const linkedLog = logs.find(l => l.transactionId === savedTx.id || l.id === savedTx.metadata?.sourceId);
+                    if (linkedLog) {
+                        try {
+                            const updatedLog = {
+                                ...linkedLog,
+                                amount: Math.abs(savedTx.amount),
+                                date: savedTx.date.includes('T') ? savedTx.date : `${savedTx.date}T${savedTx.time || '12:00:00'}`,
+                                location: savedTx.merchant || linkedLog.location,
+                                driverId: savedTx.driverId || linkedLog.driverId,
+                                vehicleId: savedTx.vehicleId || linkedLog.vehicleId,
+                                odometer: savedTx.odometer || linkedLog.odometer,
+                                liters: savedTx.quantity || linkedLog.liters,
+                                metadata: {
+                                    ...linkedLog.metadata,
+                                    isEdited: true,
+                                    lastEditedAt: new Date().toISOString(),
+                                    syncSource: 'financial_transaction',
+                                    editReason: 'Financial record reconciliation sync'
+                                }
+                            };
+                            
+                            if (updatedLog.liters && updatedLog.liters > 0) {
+                                updatedLog.pricePerLiter = Number((updatedLog.amount / updatedLog.liters).toFixed(3));
+                                if (updatedLog.metadata) updatedLog.metadata.pricePerLiter = updatedLog.pricePerLiter;
+                            }
 
-                          await fuelService.saveFuelEntry(updatedLog);
-                          setLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
-                      } catch (e) {
-                          console.error("Failed to sync changes back to fuel log", e);
-                      }
-                  }
-              }
-
-              setTransactions(prev => prev.map(t => t.id === savedTx.id ? savedTx : t));
-              toast.success("Expense updated and linked fuel records synced");
-          } else {
-              setTransactions(prev => [savedTx, ...prev]);
-              toast.success("Expense recorded and settled");
-          }
-          setEditingExpense(null);
-          loadData(true);
-      } catch (e) {
-          console.error(e);
-          toast.error("Failed to save expense");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
+                            await fuelService.saveFuelEntry(updatedLog);
+                            setLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
+                        } catch (e) {
+                            console.error("Failed to sync changes back to fuel log", e);
+                        }
+                    }
+                }
+                setTransactions(prev => prev.map(t => t.id === savedTx.id ? savedTx : t));
+                toast.success("Expense updated and linked fuel records synced");
+            } else {
+                setTransactions(prev => [savedTx, ...prev]);
+                // We don't toast here if it's bulk, the modal will toast at the end
+            }
+            
+            if (shouldRefresh) {
+                await loadData(true);
+            }
+        } catch (e) {
+            console.error(e);
+            throw e; // Let the modal catch it
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
   const handleEditExpense = (tx: FinancialTransaction) => {
       setEditingExpense(tx);
@@ -387,7 +410,20 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       if (!deleteLogConfirmationId) return;
       try {
           const logToDelete = logs.find(l => l.id === deleteLogConfirmationId);
-          const transactionId = logToDelete?.transactionId;
+          if (!logToDelete) return;
+
+          let transactionId = logToDelete.transactionId;
+          
+          // Phase 6.1: Global Lookup for missing/corrupted links (Source-Aware Deletion)
+          if (!transactionId && cascadeDelete) {
+              const matchedTx = transactions.find(t => 
+                  (t.category === 'Fuel' || t.category === 'Fuel Reimbursement') &&
+                  Math.abs(t.amount) === logToDelete.amount &&
+                  (t.date === (logToDelete.date?.split('T')[0] || '') || t.metadata?.sourceId === logToDelete.id) &&
+                  t.vehicleId === logToDelete.vehicleId
+              );
+              if (matchedTx) transactionId = matchedTx.id;
+          }
 
           // Sequential Cleanup (Phase 2, Step 3)
           await fuelService.deleteFuelEntry(deleteLogConfirmationId);
@@ -398,7 +434,18 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           }
 
           setLogs(prev => prev.filter(l => l.id !== deleteLogConfirmationId));
-          toast.success(transactionId && cascadeDelete ? "Log and linked reimbursement deleted" : "Log entry deleted");
+          
+          // Phase 8.2: Recovery Context Toast
+          const detailsText = logToDelete ? ` (${logToDelete.liters}L, $${logToDelete.amount.toFixed(2)})` : "";
+          toast.success(
+            transactionId && cascadeDelete 
+              ? `Log and linked record deleted${detailsText}` 
+              : `Log entry deleted${detailsText}`,
+            {
+              description: logToDelete?.type === 'Fuel_Manual_Entry' ? "You can re-submit this manual entry with corrected data." : undefined,
+              duration: 5000
+            }
+          );
       } catch (e) {
           console.error(e);
           toast.error("Failed to delete log entry");
@@ -415,8 +462,20 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const confirmDeleteExpense = async () => {
       if (!deleteConfirmationId) return;
       try {
+          const txToDelete = transactions.find(t => t.id === deleteConfirmationId);
+          if (!txToDelete) return;
+
           // Find if there is a linked fuel log
-          const logToCleanup = logs.find(l => l.transactionId === deleteConfirmationId);
+          let logToCleanup = logs.find(l => l.transactionId === deleteConfirmationId);
+
+          // Phase 6.2: Global Lookup for missing/corrupted links (Source-Aware Deletion)
+          if (!logToCleanup && cascadeDelete) {
+              logToCleanup = logs.find(l => 
+                  l.amount === Math.abs(txToDelete.amount) &&
+                  ((l.date?.split('T')[0] || '') === txToDelete.date || l.metadata?.sourceId === txToDelete.id) &&
+                  l.vehicleId === txToDelete.vehicleId
+              );
+          }
           
           await api.deleteTransaction(deleteConfirmationId);
           
@@ -426,7 +485,18 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           }
 
           setTransactions(prev => prev.filter(t => t.id !== deleteConfirmationId));
-          toast.success(logToCleanup && cascadeDelete ? "Reimbursement and linked fuel log deleted" : "Expense deleted");
+          
+          // Phase 8.2: Recovery Context Toast
+          const detailsText = txToDelete ? ` ($${Math.abs(txToDelete.amount).toFixed(2)})` : "";
+          toast.success(
+            logToCleanup && cascadeDelete 
+              ? `Financial record and linked fuel log deleted${detailsText}` 
+              : `Expense deleted${detailsText}`,
+            {
+              description: "The linked entry has been removed to maintain ledger integrity.",
+              duration: 5000
+            }
+          );
       } catch (e) {
           console.error(e);
           toast.error("Failed to delete expense");
@@ -504,22 +574,33 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               category: "Fuel Reimbursement",
               description: `Fuel at ${log.location || 'Unknown'} (Healed Record)`,
               driverId: log.driverId,
+              driverName: getDriverName(log.driverId), // Step 9.1: Fix Driver Name in "Heal" Logic
               vehicleId: log.vehicleId,
               status: "Approved",
               type: "Reimbursement",
               metadata: {
                   sourceId: log.id,
-                  source: "Maintenance Repair",
-                  automated: false
+                  source: "Manual",
+                  automated: false,
+                  // Phase 3: Preservation of Manual Origin
+                  portal_type: "Manual_Entry",
+                  isManual: true,
+                  healedAt: new Date().toISOString(),
+                  isHealed: true // Step 11.2: Add isHealed flag for UI distinction
               }
           };
           
           const savedTx = await api.saveTransaction(txData);
           
-          // Update the log with the new transactionId
+          // Update the log with the new transactionId and heal metadata
           await fuelService.saveFuelEntry({
               ...log,
-              transactionId: savedTx.id
+              transactionId: savedTx.id,
+              metadata: {
+                  ...log.metadata,
+                  isHealed: true,
+                  healedAt: new Date().toISOString()
+              }
           });
 
           toast.success("Missing financial record created and linked");
@@ -540,6 +621,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               date: tx.date.includes('T') ? tx.date : `${tx.date}T${tx.time || '12:00:00'}`,
               amount: Math.abs(tx.amount),
               driverId: tx.driverId || drivers[0]?.id,
+              driverName: tx.driverName || getDriverName(tx.driverId), // Ensure metadata preservation
               vehicleId: tx.vehicleId || vehicles[0]?.id,
               location: tx.merchant || tx.description || "Unknown Station",
               type: "Reimbursement",
@@ -549,7 +631,12 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               metadata: {
                   isEdited: true,
                   editReason: "Historical Repair",
-                  syncSource: "maintenance_repair"
+                  syncSource: "maintenance_repair",
+                  source: "Manual",
+                  // Phase 3: Preservation of Manual Origin
+                  portal_type: "Manual_Entry",
+                  isManual: true,
+                  healedAt: new Date().toISOString()
               }
           };
 
@@ -563,6 +650,97 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       } catch (e) {
           console.error(e);
           toast.error("Failed to repair fuel log");
+      } finally {
+          setIsSyncing(false);
+      }
+  };
+
+  const handleStandardizeTypes = async (logsToUpdate: FuelEntry[]) => {
+      setIsSyncing(true);
+      try {
+          const promises = logsToUpdate.map(log => 
+              fuelService.saveFuelEntry({
+                  ...log,
+                  type: 'Fuel_Manual_Entry' as any,
+                  metadata: {
+                      ...log.metadata,
+                      isEdited: true,
+                      editReason: 'Phase 5 Standardization',
+                      source: 'Manual',
+                      portal_type: 'Manual_Entry',
+                      isManual: true
+                  }
+              })
+          );
+          await Promise.all(promises);
+          toast.success(`Successfully standardized ${logsToUpdate.length} legacy records.`);
+          await loadData(true);
+      } catch (e) {
+          console.error("Standardization failed", e);
+          toast.error("Failed to standardize legacy records");
+      } finally {
+          setIsSyncing(false);
+      }
+  };
+
+  const handleBackfillMetadata = async (records: FinancialTransaction[]) => {
+      setIsSyncing(true);
+      try {
+          const promises = records.map(tx => {
+              const driverName = getDriverName(tx.driverId);
+              
+              // Find the linked fuel log entry to pull missing physical data
+              const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
+              
+              return api.saveTransaction({
+                  ...tx,
+                  driverName,
+                  // Backfill physical data from the log if missing in the ledger
+                  odometer: tx.odometer || linkedLog?.odometer || 0,
+                  quantity: tx.quantity || linkedLog?.liters || undefined,
+                  metadata: {
+                      ...tx.metadata,
+                      pricePerLiter: tx.metadata?.pricePerLiter || linkedLog?.pricePerLiter || undefined,
+                      isEdited: true,
+                      lastEditedAt: new Date().toISOString(),
+                      editReason: 'Phase 14 Metadata Backfill',
+                      syncSource: 'maintenance_repair'
+                  }
+              });
+          });
+          await Promise.all(promises);
+          toast.success(`Successfully backfilled metadata for ${records.length} records.`);
+          await loadData(true);
+      } catch (e) {
+          console.error("Backfill failed", e);
+          toast.error("Failed to backfill metadata");
+      } finally {
+          setIsSyncing(false);
+      }
+  };
+
+  const handleRepairNaming = async (records: FinancialTransaction[]) => {
+      setIsSyncing(true);
+      try {
+          const promises = records.map(tx => {
+              return api.saveTransaction({
+                  ...tx,
+                  metadata: {
+                      ...tx.metadata,
+                      source: 'Manual',
+                      isManual: true,
+                      portal_type: 'Manual_Entry',
+                      lastEditedAt: new Date().toISOString(),
+                      editReason: 'Phase 4 Naming Convention Alignment'
+                  }
+              });
+          });
+          await Promise.all(promises);
+          toast.success(`Successfully repaired ${records.length} record naming conventions.`);
+          await loadData(true);
+      } catch (e) {
+          console.error("Naming repair failed", e);
+          toast.error("Failed to repair naming conventions");
       } finally {
           setIsSyncing(false);
       }
@@ -591,12 +769,42 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
   const getDriverName = (id?: string) => {
       if (!id) return '';
-      const d = drivers.find(d => d.id === id);
+      // Step 9.2: Correct Driver Lookup Utility - Search by both id and driverId for legacy/mismatch compatibility
+      const d = drivers.find(d => d.id === id || d.driverId === id);
       return d ? d.name : 'Unknown Driver';
   };
 
-  // Calculate Spend
-  const weeklySpend = logs.reduce((sum, log) => sum + log.amount, 0);
+  // Phase 4: Decoupled Summary Stats (Step 4.2)
+  const statsScopeLogs = logs.filter(log => {
+    if (!logDateRange?.from && !logDateRange?.to) return true;
+    
+    let entryDate: Date;
+    if (log.date.includes('-') && log.date.length === 10) {
+        const [y, m, d] = log.date.split('-').map(Number);
+        entryDate = new Date(y, m - 1, d);
+    } else {
+        entryDate = new Date(log.date);
+    }
+    entryDate.setHours(0, 0, 0, 0);
+
+    if (logDateRange.from) {
+        const fromDate = new Date(logDateRange.from);
+        fromDate.setHours(0, 0, 0, 0);
+        if (entryDate < fromDate) return false;
+    }
+    if (logDateRange.to) {
+        const toDate = new Date(logDateRange.to);
+        toDate.setHours(0, 0, 0, 0);
+        if (entryDate > toDate) return false;
+    }
+    return true;
+  });
+
+  const weeklySpend = statsScopeLogs.reduce((sum, log) => sum + log.amount, 0);
+
+  const anchorTotalSpent = statsScopeLogs
+    .filter(log => log.type === 'Reimbursement' && (log.metadata?.isEdited || log.transactionId))
+    .reduce((sum, log) => sum + log.amount, 0);
 
   const handleFinalize = async (reports: WeeklyFuelReport[]) => {
       try {
@@ -704,6 +912,17 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                     </div>
                 </CardContent>
             </Card>
+            <Card>
+                <CardContent className="p-6 flex items-center gap-4">
+                    <div className="p-3 bg-emerald-100 text-emerald-600 rounded-full">
+                        <ShieldCheck className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-500 font-medium">Anchor Total Spent</p>
+                        <h3 className="text-2xl font-bold text-slate-900">${anchorTotalSpent.toFixed(2)}</h3>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
       )}
 
@@ -717,6 +936,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               onEdit={handleEditExpense}
               onDelete={handleDeleteExpense}
               onViewDriverLedger={onViewDriverLedger}
+              dateRange={reimbursementDateRange}
+              onDateRangeChange={setReimbursementDateRange}
+              isRefreshing={isRefreshing}
+              onRefresh={() => loadData(true)}
           />
       )}
 
@@ -730,7 +953,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                  <div className="space-y-1">
                 </div>
                 <div className="flex items-center gap-2">
-                    <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+                    <DatePickerWithRange date={reconciliationDateRange} setDate={setReconciliationDateRange} />
                 </div>
             </div>
             
@@ -740,7 +963,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 fuelEntries={logs}
                 adjustments={adjustments}
                 disputes={disputes}
-                dateRange={dateRange}
+                dateRange={reconciliationDateRange}
                 scenarios={scenarios}
                 onFinalize={handleFinalize}
                 onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
@@ -780,6 +1003,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 onDelete={handleDeleteLog}
                 getVehicleName={getVehicleName}
                 getDriverName={getDriverName}
+                dateRange={logDateRange}
+                onDateRangeChange={setLogDateRange}
             />
         </div>
       )}
@@ -791,6 +1016,11 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               onHealLogToTx={handleHealLogToTx}
               onHealTxToLog={handleHealTxToLog}
               onSyncRecords={handleSyncRecords}
+              onStandardizeTypes={handleStandardizeTypes}
+              onBackfillMetadata={handleBackfillMetadata}
+              onRepairNaming={handleRepairNaming}
+              onDeleteLog={handleDeleteLog}
+              onDeleteTx={handleDeleteExpense}
           />
       )}
 
@@ -853,27 +1083,29 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Reimbursement Request?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
-              <p>This action cannot be undone. This will permanently delete the expense record from the financial ledger.</p>
-              
-              {logs.some(l => l.transactionId === deleteConfirmationId) && (
-                <div className="flex items-start space-x-3 p-3 bg-amber-50 border border-amber-100 rounded-lg mt-2">
-                  <Checkbox 
-                    id="cascade-log" 
-                    checked={cascadeDelete} 
-                    onCheckedChange={(checked) => setCascadeDelete(!!checked)}
-                    className="mt-1"
-                  />
-                  <div className="grid gap-1.5 leading-none">
-                    <Label htmlFor="cascade-log" className="text-sm font-bold text-amber-900 cursor-pointer">
-                      Delete linked fuel log entry as well
-                    </Label>
-                    <p className="text-xs text-amber-700">
-                      If checked, the physical fuel consumption record used for mileage auditing will also be removed.
-                    </p>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>This action cannot be undone. This will permanently delete the expense record from the financial ledger.</p>
+                
+                {logs.some(l => l.transactionId === deleteConfirmationId) && (
+                  <div className="flex items-start space-x-3 p-3 bg-amber-50 border border-amber-100 rounded-lg mt-2">
+                    <Checkbox 
+                      id="cascade-log" 
+                      checked={cascadeDelete} 
+                      onCheckedChange={(checked) => setCascadeDelete(!!checked)}
+                      className="mt-1"
+                    />
+                    <div className="grid gap-1.5 leading-none">
+                      <Label htmlFor="cascade-log" className="text-sm font-bold text-amber-900 cursor-pointer">
+                        Delete linked fuel log entry as well
+                      </Label>
+                      <p className="text-xs text-amber-700">
+                        If checked, the physical fuel consumption record used for mileage auditing will also be removed.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -889,27 +1121,29 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Fuel Log Entry?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
-              <p>This will remove the fuel consumption record from the audit timeline. This may affect "Stop-to-Stop" calculations for this vehicle.</p>
-              
-              {logs.find(l => l.id === deleteLogConfirmationId)?.transactionId && (
-                <div className="flex items-start space-x-3 p-3 bg-amber-50 border border-amber-100 rounded-lg mt-2">
-                  <Checkbox 
-                    id="cascade-expense" 
-                    checked={cascadeDelete} 
-                    onCheckedChange={(checked) => setCascadeDelete(!!checked)}
-                    className="mt-1"
-                  />
-                  <div className="grid gap-1.5 leading-none">
-                    <Label htmlFor="cascade-expense" className="text-sm font-bold text-amber-900 cursor-pointer">
-                      Void linked reimbursement request
-                    </Label>
-                    <p className="text-xs text-amber-700">
-                      If checked, the pending payment request in the "Reimbursements" tab will also be deleted.
-                    </p>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>This will remove the fuel consumption record from the audit timeline. This may affect "Stop-to-Stop" calculations for this vehicle.</p>
+                
+                {logs.find(l => l.id === deleteLogConfirmationId)?.transactionId && (
+                  <div className="flex items-start space-x-3 p-3 bg-amber-50 border border-amber-100 rounded-lg mt-2">
+                    <Checkbox 
+                      id="cascade-expense" 
+                      checked={cascadeDelete} 
+                      onCheckedChange={(checked) => setCascadeDelete(!!checked)}
+                      className="mt-1"
+                    />
+                    <div className="grid gap-1.5 leading-none">
+                      <Label htmlFor="cascade-expense" className="text-sm font-bold text-amber-900 cursor-pointer">
+                        Void linked reimbursement request
+                      </Label>
+                      <p className="text-xs text-amber-700">
+                        If checked, the pending payment request in the "Reimbursements" tab will also be deleted.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -130,8 +130,15 @@ export const AlertEngine = {
 
         // --- 4. Fuel Leakage Checks (Phase 7) ---
         // Group data by vehicle for the current week
-        const weekTrips = trips.filter(t => t.date >= currentWeekStart);
-        const weekEntries = fuelEntries.filter(e => e.date >= currentWeekStart);
+        // Phase 8.1: Filter out records with invalid timestamps or zero odometer readings to prevent false positives ($14k leakage)
+        const weekTrips = trips.filter(t => t.date && t.date >= currentWeekStart && t.date !== "Invalid Date" && !t.date.includes("undefined"));
+        const weekEntries = fuelEntries.filter(e => 
+            e.date && 
+            e.date >= currentWeekStart && 
+            e.date !== "Invalid Date" && 
+            !e.date.includes("undefined") &&
+            (e.odometer || 0) > 0
+        );
         
         vehicleMetrics.forEach(vehicle => {
             const vTrips = weekTrips.filter(t => t.vehicleId === vehicle.vehicleId);

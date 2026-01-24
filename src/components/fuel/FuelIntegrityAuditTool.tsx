@@ -13,7 +13,8 @@ import {
     ArrowRight,
     Loader2,
     Search,
-    Filter
+    Filter,
+    Trash2
 } from "lucide-react";
 import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
@@ -25,6 +26,11 @@ interface FuelIntegrityAuditToolProps {
     onHealLogToTx: (log: FuelEntry) => Promise<void>;
     onHealTxToLog: (tx: FinancialTransaction) => Promise<void>;
     onSyncRecords: (log: FuelEntry, tx: FinancialTransaction, source: 'log' | 'tx') => Promise<void>;
+    onStandardizeTypes: (logs: FuelEntry[]) => Promise<void>;
+    onBackfillMetadata: (records: any[]) => Promise<void>;
+    onRepairNaming: (records: any[]) => Promise<void>;
+    onDeleteLog: (id: string) => void;
+    onDeleteTx: (id: string) => void;
 }
 
 export function FuelIntegrityAuditTool({ 
@@ -32,11 +38,15 @@ export function FuelIntegrityAuditTool({
     transactions, 
     onHealLogToTx, 
     onHealTxToLog, 
-    onSyncRecords 
+    onSyncRecords,
+    onStandardizeTypes,
+    onBackfillMetadata,
+    onDeleteLog,
+    onDeleteTx
 }: FuelIntegrityAuditToolProps) {
     const [isScanning, setIsScanning] = useState(false);
     const [lastScanDate, setLastScanDate] = useState<Date | null>(null);
-    const [filter, setFilter] = useState<'all' | 'orphaned' | 'mismatch'>('all');
+    const [filter, setFilter] = useState<'all' | 'orphaned' | 'mismatch' | 'anomaly'>('all');
     const [healingId, setHealingId] = useState<string | null>(null);
 
     // Scan Engine
@@ -48,9 +58,55 @@ export function FuelIntegrityAuditTool({
         const logMap = new Map(logs.map(l => [l.id, l]));
         const logByTxId = new Map(logs.filter(l => !!l.transactionId).map(l => [l.transactionId!, l]));
 
+        // 0. Check for Corruption (Phase 7: Step 7.3)
+        logs.forEach(l => {
+            const isInvalidDate = l.date === "Invalid Date" || !l.date || l.date.includes("undefined");
+            if (isInvalidDate) {
+                issues.push({
+                    id: `corrupt-date-${l.id}`,
+                    type: 'Critical Corruption',
+                    severity: 'high',
+                    description: `Record #${l.id.slice(0, 5)} has an unrecoverable "Invalid Date" field. This breaks chronological auditing.`,
+                    data: { log: l },
+                    action: 'delete'
+                });
+            }
+        });
+
+        // 0.3 Check for Source Convention Mismatches (Phase 4: Step 4.1)
+        const namingMismatches = transactions.filter(t => 
+            (t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && 
+            t.status === 'Pending' &&
+            (t.metadata?.isManual || t.type === 'Fuel_Manual_Entry' || t.type === 'Manual_Entry') &&
+            t.metadata?.source !== 'Manual' && t.metadata?.source !== 'Bulk Manual'
+        );
+        if (namingMismatches.length > 0) {
+            issues.push({
+                id: 'source-naming-mismatch',
+                type: 'Naming Convention Mismatch',
+                severity: 'low',
+                description: `${namingMismatches.length} manual records found with inconsistent source labels. Fixing this ensures they appear correctly in the Pending "To-Do" list.`,
+                data: { records: namingMismatches },
+                action: 'repair_naming'
+            });
+        }
+
+        // 0.1 Check for Legacy Type Mismatches (Phase 5: Step 5.1)
+        const legacyRecords = logs.filter(l => (l as any).type === 'Manual_Entry');
+        if (legacyRecords.length > 0) {
+            issues.push({
+                id: 'legacy-types',
+                type: 'Legacy Type Mismatch',
+                severity: 'medium',
+                description: `${legacyRecords.length} records found with legacy 'Manual_Entry' type. Needs migration to 'Fuel_Manual_Entry'.`,
+                data: { logs: legacyRecords },
+                action: 'standardize'
+            });
+        }
+
         // 1. Check for Orphaned Logs (Logs that should have a TX but don't)
         logs.forEach(log => {
-            if (log.type === 'Reimbursement' || log.type === 'Manual_Entry') {
+            if (log.type === 'Reimbursement' || log.type === 'Manual_Entry' || log.type === 'Fuel_Manual_Entry') {
                 const tx = txMap.get(log.transactionId || '');
                 if (!tx) {
                     issues.push({
@@ -97,6 +153,58 @@ export function FuelIntegrityAuditTool({
             }
         });
 
+        // 4. Mathematical Integrity Checks (Velocity & Anchors)
+        // Group logs by vehicle to check sequential integrity
+        const logsByVehicle = new Map<string, FuelEntry[]>();
+        logs.forEach(l => {
+            const list = logsByVehicle.get(l.vehicleId) || [];
+            list.push(l);
+            logsByVehicle.set(l.vehicleId, list);
+        });
+
+        logsByVehicle.forEach((vLogs, vehicleId) => {
+            // Phase 8.3: Robust Chronological Sorting (Filter out NaN and corrupt strings)
+            const validLogs = vLogs.filter(l => {
+                if (!l.date || l.date === "Invalid Date" || l.date.includes("undefined")) return false;
+                const timestamp = new Date(l.date).getTime();
+                return !isNaN(timestamp);
+            });
+            
+            const sorted = [...validLogs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const current = sorted[i];
+                const next = sorted[i+1];
+                
+                // Velocity Check: Fueling twice within 4 hours is suspicious
+                const diffMs = new Date(next.date).getTime() - new Date(current.date).getTime();
+                const diffHours = diffMs / (1000 * 60 * 60);
+                
+                if (diffHours < 4 && current.liters > 10 && next.liters > 10) {
+                    issues.push({
+                        id: `velocity-${current.id}-${next.id}`,
+                        type: 'Velocity Alert',
+                        severity: 'low',
+                        description: `Suspicious fueling frequency: Vehicle fueled twice within ${diffHours.toFixed(1)} hours (${current.liters}L and ${next.liters}L).`,
+                        data: { log: next },
+                        action: 'flag'
+                    });
+                }
+
+                // Odometer Anchor Check: Next odometer must be greater than current
+                if (current.odometer && next.odometer && next.odometer <= current.odometer) {
+                    issues.push({
+                        id: `odo-anchor-${current.id}-${next.id}`,
+                        type: 'Odometer Drift',
+                        severity: 'medium',
+                        description: `Odometer integrity failure: Previous reading (${current.odometer}) is higher than or equal to current reading (${next.odometer}). Manual re-entry recommended.`,
+                        data: { log: next },
+                        action: 'delete'
+                    });
+                }
+            }
+        });
+
         return issues;
     }, [logs, transactions]);
 
@@ -117,6 +225,15 @@ export function FuelIntegrityAuditTool({
                 await onHealTxToLog(issue.data.tx);
             } else if (issue.action === 'sync') {
                 await onSyncRecords(issue.data.log, issue.data.tx, param || 'log');
+            } else if (issue.action === 'standardize') {
+                await onStandardizeTypes(issue.data.logs);
+            } else if (issue.action === 'backfill_metadata') {
+                await onBackfillMetadata(issue.data.records);
+            } else if (issue.action === 'repair_naming') {
+                await onRepairNaming(issue.data.records);
+            } else if (issue.action === 'delete') {
+                if (issue.data.log) onDeleteLog(issue.data.log.id);
+                else if (issue.data.tx) onDeleteTx(issue.data.tx.id);
             }
         } finally {
             setHealingId(null);
@@ -127,6 +244,7 @@ export function FuelIntegrityAuditTool({
         if (filter === 'all') return true;
         if (filter === 'orphaned') return i.type.includes('Orphaned');
         if (filter === 'mismatch') return i.type === 'Data Drift';
+        if (filter === 'anomaly') return i.type === 'Velocity Alert' || i.type === 'Odometer Drift';
         return true;
     });
 
@@ -196,6 +314,10 @@ export function FuelIntegrityAuditTool({
                                     <span className="text-slate-500">Data Drift:</span>
                                     <span className="font-bold">{auditResults.filter(i => i.type === 'Data Drift').length}</span>
                                 </div>
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-slate-500">Anomalies:</span>
+                                    <span className="font-bold">{auditResults.filter(i => i.type === 'Velocity Alert' || i.type === 'Odometer Drift').length}</span>
+                                </div>
                             </div>
 
                             <div className="pt-4 border-t space-y-2">
@@ -224,6 +346,14 @@ export function FuelIntegrityAuditTool({
                                         onClick={() => setFilter('mismatch')}
                                     >
                                         DRIFT
+                                    </Button>
+                                    <Button 
+                                        variant={filter === 'anomaly' ? 'default' : 'outline'} 
+                                        size="sm" 
+                                        className="h-7 text-[10px]"
+                                        onClick={() => setFilter('anomaly')}
+                                    >
+                                        ANOMALIES
                                     </Button>
                                 </div>
                             </div>
@@ -312,14 +442,24 @@ export function FuelIntegrityAuditTool({
                                                         ) : (
                                                             <Button 
                                                                 size="sm" 
-                                                                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+                                                                className={cn(
+                                                                    "h-8 font-bold",
+                                                                    issue.action === 'delete' ? "bg-rose-600 hover:bg-rose-700 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                                )}
                                                                 disabled={!!healingId}
                                                                 onClick={() => runHeal(issue)}
                                                             >
-                                                                {healingId === issue.id ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Wrench className="h-3.5 w-3.5 mr-2" />}
-                                                                {issue.action === 'create_tx' ? 'Heal Ledger Record' : 'Repair Fuel Log'}
+                                                                {healingId === issue.id ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : 
+                                                                 issue.action === 'delete' ? <Trash2 className="h-3.5 w-3.5 mr-2" /> : <Wrench className="h-3.5 w-3.5 mr-2" />}
+                                                                {issue.action === 'create_tx' ? 'Heal Ledger Record' : 
+                                                                 issue.action === 'delete' ? 'Purge & Redo Entry' : 'Repair Fuel Log'}
                                                                 <ArrowRight className="h-3 w-3 ml-2 group-hover:translate-x-1 transition-transform" />
                                                             </Button>
+                                                        )}
+                                                        {issue.action === 'delete' && (
+                                                            <span className="text-[10px] text-slate-400 font-medium">
+                                                                * This will remove the record from both logs and ledger.
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </div>

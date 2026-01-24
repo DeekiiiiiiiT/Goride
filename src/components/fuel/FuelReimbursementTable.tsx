@@ -10,7 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { FinancialTransaction } from '../../types/data';
-import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2 } from "lucide-react";
+import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Input } from "../ui/input";
@@ -22,6 +22,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../ui/utils";
 import { FuelEntry } from '../../types/fuel';
 
+import { DateRange } from "react-day-picker";
+import { DatePickerWithRange } from "../ui/date-range-picker";
+
 interface FuelReimbursementTableProps {
     transactions: FinancialTransaction[];
     logs?: FuelEntry[];
@@ -31,6 +34,10 @@ interface FuelReimbursementTableProps {
     onEdit?: (transaction: FinancialTransaction) => void;
     onDelete?: (id: string) => void;
     onViewDriverLedger?: (driverId: string) => void;
+    dateRange?: DateRange;
+    onDateRangeChange?: (range: DateRange | undefined) => void;
+    isRefreshing?: boolean;
+    onRefresh?: () => void;
 }
 
 export function FuelReimbursementTable({ 
@@ -41,7 +48,11 @@ export function FuelReimbursementTable({
     onRequestSubmit, 
     onEdit, 
     onDelete,
-    onViewDriverLedger 
+    onViewDriverLedger,
+    dateRange,
+    onDateRangeChange,
+    isRefreshing = false,
+    onRefresh
 }: FuelReimbursementTableProps) {
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -59,18 +70,47 @@ export function FuelReimbursementTable({
     // Filter mainly for Reimbursements. 
     // We exclude automated transactions to avoid "duplication" in the UI, 
     // as settlements are linked to and visible within the primary log entry.
-    const pending = transactions.filter(t => 
-        t.status === 'Pending' && 
-        !t.metadata?.automated &&
-        (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || (t.type === 'Expense' && t.paymentMethod === 'Cash')) &&
-        (t.category === 'Fuel' || t.category === 'Fuel Reimbursement')
-    );
-    const history = transactions.filter(t => 
-        (t.status === 'Approved' || t.status === 'Rejected') && 
-        !t.metadata?.automated &&
-        (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || (t.type === 'Expense' && t.paymentMethod === 'Cash')) &&
-        (t.category === 'Fuel' || t.category === 'Fuel Reimbursement')
-    );
+    const isFuelReimbursement = (t: FinancialTransaction) => {
+        const isStandardSource = !t.metadata?.automated || t.metadata?.source === 'Manual' || t.metadata?.source === 'Bulk Manual';
+        const isReimbursementType = (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || t.type === 'Manual_Entry' || (t.type === 'Expense' && t.paymentMethod === 'Cash'));
+        const isFuelCategory = (t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
+        
+        return isStandardSource && isReimbursementType && isFuelCategory;
+    };
+
+    const isWithinRange = (t: FinancialTransaction) => {
+        if (!dateRange?.from && !dateRange?.to) return true;
+        
+        // Parse transaction date as a local date object
+        let txDate: Date;
+        if (t.date.includes('T')) {
+            // ISO string - parse and convert to local date at midnight
+            const dateOnly = t.date.split('T')[0];
+            const [y, m, d] = dateOnly.split('-').map(Number);
+            txDate = new Date(y, m - 1, d);
+        } else if (t.date.includes('-') && t.date.length === 10) {
+            const [y, m, d] = t.date.split('-').map(Number);
+            txDate = new Date(y, m - 1, d);
+        } else {
+            txDate = new Date(t.date);
+            txDate.setHours(0, 0, 0, 0);
+        }
+        
+        if (dateRange?.from) {
+            const fromDate = new Date(dateRange.from);
+            fromDate.setHours(0, 0, 0, 0);
+            if (txDate < fromDate) return false;
+        }
+        if (dateRange?.to) {
+            const toDate = new Date(dateRange.to);
+            toDate.setHours(0, 0, 0, 0);
+            if (txDate > toDate) return false;
+        }
+        return true;
+    };
+
+    const pending = transactions.filter(t => t.status === 'Pending' && isFuelReimbursement(t));
+    const history = transactions.filter(t => (t.status === 'Approved' || t.status === 'Rejected') && isFuelReimbursement(t) && isWithinRange(t));
 
     const handleAction = (type: 'approve' | 'reject') => {
         setAction(type);
@@ -208,9 +248,14 @@ export function FuelReimbursementTable({
                                     <div className="flex flex-col max-w-[200px]">
                                         <div className="flex flex-wrap items-center gap-2 mb-1">
                                             <span className="truncate text-sm font-medium">{tx.description}</span>
-                                            {tx.metadata?.source === 'Manual' && (
-                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200">
-                                                    Manual
+                                            {tx.metadata?.source && (
+                                                <Badge variant="secondary" className={cn(
+                                                    "text-[10px] h-5 px-1.5 font-normal border hover:bg-slate-200 transition-colors",
+                                                    tx.metadata.source === 'Fuel Log' || tx.metadata.source === 'Bulk Log' 
+                                                        ? "bg-blue-50 text-blue-700 border-blue-200" 
+                                                        : "bg-slate-100 text-slate-600 border-slate-200"
+                                                )}>
+                                                    {tx.metadata.source}
                                                 </Badge>
                                             )}
                                         </div>
@@ -242,19 +287,33 @@ export function FuelReimbursementTable({
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}>
+                                        <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }} title="View Details">
                                             <Eye className="h-4 w-4" />
                                         </Button>
+
+                                        {/* Edit Button - Enabled for History and Pending to allow metadata repair */}
+                                        {onEdit && (
+                                            tx.metadata?.source === 'Manual' || 
+                                            tx.metadata?.source === 'Bulk Manual' || 
+                                            tx.metadata?.source === 'Manual Request' ||
+                                            tx.metadata?.source === 'Maintenance Repair' || 
+                                            !tx.metadata?.source
+                                        ) && (
+                                            <Button 
+                                                size="sm" 
+                                                variant="outline" 
+                                                onClick={() => onEdit(tx)} 
+                                                title="Edit Transaction"
+                                                className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </Button>
+                                        )}
                                         
                                         {showActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
                                             <>
-                                                {onEdit && (
-                                                    <Button size="sm" variant="outline" onClick={() => onEdit(tx)}>
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                )}
                                                 {onDelete && (
-                                                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)}>
+                                                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)} title="Delete">
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
                                                 )}
@@ -263,10 +322,10 @@ export function FuelReimbursementTable({
 
                                         {showActions && (
                                             <>
-                                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }}>
+                                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }} title="Approve">
                                                     <Check className="h-4 w-4" />
                                                 </Button>
-                                                <Button size="sm" variant="destructive" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('reject'); }}>
+                                                <Button size="sm" variant="destructive" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('reject'); }} title="Reject">
                                                     <X className="h-4 w-4" />
                                                 </Button>
                                             </>
@@ -296,16 +355,43 @@ export function FuelReimbursementTable({
                         </TabsTrigger>
                         <TabsTrigger value="history">History</TabsTrigger>
                     </TabsList>
-                    
-                    {onRequestSubmit && (
-                        <Button onClick={onRequestSubmit} size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Log Receipt / Manual Entry
-                        </Button>
-                    )}
+
+                    <div className="flex items-center gap-2">
+                        {onRefresh && (
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={onRefresh} 
+                                disabled={isRefreshing}
+                                className="h-9 px-2 text-slate-500 border-slate-200"
+                            >
+                                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                            </Button>
+                        )}
+
+                        {onDateRangeChange && (
+                            <DatePickerWithRange 
+                                date={dateRange} 
+                                setDate={onDateRangeChange} 
+                            />
+                        )}
+                        
+                        {onRequestSubmit && (
+                            <Button onClick={onRequestSubmit} size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
+                                <Plus className="h-4 w-4 mr-2" />
+                                Log Receipt / Manual Entry
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 <TabsContent value="pending" className="space-y-4">
+                    {isRefreshing && (
+                        <div className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50/50 p-2 rounded-md border border-blue-100 animate-pulse">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Synchronizing ledger and verifying manual entries...
+                        </div>
+                    )}
                     {renderTable(pending, true)}
                 </TabsContent>
 
@@ -471,7 +557,20 @@ export function FuelReimbursementTable({
 
                     {!action && selectedTx?.status === 'Pending' && (
                         <DialogFooter className="gap-2 sm:gap-0">
-                            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsDetailsOpen(false)}>Close</Button>
+                            <div className="flex gap-2 w-full sm:w-auto mr-auto">
+                                {onEdit && (
+                                    selectedTx.metadata?.source === 'Manual' || 
+                                    selectedTx.metadata?.source === 'Bulk Manual' || 
+                                    selectedTx.metadata?.source === 'Manual Request' ||
+                                    !selectedTx.metadata?.source
+                                ) && (
+                                    <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => { setIsDetailsOpen(false); onEdit(selectedTx); }}>
+                                        <Pencil className="h-4 w-4 mr-2" />
+                                        Edit
+                                    </Button>
+                                )}
+                                <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setIsDetailsOpen(false)}>Close</Button>
+                            </div>
                             <div className="flex gap-2 w-full sm:w-auto">
                                 <Button variant="destructive" className="flex-1 sm:flex-none" onClick={() => setAction('reject')}>Reject</Button>
                                 <Button className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none" onClick={() => setAction('approve')}>Approve</Button>

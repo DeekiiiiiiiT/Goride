@@ -217,10 +217,10 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         }
 
         const entry: FuelEntry = {
-            ...initialData, // Preserve original fields like transactionId, paymentSource, etc.
+            ...initialData,
             id: initialData?.id || crypto.randomUUID(),
             date: fullDate,
-            type: formData.type as any,
+            type: formData.type === 'Manual_Entry' ? 'Fuel_Manual_Entry' : formData.type,
             amount: Number(formData.amount),
             liters: Number(formData.liters),
             pricePerLiter: Number(formData.pricePerLiter),
@@ -235,6 +235,9 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 ...(initialData?.metadata || {}),
                 pricePerLiter: Number(formData.pricePerLiter),
                 editReason: formData.editReason,
+                source: 'Fuel Log',
+                portal_type: 'Manual_Entry',
+                isManual: true
             }
         };
 
@@ -264,7 +267,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         const entries: FuelEntry[] = validEntries.map(row => ({
             id: row.id,
             date: row.date,
-            type: bulkCommon.type as any,
+            type: bulkCommon.type === 'Manual_Entry' ? 'Fuel_Manual_Entry' : bulkCommon.type,
             amount: row.amount,
             liters: row.liters,
             pricePerLiter: row.pricePerLiter,
@@ -273,9 +276,14 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             stationAddress: row.stationAddress,
             vehicleId: bulkCommon.vehicleId,
             driverId: bulkCommon.driverId,
-            // Card ID is undefined for manual entries usually, but if type is Card, we might need it.
-            // For now assuming bulk is mostly for cash/manual. If card needed, add to common.
-            cardId: undefined 
+            cardId: undefined,
+            paymentSource: bulkCommon.type === 'Card_Transaction' ? 'Gas_Card' : 'RideShare_Cash',
+            metadata: {
+                pricePerLiter: row.pricePerLiter,
+                source: 'Bulk Log',
+                portal_type: 'Manual_Entry',
+                isManual: true
+            }
         }));
 
         onSave(entries);

@@ -398,7 +398,7 @@ export interface ServiceRequest {
 
 // --- Phase 1: Enhanced Transaction Data Structure (Transactions Tab Enhancement) ---
 
-export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment' | 'Float_Given' | 'Payment_Received' | 'Reimbursement';
+export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment' | 'Float_Given' | 'Payment_Received' | 'Reimbursement' | 'Fuel_Manual_Entry';
 
 export type TransactionCategory = 
   // Revenue

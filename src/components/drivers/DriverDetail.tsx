@@ -920,7 +920,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
 
         // Filter Check
-        if (isWithinInterval(tripDateObj, { start, end })) {
+        if (isWithinInterval(startOfDay(tripDateObj), { start, end })) {
             periodEarnings += trip.amount;
             
             const platform = trip.platform || 'Other';
@@ -982,7 +982,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
 
         // Previous Period Check
-        if (isWithinInterval(tripDateObj, { start: prevStart, end: prevEnd })) {
+        if (isWithinInterval(startOfDay(tripDateObj), { start: prevStart, end: prevEnd })) {
             prevPeriodEarnings += trip.amount;
         }
      });
@@ -1156,7 +1156,33 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      // 1. Identify vehicles driven in this period from Trip Logs
      trips.forEach(trip => {
-         const tripDateObj = new Date(trip.date);
+         let tripDateObj: Date;
+         if (typeof trip.date === 'string') {
+            if (trip.date.includes('T')) {
+                tripDateObj = new Date(trip.date);
+            } else if (trip.date.includes('/')) {
+                const parts = trip.date.split('/');
+                if (parts.length === 3) {
+                    const p1 = parseInt(parts[0]);
+                    const p2 = parseInt(parts[1]);
+                    const p3 = parseInt(parts[2]);
+                    if (p1 > 12) {
+                        tripDateObj = new Date(p3, p2 - 1, p1);
+                    } else {
+                        tripDateObj = new Date(p3, p1 - 1, p2);
+                    }
+                } else {
+                    tripDateObj = new Date(trip.date);
+                }
+            } else if (trip.date.includes('-') && trip.date.length === 10) {
+                const [y, m, d] = trip.date.split('-').map(Number);
+                tripDateObj = new Date(y, m - 1, d);
+            } else {
+                tripDateObj = new Date(trip.date);
+            }
+         } else {
+            tripDateObj = new Date(trip.date);
+         }
          if (isWithinInterval(tripDateObj, { start, end }) && trip.vehicleId) {
              // Normalize plate (remove spaces, uppercase)
              activePlates.add(trip.vehicleId.replace(/[\s-]/g, '').toUpperCase());

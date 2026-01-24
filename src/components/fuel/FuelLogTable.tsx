@@ -37,6 +37,9 @@ import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, Ale
 import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
 
+import { DateRange } from "react-day-picker";
+import { DatePickerWithRange } from "../ui/date-range-picker";
+
 interface FuelLogTableProps {
     entries: FuelEntry[];
     transactions: FinancialTransaction[];
@@ -44,9 +47,20 @@ interface FuelLogTableProps {
     onDelete: (id: string) => void;
     getVehicleName: (id?: string) => string;
     getDriverName: (id?: string) => string;
+    dateRange?: DateRange;
+    onDateRangeChange?: (range: DateRange | undefined) => void;
 }
 
-export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehicleName, getDriverName }: FuelLogTableProps) {
+export function FuelLogTable({ 
+    entries, 
+    transactions, 
+    onEdit, 
+    onDelete, 
+    getVehicleName, 
+    getDriverName,
+    dateRange,
+    onDateRangeChange
+}: FuelLogTableProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<string>('all');
     const [filterVehicle, setFilterVehicle] = useState<string>('all');
@@ -82,6 +96,13 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
         return new Map(transactions.map(t => [t.id, t]));
     }, [transactions]);
 
+    // Robust lookup for linked transactions (Phase 3)
+    const getLinkedTransaction = (entry: FuelEntry) => {
+        if (entry.transactionId) return transactionMap.get(entry.transactionId);
+        // Fallback for records created via Reimbursement queue that didn't write back their ID to the log yet
+        return transactions.find(t => t.metadata?.sourceId === entry.id);
+    };
+
     const trustedEntryIds = useMemo(() => {
         const trusted = new Set<string>();
         entries.forEach(entry => {
@@ -94,18 +115,17 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                 return;
             }
 
-            if (!entry.transactionId) return;
-            const tx = transactionMap.get(entry.transactionId);
+            const tx = getLinkedTransaction(entry);
             
             // Logic: Trust the entry if it's linked to a transaction that isn't purely "Manual" 
-            const isOriginallyTrusted = tx && tx.metadata?.source !== 'Manual';
+            const isOriginallyTrusted = tx && tx.metadata?.source !== 'Manual' && tx.metadata?.source !== 'Fuel Log';
             
             if (isOriginallyTrusted) {
                 trusted.add(entry.id);
             }
         });
         return trusted;
-    }, [entries, transactionMap]);
+    }, [entries, transactions, transactionMap]);
 
     // Phase 3 & 5: Sequential Validation & Diagnostics
     const { validAnchorIds, anchorFailures } = useMemo(() => {
@@ -168,12 +188,59 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
         return { validAnchorIds: anchors, anchorFailures: failures };
     }, [entries, trustedEntryIds]);
 
+    // Phase 2: Manual Intent Helper (Step 2.2)
+    const isManualEntry = (entry: FuelEntry) => {
+        // Step 10.1: Refine Manual Entry Definition - Exclude valid Anchors
+        if (validAnchorIds.has(entry.id)) return false;
+
+        const tx = getLinkedTransaction(entry);
+        const isManualType = entry.type === 'Manual_Entry' || entry.type === 'Fuel_Manual_Entry';
+        const hasManualPortalType = entry.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.portal_type === 'Manual_Entry';
+        const hasManualSource = entry.metadata?.source?.toLowerCase().includes('manual') || 
+                               entry.metadata?.source?.toLowerCase().includes('fuel log') ||
+                               tx?.metadata?.source?.toLowerCase().includes('manual') ||
+                               tx?.metadata?.source?.toLowerCase().includes('fuel log');
+        
+        return isManualType || hasManualPortalType || hasManualSource;
+    };
+
     const filteredEntries = entries.filter(entry => {
-        if (filterType !== 'all' && entry.type !== filterType) return false;
+        // Step 2.1: Updated Type Filter Logic
+        if (filterType !== 'all') {
+            if (filterType === 'Fuel_Manual_Entry') {
+                if (!isManualEntry(entry)) return false;
+            } else {
+                if (entry.type !== filterType) return false;
+            }
+        }
+
         if (filterVehicle !== 'all' && entry.vehicleId !== filterVehicle) return false;
         if (filterDriver !== 'all' && entry.driverId !== filterDriver) return false;
         if (filterAnchor === 'valid' && !validAnchorIds.has(entry.id)) return false;
         if (filterAnchor === 'invalid' && (entry.type !== 'Reimbursement' || validAnchorIds.has(entry.id))) return false;
+
+        // Date Range Filtering - Normalize everything to local date midnights for comparison
+        if (dateRange?.from || dateRange?.to) {
+            let entryDate: Date;
+            if (entry.date.includes('-') && entry.date.length === 10) {
+                const [y, m, d] = entry.date.split('-').map(Number);
+                entryDate = new Date(y, m - 1, d);
+            } else {
+                entryDate = new Date(entry.date);
+            }
+            entryDate.setHours(0, 0, 0, 0);
+
+            if (dateRange.from) {
+                const fromDate = new Date(dateRange.from);
+                fromDate.setHours(0, 0, 0, 0);
+                if (entryDate < fromDate) return false;
+            }
+            if (dateRange.to) {
+                const toDate = new Date(dateRange.to);
+                toDate.setHours(0, 0, 0, 0);
+                if (entryDate > toDate) return false;
+            }
+        }
 
         return (
             getVehicleName(entry.vehicleId).toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -188,6 +255,7 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
     const getTypeIcon = (type: string) => {
         switch(type) {
             case 'Card_Transaction': return <CreditCard className="h-4 w-4 text-indigo-500" />;
+            case 'Fuel_Manual_Entry':
             case 'Manual_Entry': return <Banknote className="h-4 w-4 text-emerald-500" />;
             case 'Reimbursement': return <Banknote className="h-4 w-4 text-orange-500" />;
             default: return <Fuel className="h-4 w-4 text-slate-500" />;
@@ -203,24 +271,53 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
         return new Date(dateString).toLocaleDateString();
     };
 
-    // Phase 4: Reconciliation Stats
+    // Phase 4: Decoupled Analytics (Step 4.1)
     const stats = useMemo(() => {
-        const manualEntries = entries.filter(e => {
-            const tx = transactionMap.get(e.transactionId || '');
-            return tx?.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.source === 'Manual' || tx?.metadata?.source === 'Bulk Manual';
+        // Stats should respect the date window but ignore UI-level workspace filters (search, vehicle, driver)
+        // to provide a stable audit context.
+        const auditScopeEntries = entries.filter(entry => {
+            if (!dateRange?.from && !dateRange?.to) return true;
+            
+            let entryDate: Date;
+            if (entry.date.includes('-') && entry.date.length === 10) {
+                const [y, m, d] = entry.date.split('-').map(Number);
+                entryDate = new Date(y, m - 1, d);
+            } else {
+                entryDate = new Date(entry.date);
+            }
+            entryDate.setHours(0, 0, 0, 0);
+
+            if (dateRange.from) {
+                const fromDate = new Date(dateRange.from);
+                fromDate.setHours(0, 0, 0, 0);
+                if (entryDate < fromDate) return false;
+            }
+            if (dateRange.to) {
+                const toDate = new Date(dateRange.to);
+                toDate.setHours(0, 0, 0, 0);
+                if (entryDate > toDate) return false;
+            }
+            return true;
         });
+
+        // Step 10.2: Update Analytics Aggregation - stats already uses isManualEntry
+        // which now correctly excludes valid anchors.
+        const manualEntries = auditScopeEntries.filter(e => isManualEntry(e));
         
         const unreconciled = manualEntries.filter(e => {
-            const tx = transactionMap.get(e.transactionId || '');
+            const tx = getLinkedTransaction(e);
             return !tx?.isReconciled;
         });
+
+        const anchorEntries = auditScopeEntries.filter(e => validAnchorIds.has(e.id));
 
         return {
             manualCount: manualEntries.length,
             unreconciledCount: unreconciled.length,
-            totalSpend: manualEntries.reduce((sum, e) => sum + e.amount, 0)
+            totalSpend: manualEntries.reduce((sum, e) => sum + e.amount, 0),
+            anchorTotalSpent: anchorEntries.reduce((sum, e) => sum + e.amount, 0)
         };
-    }, [entries, transactionMap]);
+    }, [entries, transactionMap, validAnchorIds, dateRange, isManualEntry]); // Added isManualEntry to deps
 
     const handleReconcile = async (id: string) => {
         try {
@@ -239,7 +336,7 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
     return (
         <div className="space-y-4">
             {/* Reconciliation Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
                     <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center">
                         <ListFilter className="h-5 w-5 text-blue-500" />
@@ -265,6 +362,15 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                     <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manual Spend</p>
                         <p className="text-xl font-bold text-slate-700">${stats.totalSpend.toFixed(2)}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div className="h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center">
+                        <ShieldCheck className="h-5 w-5 text-indigo-500" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Anchor Total Spent</p>
+                        <p className="text-xl font-bold text-slate-700">${stats.anchorTotalSpent.toFixed(2)}</p>
                     </div>
                 </div>
             </div>
@@ -312,7 +418,7 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                                 <SelectItem value="all">All Types</SelectItem>
                                                 <SelectItem value="Reimbursement">Reimbursement</SelectItem>
                                                 <SelectItem value="Card_Transaction">Card Transaction</SelectItem>
-                                                <SelectItem value="Manual_Entry">Manual Entry</SelectItem>
+                                                <SelectItem value="Fuel_Manual_Entry">Manual Entry</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -371,6 +477,13 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                         </PopoverContent>
                     </Popover>
 
+                    {onDateRangeChange && (
+                        <DatePickerWithRange 
+                            date={dateRange} 
+                            setDate={onDateRangeChange} 
+                        />
+                    )}
+
                     {activeFilterCount > 0 && (
                          <Button variant="ghost" size="icon" onClick={clearFilters}>
                             <X className="h-4 w-4" />
@@ -416,22 +529,48 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                             <div className="flex items-center gap-2" title={entry.type}>
                                                 {getTypeIcon(entry.type)}
                                                 <span className="hidden md:inline text-xs font-medium text-slate-600">
-                                                    {entry.type.replace('_', ' ')}
+                                                    {entry.type === 'Fuel_Manual_Entry' ? 'Manual Entry' : entry.type.replace('_', ' ')}
                                                 </span>
+                                                {/* Step 11.1: Refined Reconciliation Status Indicator - Exclude Anchors */}
+                                                {isManualEntry(entry) && (
+                                                    <div className="flex items-center gap-1 ml-1">
+                                                        {(() => {
+                                                            const tx = getLinkedTransaction(entry);
+                                                            const isReconciled = tx?.isReconciled;
+                                                            return isReconciled ? (
+                                                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 h-4 px-1 text-[8px] font-bold">
+                                                                    RECONCILED
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-100 h-4 px-1 text-[8px] font-bold">
+                                                                    UNRECONCILED
+                                                                </Badge>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                )}
+                                                {entry.metadata?.source && !isManualEntry(entry) && (
+                                                    <Badge variant="outline" className="text-[8px] h-3.5 px-1 bg-slate-50 text-slate-500 border-slate-200 uppercase font-bold tracking-tighter">
+                                                        {entry.metadata.source}
+                                                    </Badge>
+                                                )}
                                                 {validAnchorIds.has(entry.id) ? (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <Badge 
                                                                 variant="secondary" 
                                                                 className={cn(
-                                                                    "cursor-help ml-1 h-5 px-1.5 text-[10px] font-medium border transition-colors",
-                                                                    entry.metadata?.isEdited 
-                                                                        ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
-                                                                        : "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                                                    "cursor-help ml-1 h-5 px-1.5 text-[10px] font-bold border transition-colors uppercase tracking-tight",
+                                                                    entry.metadata?.isHealed
+                                                                        ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                                                        : entry.metadata?.isEdited 
+                                                                            ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
+                                                                            : "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                                                                 )}
                                                             >
-                                                                {entry.metadata?.isEdited && <History className="mr-1 h-2.5 w-2.5" />}
-                                                                {entry.metadata?.isEdited ? "Modified Anchor" : "Verified Anchor"}
+                                                                {entry.metadata?.isHealed && <ShieldCheck className="mr-1 h-2.5 w-2.5" />}
+                                                                {entry.metadata?.isEdited && !entry.metadata?.isHealed && <History className="mr-1 h-2.5 w-2.5" />}
+                                                                {entry.metadata?.isHealed ? "Healed Anchor" : entry.metadata?.isEdited ? "Modified Anchor" : "Verified Anchor"}
                                                             </Badge>
                                                         </TooltipTrigger>
                                                         <TooltipContent className="max-w-xs">
@@ -453,12 +592,18 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                                                     This odometer reading is used as a fixed point for "Stop-to-Stop" fuel efficiency calculations.
                                                                 </p>
                                                                 {entry.metadata?.isEdited && (
-                                                                    <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] space-y-1">
-                                                                        <p className="font-semibold text-amber-800 uppercase tracking-tight">Audit History:</p>
-                                                                        <div className="bg-amber-50/50 p-1.5 rounded border border-amber-100">
-                                                                            <p className="italic text-amber-900 font-medium">"{entry.metadata?.editReason || "Administrative adjustment"}"</p>
+                                                            <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] space-y-2">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <p className="font-semibold text-amber-800 uppercase tracking-tight">Audit History:</p>
+                                                                            <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded">ADMIN_OVERRIDE</span>
                                                                         </div>
-                                                                        <p className="text-slate-400 text-right">Updated: {new Date(entry.metadata?.lastEditedAt).toLocaleString()}</p>
+                                                                        <div className="bg-amber-50/50 p-2 rounded border border-amber-100 shadow-inner">
+                                                                            <p className="italic text-amber-900 font-medium leading-relaxed">"{entry.metadata?.editReason || "This anchor was manually adjusted by an administrator to correct historical inaccuracies or odometer drift."}"</p>
+                                                                        </div>
+                                                                        <div className="flex items-center justify-between text-slate-400 text-[9px] italic">
+                                                                            <span>Action: REPAIRED</span>
+                                                                            <span>Updated: {entry.metadata?.lastEditedAt ? new Date(entry.metadata.lastEditedAt).toLocaleString() : 'N/A'}</span>
+                                                                        </div>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -477,29 +622,16 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                             </div>
                                             {/* Source Metadata */}
                                             {(() => {
-                                                const tx = transactionMap.get(entry.transactionId || '');
-                                                const isManual = tx?.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.source?.includes('Manual');
-                                                const isReconciled = tx?.isReconciled;
+                                                const tx = getLinkedTransaction(entry);
+                                                const isManual = isManualEntry(entry);
                                                 
                                                 if (!isManual) return null;
 
                                                 return (
                                                     <div className="flex items-center gap-1.5 mt-0.5">
                                                         <Badge variant="outline" className="text-[9px] h-4 px-1 border-slate-200 text-slate-400 font-normal">
-                                                            {tx?.metadata?.source || 'Manual'}
+                                                            {tx?.metadata?.source || entry.metadata?.source || 'Manual'}
                                                         </Badge>
-                                                        {isReconciled ? (
-                                                            <ShieldCheck className="h-3 w-3 text-emerald-500" title="Reconciled" />
-                                                        ) : (
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <HelpCircle className="h-3 w-3 text-amber-400 cursor-help" />
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    <p className="text-xs">Unreconciled Manual Entry</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        )}
                                                     </div>
                                                 );
                                             })()}
@@ -521,7 +653,7 @@ export function FuelLogTable({ entries, transactions, onEdit, onDelete, getVehic
                                         <div className="flex flex-col">
                                             <span>${entry.amount.toFixed(2)}</span>
                                             {(() => {
-                                                const tx = transactionMap.get(entry.transactionId || '');
+                                                const tx = getLinkedTransaction(entry);
                                                 if (!tx) return null;
                                                 
                                                 const amountMismatch = Math.abs(entry.amount - Math.abs(tx.amount)) > 0.01;

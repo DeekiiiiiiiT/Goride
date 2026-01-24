@@ -142,7 +142,10 @@ export const settlementService = {
         isEdited: (entryOrTx as any).metadata?.isEdited || existingTx?.metadata?.isEdited,
         lastEditedAt: (entryOrTx as any).metadata?.lastEditedAt || existingTx?.metadata?.lastEditedAt,
         editReason: (entryOrTx as any).metadata?.editReason || existingTx?.metadata?.editReason,
-        syncSource: 'fuel_log'
+        syncSource: 'fuel_log',
+        // Phase 3: Preservation of Manual Origin
+        isManual: true,
+        portal_type: 'Manual_Entry'
       }
     };
 
