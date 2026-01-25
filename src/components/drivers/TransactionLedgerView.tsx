@@ -4,6 +4,7 @@ import { Badge } from "../ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "../ui/tooltip";
 import { format, parseISO } from "date-fns";
 import { FinancialTransaction } from '../../types/data';
+import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { cn } from "../ui/utils";
 import { MoreHorizontal, History } from "lucide-react";
 import { Button } from "../ui/button";
@@ -41,7 +42,7 @@ export function TransactionLedgerView({ transactions }: TransactionLedgerViewPro
                     {sortedTransactions.map((tx) => (
                         <TableRow key={tx.id} className={tx.metadata?.automated ? "bg-emerald-50/30" : ""}>
                             <TableCell className="font-medium text-slate-700">
-                                {format(parseISO(tx.date), "MMM d, yyyy")}
+                                {formatSafeDate(tx.date, tx.time)}
                             </TableCell>
                             <TableCell>
                                 <div className="flex flex-col">

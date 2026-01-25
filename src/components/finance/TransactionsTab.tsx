@@ -23,6 +23,7 @@ import { PayrollTab } from "./PayrollTab";
 import { ReportCenter } from "./reports/ReportCenter";
 import { FleetFinancialReport } from "./reports/FleetFinancialReport"; // Imported
 import { format, isSameDay, subDays, startOfMonth, isBefore, isAfter, startOfDay, endOfDay } from "date-fns";
+import { formatSafeDate, formatSafeTime } from "../../utils/timeUtils";
 import { cn } from "../ui/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { api } from "../../services/api"; // Need API to fetch driver metrics for report
@@ -483,7 +484,7 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                                                 <TableBody>
                                                     {batchTxns.slice(0, 50).map(txn => (
                                                         <TableRow key={txn.id}>
-                                                            <TableCell className="w-[120px]">{format(new Date(txn.date), 'MMM d, yyyy')}</TableCell>
+                                                            <TableCell className="w-[120px]">{formatSafeDate(txn.date)}</TableCell>
                                                             <TableCell>{txn.description}</TableCell>
                                                             <TableCell className={cn("text-right font-mono font-medium", txn.amount >= 0 ? "text-emerald-600" : "text-rose-600")}>
                                                                 {formatCurrency(txn.amount)}
@@ -565,8 +566,8 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
                             </TableCell>
                             <TableCell className="align-top">
                             <div className="flex flex-col">
-                                <span className="font-medium text-slate-900">{format(new Date(txn.date), 'MMM d, yyyy')}</span>
-                                <span className="text-xs text-slate-500">{txn.time}</span>
+                                <span className="font-medium text-slate-900">{formatSafeDate(txn.date)}</span>
+                                <span className="text-xs text-slate-500">{txn.time || 'Timeless'}</span>
                             </div>
                             </TableCell>
                             <TableCell className="align-top">

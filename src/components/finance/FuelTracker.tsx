@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { FinancialTransaction } from "../../types/data";
 import { Fuel, Plus, Gauge, Droplets, TrendingDown } from "lucide-react";
-import { format } from "date-fns";
+import { formatSafeDate, formatSafeTime, parseSafeDate } from "../../utils/timeUtils";
 
 interface FuelTrackerProps {
   transactions: FinancialTransaction[];
@@ -33,7 +33,7 @@ export function FuelTracker({ transactions, onAddTransaction, vehicles }: FuelTr
   });
 
   const fuelTransactions = useMemo(() => 
-    transactions.filter(t => t.category === 'Fuel').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    transactions.filter(t => t.category === 'Fuel').sort((a, b) => parseSafeDate(b.date).getTime() - parseSafeDate(a.date).getTime()),
   [transactions]);
 
   // Analytics
@@ -235,7 +235,7 @@ export function FuelTracker({ transactions, onAddTransaction, vehicles }: FuelTr
                       {fuelTransactions.length > 0 ? (
                           fuelTransactions.slice(0, 10).map(t => (
                               <TableRow key={t.id}>
-                                  <TableCell>{t.date} <span className="text-xs text-slate-400">{t.time}</span></TableCell>
+                                  <TableCell>{formatSafeDate(t.date)} <span className="text-xs text-slate-400">{t.time || 'Timeless'}</span></TableCell>
                                   <TableCell><span className="font-mono text-xs">{t.vehicleId || '-'}</span></TableCell>
                                   <TableCell>{t.odometer?.toLocaleString() || '-'}</TableCell>
                                   <TableCell>{t.vendor || t.description}</TableCell>

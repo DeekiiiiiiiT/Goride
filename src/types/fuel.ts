@@ -13,7 +13,8 @@ export interface FuelCard {
 
 export interface FuelEntry {
   id: string;
-  date: string; // ISO Date
+  date: string; // ISO Date YYYY-MM-DD
+  time?: string; // HH:mm:ss
   cardId?: string;
   vehicleId?: string;
   driverId?: string;

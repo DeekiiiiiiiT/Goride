@@ -34,6 +34,7 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
 import { format, isSameWeek } from "date-fns";
 import { DriverOverview } from './DriverOverview';
+import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 
 export function DriverDashboard() {
@@ -375,7 +376,7 @@ export function DriverDashboard() {
             driverId: user?.id,
             driverName: driverRecord?.name || user?.email,
             date: data.date || new Date().toISOString(),
-            time: format(new Date(), 'HH:mm:ss'),
+            time: undefined,
             type: 'Expense',
             category: 'Maintenance',
             amount: 0, // Placeholder

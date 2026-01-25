@@ -4,6 +4,7 @@ import { FinancialTransaction } from "../../types/data";
 import { PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { SafeResponsiveContainer } from "../ui/SafeResponsiveContainer";
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { parseSafeDate } from '../../utils/timeUtils';
 
 interface ExpensesOverviewProps {
   transactions: FinancialTransaction[];
@@ -20,7 +21,7 @@ export function ExpensesOverview({ transactions }: ExpensesOverviewProps) {
     
     return transactions.filter(t => 
         t.type === 'Expense' && 
-        isWithinInterval(new Date(t.date), { start, end })
+        isWithinInterval(parseSafeDate(t.date), { start, end })
     );
   }, [transactions]);
 

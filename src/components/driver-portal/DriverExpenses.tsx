@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import { cn } from "../ui/utils";
+import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { toast } from "sonner@2.0.3";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
@@ -54,24 +55,22 @@ interface FuelEntryState {
   pricePerLiter?: string;
   isFullTank?: boolean;
   manualReason?: string;
-  volume?: string; // Kept for backward compatibility/internal calculation
+  volume?: string; 
 }
 
-function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
+export function DriverExpenses({ defaultOpen = false }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Wizard State
   const [viewState, setViewState] = useState<ViewState>(defaultOpen ? 'category_select' : 'list');
   const [fuelEntry, setFuelEntry] = useState<FuelEntryState>({});
   const [tankStatus, setTankStatus] = useState<any>(null);
   
   const [isScanning, setIsScanning] = useState(false);
 
-  // Form State (Shared between wizard steps or used in entry_details)
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState<string>(format(new Date(), 'HH:mm'));
   const [amount, setAmount] = useState('');
@@ -81,15 +80,12 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
-  // Parsed Receipt Fields
   const [merchant, setMerchant] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [plaza, setPlaza] = useState('');
   const [lane, setLane] = useState('');
   const [vehicleClass, setVehicleClass] = useState('');
   const [collector, setCollector] = useState('');
-  const [scannedDate, setScannedDate] = useState('');
-  const [scannedTime, setScannedTime] = useState('');
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,16 +108,12 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
     setLane('');
     setVehicleClass('');
     setCollector('');
-    setScannedDate('');
-    setScannedTime('');
     setFuelEntry({});
   };
 
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      // Pass all relevant IDs to filter server-side
-      // We explicitly check user.id and driverRecord fields
       const driverIds = [
           user?.id,
           driverRecord?.id,
@@ -129,8 +121,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
       ].filter(Boolean) as string[];
 
       const allTx = await api.getTransactions(driverIds);
-      
-      // Filter for only Expenses (server handles the ID filtering now)
       const myTx = allTx.filter((t: FinancialTransaction) => 
         t.type === 'Expense'
       );
@@ -150,7 +140,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
       reader.onload = (e) => setReceiptPreview(e.target?.result as string);
       reader.readAsDataURL(file);
 
-      // AI Scan
       setIsScanning(true);
       toast.info("Analyzing receipt...", { duration: 2000 });
       
@@ -161,16 +150,11 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
            if (data.amount) setAmount(data.amount.toString());
            
            if (data.date) {
-               // Handle Date - Parse as local date to avoid timezone shifts
-               // "YYYY-MM-DD" -> [YYYY, MM, DD]
                const parts = data.date.split('-');
                if (parts.length === 3) {
                    const y = parseInt(parts[0]);
-                   const m = parseInt(parts[1]) - 1; // Month is 0-indexed
+                   const m = parseInt(parts[1]) - 1; 
                    const d = parseInt(parts[2]);
-                   
-                   // Basic validation to prevent weird years (e.g. 1900) if format is DD-MM-YYYY
-                   // Assume year must be > 2000
                    if (y > 2000) {
                         const localDate = new Date(y, m, d);
                         if (isValid(localDate)) {
@@ -181,16 +165,12 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
            }
 
            if (data.time) {
-                // Handle Time - Expecting HH:MM or HH:MM:SS
-                // We just need HH:MM for the input
                 let timeStr = data.time;
                 if (timeStr.length > 5) {
                     timeStr = timeStr.substring(0, 5);
                 }
                 setTime(timeStr);
            } else if (!data.time && data.date) {
-                // If no time is found but date is found, default to 12:00 PM to avoid confusion
-                // or keep current time? Let's default to noon if strictly scanning a receipt.
                 setTime("12:00");
            }
            
@@ -202,17 +182,13 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                else setCategory('Other Expenses');
            }
            
-           // Populate Read-Only Fields
            setMerchant(data.merchant || '');
            setPlaza(data.plaza || '');
            setLane(data.lane || '');
            setVehicleClass(data.vehicleClass || '');
            setReferenceNumber(data.receiptNumber || '');
            setCollector(data.collector || '');
-           setScannedDate(data.date || '');
-           setScannedTime(data.time || '');
            
-           // Any extra notes from AI
            if (data.notes) setNotes(data.notes);
            
            toast.success("Receipt details extracted!");
@@ -234,35 +210,27 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
     const isGasCard = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
     const isFuel = category === 'Fuel';
 
-    // 1. Calculate Amount
     let finalAmount = 0;
     if (isFuel) {
         if (isGasCard) {
-            finalAmount = 0; // Gas card transactions are tracked but not reimbursed directly
+            finalAmount = 0; 
         } else {
-            // Cash fuel is an expense (negative)
             finalAmount = -Math.abs(parseFloat(amount || '0'));
         }
     } else {
-        // Other expenses are negative
         finalAmount = -Math.abs(parseFloat(amount || '0'));
     }
 
-    // 2. Determine Payment Method String
-    let methodStr = 'Cash'; // Default
+    let methodStr = 'Cash'; 
     if (isFuel) {
         methodStr = isGasCard ? 'Gas Card' : 'Cash';
     }
 
-    // 3. Determine Odometer
-    // For Fuel, we strictly use the scanned value. For others, optional manual entry.
     const finalOdometer = isFuel ? fuelEntry.odometerReading : (odometer ? parseInt(odometer) : undefined);
 
-    // 4. Construct Metadata
     const fuelPrice = fuelEntry.pricePerLiter ? parseFloat(fuelEntry.pricePerLiter) : undefined;
     const rawAmount = Math.abs(parseFloat(amount || '0'));
     
-    // Auto-calculate volume if price is provided, otherwise fallback to existing volume (if any)
     let calculatedVolume = fuelEntry.volume ? parseFloat(fuelEntry.volume) : undefined;
     if (isFuel && !isGasCard && fuelPrice && fuelPrice > 0) {
         calculatedVolume = Number((rawAmount / fuelPrice).toFixed(2));
@@ -273,7 +241,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
         lane,
         vehicleClass,
         collector,
-        // Fuel Specifics
         fuelVolume: calculatedVolume,
         pricePerLiter: fuelPrice,
         isFullTank: (isFuel) ? fuelEntry.isFullTank : undefined,
@@ -293,8 +260,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
   };
 
   const parseLocalDate = (dateStr: string): Date => {
-    // Parse YYYY-MM-DD manually to create a local Date at 00:00:00
-    // new Date("YYYY-MM-DD") creates UTC midnight, which shifts the date when displayed locally
     const [year, month, day] = dateStr.split('-').map(Number);
     return new Date(year, month - 1, day);
   };
@@ -304,7 +269,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
     
     const isGasCard = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
     
-    // Validation
     if (!category || !date) {
       toast.error("Please fill in all required fields");
       return;
@@ -315,7 +279,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
         return;
     }
 
-    // specific validation for Cash Fuel
     if (category === 'Fuel' && !isGasCard) {
         const price = parseFloat(fuelEntry.pricePerLiter || '0');
         if (!fuelEntry.pricePerLiter || isNaN(price) || price <= 0) {
@@ -323,8 +286,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
              return;
         }
         
-        // Basic Sanity Check: Price shouldn't be suspiciously low (e.g. $0.10)
-        // Adjusting threshold to 0.50 as a reasonable minimum for most regions
         if (price < 0.50) {
              toast.error("Fuel price seems too low. Please verify.");
              return;
@@ -352,7 +313,7 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
         vehicleId: driverRecord?.assignedVehicleId,
         vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (driverRecord?.assignedVehicleId ? 'Assigned Vehicle' : undefined),
         date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-        time: time ? `${time}:00` : (isValid(date) ? format(date, 'HH:mm:ss') : format(new Date(), 'HH:mm:ss')),
+        time: time ? `${time}:00` : undefined,
         type: 'Expense',
         category: category as TransactionCategory,
         description: notes || `${category} Expense - ${merchant || 'Unknown'}`,
@@ -363,7 +324,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
       };
 
       const newTx = constructTransactionPayload(baseTx, receiptUrl, odometerProofUrl);
-
       const savedTx = await api.saveTransaction(newTx);
       
       if (savedTx.status === 'Approved') {
@@ -412,7 +372,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
     setCategory(cat);
     if (cat === 'Fuel') {
       setViewState('odometer_scan');
-      // Fetch tank status early
       if (driverRecord?.assignedVehicleId) {
         api.getVehicleTankStatus(driverRecord.assignedVehicleId)
           .then(setTankStatus)
@@ -437,14 +396,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
   const handleMethodSelect = (method: 'gas_card' | 'personal_cash') => {
     setFuelEntry(prev => ({ ...prev, paymentMethod: method }));
     setViewState('entry_details');
-  };
-
-  const handleClearReceipt = () => {
-    setReceiptFile(null);
-    setReceiptPreview(null);
-    if (cameraInputRef.current) {
-        cameraInputRef.current.value = "";
-    }
   };
 
   const goBack = () => {
@@ -517,18 +468,7 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                                 <div className="flex items-center justify-between text-xs text-slate-500">
                                    <div className="flex items-center gap-2">
                                        <span>
-                                       {(() => {
-                                           try {
-                                               const timeStr = tx.time || '12:00:00';
-                                               const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-                                               const localDate = new Date(`${tx.date}T${cleanTime}`);
-                                               const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
-                                               
-                                               return format(validDate, 'MMM d, yyyy');
-                                           } catch (e) {
-                                               return format(new Date(tx.date), 'MMM d, yyyy');
-                                           }
-                                       })()}
+                                           {formatSafeDate(tx.date, tx.time)}
                                        </span>
                                        {tx.odometer && <span>• {tx.odometer} km</span>}
                                    </div>
@@ -631,8 +571,6 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                 />
             ) : (
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              {/* Category-specific UI will be implemented in Phases 6 & 7 */}
-              {/* For now, just a placeholder to complete Phase 3 */}
               <div className="space-y-4">
                 <div className="space-y-2">
                     <Label>{category === 'Fuel' ? 'Gas Station name' : 'Merchant / Vendor'}</Label>
@@ -677,186 +615,42 @@ function ExpenseLogger({ defaultOpen = false }: ExpenseLoggerProps) {
                         isFullTank={fuelEntry.isFullTank || false}
                         onFullTankChange={(c) => setFuelEntry(prev => ({ ...prev, isFullTank: c }))}
                         currentVolume={(() => {
-                            const p = parseFloat(fuelEntry.pricePerLiter || '0');
-                            const a = parseFloat(amount || '0');
-                            return (p > 0 && a > 0) ? Number((a / p).toFixed(2)) : 0;
+                            const amt = parseFloat(amount || '0');
+                            const price = parseFloat(fuelEntry.pricePerLiter || '0');
+                            if (amt > 0 && price > 0) return (amt / price).toFixed(2);
+                            return '0.00';
                         })()}
-                        tankStatus={tankStatus}
                       />
                   </div>
                 )}
 
-                {category === 'Tolls' && (
-                   <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Amount ($)</Label>
-                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Plaza / Location</Label>
-                        <Input 
-                            placeholder="e.g. 407 ETR / Exit 42" 
-                            value={plaza} 
-                            onChange={e => setPlaza(e.target.value)} 
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                             <Label>Lane</Label>
-                             <Input placeholder="e.g. 4" value={lane} onChange={e => setLane(e.target.value)} />
-                          </div>
-                          <div className="space-y-2">
-                             <Label>Collector</Label>
-                             <Input placeholder="ID #" value={collector} onChange={e => setCollector(e.target.value)} />
-                          </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>Vehicle Class</Label>
-                            <Input placeholder="e.g. Class 2" value={vehicleClass} onChange={e => setVehicleClass(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Reference Number</Label>
-                            <Input placeholder="Transaction ID" value={referenceNumber} onChange={e => setReferenceNumber(e.target.value)} />
-                        </div>
-                      </div>
-                   </div>
-                )}
-
-                {category !== 'Fuel' && category !== 'Tolls' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Amount ($)</Label>
-                      <Input type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
-                    </div>
-                    {category === 'Maintenance' && (
-                      <div className="space-y-2">
-                        <Label>Odometer (km)</Label>
-                        <Input 
-                            type="number" 
-                            inputMode="decimal"
-                            placeholder="Current reading" 
-                            value={odometer}
-                            onChange={e => setOdometer(e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-
                 {category !== 'Fuel' && (
                   <div className="space-y-2">
-                    <Label>Notes</Label>
-                    <Textarea 
-                      placeholder="Add details about this expense..."
-                      value={notes}
-                      onChange={e => setNotes(e.target.value)}
-                    />
+                    <Label>Amount ($)</Label>
+                    <Input type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
                   </div>
                 )}
 
-                {category !== 'Fuel' && (
-                  <ReceiptUploader 
-                      onFileSelect={handleFileChange}
-                      onClear={handleClearReceipt}
-                      previewUrl={receiptPreview}
-                      isScanning={isScanning}
-                      fileName={receiptFile?.name}
-                  />
-                )}
+                <ReceiptUploader 
+                  preview={receiptPreview}
+                  isScanning={isScanning}
+                  onFileChange={handleFileChange}
+                />
+
+                <div className="space-y-2">
+                  <Label>Notes (Optional)</Label>
+                  <Textarea placeholder="Add details..." value={notes} onChange={e => setNotes(e.target.value)} />
+                </div>
               </div>
 
-              <Button className="w-full" size="lg" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card' ? 'Submit Log' : 'Submit Expense'}
+              <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Expense"}
               </Button>
             </form>
             )
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-export function DriverExpenses() {
-  const [currentView, setCurrentView] = useState('home');
-  const [history, setHistory] = useState<string[]>(['home']);
-
-  const navigateTo = (view: string) => {
-    setCurrentView(view);
-    setHistory(prev => [...prev, view]);
-  };
-
-  const handleBack = () => {
-    if (history.length > 1) {
-      const newHistory = [...history];
-      newHistory.pop(); // Remove current
-      const previous = newHistory[newHistory.length - 1];
-      setHistory(newHistory);
-      setCurrentView(previous);
-    }
-  };
-
-  // Determine Title & Header State
-  let title = "GoRide";
-  let showBack = currentView !== 'home';
-
-  if (currentView === 'menu-reimbursements') title = "Reimbursements";
-  else if (currentView === 'feature-expenses') title = "Expenses";
-  else if (currentView === 'feature-fuel') title = "Fuel & MPG";
-  else if (currentView === 'claim-tolls') title = "Toll Refunds";
-  else if (currentView === 'claim-wait') title = "Wait Time Disputes";
-  else if (currentView === 'claim-cleaning') title = "Cleaning Fees";
-  else if (currentView === 'claim-history' || currentView === 'menu-history') title = "History";
-
-  return (
-    <div className="flex flex-col min-h-[calc(100vh-8rem)]">
-      
-      {/* Dynamic Header - Only show on sub-pages */}
-      {currentView !== 'home' && (
-        <DriverHeader 
-          title={title}
-          onBack={handleBack}
-          showProfile={false}
-        />
-      )}
-
-      <div className="flex-1">
-        {currentView === 'home' && <PortalHome onNavigate={navigateTo} />}
-        
-        {currentView === 'menu-reimbursements' && <ReimbursementMenu onNavigate={navigateTo} />}
-        
-        {currentView === 'feature-expenses' && (
-          <div className="p-4">
-            <ExpenseLogger defaultOpen={true} />
-          </div>
-        )}
-
-        {currentView === 'feature-fuel' && (
-           <div className="p-4">
-             <DriverFuelStats />
-           </div>
-        )}
-
-        {/* Claims Deep Linking - Passed as "defaultTab" props in Phase 5 */}
-        {(currentView === 'claim-tolls' || currentView === 'claim-wait' || currentView === 'claim-cleaning' || currentView === 'claim-history' || currentView === 'menu-history') && (
-           <div className="p-4">
-             <DriverClaims 
-               hideTabs={true}
-               defaultTab={
-                 currentView === 'claim-tolls' ? 'tolls' : 
-                 currentView === 'claim-wait' ? 'wait' : 
-                 currentView === 'claim-cleaning' ? 'cleaning' : 
-                 currentView === 'claim-history' || currentView === 'menu-history' ? 'history' : 
-                 'tolls'
-               }
-             /> 
-           </div>
-        )}
-
-      </div>
     </div>
   );
 }

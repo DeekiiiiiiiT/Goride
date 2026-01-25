@@ -16,7 +16,7 @@ export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled
 export interface FinancialTransaction {
   id: string; // Transaction UUID
   date: string; // ISO Date YYYY-MM-DD
-  time: string; // HH:mm:ss
+  time?: string; // HH:mm:ss
   driverId?: string; // Optional if not driver related
   driverName?: string;
   vehicleId?: string; // Optional if not vehicle related

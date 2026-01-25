@@ -141,7 +141,7 @@ export function LogCashPaymentModal({
       await onSave({
         id: initialTransaction?.id,
         amount: parseFloat(amount),
-        date: new Date(date).toISOString(),
+        date: date, // Keep as YYYY-MM-DD string to avoid UTC shift in constructor
         notes,
         paymentMethod,
         referenceNumber: referenceNumber || undefined,

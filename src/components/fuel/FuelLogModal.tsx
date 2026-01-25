@@ -23,7 +23,7 @@ interface FuelLogModalProps {
 
 export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, drivers, cards }: FuelLogModalProps) {
     const [activeTab, setActiveTab] = useState('single');
-    const [time, setTime] = useState('12:00');
+    const [time, setTime] = useState<string>('');
 
     const stations = [
         "TotalEnergies",
@@ -106,7 +106,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 }
             } catch (e) {
                 console.error("Error parsing date for time extraction", e);
-                setTime('12:00');
+                setTime('');
             }
         } else {
             // Reset to defaults when opening fresh
@@ -124,11 +124,8 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 cardId: '',
             });
 
-            // Set default time to current time
-            const now = new Date();
-            const hours = now.getHours().toString().padStart(2, '0');
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            setTime(`${hours}:${minutes}`);
+            // Set default time to empty for manual entries
+            setTime('');
         }
     }, [initialData, isOpen]);
 
@@ -206,20 +203,25 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
 
         // Combine Date and Time
         let fullDate = formData.date;
-        try {
-            const timePart = time || '00:00';
-            const dateObj = new Date(`${formData.date}T${timePart}`);
-            if (!isNaN(dateObj.getTime())) {
-                fullDate = dateObj.toISOString();
+        let finalTime = undefined;
+
+        if (time) {
+            try {
+                const dateObj = new Date(`${formData.date}T${time}`);
+                if (!isNaN(dateObj.getTime())) {
+                    fullDate = dateObj.toISOString().split('T')[0];
+                    finalTime = `${time}:00`;
+                }
+            } catch (e) {
+                console.error("Error constructing date time", e);
             }
-        } catch (e) {
-            console.error("Error constructing date time", e);
         }
 
         const entry: FuelEntry = {
             ...initialData,
             id: initialData?.id || crypto.randomUUID(),
             date: fullDate,
+            time: finalTime,
             type: formData.type === 'Manual_Entry' ? 'Fuel_Manual_Entry' : formData.type,
             amount: Number(formData.amount),
             liters: Number(formData.liters),

@@ -122,3 +122,68 @@ export function calculateDaysRemaining(dateStr: string, windowDays: number = 10)
       return { daysRemaining: 0, status: 'expired', isUrgent: false };
   }
 }
+
+/**
+ * Robustly formats a date for display without UTC shifts.
+ * If only date is provided (YYYY-MM-DD), it treats it as local time.
+ */
+export function formatSafeDate(dateStr: string, timeStr?: string | null, formatStr: string = 'MMM dd, yyyy'): string {
+  if (!dateStr) return 'N/A';
+  
+  try {
+    // 1. Full ISO String (with T) - likely has timezone data
+    if (dateStr.includes('T')) {
+      return format(parseISO(dateStr), formatStr);
+    }
+
+    // 2. Separate Date (YYYY-MM-DD) and optional Time (HH:mm:ss)
+    const [year, month, day] = dateStr.split('-').map(Number);
+    
+    if (timeStr) {
+      const [hour, min, sec] = timeStr.split(':').map(Number);
+      // Create local date object (month is 0-indexed)
+      const localDate = new Date(year, month - 1, day, hour || 0, min || 0, sec || 0);
+      return format(localDate, formatStr + (formatStr.includes('HH') ? '' : ' HH:mm'));
+    }
+
+    // 3. Just YYYY-MM-DD - create local midnight
+    const localDate = new Date(year, month - 1, day);
+    return format(localDate, formatStr);
+  } catch (e) {
+    console.error("formatSafeDate error:", e);
+    return dateStr;
+  }
+}
+
+/**
+ * Returns a human-friendly "Time only" string if available, or "Timeless"
+ */
+export function formatSafeTime(timeStr?: string | null): string {
+    if (!timeStr) return 'Timeless';
+    
+    try {
+        const [h, m] = timeStr.split(':');
+        const hour = parseInt(h);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour % 12 || 12;
+        return `${displayHour}:${m} ${ampm}`;
+    } catch (e) {
+        return timeStr;
+    }
+}
+
+/**
+ * Parses a YYYY-MM-DD string into a local Date object.
+ * This avoids the default new Date("2023-10-25") behavior which creates a UTC midnight.
+ */
+export function parseSafeDate(dateStr: string): Date {
+    if (!dateStr) return new Date();
+    if (dateStr.includes('T')) return new Date(dateStr);
+    
+    try {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    } catch (e) {
+        return new Date(dateStr);
+    }
+}

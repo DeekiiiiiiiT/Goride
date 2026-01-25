@@ -108,18 +108,50 @@ export const settlementService = {
 
     if (creditAmount <= 0) return null;
 
-    // 5. Check for existing settlement transaction to avoid duplicates during edits
+    // 5. Phase 4: Automated Settlement Validation & Audit
+    let auditFlags: string[] = [];
+    let reconciliationStatus: 'Verified' | 'Flagged' | 'Observing' = 'Verified';
+
+    // Validation: Suspicious Fuel Volume
+    if (liters > 100) {
+        auditFlags.push("High volume (>100L) detected");
+        reconciliationStatus = 'Flagged';
+    }
+
+    // Validation: Suspicious Price Per Liter (assuming USD/standard range)
+    const pPl = amount / (liters || 1);
+    if (pPl > 5 || pPl < 0.5) {
+        auditFlags.push(`Suspicious price per liter: $${pPl.toFixed(2)}`);
+        reconciliationStatus = 'Flagged';
+    }
+
+    // Validation: Duplicate Check (Same driver, vehicle, and date/time/amount)
+    const isDuplicate = allTransactions.some(t => 
+        t.driverId === driverId && 
+        t.vehicleId === vehicleId && 
+        t.date === date.split('T')[0] && 
+        Math.abs(t.amount) === amount && 
+        t.id !== entryId && 
+        t.metadata?.sourceId !== entryId
+    );
+
+    if (isDuplicate) {
+        auditFlags.push("Possible duplicate transaction detected");
+        reconciliationStatus = 'Flagged';
+    }
+
+    // 6. Check for existing settlement transaction to avoid duplicates during edits
     // IMPORTANT: The settlement is a SEPARATE transaction from the expense.
     // If we're passed a transaction, we shouldn't use its ID as our settlement ID.
     const settlementTxId = (entryOrTx as any).metadata?.settlementTxId || 
                           allTransactions.find(t => t.metadata?.sourceId === entryId && t.type === 'Reimbursement')?.id || 
                           crypto.randomUUID();
 
-    // 6. Create or Update the Financial Transaction (Credit)
+    // 7. Create or Update the Financial Transaction (Credit)
     const settlementTx: Partial<FinancialTransaction> = {
       id: settlementTxId,
       date: date.split('T')[0],
-      time: date.includes('T') ? date.split('T')[1].substring(0, 8) : format(new Date(), 'HH:mm:ss'),
+      time: date.includes('T') ? date.split('T')[1].substring(0, 8) : (entryOrTx as any).time || undefined,
       driverId: driverId,
       driverName: driver?.name || 'Unknown Driver',
       vehicleId: vehicleId,
@@ -129,9 +161,9 @@ export const settlementService = {
       merchant: location,
       amount: Number(creditAmount.toFixed(2)), 
       paymentMethod: 'Cash',
-      status: 'Approved', 
+      status: reconciliationStatus === 'Flagged' ? 'Pending' : 'Approved', 
       quantity: liters,
-      isReconciled: true,
+      isReconciled: reconciliationStatus === 'Verified',
       metadata: {
         sourceId: entryId,
         settlementType: 'RideShare_Cash_Offset',
@@ -139,6 +171,8 @@ export const settlementService = {
         totalCost: amount,
         coveragePercent: (creditAmount / amount) * 100,
         automated: true,
+        auditFlags: auditFlags.length > 0 ? auditFlags : undefined,
+        reconciliationStatus: reconciliationStatus,
         // Carry over audit flags if it's an update
         isEdited: (entryOrTx as any).metadata?.isEdited,
         lastEditedAt: (entryOrTx as any).metadata?.lastEditedAt,
@@ -173,7 +207,7 @@ export const settlementService = {
     const deductionTx: Partial<FinancialTransaction> = {
       id: crypto.randomUUID(),
       date: bucket.endDate.split('T')[0],
-      time: bucket.endDate.includes('T') ? bucket.endDate.split('T')[1].substring(0, 8) : format(new Date(), 'HH:mm:ss'),
+      time: bucket.endDate.includes('T') ? bucket.endDate.split('T')[1].substring(0, 8) : undefined,
       driverId: driverId,
       vehicleId: bucket.vehicleId,
       type: 'Expense',

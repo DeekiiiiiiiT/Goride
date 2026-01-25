@@ -7,6 +7,7 @@ import { api } from "../../services/api";
 import { tierService } from "../../services/tierService";
 import { toast } from "sonner@2.0.3";
 import { format } from "date-fns";
+import { formatSafeDate, formatSafeTime } from "../../utils/timeUtils";
 import {
   Dialog,
   DialogContent,
@@ -132,7 +133,7 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
         const reimbursementTx: Partial<FinancialTransaction> = {
           id: crypto.randomUUID(),
           date: new Date().toISOString().split('T')[0],
-          time: format(new Date(), 'HH:mm:ss'),
+          time: selectedTx.time || undefined,
           driverId: selectedTx.driverId,
           driverName: selectedTx.driverName,
           type: 'Adjustment',
@@ -191,7 +192,7 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
                     <div>
                         <h4 className="font-semibold text-slate-900">{tx.category} Request</h4>
                         <p className="text-sm text-slate-500">
-                            {tx.driverName} • {format(new Date(tx.date), 'MMM d')}
+                            {tx.driverName} • {formatSafeDate(tx.date, null, 'MMM d')}
                         </p>
                     </div>
                     <div className="text-right">

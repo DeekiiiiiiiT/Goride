@@ -41,6 +41,7 @@ import { format, isWithinInterval, startOfDay, endOfDay, parseISO } from 'date-f
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { cn } from '../ui/utils';
 import { isFuelDebit, isFuelCredit, findBucketForEntry } from '../../utils/fuelGroupingUtils';
+import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { 
@@ -82,33 +83,6 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
 }) => {
   const [expandedBuckets, setExpandedBuckets] = useState<Record<string, boolean>>({});
 
-  // Helper to format date and time consistently without UTC shifts
-  const formatDateTime = (dateStr: string, timeStr?: string) => {
-    if (!dateStr) return 'N/A';
-    
-    try {
-      // If it's a full ISO string with 'T', it likely has time data
-      if (dateStr.includes('T')) {
-        return format(new Date(dateStr), 'MMM dd, yyyy HH:mm');
-      }
-
-      // If we have separate date (YYYY-MM-DD) and time (HH:mm:ss)
-      if (timeStr) {
-        const [year, month, day] = dateStr.split('-').map(Number);
-        const [hour, min] = timeStr.split(':').map(Number);
-        // Create local date object
-        const date = new Date(year, month - 1, day, hour || 0, min || 0);
-        return format(date, 'MMM dd, yyyy HH:mm');
-      }
-
-      // Just a date - display date only to avoid misleading "19:00" from timezone shifts
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      return format(date, 'MMM dd, yyyy');
-    } catch (e) {
-      return dateStr;
-    }
-  };
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>({
     start: null,
@@ -600,7 +574,7 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
                     {group.entries.map((entry) => (
                       <TableRow key={entry.id} className="bg-white/50 border-l-4 border-l-slate-100">
                         <TableCell className="pl-6 md:pl-8 text-[10px] md:text-xs text-slate-500 whitespace-nowrap">
-                          {formatDateTime(entry.date, (entry as any).time)}
+                          {formatSafeDate(entry.date, entry.time)}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
@@ -625,7 +599,10 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          {renderStatusBadge(entry.reconciliationStatus)}
+                          {renderStatusBadge(
+                            entry.reconciliationStatus, 
+                            entry.metadata?.auditFlags?.join(', ') || entry.metadata?.reason
+                          )}
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-red-600">
                           -${FuelCalculationService.formatCurrency(entry.amount).replace('$', '')}
@@ -637,7 +614,7 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
                     {group.transactions.map((tx) => (
                       <TableRow key={tx.id} className="bg-white/50 border-l-4 border-l-slate-100 hover:bg-slate-50/50 transition-colors">
                         <TableCell className="pl-6 md:pl-8 text-[10px] md:text-xs text-slate-500 whitespace-nowrap">
-                          {formatDateTime(tx.date, tx.time)}
+                          {formatSafeDate(tx.date, tx.time)}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
@@ -648,9 +625,11 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          {tx.metadata?.automated ? (
+                          {tx.metadata?.reconciliationStatus === 'Flagged' ? (
+                             renderStatusBadge('Flagged', tx.metadata?.auditFlags?.join(', '))
+                          ) : tx.metadata?.automated ? (
                             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 gap-1"><Zap className="w-3 h-3" /> Auto</Badge>
-                          ) : renderStatusBadge(tx.status)}
+                          ) : renderStatusBadge(tx.status, tx.metadata?.approvalReason)}
                         </TableCell>
                         <TableCell className="text-right">
                           {isFuelDebit(tx) ? (

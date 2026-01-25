@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { FinancialTransaction } from "../../types/data";
 import { Wrench, Plus, AlertTriangle, CalendarClock } from "lucide-react";
-import { format } from "date-fns";
+import { formatSafeDate, parseSafeDate } from "../../utils/timeUtils";
 
 interface MaintenanceTrackerProps {
   transactions: FinancialTransaction[];
@@ -33,7 +33,7 @@ export function MaintenanceTracker({ transactions, onAddTransaction, vehicles }:
   });
 
   const maintenanceTxns = useMemo(() => 
-    transactions.filter(t => t.category === 'Maintenance').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    transactions.filter(t => t.category === 'Maintenance').sort((a, b) => parseSafeDate(b.date).getTime() - parseSafeDate(a.date).getTime()),
   [transactions]);
 
   const stats = useMemo(() => {
@@ -218,7 +218,7 @@ export function MaintenanceTracker({ transactions, onAddTransaction, vehicles }:
                       {maintenanceTxns.length > 0 ? (
                           maintenanceTxns.slice(0, 10).map(t => (
                               <TableRow key={t.id}>
-                                  <TableCell>{t.date}</TableCell>
+                                  <TableCell>{formatSafeDate(t.date)}</TableCell>
                                   <TableCell><span className="font-mono text-xs">{t.vehicleId || '-'}</span></TableCell>
                                   <TableCell>{t.subType}</TableCell>
                                   <TableCell>{t.vendor}</TableCell>
