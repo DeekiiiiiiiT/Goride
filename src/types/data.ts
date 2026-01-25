@@ -444,6 +444,10 @@ export interface FinancialTransaction {
   processedDate?: string;
   isReconciled: boolean;
   
+  // Phase 1 Refactor: Fuel Anchor Tracking
+  anchorPeriodId?: string; // Links this transaction to a specific fuel window
+  reconciliationStatus?: 'Pending' | 'Verified' | 'Flagged' | 'Observing' | 'Archived';
+  
   // Expense Specific Fields
   odometer?: number;
   odometerProofUrl?: string; // Phase 1: Fuel Log Enhancement
@@ -470,6 +474,11 @@ export interface FinancialTransaction {
     odometerProofUrl?: string;
     approvalReason?: string;
     approvedAt?: string;
+
+    // Phase 1: Ledger Accounting
+    isDebit?: boolean;
+    isCredit?: boolean;
+    
     [key: string]: any;
   };
 }

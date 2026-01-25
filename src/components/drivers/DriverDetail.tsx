@@ -90,7 +90,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
-import { TransactionLedgerView } from './TransactionLedgerView';
+import { FuelLedgerView } from './FuelLedgerView';
+import { FuelEntry, OdometerBucket } from '../../types/fuel';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
@@ -174,6 +175,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [ledgerView, setLedgerView] = useState<'tolls' | 'payments' | 'fuel'>('tolls');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [claims, setClaims] = useState<any[]>([]);
+  const [fuelEntries, setFuelEntries] = useState<FuelEntry[]>([]);
+  const [odometerBuckets, setOdometerBuckets] = useState<OdometerBucket[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
   // Phase 1: Date Range & Data Context Filtering
@@ -307,28 +310,18 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const type = (t.type || '').toLowerCase();
       const isAutomated = t.metadata?.automated === true;
       
-      // Phase 3: Financial Settlement Logic
-      // We only show items that have a direct financial impact and are part of the settlement flow.
-      // Raw "Fuel" logs (receipts) are operational noise unless they are being credited/debited.
-      // We prioritize "Fuel Reimbursement" and "Automated Settlements".
-      const isFuelReimbursement = cat === 'fuel reimbursement' || type === 'reimbursement';
-      const isFuelSettlement = desc.includes('settlement') || isAutomated;
-      const isFuelExpense = cat === 'fuel' || desc.includes('fuel expense');
-
-      // If it's an automated settlement, it's always included
-      if (isAutomated || isFuelSettlement || isFuelReimbursement) return true;
-
-      // For raw fuel expenses, only show if they are NOT redundant with a settlement
-      // In practice, if the user wants "only settled and split", we filter out the raw logs
-      // but keep them if they are the ONLY record (not yet settled).
-      // However, to keep the ledger clean as requested:
-      return isFuelReimbursement || (isFuelExpense && isAutomated);
+      // Phase 7 Update: Include ALL fuel-related transactions for the Ledger
+      // The FuelLedgerView handles the grouping and display logic.
+      const isFuel = cat.includes('fuel') || desc.includes('fuel') || type.includes('fuel');
+      
+      return isFuel || isAutomated;
   }), [dateFilteredTransactions]);
 
   // Calculate Toll Stats for new Metric Card
-  const { disputeCharges, netTollReimbursement } = useMemo(() => {
+  const { disputeCharges, netTollReimbursement, fuelSpend } = useMemo(() => {
       let disputes = 0;
       let net = 0;
+      let fuel = 0;
 
       // Use ACTIVE transactions for financial calculations
       cashTollTransactions.active.forEach(t => {
@@ -338,10 +331,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           if (classification === 'Resolved_Debit') {
               // This is a Charge to the driver (Reduce Reimbursement)
               net -= amount;
-              // We might track "disputes" as these charges? 
-              // The original logic tracked "Unresolved Debits" as disputes.
-              // But we are now Filtering OUT unresolved debits (Pending_Dispute).
-              // So 'disputes' metric might be redundant or should represent "Charged Back".
               disputes += amount; 
           } else if (classification === 'Standard_Credit' || classification === 'Resolved_Credit') {
               // This is a Reimbursement (Increase Net)
@@ -349,8 +338,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           }
       });
 
-      return { disputeCharges: disputes, netTollReimbursement: net };
-  }, [cashTollTransactions]);
+      // Sum Fuel Spend for the period (Phase 7)
+      fuelTransactions.forEach(t => {
+          if (t.amount < 0) fuel += Math.abs(t.amount);
+      });
+
+      return { disputeCharges: disputes, netTollReimbursement: net, fuelSpend: fuel };
+  }, [cashTollTransactions, fuelTransactions]);
 
   const [filterPlatform, setFilterPlatform] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
@@ -384,9 +378,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
               driver?.inDriveDriverId
           ].filter(Boolean) as string[];
 
-          const [driverTx, allClaims] = await Promise.all([
+          const [driverTx, allClaims, allFuelEntries, allBuckets] = await Promise.all([
               api.getTransactions(driverIds),
-              api.getClaims() // Fetch ALL claims to ensure we find links even if driverId filter is tricky
+              api.getClaims(), // Fetch ALL claims to ensure we find links even if driverId filter is tricky
+              api.getFuelEntries ? api.getFuelEntries(driverIds) : Promise.resolve([]),
+              api.getOdometerBuckets ? api.getOdometerBuckets(driverIds) : Promise.resolve([])
           ]);
 
           // Server-side filtering is now enabled for getTransactions(driverIds)
@@ -394,6 +390,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           
           // Filter claims locally if needed, or just use all for linking (safer)
           setClaims(Array.isArray(allClaims) ? allClaims : []);
+
+          setFuelEntries(Array.isArray(allFuelEntries) ? allFuelEntries : []);
+          setOdometerBuckets(Array.isArray(allBuckets) ? allBuckets : []);
       } catch (e) {
           console.error("Failed to load data", e);
           // Ensure we don't crash if API fails
@@ -2371,8 +2370,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                         <div className="flex items-center justify-between">
                                             <p className="text-sm text-slate-500">History of fuel settlements and automated credits.</p>
                                         </div>
-                                        <TransactionLedgerView 
+                                        <FuelLedgerView 
                                             transactions={fuelTransactions}
+                                            fuelEntries={fuelEntries}
+                                            buckets={odometerBuckets}
                                         />
                                     </div>
                                 )}
@@ -2438,9 +2439,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     icon={<MapPin className="h-4 w-4 text-slate-500" />}
                  />
                  <MetricCard 
-                    title="Total Fuel Used"
-                    value="Coming Soon"
-                    subtext="Total fuel used for the period"
+                    title="Total Fuel Spend"
+                    value={`$${fuelSpend.toFixed(2)}`}
+                    subtext="Total out-of-pocket & card fuel"
                     icon={<Fuel className="h-4 w-4 text-slate-500" />}
                  />
              </div>

@@ -477,7 +477,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
 
                 const transactionData = {
                     id: entry.id,
-                    date: entry.date || commonData.date || getLocalDateString(),
+                    date: commonData.date || entry.date || getLocalDateString(),
                     time: entry.time || '',
                     driverId: commonData.driverId,
                     driverName: driver?.name || 'Unknown Driver',
@@ -1028,9 +1028,15 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 <DialogFooter>
                     <div className="flex items-center justify-between w-full">
                         <Button variant="ghost" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-                        <Button onClick={handleSubmit} disabled={isSubmitting} className="min-w-[120px]">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                            {isSubmitting ? "Submitting..." : "Save Expense"}
+                        <Button onClick={handleSubmit} disabled={isSubmitting} className="min-w-[120px] bg-slate-900 text-white hover:bg-slate-800 transition-all">
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    {initialData ? "Updating..." : "Saving..."}
+                                </>
+                            ) : (
+                                initialData ? "Save Changes" : "Save Expense"
+                            )}
                         </Button>
                     </div>
                 </DialogFooter>

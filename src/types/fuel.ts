@@ -35,6 +35,10 @@ export interface FuelEntry {
   // Link to financial transaction
   transactionId?: string;
 
+  // Phase 1 Refactor: Anchor Tracking
+  anchorPeriodId?: string; // Links this entry to a specific odometer window
+  reconciliationStatus?: 'Pending' | 'Verified' | 'Flagged' | 'Observing' | 'Archived';
+
   // Phase 7: Audit Status
   auditStatus?: 'Clear' | 'Observing' | 'Flagged' | 'Auto-Resolved';
   
@@ -43,6 +47,10 @@ export interface FuelEntry {
     isEdited?: boolean;
     lastEditedAt?: string;
     editReason?: string;
+
+    // Phase 1: Ledger Accounting
+    isDebit?: boolean;
+    isCredit?: boolean;
     
     // Phase 7: Advanced Predictive Metadata
     observationReason?: string;

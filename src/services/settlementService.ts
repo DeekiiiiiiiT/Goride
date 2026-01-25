@@ -109,21 +109,23 @@ export const settlementService = {
     if (creditAmount <= 0) return null;
 
     // 5. Check for existing settlement transaction to avoid duplicates during edits
-    const existingTx = allTransactions.find(t => 
-      t.id === existingTxId || (t.metadata?.sourceId === entryId && t.type === 'Reimbursement')
-    );
+    // IMPORTANT: The settlement is a SEPARATE transaction from the expense.
+    // If we're passed a transaction, we shouldn't use its ID as our settlement ID.
+    const settlementTxId = (entryOrTx as any).metadata?.settlementTxId || 
+                          allTransactions.find(t => t.metadata?.sourceId === entryId && t.type === 'Reimbursement')?.id || 
+                          crypto.randomUUID();
 
     // 6. Create or Update the Financial Transaction (Credit)
     const settlementTx: Partial<FinancialTransaction> = {
-      id: existingTx?.id || crypto.randomUUID(),
+      id: settlementTxId,
       date: date.split('T')[0],
-      time: date.includes('T') ? date.split('T')[1].substring(0, 8) : (existingTx?.time || format(new Date(), 'HH:mm:ss')),
+      time: date.includes('T') ? date.split('T')[1].substring(0, 8) : format(new Date(), 'HH:mm:ss'),
       driverId: driverId,
       driverName: driver?.name || 'Unknown Driver',
       vehicleId: vehicleId,
       type: 'Reimbursement',
       category: 'Fuel Reimbursement',
-      description: `Fuel Reimbursement: ${location || 'Unknown Station'} - ${liters}L @ $${(amount/liters).toFixed(3)}/L`,
+      description: `Fuel Reimbursement: ${location || 'Unknown Station'}${liters ? ` - ${liters}L @ $${(amount / liters).toFixed(3)}/L` : ''}`,
       merchant: location,
       amount: Number(creditAmount.toFixed(2)), 
       paymentMethod: 'Cash',
@@ -131,7 +133,6 @@ export const settlementService = {
       quantity: liters,
       isReconciled: true,
       metadata: {
-        ...(existingTx?.metadata || {}),
         sourceId: entryId,
         settlementType: 'RideShare_Cash_Offset',
         scenarioId: activeScenario.id,
@@ -139,9 +140,9 @@ export const settlementService = {
         coveragePercent: (creditAmount / amount) * 100,
         automated: true,
         // Carry over audit flags if it's an update
-        isEdited: (entryOrTx as any).metadata?.isEdited || existingTx?.metadata?.isEdited,
-        lastEditedAt: (entryOrTx as any).metadata?.lastEditedAt || existingTx?.metadata?.lastEditedAt,
-        editReason: (entryOrTx as any).metadata?.editReason || existingTx?.metadata?.editReason,
+        isEdited: (entryOrTx as any).metadata?.isEdited,
+        lastEditedAt: (entryOrTx as any).metadata?.lastEditedAt,
+        editReason: (entryOrTx as any).metadata?.editReason,
         syncSource: 'fuel_log',
         // Phase 3: Preservation of Manual Origin
         isManual: true,
