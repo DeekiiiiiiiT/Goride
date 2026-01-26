@@ -1,62 +1,42 @@
-# Smart Unified Restoration Strategy
+# Disaster Recovery & Import Fixes Plan
 
-## Context
-This document outlines the implementation plan for splitting the odometer export into a comprehensive "Master Log" and a legacy "Check-in" CSV, ensuring they are treated as distinct restoration paths.
+## Phase 1: Fix Missing Dependencies (Critical Crash)
+**Objective:** Resolve the `ReferenceError: tripCalibrationService is not defined` to allow the import process to complete.
 
-## Phase 1: Data Aggregation & API Layer (Backend Export)
-**Goal:** Enhance the data collection logic to retrieve odometer readings from ALL source tables (Fuel, Service, Check-ins, Manual) to create a true "Master Log".
+1.  **Step 1.1: Import Service in ImportsPage**
+    *   **Action:** Edit `/components/imports/ImportsPage.tsx`.
+    *   **Detail:** Add `import { tripCalibrationService } from '../../services/tripCalibrationService';` to the top imports section.
+    *   **Reason:** The `handleConfirmImport` function calls this service, but it is currently not imported.
 
-1.  **Fuel Data Fetching Implementation:**
-    *   Verify `api.ts` capabilities for fetching all fuel entries.
-    *   If `api.getFuelEntriesByVehicle` is missing, implement a helper in `data-export.ts` to fetch all fuel entries (using `fetchAllFuelLogs` logic) and filter by `vehicleId` in memory (or optimize if API allows).
-    *   Create `normalizeFuelReadings(fuelEntries: FuelEntry[]): OdometerReading[]` helper.
-        *   Map `date` -> `date`.
-        *   Map `odometer` -> `value`.
-        *   Set `source` = `'Fuel Log'`.
-        *   Filter out entries with 0 or missing odometer.
+2.  **Step 1.2: Verify Service Signature**
+    *   **Action:** Read `/services/tripCalibrationService.ts` (already done, but confirmed).
+    *   **Detail:** Ensure `calibrateTrips` accepts `processedData` (Trip[]) as an argument.
+    *   **Reason:** Prevents a subsequent TypeScript or runtime error after the import is fixed.
 
-2.  **Service Data Fetching Implementation:**
-    *   Use existing `api.getMaintenanceLogs(vehicleId)`.
-    *   Create `normalizeServiceReadings(serviceLogs: ServiceRequest[]): OdometerReading[]` helper.
-        *   Map `date` -> `date`.
-        *   Map `odometer` -> `value`.
-        *   Set `source` = `'Service Log'`.
-        *   Filter out entries with 0 or missing odometer.
+## Phase 2: Refine Anomaly Detection Logic (False Positives)
+**Objective:** Stop the system from flagging legitimate financial adjustments (tips, gratuities, refunds) as "Zero Distance" anomalies.
 
-3.  **Manual & Check-in Data Fetching (Refinement):**
-    *   Keep existing `api.getOdometerHistory` (Manual) and `api.getCheckInsByVehicle` (Check-in) calls.
-    *   Ensure Check-in normalization sets `source` = `'Weekly Check-in'`.
-    *   Ensure Manual normalization sets `source` = `'Manual'`.
+1.  **Step 2.1: Expand Keyword Exclusion List**
+    *   **Action:** Edit `/services/dataSanitizer.ts`.
+    *   **Detail:** In the `auditTrip` method, locate the `isFare` logic.
+    *   **Change:** Update the condition to exclude records where `notes` (or `type`) contains:
+        *   "adjustment"
+        *   "gratuity"
+        *   "miscellaneous"
+        *   "other"
+        *   "cancellation"
+    *   **Code:** `const isFare = !trip.notes?.toLowerCase().match(/tip|bonus|adjustment|gratuity|misc|other|cancel/);`
 
-## Phase 2: Aggregation Logic & CSV Generation
-**Goal:** Integrate the new data sources into the main export function and ensure correct CSV formatting.
+2.  **Step 2.2: Safety Check for Notes**
+    *   **Action:** Ensure `trip.notes` is accessed safely (optional chaining `?.`) in the new logic.
+    *   **Reason:** Imported CSV data often has empty or undefined notes fields.
 
-1.  **Refactor `fetchAllOdometerReadings`:**
-    *   Update `Promise.all` inside the vehicle loop to fetch from all 4 sources concurrently:
-        ```typescript
-        const [manual, checkins, fuel, service] = await Promise.all([ ... ]);
-        ```
-    *   Apply the normalization helpers from Phase 1.
-    *   Merge all 4 arrays into a single `allReadings` array.
+## Phase 3: Final Verification
+**Objective:** Ensure the import flow runs smoothly without console errors or incorrect warnings.
 
-2.  **Sorting & Deduplication:**
-    *   Sort `allReadings` by `date` (ascending).
-    *   (Optional) Implement basic deduplication: If multiple entries exist for the exact same timestamp + source + value, keep one. If different sources have same timestamp, keep all to show corroboration.
+1.  **Step 3.1: Review ImportsPage Logic**
+    *   **Action:** Manual review of `handleConfirmImport` in `ImportsPage.tsx`.
+    *   **Detail:** Check that the `calibratedTrips` result is correctly passed to the batch creation logic.
 
-3.  **CSV Output Verification:**
-    *   Ensure `ODOMETER_CSV_COLUMNS` handles the `source` field correctly.
-    *   Verify `jsonToCsv` correctly processes the unified list.
-
-## Phase 3: Validation & Safe Import Check
-**Goal:** Verify the export output and ensure the import process (even if not changing) won't choke on the new data.
-
-1.  **Export Output Testing:**
-    *   Generate the "Odometer History" backup.
-    *   Verify the CSV contains rows with 'Fuel Log', 'Service Log', 'Weekly Check-in', and 'Manual'.
-    *   Verify the row counts match the "Raw History" tab in the UI.
-
-2.  **Import Impact Analysis:**
-    *   Review `import-validator.ts` and `data-import-executor.ts` for "Odometer History" import.
-    *   Confirm that importing this "Master Log" will create `odometer_readings` (anchors) for all these entries.
-    *   *Note:* We are NOT recreating the original fuel/service records from this CSV; we are creating *Odometer Anchors*. This is the intended behavior for "Restoring Odometer History".
-    *   Ensure no validation rules block 'Fuel Log' or 'Service Log' as valid sources.
+2.  **Step 3.2: Complete**
+    *   **Action:** Mark task as done.
