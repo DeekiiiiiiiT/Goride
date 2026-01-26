@@ -1,34 +1,62 @@
-# Solution Plan: Fix for Default Time Injection and UTC Shifting
+# Smart Unified Restoration Strategy
 
-## Background
-The system is currently injecting a "07:00 PM" or "19:00" timestamp into manual entries. This is caused by a combination of UTC timezone shifting (UTC midnight becoming local 7pm) and an automated fallback in the settlement service that injects the "current time" into approved records.
+## Context
+This document outlines the implementation plan for splitting the odometer export into a comprehensive "Master Log" and a legacy "Check-in" CSV, ensuring they are treated as distinct restoration paths.
 
-## Implementation Phases
+## Phase 1: Data Aggregation & API Layer (Backend Export)
+**Goal:** Enhance the data collection logic to retrieve odometer readings from ALL source tables (Fuel, Service, Check-ins, Manual) to create a true "Master Log".
 
-### Phase 1: Diagnostic & Data Normalization Analysis
-*   **Step 1.1**: Audit all components that handle date/time input (Modals, Forms) specifically looking for `type="date"` vs `type="datetime-local"`.
-*   **Step 1.2**: Audit the `settlementService.ts` and `api.ts` to identify everywhere `format(new Date(), 'HH:mm:ss')` or `new Date()` is used as a default for historical records.
-*   **Step 1.3**: Map out the flow of manual fuel entries from the `FuelLogModal` to the `settlementService` to find the exact injection point of "current time".
+1.  **Fuel Data Fetching Implementation:**
+    *   Verify `api.ts` capabilities for fetching all fuel entries.
+    *   If `api.getFuelEntriesByVehicle` is missing, implement a helper in `data-export.ts` to fetch all fuel entries (using `fetchAllFuelLogs` logic) and filter by `vehicleId` in memory (or optimize if API allows).
+    *   Create `normalizeFuelReadings(fuelEntries: FuelEntry[]): OdometerReading[]` helper.
+        *   Map `date` -> `date`.
+        *   Map `odometer` -> `value`.
+        *   Set `source` = `'Fuel Log'`.
+        *   Filter out entries with 0 or missing odometer.
 
-### Phase 2: Removing Fallback Time Injection
-*   **Step 2.1**: Update `settlementService.ts` to make the `time` property optional and remove the `format(new Date(), 'HH:mm:ss')` fallback in `processFuelSettlement`.
-*   **Step 2.2**: Ensure that when a settlement (Credit) is created from a manual entry (Debit), it explicitly copies the source's time value (even if null) instead of generating a new one.
-*   **Step 2.3**: Modify the `Manual Entry` save logic in `FuelLedgerView.tsx` and `FuelLogModal.tsx` to stop sending the current system time if the user hasn't specified one.
+2.  **Service Data Fetching Implementation:**
+    *   Use existing `api.getMaintenanceLogs(vehicleId)`.
+    *   Create `normalizeServiceReadings(serviceLogs: ServiceRequest[]): OdometerReading[]` helper.
+        *   Map `date` -> `date`.
+        *   Map `odometer` -> `value`.
+        *   Set `source` = `'Service Log'`.
+        *   Filter out entries with 0 or missing odometer.
 
-### Phase 3: Implementing Local-Safe Date Utilities
-*   **Step 3.1**: Update `/utils/timeUtils.ts` with a `parseLocalDate` function that treats `YYYY-MM-DD` strings as local dates by splitting components rather than using the native UTC parser.
-*   **Step 3.2**: Replace `new Date(dateString)` calls in critical UI components with the new `parseLocalDate` utility to stop the UTC-to-7:00PM shift.
-*   **Step 3.3**: Standardize the `formatDateTime` helper used in `FuelLedgerView.tsx` and migrate it to a global utility for app-wide consistency.
+3.  **Manual & Check-in Data Fetching (Refinement):**
+    *   Keep existing `api.getOdometerHistory` (Manual) and `api.getCheckInsByVehicle` (Check-in) calls.
+    *   Ensure Check-in normalization sets `source` = `'Weekly Check-in'`.
+    *   Ensure Manual normalization sets `source` = `'Manual'`.
 
-### Phase 4: UI/UX Refinement for Optional Time
-*   **Step 4.1**: Update the `FuelLogModal` and `EditTransaction` components to allow the time field to be cleared or remain "Not Set".
-*   **Step 4.2**: Add conditional rendering to all "Transaction Details" screens (like the Reimbursement Request modal) so the "at [Time]" text is hidden if no time data exists.
-*   **Step 4.3**: Ensure "Verified" badges and other audit trail status indicators don't break when time data is missing.
+## Phase 2: Aggregation Logic & CSV Generation
+**Goal:** Integrate the new data sources into the main export function and ensure correct CSV formatting.
 
-### Phase 5: Data Verification & Integrity Check
-*   **Step 5.1**: **Regression Test**: Create a manual entry for "2025-01-01" and verify it stays as "Jan 01, 2025" with no time across all views.
-*   **Step 5.2**: **Verification**: Approve the entry and check that the generated credit also has no time (synced with its parent debit).
-*   **Step 5.3**: **Integrity Check**: Confirm that high-volume datasets (like actual trips or bulk fuel imports) which *do* have timestamps still display them correctly.
+1.  **Refactor `fetchAllOdometerReadings`:**
+    *   Update `Promise.all` inside the vehicle loop to fetch from all 4 sources concurrently:
+        ```typescript
+        const [manual, checkins, fuel, service] = await Promise.all([ ... ]);
+        ```
+    *   Apply the normalization helpers from Phase 1.
+    *   Merge all 4 arrays into a single `allReadings` array.
 
----
-**Status**: Complete. System-wide timestamp normalization and UTC-shift mitigation finalized.
+2.  **Sorting & Deduplication:**
+    *   Sort `allReadings` by `date` (ascending).
+    *   (Optional) Implement basic deduplication: If multiple entries exist for the exact same timestamp + source + value, keep one. If different sources have same timestamp, keep all to show corroboration.
+
+3.  **CSV Output Verification:**
+    *   Ensure `ODOMETER_CSV_COLUMNS` handles the `source` field correctly.
+    *   Verify `jsonToCsv` correctly processes the unified list.
+
+## Phase 3: Validation & Safe Import Check
+**Goal:** Verify the export output and ensure the import process (even if not changing) won't choke on the new data.
+
+1.  **Export Output Testing:**
+    *   Generate the "Odometer History" backup.
+    *   Verify the CSV contains rows with 'Fuel Log', 'Service Log', 'Weekly Check-in', and 'Manual'.
+    *   Verify the row counts match the "Raw History" tab in the UI.
+
+2.  **Import Impact Analysis:**
+    *   Review `import-validator.ts` and `data-import-executor.ts` for "Odometer History" import.
+    *   Confirm that importing this "Master Log" will create `odometer_readings` (anchors) for all these entries.
+    *   *Note:* We are NOT recreating the original fuel/service records from this CSV; we are creating *Odometer Anchors*. This is the intended behavior for "Restoring Odometer History".
+    *   Ensure no validation rules block 'Fuel Log' or 'Service Log' as valid sources.

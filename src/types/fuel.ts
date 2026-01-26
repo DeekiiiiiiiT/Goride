@@ -109,6 +109,9 @@ export interface WeeklyFuelReport {
   healthScore?: number; // 0-100
   finalizedAt?: string;
   metadata?: any;
+  
+  // Phase 3: Staged Reconciliation
+  pendingCount?: number; // Number of logs waiting to be finalized
 }
 
 export interface OdometerBucket {

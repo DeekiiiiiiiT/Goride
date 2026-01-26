@@ -674,6 +674,15 @@ export const api = {
     return response.json();
   },
 
+  async reconcileLedgerOrphans() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/reconcile-ledger-orphans`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to run integrity repair");
+    return response.json();
+  },
+
   // --- Synchronization Helpers (Phase 1) ---
   async getLinkedFuelEntry(idOrTransactionId: string): Promise<any | null> {
     if (!idOrTransactionId) return null;
@@ -1061,6 +1070,14 @@ export const api = {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to delete fuel entry");
+    return response.json();
+  },
+
+  async getAllFuelEntries() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch fuel entries");
     return response.json();
   }
 };

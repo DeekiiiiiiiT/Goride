@@ -1,6 +1,8 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
+import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
+import { settlementService } from './settlementService';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -60,6 +62,11 @@ export const fuelService = {
   },
 
   async saveFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
+    // Phase 2: Staged Reconciliation - Default to Pending for new or legacy logs
+    if (!entry.reconciliationStatus) {
+        entry.reconciliationStatus = 'Pending';
+    }
+
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
       method: 'POST',
       headers: {
@@ -172,6 +179,27 @@ export const fuelService = {
     } catch (e) {
       console.error("Error fetching linked transaction:", e);
       return null;
+    }
+  },
+
+  /**
+   * Generates a cleanup map for a fuel entry, identifying all linked ledger records
+   * that must be removed to maintain system integrity.
+   */
+  async getCleanupMap(entryId: string): Promise<{ entry: FuelEntry | null, relatedTransactions: FinancialTransaction[] }> {
+    try {
+      const allEntries = await this.getFuelEntries();
+      const entry = allEntries.find(e => e.id === entryId) || null;
+      
+      if (!entry) {
+        return { entry: null, relatedTransactions: [] };
+      }
+
+      const relatedTransactions = await settlementService.getRelatedTransactions(entry);
+      return { entry, relatedTransactions };
+    } catch (error) {
+      console.error("[FuelService] Failed to generate cleanup map:", error);
+      return { entry: null, relatedTransactions: [] };
     }
   }
 };

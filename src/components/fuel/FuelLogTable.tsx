@@ -66,6 +66,7 @@ export function FuelLogTable({
     const [filterVehicle, setFilterVehicle] = useState<string>('all');
     const [filterDriver, setFilterDriver] = useState<string>('all');
     const [filterAnchor, setFilterAnchor] = useState<string>('all');
+    const [filterStatus, setFilterStatus] = useState<string>('all');
 
     const uniqueVehicles = useMemo(() => {
         const ids = Array.from(new Set(entries.map(e => e.vehicleId).filter(Boolean))) as string[];
@@ -81,7 +82,8 @@ export function FuelLogTable({
         filterType !== 'all',
         filterVehicle !== 'all',
         filterDriver !== 'all',
-        filterAnchor !== 'all'
+        filterAnchor !== 'all',
+        filterStatus !== 'all'
     ].filter(Boolean).length;
 
     const clearFilters = () => {
@@ -89,6 +91,7 @@ export function FuelLogTable({
         setFilterVehicle('all');
         setFilterDriver('all');
         setFilterAnchor('all');
+        setFilterStatus('all');
     };
 
     // Phase 2: Source Verification Logic
@@ -218,6 +221,12 @@ export function FuelLogTable({
         if (filterDriver !== 'all' && entry.driverId !== filterDriver) return false;
         if (filterAnchor === 'valid' && !validAnchorIds.has(entry.id)) return false;
         if (filterAnchor === 'invalid' && (entry.type !== 'Reimbursement' || validAnchorIds.has(entry.id))) return false;
+        
+        // Phase 11: Status Filter
+        if (filterStatus !== 'all') {
+            const status = entry.reconciliationStatus || 'Pending';
+            if (status !== filterStatus) return false;
+        }
 
         // Date Range Filtering - Normalize everything to local date midnights for comparison
         if (dateRange?.from || dateRange?.to) {
@@ -251,6 +260,41 @@ export function FuelLogTable({
             (entry.type === 'Reimbursement' && 'anchor'.includes(searchTerm.toLowerCase()))
         );
     });
+
+    // Phase 4: Ledger Integrity Analysis (Step 4.2)
+    const ledgerIntegrity = useMemo(() => {
+        const integrityMap = new Map<string, 'Complete' | 'Partial' | 'Orphaned' | 'Pending'>();
+        
+        entries.forEach(entry => {
+            if (!isManualEntry(entry)) return;
+            
+            // Phase 10: Pending items are safe - they haven't been committed to ledger yet
+            if (entry.reconciliationStatus === 'Pending') {
+                integrityMap.set(entry.id, 'Pending');
+                return;
+            }
+            
+            const related = transactions.filter(t => 
+                t.metadata?.sourceId === entry.id || 
+                t.metadata?.linkedFuelId === entry.id ||
+                t.id === entry.transactionId ||
+                (Math.abs(t.amount) === Math.abs(entry.amount) && t.date === entry.date.split('T')[0] && t.vehicleId === entry.vehicleId)
+            );
+
+            const hasDebit = related.some(t => t.amount < 0 || t.type === 'Expense');
+            const hasCredit = related.some(t => t.amount > 0 || t.type === 'Reimbursement');
+
+            if (hasDebit && hasCredit) {
+                integrityMap.set(entry.id, 'Complete');
+            } else if (hasDebit || hasCredit) {
+                integrityMap.set(entry.id, 'Partial');
+            } else {
+                integrityMap.set(entry.id, 'Orphaned');
+            }
+        });
+        
+        return integrityMap;
+    }, [entries, transactions]);
 
     const getTypeIcon = (type: string) => {
         switch(type) {
@@ -300,8 +344,6 @@ export function FuelLogTable({
             return true;
         });
 
-        // Step 10.2: Update Analytics Aggregation - stats already uses isManualEntry
-        // which now correctly excludes valid anchors.
         const manualEntries = auditScopeEntries.filter(e => isManualEntry(e));
         
         const unreconciled = manualEntries.filter(e => {
@@ -309,15 +351,30 @@ export function FuelLogTable({
             return !tx?.isReconciled;
         });
 
+        const reconciled = manualEntries.filter(e => {
+            const tx = getLinkedTransaction(e);
+            return tx?.isReconciled;
+        });
+
         const anchorEntries = auditScopeEntries.filter(e => validAnchorIds.has(e.id));
+
+        // Phase 4: Calculate imbalance stats
+        const imbalancedCount = manualEntries.filter(e => {
+            const status = ledgerIntegrity.get(e.id);
+            // Phase 10: Pending items are not imbalanced errors
+            return status !== 'Complete' && status !== 'Pending';
+        }).length;
 
         return {
             manualCount: manualEntries.length,
             unreconciledCount: unreconciled.length,
+            reconciledCount: reconciled.length,
+            anchorCount: anchorEntries.length,
             totalSpend: manualEntries.reduce((sum, e) => sum + e.amount, 0),
-            anchorTotalSpent: anchorEntries.reduce((sum, e) => sum + e.amount, 0)
+            anchorTotalSpent: anchorEntries.reduce((sum, e) => sum + e.amount, 0),
+            imbalancedCount
         };
-    }, [entries, transactionMap, validAnchorIds, dateRange, isManualEntry]); // Added isManualEntry to deps
+    }, [entries, transactionMap, validAnchorIds, dateRange, isManualEntry, ledgerIntegrity]);
 
     const handleReconcile = async (id: string) => {
         try {
@@ -338,39 +395,81 @@ export function FuelLogTable({
             {/* Reconciliation Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center">
+                    <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
                         <ListFilter className="h-5 w-5 text-blue-500" />
                     </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manual Entries</p>
-                        <p className="text-xl font-bold text-slate-700">{stats.manualCount}</p>
+                    <div className="flex-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Log Volume</p>
+                        <div className="flex items-baseline gap-3">
+                            <div>
+                                <p className="text-xl font-bold text-slate-700">{stats.manualCount}</p>
+                                <p className="text-[10px] text-slate-500">Manual</p>
+                            </div>
+                            <div className="h-8 w-px bg-slate-100 mx-1"></div>
+                            <div>
+                                <p className="text-xl font-bold text-emerald-600">{stats.anchorCount}</p>
+                                <p className="text-[10px] text-slate-500">Anchors</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className="h-10 w-10 bg-amber-50 rounded-full flex items-center justify-center">
+                    <div className="h-10 w-10 bg-amber-50 rounded-full flex items-center justify-center shrink-0">
                         <AlertCircle className="h-5 w-5 text-amber-500" />
                     </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unreconciled</p>
-                        <p className="text-xl font-bold text-slate-700">{stats.unreconciledCount}</p>
+                    <div className="flex-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reconciliation</p>
+                        <div className="flex items-baseline gap-3">
+                            <div>
+                                <p className="text-xl font-bold text-amber-600">{stats.unreconciledCount}</p>
+                                <p className="text-[10px] text-slate-500">Pending</p>
+                            </div>
+                             <div className="h-8 w-px bg-slate-100 mx-1"></div>
+                            <div>
+                                <p className="text-xl font-bold text-slate-700">{stats.reconciledCount}</p>
+                                <p className="text-[10px] text-slate-500">Reconciled</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center">
+                    <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center shrink-0">
                         <Banknote className="h-5 w-5 text-emerald-500" />
                     </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manual Spend</p>
-                        <p className="text-xl font-bold text-slate-700">${stats.totalSpend.toFixed(2)}</p>
+                    <div className="flex-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Spend</p>
+                         <div className="flex items-baseline gap-3">
+                            <div>
+                                <p className="text-xl font-bold text-slate-700">${stats.totalSpend.toFixed(0)}</p>
+                                <p className="text-[10px] text-slate-500">Manual</p>
+                            </div>
+                            <div className="h-8 w-px bg-slate-100 mx-1"></div>
+                            <div>
+                                <p className="text-xl font-bold text-emerald-600">${stats.anchorTotalSpent.toFixed(0)}</p>
+                                <p className="text-[10px] text-slate-500">Anchors</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className="h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center">
-                        <ShieldCheck className="h-5 w-5 text-indigo-500" />
+                    <div className={cn(
+                        "h-10 w-10 rounded-full flex items-center justify-center",
+                        stats.imbalancedCount > 0 ? "bg-red-50" : "bg-indigo-50"
+                    )}>
+                        {stats.imbalancedCount > 0 ? (
+                            <AlertCircle className="h-5 w-5 text-red-500" />
+                        ) : (
+                            <ShieldCheck className="h-5 w-5 text-indigo-500" />
+                        )}
                     </div>
                     <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Anchor Total Spent</p>
-                        <p className="text-xl font-bold text-slate-700">${stats.anchorTotalSpent.toFixed(2)}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ledger Health</p>
+                        <p className={cn(
+                            "text-xl font-bold",
+                            stats.imbalancedCount > 0 ? "text-red-600" : "text-slate-700"
+                        )}>
+                            {stats.imbalancedCount > 0 ? `${stats.imbalancedCount} Imbalanced` : 'Healthy'}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -419,6 +518,21 @@ export function FuelLogTable({
                                                 <SelectItem value="Reimbursement">Reimbursement</SelectItem>
                                                 <SelectItem value="Card_Transaction">Card Transaction</SelectItem>
                                                 <SelectItem value="Fuel_Manual_Entry">Manual Entry</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div className="grid gap-1">
+                                        <Label htmlFor="status">Reconciliation Status</Label>
+                                        <Select value={filterStatus} onValueChange={setFilterStatus}>
+                                            <SelectTrigger id="status">
+                                                <SelectValue placeholder="All Statuses" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Statuses</SelectItem>
+                                                <SelectItem value="Pending">Pending (Blue)</SelectItem>
+                                                <SelectItem value="Verified">Verified (Green)</SelectItem>
+                                                <SelectItem value="Flagged">Flagged (Red)</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -531,20 +645,48 @@ export function FuelLogTable({
                                                 <span className="hidden md:inline text-xs font-medium text-slate-600">
                                                     {entry.type === 'Fuel_Manual_Entry' ? 'Manual Entry' : entry.type.replace('_', ' ')}
                                                 </span>
-                                                {/* Step 11.1: Refined Reconciliation Status Indicator - Exclude Anchors */}
+                                                {/* Step 9.3: Refined Reconciliation Status Indicator - Uses reconciliationStatus */}
                                                 {isManualEntry(entry) && (
                                                     <div className="flex items-center gap-1 ml-1">
                                                         {(() => {
-                                                            const tx = getLinkedTransaction(entry);
-                                                            const isReconciled = tx?.isReconciled;
-                                                            return isReconciled ? (
-                                                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 h-4 px-1 text-[8px] font-bold">
-                                                                    RECONCILED
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-100 h-4 px-1 text-[8px] font-bold">
-                                                                    UNRECONCILED
-                                                                </Badge>
+                                                            const status = entry.reconciliationStatus || 'Pending';
+                                                            const integrity = ledgerIntegrity.get(entry.id);
+                                                            
+                                                            return (
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <div className="flex items-center gap-1">
+                                                                        {status === 'Verified' ? (
+                                                                            <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 h-4 px-1 text-[8px] font-bold">
+                                                                                VERIFIED
+                                                                            </Badge>
+                                                                        ) : status === 'Flagged' ? (
+                                                                            <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-100 h-4 px-1 text-[8px] font-bold">
+                                                                                FLAGGED
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 h-4 px-1 text-[8px] font-bold">
+                                                                                PENDING
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+                                                                    {integrity && integrity !== 'Complete' && integrity !== 'Pending' && (
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <div className="flex items-center gap-0.5 text-[7px] font-bold text-red-500 uppercase tracking-tighter cursor-help">
+                                                                                    <AlertCircle className="h-2 w-2" />
+                                                                                    {integrity} Ledger
+                                                                                </div>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>
+                                                                                <p className="text-xs">
+                                                                                    {integrity === 'Partial' 
+                                                                                        ? "Missing either the Debit or Credit side of this transaction." 
+                                                                                        : "No financial records found in the ledger for this log."}
+                                                                                </p>
+                                                                            </TooltipContent>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                </div>
                                                             );
                                                         })()}
                                                     </div>
@@ -710,17 +852,6 @@ export function FuelLogTable({
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                {(() => {
-                                                    const tx = transactionMap.get(entry.transactionId || '');
-                                                    if (tx?.metadata?.portal_type === 'Manual_Entry' && !tx?.isReconciled) {
-                                                        return (
-                                                            <DropdownMenuItem onClick={() => handleReconcile(entry.id)} className="text-emerald-600 font-medium">
-                                                                <ShieldCheck className="mr-2 h-4 w-4" /> Reconcile Entry
-                                                            </DropdownMenuItem>
-                                                        );
-                                                    }
-                                                    return null;
-                                                })()}
                                                 <DropdownMenuItem onClick={() => onEdit(entry)}>
                                                     <Pencil className="mr-2 h-4 w-4" /> Edit Entry
                                                 </DropdownMenuItem>

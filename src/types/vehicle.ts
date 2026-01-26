@@ -85,7 +85,7 @@ export interface Vehicle {
   registrationExpiry?: string;
   registrationIssueDate?: string;
   controlNumber?: string;
-
+  
   // Documents URLs
   fitnessCertificateUrl?: string;
   registrationCertificateUrl?: string;
@@ -167,4 +167,25 @@ export interface MileageReport {
     anomalyDetected: boolean;
     anomalyReason?: string;
     tripCount: number;
+}
+
+// Phase 1: Unified Restoration Types
+
+export type UnifiedOdometerSource = 'manual' | 'fuel' | 'service' | 'checkin';
+
+export interface UnifiedOdometerEntry extends Omit<OdometerReading, 'source' | 'referenceId'> {
+  source: UnifiedOdometerSource;
+  referenceId: string; // Required for unified entries to track origin
+  metaData?: Record<string, any>;
+}
+
+export function isUnifiedOdometerEntry(entry: any): entry is UnifiedOdometerEntry {
+  return (
+    entry &&
+    typeof entry === 'object' &&
+    'source' in entry &&
+    'value' in entry &&
+    'date' in entry &&
+    ['manual', 'fuel', 'service', 'checkin'].includes(entry.source)
+  );
 }

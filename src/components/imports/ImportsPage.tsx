@@ -77,11 +77,10 @@ import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { DataSanitizer } from '../../services/dataSanitizer';
 import { ImpactAnalysis } from './ImpactAnalysis';
-
+import { DisasterRecoveryCard } from './DisasterRecoveryCard';
 import { AuditSummaryCard } from './AuditSummaryCard';
-import { QuarantineList } from './QuarantineList';
 import { CalibrationReport } from './CalibrationReport';
-import { tripCalibrationService } from '../../services/tripCalibrationService';
+import { QuarantineList } from './QuarantineList';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
@@ -147,35 +146,6 @@ export function ImportsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
   const [disabledColumns, setDisabledColumns] = useState<Record<string, string[]>>({});
   const [tollImportMode, setTollImportMode] = useState<'usage' | 'topup' | 'recovery' | null>(null);
-
-  const handleExportBackup = async () => {
-      try {
-          const toastId = toast.loading("Preparing Disaster Recovery Backup...");
-          const rows = await fetchFullTollHistory();
-          
-          if (rows.length === 0) {
-              toast.dismiss(toastId);
-              toast.info("No toll transactions found to export.");
-              return;
-          }
-
-          const csvContent = generateBackupCSV(rows);
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.setAttribute('download', `toll_disaster_recovery_${new Date().toISOString().split('T')[0]}.csv`);
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          toast.dismiss(toastId);
-          toast.success(`Exported ${rows.length} records successfully.`);
-      } catch (err) {
-          console.error(err);
-          toast.error("Export failed. Please try again.");
-      }
-  };
 
   // Load Fields
   useEffect(() => {
@@ -579,6 +549,35 @@ export function ImportsPage() {
       setWarning(null);
   };
 
+  const handleTollBackup = async () => {
+      try {
+          const toastId = toast.loading("Preparing Toll Backup...");
+          const rows = await fetchFullTollHistory();
+          
+          if (rows.length === 0) {
+              toast.dismiss(toastId);
+              toast.info("No toll transactions found to export.");
+              return;
+          }
+
+          const csvContent = generateBackupCSV(rows);
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', `toll_backup_${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          toast.dismiss(toastId);
+          toast.success(`Exported ${rows.length} toll records.`);
+      } catch (err) {
+          console.error(err);
+          toast.error("Toll export failed.");
+      }
+  };
+
   // --- Field Management Handlers (Simplified for this view) ---
   const [fieldNameInput, setFieldNameInput] = useState('');
   const [fieldTypeInput, setFieldTypeInput] = useState<FieldType>('text');
@@ -945,6 +944,9 @@ export function ImportsPage() {
         </Alert>
       )}
 
+      {/* DISASTER RECOVERY SECTION */}
+      <DisasterRecoveryCard />
+
       {/* STEP 0: SELECT PLATFORM */}
       {step === 'select_platform' && (
         <div className="space-y-6">
@@ -981,7 +983,7 @@ export function ImportsPage() {
                     { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white' },
                     { id: 'Toll Top-up', icon: <CreditCard className="h-6 w-6" />, color: 'bg-emerald-600 text-white', action: () => setTollImportMode('topup') },
                     { id: 'Toll Usage', icon: <MinusCircle className="h-6 w-6" />, color: 'bg-slate-600 text-white', action: () => setTollImportMode('usage') },
-                    { id: 'Disaster Recovery', icon: <CloudDownload className="h-6 w-6" />, color: 'bg-white border-2 border-slate-200 text-slate-600', subtext: 'Export Backup', action: handleExportBackup },
+                    { id: 'Disaster Recovery', icon: <CloudDownload className="h-6 w-6" />, color: 'bg-white border-2 border-slate-200 text-slate-600', subtext: 'Export Backup', action: handleTollBackup },
                     { id: 'Restore Backup', icon: <UploadCloud className="h-6 w-6" />, color: 'bg-rose-50 border-2 border-rose-100 text-rose-600', subtext: 'Import Recovery CSV', action: () => setTollImportMode('recovery') },
                 ].map((platform: any) => (
                     <Card 

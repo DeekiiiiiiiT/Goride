@@ -109,11 +109,16 @@ export function FuelIntegrityAuditTool({
             if (log.type === 'Reimbursement' || log.type === 'Manual_Entry' || log.type === 'Fuel_Manual_Entry') {
                 const tx = txMap.get(log.transactionId || '');
                 if (!tx) {
+                    // Phase 6: Refine Orphan Logic (Step 6.2)
+                    // If the log is "Pending", it is NOT an orphan. It is waiting for reconciliation.
+                    // Only flag if it is "Verified" (or seemingly settled) but missing a link.
+                    if (log.reconciliationStatus === 'Pending') return;
+                    
                     issues.push({
                         id: `orphan-log-${log.id}`,
                         type: 'Orphaned Log',
                         severity: 'high',
-                        description: `Fuel log #${log.id.slice(0, 5)} exists but has no linked financial transaction in ledger.`,
+                        description: `Fuel log #${log.id.slice(0, 5)} is marked as ${log.reconciliationStatus || 'Finalized'} but has no linked financial transaction.`,
                         data: { log },
                         action: 'create_tx'
                     });
@@ -437,6 +442,28 @@ export function FuelIntegrityAuditTool({
                                                                 >
                                                                     {healingId === issue.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCcw className="h-3 w-3 mr-1" />}
                                                                     USE LEDGER AS SOURCE
+                                                                </Button>
+                                                            </div>
+                                                        ) : issue.type === 'Orphaned Transaction' ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <Button 
+                                                                    size="sm" 
+                                                                    className="h-8 font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                                    disabled={!!healingId}
+                                                                    onClick={() => runHeal(issue)}
+                                                                >
+                                                                    {healingId === issue.id ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Wrench className="h-3.5 w-3.5 mr-2" />}
+                                                                    Heal (Create Log)
+                                                                </Button>
+                                                                <Button 
+                                                                    size="sm" 
+                                                                    variant="destructive"
+                                                                    className="h-8 font-bold bg-rose-600 hover:bg-rose-700 text-white"
+                                                                    disabled={!!healingId}
+                                                                    onClick={() => runHeal({ ...issue, action: 'delete' })}
+                                                                >
+                                                                    {healingId === issue.id ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Trash2 className="h-3.5 w-3.5 mr-2" />}
+                                                                    Purge (Ghost)
                                                                 </Button>
                                                             </div>
                                                         ) : (

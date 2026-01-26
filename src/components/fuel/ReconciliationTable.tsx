@@ -401,19 +401,29 @@ export function ReconciliationTable({
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            {dispute ? (
-                                                <Badge variant={
-                                                    dispute.status === 'Open' ? 'destructive' : 
-                                                    dispute.status === 'Resolved' ? 'default' : 'secondary'
-                                                } 
-                                                className="cursor-pointer hover:opacity-80 transition-opacity"
-                                                onClick={() => onResolveDispute?.(dispute)}
-                                                >
-                                                    {dispute.status === 'Open' ? 'Dispute' : dispute.status}
-                                                </Badge>
-                                            ) : (
-                                                <span className="text-slate-400 text-xs">-</span>
-                                            )}
+                                            <div className="flex flex-col gap-1 items-start">
+                                                {dispute && (
+                                                    <Badge variant={
+                                                        dispute.status === 'Open' ? 'destructive' : 
+                                                        dispute.status === 'Resolved' ? 'default' : 'secondary'
+                                                    } 
+                                                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                                                    onClick={() => onResolveDispute?.(dispute)}
+                                                    >
+                                                        {dispute.status === 'Open' ? 'Dispute' : dispute.status}
+                                                    </Badge>
+                                                )}
+
+                                                {(report.pendingCount || 0) > 0 && (
+                                                    <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                                                        {report.pendingCount} Pending
+                                                    </Badge>
+                                                )}
+
+                                                {!dispute && (!report.pendingCount || report.pendingCount === 0) && (
+                                                    <span className="text-slate-400 text-xs">-</span>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         
                                         {/* Total Spend */}

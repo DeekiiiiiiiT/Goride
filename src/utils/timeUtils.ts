@@ -1,5 +1,5 @@
+import { format, parseISO, subMinutes, addMinutes, isValid, differenceInMinutes, differenceInDays, startOfDay } from 'date-fns';
 import { Trip } from '../types/data';
-import { parseISO, subMinutes, addMinutes, isValid, differenceInMinutes, differenceInDays, startOfDay } from 'date-fns';
 
 export interface TripTimes {
   requestTime: Date; // The time the driver accepted the trip

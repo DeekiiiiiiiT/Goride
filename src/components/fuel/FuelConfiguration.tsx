@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { Info, RefreshCw, ShieldCheck, Database } from 'lucide-react';
+import { Info, RefreshCw, ShieldCheck, Database, Trash2, AlertTriangle } from 'lucide-react';
 import { ScenarioList } from './ScenarioList';
 import { Button } from "../ui/button";
 import { api } from '../../services/api';
@@ -9,6 +9,53 @@ import { toast } from "sonner@2.0.3";
 
 export function FuelConfiguration() {
     const [isBackfilling, setIsBackfilling] = React.useState(false);
+    const [isResetting, setIsResetting] = React.useState(false);
+
+    const handleResetFuelData = async () => {
+        const confirm1 = window.confirm("DANGER: This will permanently delete ALL fuel logs and their associated financial transactions. This action cannot be undone.");
+        if (!confirm1) return;
+        
+        const confirm2 = window.confirm("Are you absolutely sure? Please confirm one last time to proceed with the data wipe.");
+        if (!confirm2) return;
+
+        setIsResetting(true);
+        try {
+            const entries = await api.getAllFuelEntries();
+            let deletedCount = 0;
+            
+            // Execute deletions in parallel batches to speed up but not overwhelm server
+            const batchSize = 5;
+            for (let i = 0; i < entries.length; i += batchSize) {
+                const batch = entries.slice(i, i + batchSize);
+                await Promise.all(batch.map(async (entry: any) => {
+                    // 1. Delete linked transaction if it exists
+                    if (entry.transactionId) {
+                        try {
+                            await api.deleteTransaction(entry.transactionId);
+                        } catch (e) {
+                            console.warn(`Failed to delete linked transaction ${entry.transactionId}`, e);
+                        }
+                    }
+                    // 2. Delete the fuel entry
+                    await api.deleteFuelEntry(entry.id);
+                    deletedCount++;
+                }));
+            }
+            
+            toast.success("Fuel Data Reset Complete", {
+                description: `Successfully removed ${deletedCount} entries and linked transactions.`
+            });
+            
+            // Force reload to clear all views
+            setTimeout(() => window.location.reload(), 1500);
+            
+        } catch (e) {
+            console.error(e);
+            toast.error("Reset Failed", { description: "An error occurred while deleting data." });
+        } finally {
+            setIsResetting(false);
+        }
+    };
 
     const handleBackfill = async () => {
         const confirm = window.confirm("Are you sure? This will recalculate cumulative liters and integrity flags for ALL historical fuel entries. This may take a moment.");
@@ -79,6 +126,32 @@ export function FuelConfiguration() {
                             </Button>
                         </CardContent>
                     </Card>
+
+                    <div className="mt-4">
+                        <Card className="border-red-100 bg-red-50/30">
+                            <CardContent className="p-4 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-2 bg-red-100 rounded-lg text-red-600">
+                                        <AlertTriangle className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-red-900">Danger Zone: Reset Fuel Data</p>
+                                        <p className="text-xs text-red-700/80">Permanently delete ALL fuel logs and associated financial transactions. Use this for a fresh start.</p>
+                                    </div>
+                                </div>
+                                <Button 
+                                    variant="destructive" 
+                                    size="sm" 
+                                    className="bg-red-600 hover:bg-red-700 text-white"
+                                    onClick={handleResetFuelData}
+                                    disabled={isResetting}
+                                >
+                                    <Trash2 className={`h-4 w-4 mr-2 ${isResetting ? 'animate-bounce' : ''}`} />
+                                    {isResetting ? "Wiping Data..." : "Reset Data"}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
             </CardContent>
         </Card>

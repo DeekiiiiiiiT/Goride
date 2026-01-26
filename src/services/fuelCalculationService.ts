@@ -110,6 +110,9 @@ export const FuelCalculationService = {
             e.date <= endStr
         );
 
+        // Phase 3: Calculate Pending Count
+        const pendingCount = vehicleEntries.filter(e => e.reconciliationStatus === 'Pending').length;
+
         const vehicleTrips = trips.filter(t => 
             t.vehicleId === vehicle.id && 
             t.date >= startStr && 
@@ -191,6 +194,7 @@ export const FuelCalculationService = {
             companyShare,
             driverShare,
             status: 'Draft',
+            pendingCount,
             healthStatus,
             healthScore,
             metadata: {

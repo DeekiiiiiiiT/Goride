@@ -2374,6 +2374,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                             transactions={fuelTransactions}
                                             fuelEntries={fuelEntries}
                                             buckets={odometerBuckets}
+                                            onRefresh={refreshData}
                                         />
                                     </div>
                                 )}

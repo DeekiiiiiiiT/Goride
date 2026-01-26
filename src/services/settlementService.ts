@@ -1,8 +1,10 @@
-import { api } from './api';
-import { FuelEntry, FuelScenario } from '../types/fuel';
+import { api, fetchWithRetry } from './api';
+import { FuelEntry, FuelScenario, WeeklyFuelReport } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { FuelCalculationService } from './fuelCalculationService';
 import { format } from 'date-fns';
+import { API_ENDPOINTS } from './apiConfig';
+import { publicAnonKey } from '../utils/supabase/info';
 
 /**
  * Service to handle automated financial settlements for fuel and other expenses.
@@ -10,6 +12,236 @@ import { format } from 'date-fns';
  * paid with RideShare cash.
  */
 export const settlementService = {
+  // --- Phase 4: Commit Weekly Statement ---
+  async commitWeeklyStatement(report: WeeklyFuelReport, entries: FuelEntry[]): Promise<void> {
+    try {
+        // 1. Fetch dependencies
+        const [vehicles, scenariosResponse] = await Promise.all([
+            api.getVehicles(),
+            fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+                headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+            })
+        ]);
+        
+        if (!scenariosResponse.ok) throw new Error("Failed to fetch scenarios");
+        const scenarios: FuelScenario[] = await scenariosResponse.json();
+        const vehicle = vehicles.find(v => v.id === report.vehicleId);
+        
+        if (!vehicle) throw new Error(`Vehicle ${report.vehicleId} not found`);
+
+        // 2. Determine Active Scenario
+        const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) || 
+                               scenarios.find(s => s.isDefault) || 
+                               scenarios[0];
+
+        // Helper for coverage (duplicated from FuelCalculationService to ensure consistency)
+        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'personal' | 'misc', amount: number) => {
+            if (!activeScenario) return { company: amount, driver: 0 };
+            
+            const rule = activeScenario.rules.find(r => r.category === 'Fuel');
+            if (!rule) return { company: amount, driver: 0 };
+
+            let coveragePercent = rule.coverageValue;
+            if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
+            if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
+            if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
+            if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
+
+            if (rule.coverageType === 'Full') {
+                return { company: amount, driver: 0 };
+            } else if (rule.coverageType === 'Percentage') {
+                const companyPay = amount * (coveragePercent / 100);
+                return { company: companyPay, driver: amount - companyPay };
+            } else if (rule.coverageType === 'Fixed_Amount') {
+                const companyPay = Math.min(amount, rule.coverageValue);
+                return { company: companyPay, driver: amount - companyPay };
+            }
+            return { company: amount, driver: 0 };
+        };
+
+        // 3. Process each entry
+        for (const entry of entries) {
+            // Skip already reconciled
+            if (entry.reconciliationStatus === 'Verified' || entry.reconciliationStatus === 'Archived') continue;
+
+            // Determine usage category (simplified for 1-to-1 based on entry type/metadata if available, 
+            // but normally classification happens at aggregate level.
+            // For 1-to-1, we might assume a default split or try to infer.
+            // However, FuelCalculationService calculates 'rideShareCost', 'personalCost' based on TRIPS and MILEAGE,
+            // not strictly per FuelEntry. 
+            // Strategy: Apply the 'Generic' split unless we can map specific fuel to specific miles.
+            // Since we can't map specific liters to specific miles easily without the 'Bucket' logic,
+            // we will use the Report's aggregate ratios to split this specific receipt?
+            // OR simpler: Just apply the "RideShare Coverage" rule to everything? 
+            // NO, that would be wrong for Personal trips.
+            
+            // CORRECT APPROACH FOR STAGED RECONCILIATION:
+            // The "Weekly Report" has the TOTALS. The "Entries" are just the funding source.
+            // If we want 1-to-1, we are forcing a square peg in a round hole if the usage is mixed.
+            // BUT, usually a driver pays for ALL fuel, or Company pays for ALL fuel.
+            // The "Split" is the net result.
+            
+            // If we commit 1-to-1, we are saying "This receipt is 60% company".
+            // Let's assume the "Ride Share Coverage" applies to the entry if we lack granularity.
+            // BETTER: Use the `FuelRule.coverageValue` (Base Percentage) as the default split for the entry.
+            // If the report shows significant personal usage, the "Deduction" might be a separate bulk transaction?
+            // The prompt says: "Iterate through the `entries`... Apply the active scenario split to EACH entry."
+            
+            // Let's calculate the split based on the Base Rule for now.
+            const split = getCoverage('rideShare', entry.amount); // Defaulting to RideShare rule for the entry
+            
+            let txToCreate: Partial<FinancialTransaction> | null = null;
+            
+            if (entry.paymentSource === 'Gas_Card') {
+                // Company Paid.
+                // If Driver has a share, we deduct it.
+                if (split.driver > 0.01) {
+                    txToCreate = {
+                        type: 'Expense', // Deduction is an Expense (Credit to Company, Debit to Driver)
+                        category: 'Fuel Deduction',
+                        description: `Fuel Deduction: Share of ${entry.location || 'Fuel'}`,
+                        amount: -Math.abs(split.driver), // Negative = Deduction from Pay
+                        paymentMethod: 'Cash', // Adjustment
+                    };
+                }
+            } else {
+                // Driver Paid (Personal/Cash).
+                // If Company has a share, we reimburse it.
+                if (split.company > 0.01) {
+                    txToCreate = {
+                        type: 'Reimbursement',
+                        category: 'Fuel Reimbursement',
+                        description: `Fuel Reimbursement: ${entry.location || 'Fuel'}`,
+                        amount: Math.abs(split.company), // Positive = Add to Pay
+                        paymentMethod: 'Cash',
+                    };
+                }
+            }
+
+            let savedTxId: string | undefined = undefined;
+
+            if (txToCreate) {
+                // Fill common fields
+                txToCreate = {
+                    ...txToCreate,
+                    id: crypto.randomUUID(),
+                    date: entry.date.split('T')[0],
+                    time: entry.time,
+                    driverId: entry.driverId || report.driverId,
+                    vehicleId: entry.vehicleId,
+                    status: 'Approved',
+                    isReconciled: true,
+                    metadata: {
+                        sourceId: entry.id,
+                        scenarioId: activeScenario.id,
+                        settlementType: 'Staged_Reconciliation',
+                        totalCost: entry.amount,
+                        companyShare: split.company,
+                        driverShare: split.driver,
+                        reportId: report.id
+                    }
+                };
+
+                const saved = await api.saveTransaction(txToCreate);
+                savedTxId = saved.id;
+            }
+
+            // 4. Update Fuel Entry
+            const updatedEntry = {
+                ...entry,
+                reconciliationStatus: 'Verified',
+                transactionId: savedTxId || entry.transactionId, // Keep old if exists, else new
+                metadata: {
+                    ...entry.metadata,
+                    finalizedAt: new Date().toISOString(),
+                    finalizedByReport: report.id,
+                    splitApplied: split
+                }
+            };
+
+            await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${publicAnonKey}`
+                },
+                body: JSON.stringify(updatedEntry)
+            });
+        }
+    } catch (error) {
+        console.error("Failed to commit weekly statement:", error);
+        throw error;
+    }
+  },
+
+  /**
+   * Discovers all financial records associated with a fuel log ID (Expense + Settlement).
+   * Uses both explicit metadata IDs and "Signature Matching" (fingerprinting)
+   * to catch orphans that lost their explicit links.
+   */
+  async getRelatedTransactions(fuelEntry: FuelEntry): Promise<FinancialTransaction[]> {
+    const allTransactions = await api.getTransactions();
+    
+    // 1. Primary Match: Explicit Metadata Links
+    const explicitMatches = allTransactions.filter(t => 
+      t.metadata?.sourceId === fuelEntry.id || 
+      t.metadata?.linkedFuelId === fuelEntry.id ||
+      t.id === fuelEntry.transactionId
+    );
+
+    // 2. Secondary Match: Signature/Fingerprint Matching
+    // Matches transactions by Vehicle, Date, and Amount (handling both Debit and Credit variants)
+    const entryDate = fuelEntry.date.split('T')[0];
+    const signatureMatches = allTransactions.filter(t => {
+      // Skip if already found in explicit matches
+      if (explicitMatches.some(em => em.id === t.id)) return false;
+
+      const sameVehicle = t.vehicleId === fuelEntry.vehicleId;
+      const sameDate = t.date === entryDate;
+      
+      // Look for amount matches (Expense - amount, or Settlement - coverage amount)
+      const absTxAmount = Math.abs(t.amount);
+      const absEntryAmount = Math.abs(fuelEntry.amount);
+      
+      const sameAmount = absTxAmount === absEntryAmount || 
+                         (t.metadata?.totalCost && Math.abs(t.metadata.totalCost) === absEntryAmount);
+      
+      // We look for Fuel or Reimbursement categories for this vehicle/date/amount
+      const relevantCategory = t.category?.toLowerCase().includes('fuel') || t.category?.toLowerCase().includes('reimbursement');
+      
+      return sameVehicle && sameDate && sameAmount && relevantCategory;
+    });
+
+    return [...explicitMatches, ...signatureMatches];
+  },
+
+  /**
+   * Finds the parent FuelEntry for a given financial transaction.
+   */
+  async getParentFuelEntry(transaction: FinancialTransaction): Promise<FuelEntry | null> {
+    const fuelEntries = await fuelService.getFuelEntries();
+    
+    // 1. Explicit Link
+    const sourceId = transaction.metadata?.sourceId || transaction.metadata?.linkedFuelId;
+    if (sourceId) {
+      const match = fuelEntries.find(e => e.id === sourceId);
+      if (match) return match;
+    }
+
+    // 2. Fingerprint Match
+    const txDate = transaction.date;
+    const absTxAmount = Math.abs(transaction.amount);
+    
+    return fuelEntries.find(e => {
+      const sameVehicle = e.vehicleId === transaction.vehicleId;
+      const sameDate = e.date.split('T')[0] === txDate;
+      const sameAmount = Math.abs(e.amount) === absTxAmount || 
+                         (transaction.metadata?.totalCost && Math.abs(e.amount) === Math.abs(transaction.metadata.totalCost));
+      
+      return sameVehicle && sameDate && sameAmount;
+    }) || null;
+  },
+
   /**
    * Processes a fuel entry and creates the corresponding financial settlement
    * if it was paid with RideShare cash.

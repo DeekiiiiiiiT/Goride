@@ -220,12 +220,13 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               
               // Process settlements for bulk entries
               const scenariosData = await fuelService.getFuelScenarios();
-              for (const log of savedLogs) {
-                  await settlementService.processFuelSettlement(log, scenariosData);
-              }
+              /* 
+                 Phase 6: Legacy Auto-Settlement Disabled.
+                 Settlement is now handled via the "Finalize" flow in Reconciliation Table.
+              */
               
               setLogs(prev => [...savedLogs, ...prev]);
-              toast.success(`Successfully recorded ${savedLogs.length} transactions and processed settlements`);
+              toast.success(`Successfully recorded ${savedLogs.length} transactions (Pending Reconciliation)`);
           } else {
               // Single Mode
               const entry = entryOrEntries;
@@ -246,7 +247,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               
               // Process settlement
               const scenariosData = await fuelService.getFuelScenarios();
-              await settlementService.processFuelSettlement(savedLog, scenariosData);
+              /* 
+                 Phase 6: Legacy Auto-Settlement Disabled.
+                 Settlement is now handled via the "Finalize" flow in Reconciliation Table.
+              */
 
               if (editingLog) {
                   // Phase 13: Financial Ledger Sync Hardening (Step 13.1)
@@ -285,7 +289,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                   toast.success("Transaction updated & financial ledger synced");
               } else {
                   setLogs(prev => [savedLog, ...prev]);
-                  toast.success("Transaction recorded & ledger credit posted");
+                  toast.success("Transaction recorded (Pending Reconciliation)");
               }
           }
           setIsLogModalOpen(false);
@@ -314,8 +318,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           // If it was a fuel reimbursement, trigger the credit settlement
           if (updated.category === 'Fuel' || updated.category === 'Fuel Reimbursement') {
               const scenariosData = await fuelService.getFuelScenarios();
-              await settlementService.processFuelSettlement(updated, scenariosData);
-              toast.success("Reimbursement Approved & Ledger Credit Posted");
+              /* 
+                 Phase 6: Legacy Auto-Settlement Disabled.
+              */
+              toast.success("Reimbursement Approved (Pending Reconciliation)");
           } else {
               toast.success("Reimbursement Approved");
           }
@@ -344,7 +350,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             // If admin saves as 'Approved' immediately, process settlement
             if (savedTx.status === 'Approved' && (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement')) {
                 const scenariosData = await fuelService.getFuelScenarios();
-                await settlementService.processFuelSettlement(savedTx, scenariosData);
+                 /* 
+                 Phase 6: Legacy Auto-Settlement Disabled.
+                 */
             }
 
             if (editingExpense) {
@@ -408,48 +416,56 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
   const confirmDeleteLog = async () => {
       if (!deleteLogConfirmationId) return;
+      
+      const logEntry = logs.find(l => l.id === deleteLogConfirmationId);
+      if (!logEntry) {
+        setDeleteLogConfirmationId(null);
+        return;
+      }
+
+      setIsSyncing(true);
       try {
-          const logToDelete = logs.find(l => l.id === deleteLogConfirmationId);
-          if (!logToDelete) return;
-
-          let transactionId = logToDelete.transactionId;
+          // 1. Discover all related records (Step 1.3/2.1)
+          const cleanupMap = await fuelService.getCleanupMap(deleteLogConfirmationId);
+          const transactionsToDelete = cleanupMap.relatedTransactions;
           
-          // Phase 6.1: Global Lookup for missing/corrupted links (Source-Aware Deletion)
-          if (!transactionId && cascadeDelete) {
-              const matchedTx = transactions.find(t => 
-                  (t.category === 'Fuel' || t.category === 'Fuel Reimbursement') &&
-                  Math.abs(t.amount) === logToDelete.amount &&
-                  (t.date === (logToDelete.date?.split('T')[0] || '') || t.metadata?.sourceId === logToDelete.id) &&
-                  t.vehicleId === logToDelete.vehicleId
-              );
-              if (matchedTx) transactionId = matchedTx.id;
-          }
-
-          // Sequential Cleanup (Phase 2, Step 3)
+          // 2. Perform Atomic Deletion Sequence (Step 2.2)
+          // Always delete the primary fuel log first
           await fuelService.deleteFuelEntry(deleteLogConfirmationId);
           
-          if (cascadeDelete && transactionId) {
-              await api.deleteTransaction(transactionId);
-              setTransactions(prev => prev.filter(t => t.id !== transactionId));
+          let deletedTxCount = 0;
+          if (cascadeDelete && transactionsToDelete.length > 0) {
+              // Delete all discovered financial records (Debit + Credit/Settlement)
+              const deletePromises = transactionsToDelete.map(tx => api.deleteTransaction(tx.id));
+              await Promise.all(deletePromises);
+              deletedTxCount = transactionsToDelete.length;
           }
 
+          // 3. Update Local State
           setLogs(prev => prev.filter(l => l.id !== deleteLogConfirmationId));
+          if (cascadeDelete && transactionsToDelete.length > 0) {
+              const txIdsToDelete = transactionsToDelete.map(tx => tx.id);
+              setTransactions(prev => prev.filter(t => !txIdsToDelete.includes(t.id)));
+          }
           
-          // Phase 8.2: Recovery Context Toast
-          const detailsText = logToDelete ? ` (${logToDelete.liters}L, $${logToDelete.amount.toFixed(2)})` : "";
-          toast.success(
-            transactionId && cascadeDelete 
-              ? `Log and linked record deleted${detailsText}` 
-              : `Log entry deleted${detailsText}`,
-            {
-              description: logToDelete?.type === 'Fuel_Manual_Entry' ? "You can re-submit this manual entry with corrected data." : undefined,
+          // 4. Detailed UI Feedback (Step 2.3)
+          const detailsText = ` (${logEntry.liters}L, $${logEntry.amount.toFixed(2)})`;
+          const successMessage = cascadeDelete && deletedTxCount > 0
+              ? `Fuel log and ${deletedTxCount} associated ledger records purged successfully.`
+              : `Fuel log entry deleted successfully.`;
+          
+          toast.success(successMessage, {
+              description: cascadeDelete && deletedTxCount > 0 
+                  ? "The system has performed a total recall to prevent ledger imbalances."
+                  : "Only the fuel log was removed. Financial records may still exist.",
               duration: 5000
-            }
-          );
+          });
+
       } catch (e) {
-          console.error(e);
-          toast.error("Failed to delete log entry");
+          console.error("[FuelManagement] Deletion failure:", e);
+          toast.error("Critical failure during atomic deletion. Some records may remain.");
       } finally {
+          setIsSyncing(false);
           setDeleteLogConfirmationId(null);
       }
   };
@@ -461,46 +477,66 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
   const confirmDeleteExpense = async () => {
       if (!deleteConfirmationId) return;
+      
+      const txToDelete = transactions.find(t => t.id === deleteConfirmationId);
+      if (!txToDelete) {
+          setDeleteConfirmationId(null);
+          return;
+      }
+
+      setIsSyncing(true);
       try {
-          const txToDelete = transactions.find(t => t.id === deleteConfirmationId);
-          if (!txToDelete) return;
-
-          // Find if there is a linked fuel log
-          let logToCleanup = logs.find(l => l.transactionId === deleteConfirmationId);
-
-          // Phase 6.2: Global Lookup for missing/corrupted links (Source-Aware Deletion)
-          if (!logToCleanup && cascadeDelete) {
-              logToCleanup = logs.find(l => 
-                  l.amount === Math.abs(txToDelete.amount) &&
-                  ((l.date?.split('T')[0] || '') === txToDelete.date || l.metadata?.sourceId === txToDelete.id) &&
-                  l.vehicleId === txToDelete.vehicleId
-              );
-          }
+          // 1. Bi-Directional Discovery (Step 3.1)
+          // Find the parent fuel entry that likely spawned this transaction
+          const parentEntry = await settlementService.getParentFuelEntry(txToDelete);
           
-          await api.deleteTransaction(deleteConfirmationId);
-          
-          if (cascadeDelete && logToCleanup) {
-              await fuelService.deleteFuelEntry(logToCleanup.id);
-              setLogs(prev => prev.filter(l => l.id !== logToCleanup.id));
+          let recordsToPurge: { entryId?: string, transactionIds: string[] } = {
+              transactionIds: [deleteConfirmationId]
+          };
+
+          if (parentEntry && cascadeDelete) {
+              // If we found a parent, we do a "Total Recall" of all its children
+              const relatedTxs = await settlementService.getRelatedTransactions(parentEntry);
+              recordsToPurge = {
+                  entryId: parentEntry.id,
+                  transactionIds: Array.from(new Set([...relatedTxs.map(t => t.id), deleteConfirmationId]))
+              };
           }
 
-          setTransactions(prev => prev.filter(t => t.id !== deleteConfirmationId));
+          // 2. Atomic Purge Sequence (Step 3.2)
+          if (recordsToPurge.entryId) {
+              await fuelService.deleteFuelEntry(recordsToPurge.entryId);
+          }
           
-          // Phase 8.2: Recovery Context Toast
-          const detailsText = txToDelete ? ` ($${Math.abs(txToDelete.amount).toFixed(2)})` : "";
+          const deletePromises = recordsToPurge.transactionIds.map(id => api.deleteTransaction(id));
+          await Promise.all(deletePromises);
+
+          // 3. Sync State
+          if (recordsToPurge.entryId) {
+              setLogs(prev => prev.filter(l => l.id !== recordsToPurge.entryId));
+          }
+          setTransactions(prev => prev.filter(t => !recordsToPurge.transactionIds.includes(t.id)));
+
+          // 4. Recovery Context Feedback
+          const detailsText = ` ($${Math.abs(txToDelete.amount).toFixed(2)})`;
+          const count = recordsToPurge.transactionIds.length;
+          
           toast.success(
-            logToCleanup && cascadeDelete 
-              ? `Financial record and linked fuel log deleted${detailsText}` 
-              : `Expense deleted${detailsText}`,
+            recordsToPurge.entryId && cascadeDelete 
+              ? `Ledger records and linked fuel log purged${detailsText}` 
+              : `Expense removed${detailsText}`,
             {
-              description: "The linked entry has been removed to maintain ledger integrity.",
+              description: recordsToPurge.entryId && cascadeDelete
+                ? `Total of ${count} ledger records removed to prevent duplicate re-entry flags.`
+                : "The individual record has been removed.",
               duration: 5000
             }
           );
       } catch (e) {
-          console.error(e);
-          toast.error("Failed to delete expense");
+          console.error("[FuelManagement] Expense purge failure:", e);
+          toast.error("Critical failure during ledger cleanup.");
       } finally {
+          setIsSyncing(false);
           setDeleteConfirmationId(null);
       }
   };
@@ -809,8 +845,30 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const handleFinalize = async (reports: WeeklyFuelReport[]) => {
       try {
           setIsRefreshing(true);
-          await fuelService.finalizeReconciliation(reports);
-          toast.success(`Successfully finalized ${reports.length} statements and posted to ledger.`);
+          
+          // Phase 5: Connect to Settlement Engine
+          let successCount = 0;
+          for (const report of reports) {
+              // Filter entries for this report period and vehicle
+              const relevantEntries = logs.filter(entry => 
+                  entry.vehicleId === report.vehicleId && 
+                  entry.date >= report.weekStart && 
+                  entry.date <= report.weekEnd &&
+                  entry.reconciliationStatus === 'Pending' // Only process pending items
+              );
+              
+              if (relevantEntries.length > 0) {
+                  await settlementService.commitWeeklyStatement(report, relevantEntries);
+                  successCount++;
+              }
+          }
+          
+          if (successCount > 0) {
+              toast.success(`Successfully finalized ${successCount} statements and posted to ledger.`);
+          } else {
+              toast.info("No pending items found to finalize.");
+          }
+
           await loadData(true); // Reload everything
       } catch (e: any) {
           console.error(e);

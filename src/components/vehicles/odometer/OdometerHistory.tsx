@@ -14,7 +14,10 @@ import {
   Filter,
   Search,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  FileDown,
+  ListChecks,
+  ChevronDown
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../ui/card";
 import { Badge } from "../../ui/badge";
@@ -51,6 +54,10 @@ import { OdometerReading } from '../../../types/vehicle';
 import { odometerService } from '../../../services/odometerService';
 import { toast } from "sonner@2.0.3";
 
+import { formatMasterLogExport, formatCheckInExport } from '../../../utils/odometerUtils';
+import { downloadCSV } from '../../../utils/export';
+import { ImportOdometerModal } from './ImportOdometerModal';
+
 interface OdometerHistoryProps {
   vehicleId: string;
   maintenanceLogs?: any[];
@@ -67,6 +74,8 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({
   const [history, setHistory] = useState<OdometerReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [readingToDelete, setReadingToDelete] = useState<string | null>(null);
+  const [isExportingMaster, setIsExportingMaster] = useState(false);
+  const [isExportingCheckins, setIsExportingCheckins] = useState(false);
   const [filters, setFilters] = useState({
     source: 'all',
     search: '',
@@ -91,6 +100,63 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory, refreshTrigger]);
+
+  const handleExportMasterLog = async () => {
+      setIsExportingMaster(true);
+      try {
+          // 1. Fetch fresh unified history to ensure we have the latest
+          const data = await odometerService.getUnifiedHistory(vehicleId);
+          
+          if (!data || data.length === 0) {
+              toast.error("No data to export");
+              return;
+          }
+
+          // 2. Prepare for CSV
+          // We can cast data to UnifiedOdometerEntry[] because the service guarantees it
+          const exportRows = formatMasterLogExport(data as any[]);
+          
+          // 3. Download
+          const filename = `master_odometer_log_${vehicleId}_${new Date().toISOString().split('T')[0]}`;
+          downloadCSV(exportRows, filename);
+          
+          toast.success(`Exported ${exportRows.length} records successfully.`);
+      } catch (error) {
+          console.error("Export failed:", error);
+          toast.error("Failed to export master log");
+      } finally {
+          setIsExportingMaster(false);
+      }
+  };
+
+  const handleExportCheckins = async () => {
+      setIsExportingCheckins(true);
+      try {
+          // 1. Fetch fresh unified history
+          const data = await odometerService.getUnifiedHistory(vehicleId);
+          
+          if (!data || data.length === 0) {
+              toast.error("No data to export");
+              return;
+          }
+
+          // 2. Prepare for Check-in CSV (Legacy Format)
+          // Filter strictly for check-ins as this is a legacy export
+          const checkinsOnly = data.filter(d => d.source === 'checkin');
+          const exportRows = formatCheckInExport(checkinsOnly as any[]);
+          
+          // 3. Download
+          const filename = `checkin_export_${vehicleId}_${new Date().toISOString().split('T')[0]}`;
+          downloadCSV(exportRows, filename);
+          
+          toast.success(`Exported ${exportRows.length} check-in records.`);
+      } catch (error) {
+          console.error("Check-in export failed:", error);
+          toast.error("Failed to export check-ins");
+      } finally {
+          setIsExportingCheckins(false);
+      }
+  };
 
   const handleDeleteRequest = (id: string) => {
     if (id.startsWith('fuel') || id.startsWith('checkin') || id.startsWith('service')) {
@@ -237,14 +303,59 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({
                   <Wrench className="w-4 h-4 mr-2" />
                   Manual Odometer Entry
               </Button>
-              <Button 
-                variant="outline" 
-                className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 px-6 rounded-xl"
-                onClick={() => fetchHistory()}
-              >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Sync Latest Data
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                    variant="outline" 
+                    className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl"
+                    onClick={() => fetchHistory()}
+                    title="Refresh Data"
+                >
+                    <RefreshCw className="w-4 h-4" />
+                </Button>
+                <ImportOdometerModal 
+                    vehicleId={vehicleId} 
+                    onImportComplete={fetchHistory} 
+                    triggerClassName="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl"
+                />
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button 
+                            variant="outline" 
+                            className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl px-4 min-w-[60px]"
+                            title="Export Data"
+                        >
+                            <FileUp className="w-4 h-4 mr-2" />
+                            <ChevronDown className="w-3 h-3 opacity-50" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel>Export Options</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                            onClick={handleExportMasterLog}
+                            disabled={isExportingMaster}
+                        >
+                            {isExportingMaster ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <FileUp className="w-4 h-4 mr-2 text-indigo-500" />
+                            )}
+                            <span>Export Master Log</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                            onClick={handleExportCheckins}
+                            disabled={isExportingCheckins}
+                        >
+                            {isExportingCheckins ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <ListChecks className="w-4 h-4 mr-2 text-emerald-500" />
+                            )}
+                            <span>Export Check-ins</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
           </div>
         </div>
       </div>

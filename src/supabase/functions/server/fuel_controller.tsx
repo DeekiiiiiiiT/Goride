@@ -639,4 +639,125 @@ app.patch(`${BASE_PATH}/anchors/:id`, async (c) => {
     }
 });
 
+// --- Phase 5: Integrity Repair Engine (Server-Side) ---
+app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
+    try {
+        console.log("[Integrity] Starting server-side fingerprint matching...");
+        
+        // 1. Fetch all data
+        const transactions = await kv.getByPrefix("transaction:");
+        const entries = await kv.getByPrefix("fuel_entry:");
+        
+        // 2. Filter for Orphans
+        // Fuel Transactions that lack a link
+        const orphansTx = transactions.filter((tx: any) => 
+            (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement' || tx.description?.toLowerCase().includes('fuel') || tx.description?.toLowerCase().includes('gas')) &&
+            !tx.metadata?.linkedFuelId && 
+            !tx.metadata?.sourceId
+        );
+
+        // Fuel Entries that are not verified
+        const orphanLogs = entries.filter((e: any) => 
+            e.reconciliationStatus !== 'Verified' &&
+            !e.transactionId // If it has a transactionId, it's likely already linked explicitly
+        );
+
+        let linkedCount = 0;
+        let anomalyFixedCount = 0;
+        const updates: any[] = [];
+        const updateKeys: string[] = [];
+
+        // Helper to check if date is within 1 day (Anomaly Window)
+        const isDateMatch = (d1: string, d2: string) => {
+            if (d1 === d2) return true;
+            const t1 = new Date(d1).getTime();
+            const t2 = new Date(d2).getTime();
+            const diff = Math.abs(t1 - t2);
+            return diff <= 86400000; // 24 hours in ms
+        };
+
+        // 3. Match Fingerprints
+        for (const tx of orphansTx) {
+            // Find a log that matches Amount and Date (Exact or Window)
+            const txDate = tx.date; // YYYY-MM-DD
+            const txAmount = Math.abs(Number(tx.amount));
+
+            // Collision Resolution: Find ALL matches first
+            const potentialMatches = orphanLogs.filter((log: any) => {
+                const logDate = log.date.split('T')[0];
+                const logAmount = Math.abs(Number(log.amount));
+                
+                // Match amount (allow tiny float variance) and Date Window
+                return Math.abs(txAmount - logAmount) < 0.01 && isDateMatch(txDate, logDate);
+            });
+
+            if (potentialMatches.length > 0) {
+                // Best match strategy: Prefer EXACT date match over Window match
+                let bestMatch = potentialMatches.find((log: any) => log.date.split('T')[0] === txDate);
+                
+                // If no exact match, take the first window match (Anomaly Re-anchoring)
+                if (!bestMatch) {
+                    bestMatch = potentialMatches[0];
+                    anomalyFixedCount++;
+                }
+
+                if (bestMatch) {
+                    // Link TX -> Log
+                    tx.metadata = { ...tx.metadata, linkedFuelId: bestMatch.id, integrityNote: 'Auto-Linked via Integrity Repair' };
+                    
+                    // Link Log -> Status
+                    bestMatch.reconciliationStatus = 'Verified';
+                    bestMatch.reconciledAt = new Date().toISOString();
+                    bestMatch.transactionId = tx.id;
+                    bestMatch.metadata = { ...bestMatch.metadata, autoLinked: true };
+                    
+                    // If date was mismatched, anchor log to tx date (Source of Truth)
+                    if (bestMatch.date.split('T')[0] !== txDate) {
+                        const timePart = bestMatch.date.includes('T') ? bestMatch.date.split('T')[1] : '12:00:00.000Z';
+                        bestMatch.date = `${txDate}T${timePart}`;
+                        bestMatch.metadata.dateAdjusted = true;
+                    }
+
+                    // Add to updates
+                    updates.push(tx);
+                    updateKeys.push(`transaction:${tx.id}`);
+                    
+                    updates.push(bestMatch);
+                    updateKeys.push(`fuel_entry:${bestMatch.id}`);
+                    
+                    // Remove from pool so we don't double link
+                    const idx = orphanLogs.findIndex((l: any) => l.id === bestMatch.id);
+                    if (idx !== -1) orphanLogs.splice(idx, 1);
+                    
+                    linkedCount++;
+                }
+            }
+        }
+
+        // 4. Atomic Commit with Chunking
+        if (updates.length > 0) {
+            const BATCH_SIZE = 50;
+            for (let i = 0; i < updateKeys.length; i += BATCH_SIZE) {
+                const chunkKeys = updateKeys.slice(i, i + BATCH_SIZE);
+                const chunkValues = updates.slice(i, i + BATCH_SIZE);
+                
+                // Create object map for mset
+                // kv.mset expects (keys, values) or Object?
+                // kv_store.tsx: mset(keys: string[], values: any[])
+                await kv.mset(chunkKeys, chunkValues);
+            }
+        }
+
+        return c.json({ 
+            success: true, 
+            linkedCount, 
+            anomalyFixedCount,
+            message: `Successfully linked ${linkedCount} orphaned records (${anomalyFixedCount} window anomalies resolved).` 
+        });
+    } catch (e: any) {
+        console.error("[Integrity Error]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 export default app;
