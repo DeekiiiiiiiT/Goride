@@ -111,16 +111,33 @@ export function DriverDashboard() {
   }, [loading, metrics, recentTrip]);
 
   useEffect(() => {
+    let mounted = true;
     if (!user || driverLoading) return;
 
     const fetchData = async () => {
+      // Safety timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        if (mounted) setLoading(false);
+      }, 5000);
+
       try {
         setLoading(true);
-        // 1. Fetch Metrics & Drivers first (Small payloads)
-        const [allMetrics, drivers, flaggedTx] = await Promise.all([
+        // 1. Fetch EVERYTHING in parallel
+        // This prevents waterfalls where we wait for trips before fetching tiers
+        const [
+            allMetrics, 
+            drivers, 
+            flaggedTx, 
+            allTrips, 
+            tiers, 
+            quotaConfig
+        ] = await Promise.all([
             api.getDriverMetrics().catch(() => []),
             api.getDrivers().catch(() => []),
-            api.getFlaggedTransactions().catch(() => [])
+            api.getFlaggedTransactions().catch(() => []),
+            api.getTrips({ limit: 200 }).catch(() => []), // Increased limit for monthly calc accuracy
+            tierService.getTiers().catch(() => []),
+            tierService.getQuotaSettings().catch(() => null)
         ]);
 
         const myMetrics = allMetrics.find(m => 
@@ -138,8 +155,7 @@ export function DriverDashboard() {
         );
         setFlaggedCount(myFlagged.length);
 
-        // 2. Fetch Trips for Earnings (Medium payload, route stripped server-side)
-        const allTrips = await api.getTrips({ limit: 100 }).catch(() => []);
+        // 2. Process Trips for Earnings
         const myTrips = allTrips.filter(t => 
             t.driverId === user.id || 
             (driverRecord?.id && t.driverId === driverRecord.id) ||
@@ -179,14 +195,14 @@ export function DriverDashboard() {
 
             // Phase 2: Tier Calculation (Monthly Reset Logic)
             const monthlyEarnings = TierCalculations.calculateMonthlyEarnings(myTrips);
-            const tiers = await tierService.getTiers();
+            // tiers already fetched
             const currentTier = TierCalculations.getTierForEarnings(monthlyEarnings, tiers);
             const nextTier = TierCalculations.getNextTier(currentTier, tiers);
             const progress = TierCalculations.calculateProgress(monthlyEarnings, currentTier);
             
             // Calculate Quota Goals
             try {
-                const quotaConfig = await tierService.getQuotaSettings();
+                // quotaConfig already fetched
                 if (quotaConfig && quotaConfig.weekly && quotaConfig.weekly.enabled) {
                     const weeklyAmount = quotaConfig.weekly.amount || 0;
                     const workingDaysCount = quotaConfig.weekly.workingDays?.length || 5;
@@ -235,11 +251,14 @@ export function DriverDashboard() {
       } catch (error) {
         console.error("Error fetching driver data:", error);
       } finally {
-        setLoading(false);
+        clearTimeout(timeoutId);
+        if (mounted) setLoading(false);
       }
     };
 
     fetchData();
+    
+    return () => { mounted = false; };
   }, [user?.id, driverRecord?.id, driverRecord?.driverId, driverLoading]);
 
   const handleAction = (action: string) => {

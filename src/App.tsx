@@ -33,6 +33,7 @@ function AppContent() {
   const { user, role, loading, signOut } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverPage, setDriverPage] = useState('dashboard');
+  const [isDriverMenuOpen, setDriverMenuOpen] = useState(false);
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
 
   // ... (rest of the state logic)
@@ -101,10 +102,12 @@ function AppContent() {
         currentPage={driverPage} 
         onNavigate={setDriverPage} 
         onLogout={handleLogout}
+        isMenuOpen={isDriverMenuOpen}
+        onMenuOpenChange={setDriverMenuOpen}
       >
         {driverPage === 'dashboard' && <DriverDashboard />}
         {driverPage === 'earnings' && <DriverEarnings />}
-        {driverPage === 'expenses' && <DriverExpenses defaultOpen={true} />}
+        {driverPage === 'expenses' && <DriverExpenses defaultOpen={true} onBack={() => { setDriverPage('dashboard'); setDriverMenuOpen(true); }} />}
         {driverPage === 'trips' && <DriverTrips />}
         {driverPage === 'claims' && <DriverClaims />}
         {driverPage === 'equipment' && <DriverEquipment onBack={() => setDriverPage('profile')} />}

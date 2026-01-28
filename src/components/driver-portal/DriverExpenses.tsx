@@ -43,6 +43,7 @@ import { OdometerScanner } from './common/OdometerScanner';
 
 interface ExpenseLoggerProps {
   defaultOpen?: boolean;
+  onBack?: () => void;
 }
 
 type ViewState = 'list' | 'category_select' | 'odometer_scan' | 'method_select' | 'entry_details';
@@ -58,7 +59,7 @@ interface FuelEntryState {
   volume?: string; 
 }
 
-export function DriverExpenses({ defaultOpen = false }: ExpenseLoggerProps) {
+export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
@@ -400,7 +401,13 @@ export function DriverExpenses({ defaultOpen = false }: ExpenseLoggerProps) {
 
   const goBack = () => {
     switch (viewState) {
-      case 'category_select': setViewState('list'); break;
+      case 'category_select': 
+        if (defaultOpen && onBack) {
+          onBack();
+        } else {
+          setViewState('list'); 
+        }
+        break;
       case 'odometer_scan': setViewState('category_select'); break;
       case 'method_select': setViewState('odometer_scan'); break;
       case 'entry_details': 

@@ -34,9 +34,11 @@ interface DriverLayoutProps {
   currentPage: string;
   onNavigate: (page: string) => void;
   onLogout: () => void;
+  isMenuOpen?: boolean;
+  onMenuOpenChange?: (open: boolean) => void;
 }
 
-export function DriverLayout({ children, currentPage, onNavigate, onLogout }: DriverLayoutProps) {
+export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMenuOpen, onMenuOpenChange }: DriverLayoutProps) {
   const { user } = useAuth();
   const { isOnline } = useOffline();
   const initials = user?.email ? user.email.substring(0, 2).toUpperCase() : 'DR';
@@ -102,7 +104,7 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
             onClick={() => onNavigate('earnings')}
           />
           
-          <Sheet>
+          <Sheet open={isMenuOpen} onOpenChange={onMenuOpenChange}>
             <SheetTrigger asChild>
               <button className="flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
                 <div className="p-1 rounded-full">
@@ -111,7 +113,7 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
                 <span className="text-[10px] font-medium">Menu</span>
               </button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl p-0 flex flex-col bg-white">
+            <SheetContent side="bottom" className="h-[calc(100vh-4rem)] rounded-t-3xl p-0 flex flex-col bg-white">
               <div className="p-6 pb-2 border-b border-slate-50">
                 <div className="flex items-center justify-between mb-2">
                   <SheetTitle className="text-3xl font-bold text-slate-900">Menu</SheetTitle>
