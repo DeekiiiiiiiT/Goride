@@ -76,6 +76,7 @@ import { FuelEntry, FuelCard } from '../../types/fuel';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { DataSanitizer } from '../../services/dataSanitizer';
+import { tripCalibrationService } from '../../services/tripCalibrationService';
 import { ImpactAnalysis } from './ImpactAnalysis';
 import { DisasterRecoveryCard } from './DisasterRecoveryCard';
 import { AuditSummaryCard } from './AuditSummaryCard';

@@ -368,45 +368,123 @@ interface FleetStats {
     totalOnTripHours: number;
 }
 
+function parseDurationToHours(raw: string): number {
+    if (!raw) return 0;
+    const clean = raw.trim();
+    
+    // Handle "days : hours : minutes" format (e.g. "2:20:28")
+    if (clean.includes(':')) {
+        const parts = clean.split(':').map(p => parseFloat(p.replace(/[^0-9.]/g, '')) || 0);
+        if (parts.length === 3) {
+            // Uber Driver Activity often uses D:H:M format (e.g. 1:15:20 = 1 day 15 hours 20 mins)
+            // We assume this format for 3-part durations in these specific files.
+            return (parts[0] * 24) + parts[1] + (parts[2] / 60);
+        }
+        if (parts.length === 2) {
+            // H:M format
+            return parts[0] + (parts[1] / 60);
+        }
+    }
+    
+    // Fallback to simple float parse
+    return parseFloat(clean.replace(/[^0-9.-]/g, '')) || 0;
+}
+
 function calculateFleetStats(files: FileData[]): FleetStats {
     let sumOnTrip = 0;
     let sumOnJob = 0;
     let sumOnline = 0;
+    // Phase 2: New Variable for "To Trip" tracking
+    let sumToTrip = 0;
+    
     let foundPerformance = false;
 
     for (const file of files) {
         if (file.type === 'uber_vehicle_performance') {
             foundPerformance = true;
             file.rows.forEach(row => {
-                 const getVal = (keys: string[]) => {
-                     // 1. Exact/Trimmed Match
+                 const getValRaw = (keys: string[]) => {
+                     // 1. Exact match
                      for (const k of keys) {
                           if (row[k] !== undefined) return String(row[k]);
-                          const found = Object.keys(row).find(rk => rk.toLowerCase().trim() === k.toLowerCase().trim());
-                          if (found) return String(row[found]);
                      }
-                     // 2. Fuzzy Match (Contains)
+                     // 2. Partial match (Robust)
+                     const rowKeys = Object.keys(row);
                      for (const k of keys) {
-                          const found = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
-                          if (found) return String(row[found]);
+                         if (k === 'Hours') continue;
+                         const found = rowKeys.find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+                         if (found) return String(row[found]);
                      }
                      return '0';
                  };
 
-                 const oh = parseFloat(getVal(['Online Hours', 'Hours Online', 'Time Online']).replace(/[^0-9.-]/g, '')) || 0;
-                 const oth = parseFloat(getVal(['Hours On Trip', 'On Trip Hours', 'Time On Trip']).replace(/[^0-9.-]/g, '')) || 0;
-                 const hoj = parseFloat(getVal(['Hours On Job', 'Hours on Job', 'Job Hours']).replace(/[^0-9.-]/g, '')) || 0;
+                 const oh = parseDurationToHours(getValRaw(['Hours Online', 'Online Hours', 'Total Online', 'Time Online', 'Online Duration']));
+                 const oth = parseDurationToHours(getValRaw(['Hours On Trip', 'On Trip Hours', 'Time On Trip', 'On Trip Duration']));
+                 // Expanded list to catch "Time On Job" which caused the previous failure
+                 const hoj = parseDurationToHours(getValRaw(['Hours On Job', 'Hours on Job', 'Job Hours', 'Active Hours', 'Time On Job', 'On Job Duration', 'Active Duration']));
 
                  sumOnline += oh;
                  sumOnTrip += oth;
                  sumOnJob += hoj;
             });
+        } else if (file.type === 'uber_driver_activity') {
+            // Treat Driver Activity strictly via Reconstruction Formula
+            // "On Job" column is assumed to be missing or unreliable.
+            foundPerformance = true;
+            file.rows.forEach(row => {
+                 const getValRaw = (keys: string[]) => {
+                     // 1. Exact match
+                     for (const k of keys) {
+                          if (row[k] !== undefined) return String(row[k]);
+                     }
+                     // 2. Partial match (Robust)
+                     const rowKeys = Object.keys(row);
+                     for (const k of keys) {
+                         if (k === 'Hours') continue;
+                         const found = rowKeys.find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+                         if (found) return String(row[found]);
+                     }
+                     return '0';
+                 };
+
+                 const oh = parseDurationToHours(getValRaw(['Time Online', 'Online Duration', 'Online Hours', 'Hours Online']));
+                 const oth = parseDurationToHours(getValRaw(['Time On Trip', 'On Trip Duration', 'On Trip Hours', 'Hours On Trip']));
+                 
+                 // Phase 2: Find "Time driving to pickup" (To Trip)
+                 const toTrip = parseDurationToHours(getValRaw(['Time driving to pickup', 'Time to pickup', 'Driving to Pickup']));
+
+                 // RECONSTRUCTION FORMULA: On Job = On Trip + To Trip
+                 // We do NOT search for an "On Job" column here, per user instruction.
+                 const hoj = oth + toTrip;
+
+                 sumOnline += oh;
+                 sumOnTrip += oth;
+                 sumOnJob += hoj;
+                 sumToTrip += toTrip;
+            });
         }
     }
 
-    if (!foundPerformance || sumOnJob === 0) {
-        // Fallback: If no performance data, default to 100% OnTrip (Job Duration = Total Time)
-        return { 
+    // Phase 2 Reconstruction Logic:
+    // If On Job is missing (0) BUT we found the components (On Trip + To Trip), reconstruct it.
+    if (sumOnJob === 0 && sumOnTrip > 0 && sumToTrip > 0) {
+        // Reconstruct On Job = On Trip + To Trip
+        // This allows us to support Driver Activity files that have the granular columns but lack the summary column.
+        sumOnJob = sumOnTrip + sumToTrip;
+        
+        // Sanity Check: On Job cannot exceed Online Time
+        if (sumOnline > 0 && sumOnJob > sumOnline) {
+             console.warn(`[Import] Reconstructed On Job (${sumOnJob.toFixed(2)}) exceeds Online (${sumOnline.toFixed(2)}). Capping at Online.`);
+             sumOnJob = sumOnline;
+             // Adjust To Trip to fit: To Trip = On Job (Online) - On Trip
+             // This is a rough heuristic to keep data sane.
+        }
+    }
+
+    // STRICT LOGIC: Do not guess sumOnJob if it is still 0 after reconstruction attempt.
+    
+    if (!foundPerformance || (sumOnJob === 0 && sumOnline === 0)) {
+         return { 
             onTripRatio: 1, 
             toTripRatio: 0, 
             availableRatio: 0,
@@ -416,11 +494,25 @@ function calculateFleetStats(files: FileData[]): FleetStats {
         };
     }
 
-    const onTripRatio = sumOnTrip / sumOnJob;
-    const toTripRatio = (sumOnJob - sumOnTrip) / sumOnJob;
-    const availableRatio = (sumOnline - sumOnJob) / sumOnJob;
+    // If sumOnJob is 0 (missing), we cannot calculate ratios correctly relative to Job.
+    // However, to prevent divide by zero, we handle it.
+    let onTripRatio = 0;
+    let toTripRatio = 0;
+    let availableRatio = 0;
 
-    console.log(`[Import] Fleet Stats Calculated: OnTrip=${onTripRatio.toFixed(2)}, ToTrip=${toTripRatio.toFixed(2)}, Available=${availableRatio.toFixed(2)}, Online=${sumOnline}, Job=${sumOnJob}`);
+    if (sumOnJob > 0) {
+        onTripRatio = sumOnTrip / sumOnJob;
+        // To Trip = Job - Trip
+        toTripRatio = (sumOnJob - sumOnTrip) / sumOnJob;
+        // Available = Online - Job
+        availableRatio = (sumOnline - sumOnJob) / sumOnJob;
+    }
+
+    // Ensure no negative ratios if data is slightly dirty
+    toTripRatio = Math.max(0, toTripRatio);
+    availableRatio = Math.max(0, availableRatio);
+
+    console.log(`[Import] Fleet Stats Calculated (Phase 2): OnTrip=${onTripRatio.toFixed(2)}, ToTrip=${toTripRatio.toFixed(2)}, Available=${availableRatio.toFixed(2)}, Online=${sumOnline.toFixed(2)}, Job=${sumOnJob.toFixed(2)}, Trip=${sumOnTrip.toFixed(2)}, RawToTrip=${sumToTrip.toFixed(2)}`);
 
     return { 
         onTripRatio, 
@@ -489,9 +581,12 @@ const calculateTripDurationMinutes = (row: any, isMMDD: boolean): number => {
         } else {
             let val = parseFloat(rawDur);
             // Heuristic: If value is > 1000, assume seconds (e.g. 1200 sec = 20 min). 
+            // New Heuristic: If value is > 100000, assume milliseconds (e.g. 600000 ms = 10 min).
             const isSeconds = Object.keys(row).some(k => k.toLowerCase().includes('duration') && (k.toLowerCase().includes('sec') || k.toLowerCase().includes('(s)')));
             
-            if (isSeconds || val > 1000) {
+            if (val > 100000) {
+                 val = val / 60000;
+            } else if (isSeconds || val > 1000) {
                 val = val / 60;
             }
             return val || 0;
@@ -1281,24 +1376,61 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      }
 
                      // Merge Activity Metrics
-                     const getValLocal = (keys: string[]) => {
-                        for (const k of keys) {
-                            if (row[k] !== undefined) return String(row[k]);
-                            const found = Object.keys(row).find(rk => rk.toLowerCase().trim() === k.toLowerCase().trim());
-                            if (found) return String(row[found]);
+                     const getValLocal = (searchPhrases: string[]) => {
+                        // 1. Exact match
+                        for (const phrase of searchPhrases) {
+                            if (row[phrase] !== undefined) return String(row[phrase]);
                         }
-                        return '0';
+                        // 2. Partial match (Robust)
+                        const rowKeys = Object.keys(row);
+                        for (const phrase of searchPhrases) {
+                            // Skip generic "Hours" to avoid false positives if we use .includes()
+                            if (phrase === 'Hours') continue;
+                            
+                            const foundKey = rowKeys.find(rk => rk.toLowerCase().includes(phrase.toLowerCase()));
+                            if (foundKey) return String(row[foundKey]);
+                        }
+                        return undefined;
                      };
 
-                     const oh = parseFloat(getValLocal(['Online Hours', 'Hours Online', 'Time Online', 'Hours'])) || 0;
-                     const oth = parseFloat(getValLocal(['On Trip Hours', 'Hours On Trip', 'Hours on trip'])) || 0;
-                     const hoj = parseFloat(getValLocal(['Hours On Job', 'Hours on Job', 'Hours on job'])) || 0;
-                     const tc = parseInt(getValLocal(['Trips Completed', 'Finished Trips', 'Total Trips'])) || 0;
+                     const parseDur = (val: string | undefined) => {
+                         if (!val) return 0;
+                         return parseDurationToHours(val);
+                     };
+
+                     const oh = parseDur(getValLocal(['Online Hours', 'Hours Online', 'Time Online', 'Online Duration', 'Online Time']));
+                     const oth = parseDur(getValLocal(['On Trip Hours', 'Hours On Trip', 'Time On Trip', 'On Trip Duration', 'Trip Duration']));
+                     
+                     // Phase 2: Enhanced "To Trip" and "On Job" parsing
+                     const ttp = parseDur(getValLocal(['Time driving to pickup', 'Time to pickup', 'Driving to Pickup']));
+                     let hoj = parseDur(getValLocal(['Hours On Job', 'Time On Job', 'On Job Duration', 'Active Duration', 'Active Hours']));
+
+                     // Reconstruction Logic
+                     if (hoj === 0 && oth > 0 && ttp > 0) {
+                         hoj = oth + ttp;
+                     }
+
+                     const tc = parseInt(getValLocal(['Trips Completed', 'Finished Trips', 'Total Trips']) || '0') || 0;
                      
                      if (oh > 0) current.onlineHours = oh;
                      if (oth > 0) current.onTripHours = oth;
                      if (hoj > 0) current.hoursOnJob = hoj;
                      if (tc > 0) current.tripsCompleted = tc;
+                     
+                     // Populate Trip Meter Data
+                     const onTrip = current.onTripHours || 0;
+                     const totalOnline = current.onlineHours || 0;
+                     const onJob = current.hoursOnJob || 0;
+                     
+                     const toTrip = ttp > 0 ? ttp : Math.max(0, onJob - onTrip);
+                     const available = Math.max(0, totalOnline - (onTrip + toTrip));
+
+                     current.tripRatio = {
+                         available: available,
+                         toTrip: toTrip,
+                         onTrip: onTrip,
+                         totalOnline: totalOnline
+                     };
                      
                      driverMetricsMap.set(driverId, current);
                  }

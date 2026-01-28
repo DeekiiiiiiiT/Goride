@@ -69,6 +69,60 @@ export function CalibrationReport({ stats, tripCount }: CalibrationReportProps) 
                     </div>
                 </div>
 
+                {/* Phase 3: Fleet Efficiency Breakdown */}
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                    <h4 className="text-sm font-medium text-slate-900 mb-4">Fleet Efficiency Breakdown</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Online</div>
+                            <div className="text-lg font-bold text-slate-900 mt-1">{fleetStats.totalOnlineHours.toFixed(2)}h</div>
+                        </div>
+                        
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                            <div className="text-xs text-blue-700 uppercase tracking-wider font-semibold">Available</div>
+                            <div className="text-lg font-bold text-blue-900 mt-1">
+                                {Math.max(0, fleetStats.totalOnlineHours - fleetStats.totalOnJobHours).toFixed(2)}h
+                            </div>
+                        </div>
+
+                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 relative">
+                            <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">On Job</div>
+                            <div className="text-lg font-bold text-slate-900 mt-1">{fleetStats.totalOnJobHours.toFixed(2)}h</div>
+                            {fleetStats.totalOnJobHours === 0 && fleetStats.totalOnlineHours > 0 && (
+                                <div className="absolute top-2 right-2 text-amber-500">
+                                    <AlertTriangle className="h-4 w-4" />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                            <div className="text-xs text-amber-700 uppercase tracking-wider font-semibold">To Trip</div>
+                            <div className="text-lg font-bold text-amber-900 mt-1">
+                                {(fleetStats.toTripRatio > 0 || fleetStats.totalOnJobHours > 0) 
+                                    ? Math.max(0, fleetStats.totalOnJobHours - fleetStats.totalOnTripHours).toFixed(2) + 'h'
+                                    : <span className="text-sm text-amber-600/70">N/A</span>
+                                }
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                            <div className="text-xs text-emerald-700 uppercase tracking-wider font-semibold">On Trip</div>
+                            <div className="text-lg font-bold text-emerald-900 mt-1">{fleetStats.totalOnTripHours.toFixed(2)}h</div>
+                        </div>
+                    </div>
+                    
+                    {/* Warning for missing To Trip Data */}
+                    {fleetStats.toTripRatio === 0 && fleetStats.totalOnlineHours > 0 && (
+                        <div className="mt-4 flex items-start gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded border border-amber-100">
+                             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                             <div>
+                                <strong>Missing "To Trip" Data:</strong> We couldn't calculate the time spent driving to pickup. 
+                                This usually happens when the <code>Vehicle Performance</code> report is missing or the <code>Driver Activity</code> log lacks the "Time driving to pickup" column.
+                             </div>
+                        </div>
+                    )}
+                </div>
+
                 {phantomLagDetected && (
                     <div className="mt-4 flex items-start gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded border border-amber-100">
                         <Info className="h-4 w-4 mt-0.5 shrink-0" />

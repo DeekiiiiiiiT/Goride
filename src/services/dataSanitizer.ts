@@ -47,8 +47,8 @@ export class DataSanitizer {
       // 1. Phantom Trip Check: Earnings but no distance/duration
       // Allow for tips or adjustments which might not have distance, but "UberX" service type should usually have distance.
       if (trip.amount > 0 && (trip.distance === 0 || trip.distance === undefined) && trip.status === 'Completed') {
-          // Check if it's just a tip or bonus
-          const isFare = !trip.notes?.toLowerCase().includes('tip') && !trip.notes?.toLowerCase().includes('bonus');
+          // Check if it's just a tip, bonus, or adjustment
+          const isFare = !trip.notes?.toLowerCase().match(/tip|bonus|adjustment|gratuity|misc|other|cancel/);
           if (isFare) {
               issues.push({ id: crypto.randomUUID(), field: 'distance', message: 'Financial Adjustment (Zero Distance Record)', severity: 'warning' });
               if (status !== 'critical') status = 'warning';

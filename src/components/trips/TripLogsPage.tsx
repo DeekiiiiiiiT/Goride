@@ -33,6 +33,7 @@ import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { startOfDay, endOfDay, subDays, startOfWeek } from 'date-fns';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 
 // Helper to parse "YYYY-MM-DD" as local midnight to avoid UTC conversion issues
 const parseLocalDate = (dateStr: string) => {
@@ -153,6 +154,20 @@ export function TripLogsPage() {
 
   const trips = tripData?.data || [];
   const hasMore = (tripData?.data?.length || 0) === pageSize;
+
+  // Background Address Resolution
+  React.useEffect(() => {
+    if (trips.length > 0) {
+        // Attempt to resolve missing addresses for trips that have coordinates
+        resolveMissingTripAddresses(trips).then(resolved => {
+            if (resolved.length > 0) {
+                // If any addresses were resolved, refresh the data
+                queryClient.invalidateQueries({ queryKey: ['trips'] });
+                toast.success(`Resolved addresses for ${resolved.length} trips`);
+            }
+        });
+    }
+  }, [trips, queryClient]);
 
   // 4. Stats Query (Independent of page)
   const statsParams = useMemo(() => {

@@ -60,8 +60,9 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
                  attempts++;
                  const hasImportLib = !!(window.google?.maps?.importLibrary);
                  const hasPlacesLib = !!(window.google?.maps?.places);
+                 const hasGeocoder = !!(window.google?.maps?.Geocoder);
                  
-                 if (hasImportLib || hasPlacesLib) {
+                 if (hasImportLib || (hasPlacesLib && hasGeocoder)) {
                      clearInterval(checkInterval);
                      resolve();
                  } else if (attempts > 50) { // 5 seconds
@@ -179,6 +180,9 @@ export const reverseGeocode = async (
     }
 
     // Fallback for legacy
+    if (!window.google?.maps?.Geocoder) {
+         throw new Error("Google Maps Geocoder not available");
+    }
     const geocoder = new window.google.maps.Geocoder();
     return new Promise((resolve, reject) => {
         geocoder.geocode({ location: { lat, lng: lon } }, (results: any[], status: string) => {

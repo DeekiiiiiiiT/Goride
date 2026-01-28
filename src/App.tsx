@@ -104,7 +104,7 @@ function AppContent() {
       >
         {driverPage === 'dashboard' && <DriverDashboard />}
         {driverPage === 'earnings' && <DriverEarnings />}
-        {driverPage === 'expenses' && <DriverExpenses />}
+        {driverPage === 'expenses' && <DriverExpenses defaultOpen={true} />}
         {driverPage === 'trips' && <DriverTrips />}
         {driverPage === 'claims' && <DriverClaims />}
         {driverPage === 'equipment' && <DriverEquipment onBack={() => setDriverPage('profile')} />}

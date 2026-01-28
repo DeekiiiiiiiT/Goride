@@ -487,25 +487,24 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
   if (!isActive) {
     return (
-      <Button 
-        onClick={startTrip} 
-        disabled={isStarting}
-        className="w-full h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-500/20 rounded-2xl border-0 transition-all hover:scale-[1.01] active:scale-[0.99]"
-      >
-        {isStarting ? (
-          <div className="flex items-center gap-2 text-lg font-bold">
-            <Loader2 className="h-6 w-6 animate-spin" /> 
-            <span>Starting Engine...</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 text-xl font-bold tracking-wide">
-            <div className="p-1.5 bg-white/20 rounded-full backdrop-blur-sm">
-                <Play className="h-6 w-6 fill-current pl-1" />
+      <div className="fixed bottom-24 left-4 right-4 z-50">
+        <Button 
+          onClick={startTrip} 
+          disabled={isStarting}
+          className="w-full h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-500/20 rounded-2xl border-0 transition-all hover:scale-[1.01] active:scale-[0.99]"
+        >
+          {isStarting ? (
+            <div className="flex items-center gap-2 text-lg font-bold">
+              <Loader2 className="h-6 w-6 animate-spin" /> 
+              <span>Starting Engine...</span>
             </div>
-            <span>START NEW TRIP</span>
-          </div>
-        )}
-      </Button>
+          ) : (
+            <div className="flex items-center justify-center gap-3 text-xl font-bold tracking-wide">
+              <span>START TRIP</span>
+            </div>
+          )}
+        </Button>
+      </div>
     );
   }
 

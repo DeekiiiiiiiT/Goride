@@ -10,11 +10,17 @@ import {
   LogOut,
   Bell,
   Receipt,
-  Wrench
+  Wrench,
+  Fuel,
+  ShieldAlert,
+  Trophy,
+  Settings,
+  History,
+  ChartBar
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "../ui/sheet";
 import { NotificationCenter } from "../notifications/NotificationCenter";
 import { useAuth } from "../auth/AuthContext";
 import { OfflineStatusIndicator } from "../offline/OfflineStatusIndicator";
@@ -95,12 +101,71 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout }: Dr
             active={currentPage === 'earnings'} 
             onClick={() => onNavigate('earnings')}
           />
-          <NavButton 
-            icon={<LayoutGrid className="h-5 w-5" />} 
-            label="Menu" 
-            active={currentPage === 'expenses'} 
-            onClick={() => onNavigate('expenses')}
-          />
+          
+          <Sheet>
+            <SheetTrigger asChild>
+              <button className="flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
+                <div className="p-1 rounded-full">
+                  <LayoutGrid className="h-5 w-5" />
+                </div>
+                <span className="text-[10px] font-medium">Menu</span>
+              </button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl p-0 flex flex-col bg-white">
+              <div className="p-6 pb-2 border-b border-slate-50">
+                <div className="flex items-center justify-between mb-2">
+                  <SheetTitle className="text-3xl font-bold text-slate-900">Menu</SheetTitle>
+                  <Button variant="ghost" size="icon" className="bg-slate-100 rounded-full text-slate-600">
+                    <Settings className="h-5 w-5" />
+                  </Button>
+                </div>
+                <SheetDescription className="hidden">
+                  Access additional driver tools and features
+                </SheetDescription>
+              </div>
+              
+              <div className="flex-1 overflow-auto p-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <MenuCard 
+                    icon={<Receipt className="h-6 w-6 text-blue-600" />} 
+                    title="Expenses"
+                    onClick={() => onNavigate('expenses')} 
+                    color="bg-blue-100"
+                  />
+                  <MenuCard 
+                    icon={<ShieldAlert className="h-6 w-6 text-amber-600" />} 
+                    title="Claims"
+                    onClick={() => onNavigate('claims')} 
+                    color="bg-amber-100"
+                  />
+                  <MenuCard 
+                    icon={<Car className="h-6 w-6 text-emerald-600" />} 
+                    title="Equipment"
+                    onClick={() => onNavigate('equipment')} 
+                    color="bg-emerald-100"
+                    hasBadge
+                  />
+                  <MenuCard 
+                    icon={<ChartBar className="h-6 w-6 text-purple-600" />} 
+                    title="Performance"
+                    onClick={() => onNavigate('performance')} // Assuming performance page exists or is handled
+                    color="bg-purple-100"
+                  />
+                   <MenuCard 
+                    icon={<History className="h-6 w-6 text-slate-600" />} 
+                    title="History"
+                    onClick={() => onNavigate('trips')} 
+                    color="bg-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 text-center">
+                <p className="text-xs text-slate-300 font-medium">Version 4.20.1 (Build 892)</p>
+              </div>
+            </SheetContent>
+          </Sheet>
+
           <NavButton 
             icon={<FileText className="h-5 w-5" />} 
             label="Trips" 
@@ -136,3 +201,31 @@ function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode, la
     </button>
   );
 }
+
+function MenuCard({ icon, title, onClick, color, hasBadge = false }: { icon: React.ReactNode, title: string, onClick: () => void, color: string, hasBadge?: boolean }) {
+  return (
+    <SheetClose asChild>
+      <button 
+        onClick={onClick}
+        className="flex flex-col items-start text-left p-5 bg-white border border-slate-100 shadow-sm rounded-3xl w-full h-40 transition-all hover:bg-slate-50 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group"
+      >
+        <div className="flex justify-between w-full mb-auto relative z-10">
+          <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${color}`}>
+            {icon}
+          </div>
+          {hasBadge && (
+            <div className="h-2 w-2 rounded-full bg-orange-500 absolute top-1 right-1 animate-pulse" />
+          )}
+        </div>
+        
+        <div className="mt-4 relative z-10">
+          <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{title}</h3>
+        </div>
+        
+        {/* Subtle decoration */}
+        <div className={`absolute -bottom-4 -right-4 w-24 h-24 rounded-full ${color} opacity-10 group-hover:opacity-20 transition-opacity`} />
+      </button>
+    </SheetClose>
+  );
+}
+
