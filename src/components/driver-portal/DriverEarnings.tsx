@@ -396,6 +396,24 @@ export function DriverEarnings() {
 
   };
 
+  const paymentTransactions = React.useMemo(() => transactions.filter(t => {
+      // Strict Safety: Never show Tag Balance operations in Payment Log
+      if (t.paymentMethod === 'Tag Balance') return false;
+      if (t.description?.toLowerCase().includes('top-up')) return false;
+
+      // Exclude tolls
+      const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
+      if (isToll) return false;
+
+      // Exclude fuel
+      const isFuel = (t.category || '').toLowerCase().includes('fuel') || (t.description || '').toLowerCase().includes('fuel');
+      if (isFuel) return false;
+
+      // Strict Payment Logic: Focus on Cash Collections (Money from Driver)
+      const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
+      return isPayment && t.amount > 0;
+  }), [transactions]);
+
   if (loading) {
       return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-indigo-600" /></div>;
   }
@@ -459,7 +477,7 @@ export function DriverEarnings() {
                             />
                         ) : (
                             <TransactionLedgerView 
-                                transactions={transactions}
+                                transactions={paymentTransactions}
                             />
                         )}
                     </div>

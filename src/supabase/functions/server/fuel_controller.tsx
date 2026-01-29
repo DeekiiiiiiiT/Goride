@@ -46,9 +46,11 @@ app.delete(`${BASE_PATH}/fuel-cards/:id`, async (c) => {
 // --- SCALABILITY & PERFORMANCE (Phase 8) ---
 app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
-    const limit = parseInt(c.req.query("limit") || "100");
+    const limit = parseInt(c.req.query("limit") || "2000"); // Increased default limit to prevent missing logs
     const offset = parseInt(c.req.query("offset") || "0");
     const vehicleId = c.req.query("vehicleId");
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
 
     // Phase 8: Direct Supabase query with pagination for performance
     let query = supabase
@@ -58,6 +60,14 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
 
     if (vehicleId) {
         query = query.eq("value->>vehicleId", vehicleId);
+    }
+
+    if (startDate) {
+        query = query.gte("value->>date", startDate);
+    }
+    
+    if (endDate) {
+        query = query.lte("value->>date", endDate);
     }
 
     query = query.order("value->>date", { ascending: false })

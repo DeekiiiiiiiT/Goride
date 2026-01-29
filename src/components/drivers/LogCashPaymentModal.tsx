@@ -184,7 +184,7 @@ export function LogCashPaymentModal({
                 <p className="text-sm text-slate-600">Owed by driver</p>
             </div>
             <div className="text-right">
-                <p className="text-xl font-bold text-slate-900">${cashOwed.toFixed(2)}</p>
+                <p className="text-xl font-bold text-slate-900">${(cashOwed || 0).toFixed(2)}</p>
             </div>
         </div>
 

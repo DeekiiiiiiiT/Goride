@@ -51,10 +51,6 @@ export function DriverHeader({
             <Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:bg-slate-100">
                 <Bell className="h-5 w-5" />
             </Button>
-            <Avatar className="h-8 w-8 border-2 border-slate-100 dark:border-slate-700">
-                <AvatarImage src={`https://avatar.vercel.sh/${user?.email || 'driver'}`} />
-                <AvatarFallback>{initials}</AvatarFallback>
-            </Avatar>
           </>
         )}
       </div>

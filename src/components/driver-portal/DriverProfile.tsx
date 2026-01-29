@@ -197,7 +197,7 @@ export function DriverProfile({ onLogout, onNavigate }: DriverProfileProps) {
       {/* Profile Header */}
       <div className="flex flex-col items-center justify-center py-6 bg-white dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
          <Avatar className="h-24 w-24 mb-4 border-4 border-slate-50">
-            <AvatarImage src={driverRecord?.avatarUrl || `https://avatar.vercel.sh/${email}`} />
+            <AvatarImage src={driverRecord?.avatarUrl} />
             <AvatarFallback>{initials}</AvatarFallback>
          </Avatar>
          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{name}</h2>

@@ -65,8 +65,9 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
                  if (hasImportLib || (hasPlacesLib && hasGeocoder)) {
                      clearInterval(checkInterval);
                      resolve();
-                 } else if (attempts > 50) { // 5 seconds
+                 } else if (attempts > 100) { // 10 seconds
                      clearInterval(checkInterval);
+                     console.warn("Google Maps existing script load timeout - objects missing");
                      resolve(); // Try anyway
                  }
              }, 100);
@@ -99,8 +100,26 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
       script.defer = true;
       script.id = 'google-maps-script';
       
-      script.onload = () => resolve();
-      script.onerror = (e) => reject(e);
+      script.onload = () => {
+          // Even after onload, we might need to wait for the objects to be attached to window
+          let attempts = 0;
+          const checkInterval = setInterval(() => {
+             attempts++;
+             const hasImportLib = !!(window.google?.maps?.importLibrary);
+             const hasPlacesLib = !!(window.google?.maps?.places);
+             const hasGeocoder = !!(window.google?.maps?.Geocoder);
+             
+             if (hasImportLib || (hasPlacesLib && hasGeocoder)) {
+                 clearInterval(checkInterval);
+                 resolve();
+             } else if (attempts > 100) { // 10 seconds
+                 clearInterval(checkInterval);
+                 console.warn("Google Maps load timeout - objects missing despite script load");
+                 resolve(); // Resolve anyway, the individual functions will check and throw specific errors
+             }
+          }, 100);
+      };
+      script.onerror = (e) => reject(new Error("Google Maps script failed to load"));
       
       document.head.appendChild(script);
     } catch (error) {

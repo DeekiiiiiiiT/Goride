@@ -53,8 +53,13 @@ export const fuelService = {
   },
 
   // --- Fuel Entries ---
-  async getFuelEntries(): Promise<FuelEntry[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+  async getFuelEntries(options?: { limit?: number, startDate?: string, endDate?: string }): Promise<FuelEntry[]> {
+    const query = new URLSearchParams();
+    query.append("limit", (options?.limit || 2000).toString());
+    if (options?.startDate) query.append("startDate", options.startDate);
+    if (options?.endDate) query.append("endDate", options.endDate);
+
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${query.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");

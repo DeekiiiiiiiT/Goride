@@ -74,10 +74,6 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMe
           <Button variant="ghost" size="icon" className={`rounded-full ${isOnline ? 'text-indigo-100 hover:bg-indigo-500 hover:text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
             <Bell className="h-5 w-5" />
           </Button>
-          <Avatar className={`h-8 w-8 border-2 ${isOnline ? 'border-indigo-400' : 'border-slate-500'}`}>
-            <AvatarImage src={`https://avatar.vercel.sh/${user?.email || 'driver'}`} />
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
         </div>
       </header>
 
@@ -117,9 +113,6 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMe
               <div className="p-6 pb-2 border-b border-slate-50">
                 <div className="flex items-center justify-between mb-2">
                   <SheetTitle className="text-3xl font-bold text-slate-900">Menu</SheetTitle>
-                  <Button variant="ghost" size="icon" className="bg-slate-100 rounded-full text-slate-600">
-                    <Settings className="h-5 w-5" />
-                  </Button>
                 </div>
                 <SheetDescription className="hidden">
                   Access additional driver tools and features
@@ -209,9 +202,9 @@ function MenuCard({ icon, title, onClick, color, hasBadge = false }: { icon: Rea
     <SheetClose asChild>
       <button 
         onClick={onClick}
-        className="flex flex-col items-start text-left p-5 bg-white border border-slate-100 shadow-sm rounded-3xl w-full h-40 transition-all hover:bg-slate-50 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group"
+        className="flex flex-col items-center justify-center text-center p-5 bg-white border border-slate-100 shadow-sm rounded-3xl w-full h-40 transition-all hover:bg-slate-50 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group"
       >
-        <div className="flex justify-between w-full mb-auto relative z-10">
+        <div className="flex justify-center w-full mb-3 relative z-10">
           <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${color}`}>
             {icon}
           </div>
@@ -220,7 +213,7 @@ function MenuCard({ icon, title, onClick, color, hasBadge = false }: { icon: Rea
           )}
         </div>
         
-        <div className="mt-4 relative z-10">
+        <div className="relative z-10">
           <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{title}</h3>
         </div>
         
