@@ -122,20 +122,37 @@ export function DriverDashboard() {
 
       try {
         setLoading(true);
+        
+        // Helper to fetch trips specifically for this driver (User ID + Legacy ID)
+        const fetchDriverTrips = async () => {
+             const limit = 1000; // Increase limit to ensure full month coverage for Tier Calculation
+             const p1 = api.getTripsFiltered({ driverId: user.id, limit }).then(r => r.data).catch(() => []);
+             const promises = [p1];
+             
+             // If legacy ID exists and is different
+             if (driverRecord?.driverId && driverRecord.driverId !== user.id) {
+                 promises.push(api.getTripsFiltered({ driverId: driverRecord.driverId, limit }).then(r => r.data).catch(() => []));
+             }
+             
+             const results = await Promise.all(promises);
+             const combined = results.flat();
+             // Dedup by ID
+             return Array.from(new Map(combined.map(t => [t.id, t])).values());
+        };
+
         // 1. Fetch EVERYTHING in parallel
-        // This prevents waterfalls where we wait for trips before fetching tiers
         const [
             allMetrics, 
             drivers, 
             flaggedTx, 
-            allTrips, 
+            myTrips, 
             tiers, 
             quotaConfig
         ] = await Promise.all([
             api.getDriverMetrics().catch(() => []),
             api.getDrivers().catch(() => []),
             api.getFlaggedTransactions().catch(() => []),
-            api.getTrips({ limit: 200 }).catch(() => []), // Increased limit for monthly calc accuracy
+            fetchDriverTrips(),
             tierService.getTiers().catch(() => []),
             tierService.getQuotaSettings().catch(() => null)
         ]);
@@ -156,11 +173,7 @@ export function DriverDashboard() {
         setFlaggedCount(myFlagged.length);
 
         // 2. Process Trips for Earnings
-        const myTrips = allTrips.filter(t => 
-            t.driverId === user.id || 
-            (driverRecord?.id && t.driverId === driverRecord.id) ||
-            (driverRecord?.driverId && t.driverId === driverRecord.driverId)
-        );
+        // myTrips is already filtered and fetched for this driver
             
             // Calculate Today's Earnings (for Goals)
             const today = new Date().toISOString().split('T')[0];

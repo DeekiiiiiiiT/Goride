@@ -101,8 +101,25 @@ export function DriverEarnings() {
              'Authorization': `Bearer ${publicAnonKey}`
         };
 
-        const [allTrips, txData, metricsData, tiersData] = await Promise.all([
-             api.getTrips(),
+        // Helper to fetch trips specifically for this driver (User ID + Legacy ID)
+        const fetchDriverTrips = async () => {
+             const limit = 1000; // Increase limit to ensure full month coverage for Tier Calculation
+             const p1 = api.getTripsFiltered({ driverId: user.id, limit }).then(r => r.data).catch(() => []);
+             const promises = [p1];
+             
+             // If legacy ID exists and is different
+             if (driverRecord?.driverId && driverRecord.driverId !== user.id) {
+                 promises.push(api.getTripsFiltered({ driverId: driverRecord.driverId, limit }).then(r => r.data).catch(() => []));
+             }
+             
+             const results = await Promise.all(promises);
+             const combined = results.flat();
+             // Dedup by ID
+             return Array.from(new Map(combined.map(t => [t.id, t])).values());
+        };
+
+        const [myTrips, txData, metricsData, tiersData] = await Promise.all([
+             fetchDriverTrips(),
              // Pass all relevant IDs
              api.getTransactions([user?.id, driverRecord?.id, driverRecord?.driverId].filter(Boolean) as string[]),
              api.getDriverMetrics(),
@@ -111,12 +128,7 @@ export function DriverEarnings() {
         
         if (tiersData) setTiers(tiersData);
 
-        if (allTrips) {
-            const myTrips = allTrips.filter(t => 
-                t.driverId === user.id || 
-                (driverRecord?.id && t.driverId === driverRecord.id) ||
-                (driverRecord?.driverId && t.driverId === driverRecord.driverId)
-            );
+        if (myTrips) {
             setTrips(myTrips);
             setFilteredTrips(myTrips);
         }

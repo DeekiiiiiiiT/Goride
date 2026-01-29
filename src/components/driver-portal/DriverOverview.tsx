@@ -110,7 +110,13 @@ export function DriverOverview({
               </div>
 
               {/* Next Milestone Section */}
-              {tierState.next ? (
+              {loading && !tierState.current ? (
+                  <div className="bg-slate-800/50 rounded-xl p-4 border border-white/10 backdrop-blur-sm animate-pulse">
+                      <div className="h-3 w-24 bg-slate-700 rounded mb-3" />
+                      <div className="h-6 w-32 bg-slate-700 rounded mb-4" />
+                      <div className="h-3 w-full bg-slate-700 rounded-full" />
+                  </div>
+              ) : tierState.next ? (
                   <div className="bg-slate-800/50 rounded-xl p-4 border border-white/10 backdrop-blur-sm">
                       <p className="text-xs text-indigo-200 font-bold uppercase tracking-wider mb-2">Next Milestone</p>
                       <h3 className="text-xl font-bold text-white mb-4">{tierState.next.name}</h3>
@@ -124,16 +130,15 @@ export function DriverOverview({
                           </div>
                           <div className="flex justify-between text-[10px] text-slate-400 font-mono font-medium">
                               <span>CURRENT: ${(tierState.cumulativeEarnings || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
-                              <span>TARGET: ${(tierState.next.threshold || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                              <span>TARGET: ${(tierState.next.minEarnings || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                           </div>
                       </div>
                   </div>
               ) : (
-                  // Fallback Loading State for Milestone
-                  <div className="bg-slate-800/50 rounded-xl p-4 border border-white/10 backdrop-blur-sm animate-pulse">
-                      <div className="h-3 w-24 bg-slate-700 rounded mb-3" />
-                      <div className="h-6 w-32 bg-slate-700 rounded mb-4" />
-                      <div className="h-3 w-full bg-slate-700 rounded-full" />
+                  <div className="bg-gradient-to-br from-amber-500/20 to-purple-500/20 rounded-xl p-4 border border-amber-500/30 backdrop-blur-sm flex flex-col items-center justify-center text-center py-6">
+                      <Trophy className="h-10 w-10 text-amber-400 mb-2 drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" />
+                      <p className="text-xs text-amber-200 font-bold uppercase tracking-wider">Top Tier Status</p>
+                      <h3 className="text-xl font-bold text-white">Legendary Driver</h3>
                   </div>
               )}
           </CardContent>
