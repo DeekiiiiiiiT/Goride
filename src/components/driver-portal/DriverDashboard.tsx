@@ -461,8 +461,9 @@ export function DriverDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col min-h-[75vh] gap-6 pb-6">
             <DriverOverview 
+              className="flex-1"
               tierState={tierState}
               metrics={metrics}
               todayEarnings={todayEarnings}

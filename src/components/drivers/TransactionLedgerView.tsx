@@ -33,7 +33,6 @@ export function TransactionLedgerView({ transactions }: TransactionLedgerViewPro
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[120px]">Date</TableHead>
-                        <TableHead>Description</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                     </TableRow>
@@ -43,42 +42,6 @@ export function TransactionLedgerView({ transactions }: TransactionLedgerViewPro
                         <TableRow key={tx.id} className={tx.metadata?.automated ? "bg-emerald-50/30" : ""}>
                             <TableCell className="font-medium text-slate-700">
                                 {formatSafeDate(tx.date, tx.time)}
-                            </TableCell>
-                            <TableCell>
-                                <div className="flex flex-col">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-slate-900">{tx.description}</span>
-                                        {tx.metadata?.isEdited && (
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <div className="cursor-help text-amber-500">
-                                                            <History className="h-3 w-3" />
-                                                        </div>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent className="max-w-xs">
-                                                        <div className="space-y-1">
-                                                            <p className="font-bold text-amber-700">Manually Adjusted</p>
-                                                            <p className="text-xs">An administrator updated the original fuel entry values.</p>
-                                                            <div className="mt-2 pt-2 border-t border-slate-200 text-[10px]">
-                                                                <p className="font-semibold text-slate-700 uppercase">Reason:</p>
-                                                                <p className="italic text-slate-600">"{tx.metadata.editReason || "No reason provided"}"</p>
-                                                            </div>
-                                                        </div>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        )}
-                                    </div>
-                                    {tx.metadata?.automated && (
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider px-1 py-0.5 bg-emerald-100/50 rounded">Automated Settlement</span>
-                                            {tx.metadata?.splitRatio && (
-                                                <span className="text-[10px] text-slate-500 italic">Ratio: {tx.metadata.splitRatio}</span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
                             </TableCell>
                             <TableCell>
                                 <Badge 

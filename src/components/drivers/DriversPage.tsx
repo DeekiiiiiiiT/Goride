@@ -63,6 +63,10 @@ import {
 import { Card, CardContent } from "../ui/card";
 import { DriverDetail } from './DriverDetail';
 import { AddDriverModal } from './AddDriverModal';
+import { tierService } from '../../services/tierService';
+import { TierCalculations } from '../../utils/tierCalculations';
+import { TierConfig } from '../../types/data';
+import { isSameMonth } from 'date-fns';
 
 // Interface for our View Model
 interface DriverProfile {
@@ -78,8 +82,9 @@ interface DriverProfile {
   // New metrics for Phase 2
   todaysEarnings: number;
   todaysTrips: number;
+  monthlyEarnings: number; // New for correct Tier Calc
   acceptanceRate: number;
-  tier: 'Platinum' | 'Gold' | 'Silver' | 'Bronze';
+  tier: string;
   
   // Document URLs (Optional)
   licenseFrontUrl?: string;
@@ -100,6 +105,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const [manualDrivers, setManualDrivers] = useState<DriverProfile[]>([]);
   const [importedMetrics, setImportedMetrics] = useState<import('../../types/data').DriverMetrics[]>([]);
   const [vehicleMetrics, setVehicleMetrics] = useState<import('../../types/data').VehicleMetrics[]>([]);
+  const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -156,16 +162,18 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tripsData, driversData, metricsData, vehicleMetricsData] = await Promise.all([
+        const [tripsData, driversData, metricsData, vehicleMetricsData, tiersData] = await Promise.all([
              api.getTrips({ limit: 2000 }),
              api.getDrivers().catch(() => []),
              api.getDriverMetrics().catch(() => []),
-             api.getVehicleMetrics().catch(() => [])
+             api.getVehicleMetrics().catch(() => []),
+             tierService.getTiers().catch(() => [])
         ]);
         setTrips(tripsData);
         setManualDrivers(driversData);
         setImportedMetrics(metricsData);
         setVehicleMetrics(vehicleMetricsData);
+        setTiers(tiersData);
       } catch (err) {
         console.error("Failed to fetch data for drivers page", err);
       } finally {
@@ -199,6 +207,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     const driverMap = new Map<string, DriverProfile>();
     const driverStats = new Map<string, { completed: number, cancelled: number }>();
     const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
 
     // Process trips to extract unique drivers and aggregate data
     // Sort by date desc so we get latest vehicle/info
@@ -250,6 +259,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                     totalEarnings: 0,
                     todaysEarnings: 0,
                     todaysTrips: 0,
+                    monthlyEarnings: 0,
                     linkedTrips: [], // Initialize list
                     // Keep status from manual unless logic overrides? 
                     // We'll keep manual status but update acceptanceRate
@@ -270,6 +280,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                     totalEarnings: 0,
                     todaysEarnings: 0,
                     todaysTrips: 0,
+                    monthlyEarnings: 0,
                     acceptanceRate: 100, 
                     tier: 'Bronze',
                     linkedTrips: [], // Initialize list
@@ -316,6 +327,15 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
             driver.todaysTrips += 1;
         }
 
+        // Update Monthly Earnings (for Tier Calc)
+        try {
+             if (isSameMonth(new Date(trip.date), now)) {
+                 driver.monthlyEarnings += trip.amount || 0;
+             }
+        } catch (e) {
+             // Ignore invalid dates
+        }
+
         // Update Status Stats
         if (trip.status === 'Completed') stats.completed++;
         else if (trip.status === 'Cancelled') stats.cancelled++;
@@ -349,7 +369,12 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         // Tier Logic
         if (metric && metric.tier) {
             driver.tier = metric.tier;
+        } else if (tiers.length > 0) {
+            // Use Real-Time Monthly Earnings Calculation
+            const tier = TierCalculations.getTierForEarnings(driver.monthlyEarnings, tiers);
+            driver.tier = tier.name;
         } else {
+            // Fallback Legacy
             if (driver.totalEarnings > 5000) driver.tier = 'Platinum';
             else if (driver.totalEarnings > 3000) driver.tier = 'Gold';
             else if (driver.totalEarnings > 1000) driver.tier = 'Silver';
@@ -372,21 +397,38 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         let metric = metricsMap.get(d.id);
         if (!metric && d.uberDriverId) metric = metricsMap.get(d.uberDriverId);
         
+        // Use manual driver tier if available, otherwise default
+        let tier = d.tier || 'Bronze';
+        if (metric && metric.tier) tier = metric.tier;
+        else if (tiers.length > 0 && d.totalEarnings !== undefined) {
+             // For orphans without trips loaded, we might default to their 'totalEarnings' field 
+             // if it represents monthly, but usually it's lifetime.
+             // Safest to rely on manual 'tier' field or calculate if we had monthly data.
+             // If we have no trips, monthlyEarnings is effectively 0 unless manually set.
+             // We'll stick to existing logic or manual set tier.
+             // If manual driver has a tier set, use it.
+             if (!d.tier) {
+                 const t = TierCalculations.getTierForEarnings(0, tiers);
+                 tier = t.name;
+             }
+        }
+
         return {
             ...d,
             totalEarnings: d.totalEarnings || 0,
             totalTrips: d.totalTrips || 0,
             todaysEarnings: 0,
             todaysTrips: 0,
+            monthlyEarnings: 0, // No trips = 0 monthly
             acceptanceRate: metric ? Math.round(metric.acceptanceRate * 100) : 100,
-            tier: metric?.tier || d.tier || 'Bronze',
+            tier: tier,
             status: d.status || 'Active'
         };
     });
 
     // @ts-ignore
     return [...processedDrivers, ...orphanedDrivers];
-  }, [trips, manualDrivers, importedMetrics]);
+  }, [trips, manualDrivers, importedMetrics, tiers]);
 
   // Apply Filters
   const filteredDrivers = useMemo(() => {

@@ -1538,6 +1538,10 @@
     min-height: 72px;
   }
 
+  .min-h-\[75vh\] {
+    min-height: 75vh;
+  }
+
   .min-h-\[80px\] {
     min-height: 80px;
   }
@@ -3205,16 +3209,6 @@
 
   .bg-emerald-100 {
     background-color: var(--color-emerald-100);
-  }
-
-  .bg-emerald-100\/50 {
-    background-color: color-mix(in srgb, oklch(.95 .052 163.051) 50%, transparent);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-emerald-100\/50 {
-      background-color: color-mix(in oklab, var(--color-emerald-100) 50%, transparent);
-    }
   }
 
   .bg-emerald-400 {

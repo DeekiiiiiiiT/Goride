@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from "../ui/card";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "../ui/drawer";
+import { cn } from "../ui/utils";
 import { DriverMetrics, TierConfig, DriverGoals, Trip } from '../../types/data';
 import { DriverFuelDisputes } from './DriverFuelDisputes';
 
@@ -39,6 +40,7 @@ export interface DriverOverviewProps {
   onClaimId: (id: string) => void;
   onAction: (action: 'log_fuel' | 'request_service' | 'start_trip') => void;
   flaggedCount: number;
+  className?: string;
 }
 
 export function DriverOverview({
@@ -54,7 +56,8 @@ export function DriverOverview({
   isFixing,
   onClaimId,
   onAction,
-  flaggedCount = 0
+  flaggedCount = 0,
+  className
 }: DriverOverviewProps) {
   const { user } = useAuth();
 
@@ -66,11 +69,11 @@ export function DriverOverview({
   };
 
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6 flex flex-col", className)}>
       {/* Fuel Integrity Alert - REMOVED as per request */}
       
       {/* Main Welcome Card */}
-      <Card className="border-0 shadow-xl overflow-hidden relative bg-slate-900 text-white">
+      <Card className="border-0 shadow-xl overflow-hidden relative bg-slate-900 text-white shrink-0">
           {/* Background Effects */}
           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-[#1e1b4b] to-slate-900 z-0" />
           <div className="absolute top-0 right-0 p-4 opacity-5 z-0">
@@ -145,19 +148,21 @@ export function DriverOverview({
       </Card>
 
       {/* Earnings Stats Row */}
-      <div className="grid grid-cols-3 gap-3">
-          <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-              <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mb-1">GoRide</span>
-              <span className="text-lg font-bold text-indigo-900">${(todayEarnings?.breakdown?.goride || 0).toFixed(2)}</span>
-          </div>
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Uber</span>
-              <span className="text-lg font-bold text-slate-900">${(todayEarnings?.breakdown?.uber || 0).toFixed(2)}</span>
-          </div>
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">InDrive</span>
-              <span className="text-lg font-bold text-slate-900">${(todayEarnings?.breakdown?.indrive || 0).toFixed(2)}</span>
-          </div>
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="grid grid-cols-3 gap-3 w-full">
+            <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+                <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mb-1">GoRide</span>
+                <span className="text-lg font-bold text-indigo-900">${(todayEarnings?.breakdown?.goride || 0).toFixed(2)}</span>
+            </div>
+            <div className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Uber</span>
+                <span className="text-lg font-bold text-slate-900">${(todayEarnings?.breakdown?.uber || 0).toFixed(2)}</span>
+            </div>
+            <div className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">InDrive</span>
+                <span className="text-lg font-bold text-slate-900">${(todayEarnings?.breakdown?.indrive || 0).toFixed(2)}</span>
+            </div>
+        </div>
       </div>
 
       {/* Start Trip Button - REMOVED (Duplicate in TripTimer) */}
