@@ -68,7 +68,9 @@ import {
     DEFAULT_FIELDS,
     downloadTemplate,
     validateFile,
-    extractReportDate
+    extractReportDate,
+    DriverTimeDistance,
+    VehicleTimeDistance
 } from '../../utils/csvHelpers';
 import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpers';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState } from '../../types/data';
@@ -137,6 +139,10 @@ export function ImportsPage() {
   // Phase 3: Fuel Data
   const [fuelCards, setFuelCards] = useState<FuelCard[]>([]);
   const [processedFuelEntries, setProcessedFuelEntries] = useState<FuelEntry[]>([]);
+
+  // Phase 1: Time & Distance Data
+  const [processedDriverTime, setProcessedDriverTime] = useState<DriverTimeDistance[]>([]);
+  const [processedVehicleTime, setProcessedVehicleTime] = useState<VehicleTimeDistance[]>([]);
 
   // UI States
   const [isParsing, setIsParsing] = useState(false);
@@ -292,13 +298,18 @@ export function ImportsPage() {
       // 1. Merge
       // Phase 1: Capture Organization Name
       const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats, driverTimeData, vehicleTimeData } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
           localStorage.setItem('goride_fleet_name', organizationName);
           // Trigger update for AppLayout
           window.dispatchEvent(new Event('fleetNameUpdated'));
       }
+
+      console.log('Processed Time Data:', { 
+          drivers: driverTimeData?.length, 
+          vehicles: vehicleTimeData?.length 
+      });
 
       // 2. Apply Platform Override
       const finalTrips = trips.map(t => ({
@@ -313,6 +324,8 @@ export function ImportsPage() {
       setProcessedRentalContracts(rentalContracts);
       setProcessedFuelEntries(fuelEntries || []);
       setCalibrationStats(calibrationStats);
+      setProcessedDriverTime(driverTimeData || []);
+      setProcessedVehicleTime(vehicleTimeData || []);
       setStep('preview_merged');
   };
 
@@ -381,6 +394,8 @@ export function ImportsPage() {
         setProcessedData(finalTrips); // Keep local trips for table
         setCalibrationStats(localResult.calibrationStats);
         setProcessedFuelEntries(localResult.fuelEntries || []);
+        setProcessedDriverTime(localResult.driverTimeData || []);
+        setProcessedVehicleTime(localResult.vehicleTimeData || []);
         
         // Phase 1: Run AI Auditor
         if (aiData.drivers || aiData.vehicles || aiData.financials) {
@@ -706,6 +721,8 @@ export function ImportsPage() {
       if (type === 'uber_driver_quality') return <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Zap className="h-5 w-5" /></div>;
       if (type === 'uber_driver_activity') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Zap className="h-5 w-5" /></div>;
       if (type === 'uber_vehicle_performance') return <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><Car className="h-5 w-5" /></div>;
+      if (type === 'uber_driver_time_distance') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Clock className="h-5 w-5" /></div>;
+      if (type === 'uber_vehicle_time_distance') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Car className="h-5 w-5" /></div>;
       if (type === 'fuel_statement') return <div className="p-2 bg-rose-100 rounded-lg text-rose-600"><Fuel className="h-5 w-5" /></div>;
       return <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><FileText className="h-5 w-5" /></div>;
   };
@@ -718,6 +735,8 @@ export function ImportsPage() {
       if (type === 'uber_driver_quality') return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">Driver Quality</Badge>;
       if (type === 'uber_vehicle_performance') return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">Vehicle Perf.</Badge>;
       if (type === 'uber_driver_activity') return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200">Driver Activity</Badge>;
+      if (type === 'uber_driver_time_distance') return <Badge className="bg-cyan-100 text-cyan-700 hover:bg-cyan-200 border-cyan-200">Driver Time</Badge>;
+      if (type === 'uber_vehicle_time_distance') return <Badge className="bg-cyan-100 text-cyan-700 hover:bg-cyan-200 border-cyan-200">Vehicle Time</Badge>;
       if (type === 'uber_rental_contract') return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-yellow-200">Rental Contract</Badge>;
       if (type === 'fuel_statement') return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-200 border-rose-200">Fuel Statement</Badge>;
       return <Badge variant="secondary">Generic CSV</Badge>;

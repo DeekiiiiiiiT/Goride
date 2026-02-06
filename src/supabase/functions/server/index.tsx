@@ -3920,7 +3920,15 @@ app.post("/make-server-37f42386/map-match", async (c) => {
 
     // Filter valid points with timestamps and sort them
     const rawPoints = points
-        .filter((p: any) => p && !isNaN(Number(p.lat)) && !isNaN(Number(p.lon)) && !isNaN(Number(p.timestamp)))
+        .filter((p: any) => {
+            const lat = Number(p.lat);
+            const lon = Number(p.lon);
+            const ts = Number(p.timestamp);
+            return p && 
+                   !isNaN(lat) && lat !== 0 && 
+                   !isNaN(lon) && lon !== 0 && 
+                   !isNaN(ts) && ts > 0;
+        })
         .sort((a: any, b: any) => Number(a.timestamp) - Number(b.timestamp));
 
     // Deduplicate to ensure strictly increasing timestamps (seconds) for OSRM
@@ -3935,7 +3943,8 @@ app.post("/make-server-37f42386/map-match", async (c) => {
     }
 
     if (uniquePoints.length < 2) {
-      return c.json({ error: "At least 2 points with unique timestamps (seconds) required" }, 400);
+      // Not enough points for a route, return success with empty/null data to avoid crashing frontend
+      return c.json({ success: true, data: { totalDistance: 0, totalDuration: 0, confidence: 0, snappedRoute: [] } });
     }
 
     // Chunking Logic (60 points per chunk to be safe within 100 limit and URL length)
@@ -3945,44 +3954,53 @@ app.post("/make-server-37f42386/map-match", async (c) => {
     // Create chunks with 1 point overlap
     for (let i = 0; i < uniquePoints.length - 1; i += (CHUNK_SIZE - 1)) {
         const chunk = uniquePoints.slice(i, Math.min(i + CHUNK_SIZE, uniquePoints.length));
-        chunks.push(chunk);
+        if (chunk.length >= 2) {
+            chunks.push(chunk);
+        }
     }
-    
-    // Edge case: if we have points but loop didn't run (e.g. < 80 points), we need at least one chunk. 
-    // But slice logic above covers it: i=0. i < len-1. 
-    // If len=2, CHUNK=80. slice(0, 80). i becomes 79. Loop ends. Correct.
     
     const responses = await Promise.all(chunks.map(async (chunk) => {
         // Format: lon,lat;lon,lat
-        const coords = chunk.map((p: any) => `${p.lon},${p.lat}`).join(';');
+        const coords = chunk.map((p: any) => `${Number(p.lon)},${Number(p.lat)}`).join(';');
         const timestamps = chunk.map((p: any) => Math.floor(Number(p.timestamp) / 1000)).join(';');
-        const radiuses = chunk.map(() => "25").join(';');
+        // Increase radius to 60m to be more forgiving of GPS drift
+        const radiuses = chunk.map(() => "60").join(';');
         
         // Using public OSRM server. 
+        // fallback to 'router.project-osrm.org' but ideally this should be configurable
         const url = `https://router.project-osrm.org/match/v1/driving/${coords}?timestamps=${timestamps}&radiuses=${radiuses}&overview=full&geometries=geojson&steps=false&annotations=true`;
         
-        const res = await fetch(url);
-        if (!res.ok) {
-            console.log(`OSRM Failed URL: ${url}`);
-            throw new Error(`OSRM Match failed: ${res.statusText}`);
+        try {
+            const res = await fetch(url);
+            if (!res.ok) {
+                const text = await res.text();
+                console.log(`OSRM Failed (${res.status}): ${text.substring(0, 100)}... URL length: ${url.length}`);
+                // Return null instead of throwing to allow partial results
+                return null;
+            }
+            return res.json();
+        } catch (fetchErr) {
+            console.error("OSRM Fetch Error:", fetchErr);
+            return null;
         }
-        return res.json();
     }));
 
     // Result Stitching
     let totalDistance = 0;
     let totalDuration = 0;
     const stitchedCoordinates: any[] = [];
-    let confidence = 0;
+    let confidenceSum = 0;
+    let validResponses = 0;
     
     responses.forEach((res, index) => {
-        if (res.code !== 'Ok' || !res.matchings || res.matchings.length === 0) return;
+        if (!res || res.code !== 'Ok' || !res.matchings || res.matchings.length === 0) return;
         
         const match = res.matchings[0]; // Take best match
         
         totalDistance += match.distance;
         totalDuration += match.duration;
-        confidence += match.confidence;
+        confidenceSum += match.confidence;
+        validResponses++;
 
         // Geometry Stitching
         if (match.geometry && match.geometry.coordinates) {
@@ -3996,10 +4014,7 @@ app.post("/make-server-37f42386/map-match", async (c) => {
         }
     });
 
-    // Normalize confidence
-    if (responses.length > 0) {
-        confidence = confidence / responses.length;
-    }
+    const confidence = validResponses > 0 ? confidenceSum / validResponses : 0;
 
     return c.json({
         success: true,
@@ -4509,4 +4524,14 @@ app.delete("/make-server-37f42386/fuel-entries/:id", async (c) => {
 // Mount Fuel Controller for missing endpoints
 app.route("/", fuelApp);
 
-Deno.serve(app.fetch);
+Deno.serve({
+  onError: (e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("broken pipe") || msg.includes("connection closed") || (e as any).code === "EPIPE") {
+        // Silently handle client disconnects
+        return new Response(null, { status: 499 });
+    }
+    console.error(e);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}, app.fetch);

@@ -96,6 +96,7 @@ import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
+import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
@@ -132,6 +133,75 @@ interface DriverDocument {
   uploadDate: string;
   url?: string;
 }
+
+export interface ReconstructedMetrics {
+    onTrip: { time: number; distance: number };
+    enroute: { time: number; distance: number };
+    open: { time: number; distance: number };
+    unavailable: { time: number; distance: number };
+    fuel: {
+        rideShare: number;
+        companyOps: number;
+        personal: number;
+        misc: number;
+        total: number;
+    };
+}
+
+export const parseTripDate = (dateStr: string | Date): Date | null => {
+    if (!dateStr) return null;
+    if (dateStr instanceof Date) return dateStr;
+
+    try {
+        let dateObj: Date;
+        if (dateStr.includes('T')) {
+            dateObj = new Date(dateStr);
+        } else if (dateStr.includes('/')) {
+            // US vs UK date format ambiguity handling
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                const p1 = parseInt(parts[0]);
+                const p2 = parseInt(parts[1]);
+                const p3 = parseInt(parts[2]);
+                // Heuristic: if first part > 12, it must be day (DD/MM/YYYY)
+                // Otherwise assume MM/DD/YYYY unless specified otherwise
+                if (p1 > 12) {
+                     dateObj = new Date(p3, p2 - 1, p1);
+                } else {
+                     dateObj = new Date(p3, p1 - 1, p2);
+                }
+            } else {
+                dateObj = new Date(dateStr);
+            }
+        } else if (dateStr.includes('-') && dateStr.length === 10) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            dateObj = new Date(y, m - 1, d);
+        } else {
+            dateObj = new Date(dateStr);
+        }
+        
+        if (isNaN(dateObj.getTime())) return null;
+        return dateObj;
+    } catch (e) {
+        console.error("Failed to parse date:", dateStr);
+        return null;
+    }
+};
+
+export const getSortedTripsInRange = (trips: Trip[], rangeStart: Date, rangeEnd: Date): Trip[] => {
+    return trips.filter(trip => {
+        // Use requestTime if available, otherwise fall back to date
+        // Note: We need to cast to any if requestTime isn't in the imported Trip type yet, 
+        // but for now we assume it is or will be accessed dynamically.
+        const tripDate = parseTripDate((trip as any).requestTime || trip.date);
+        if (!tripDate) return false;
+        return tripDate >= rangeStart && tripDate <= rangeEnd;
+    }).sort((a, b) => {
+        const dateA = parseTripDate((a as any).requestTime || a.date);
+        const dateB = parseTripDate((b as any).requestTime || b.date);
+        return (dateA?.getTime() || 0) - (dateB?.getTime() || 0);
+    });
+};
 
 const MOCK_DOCUMENTS: DriverDocument[] = [
   { id: '1', name: 'Driver License (Front)', type: 'License', status: 'Verified', expiryDate: '2025-10-15', uploadDate: '2023-10-12', url: 'https://images.unsplash.com/photo-1633535928821-6556e974659b?auto=format&fit=crop&q=80&w=1000' },
@@ -178,6 +248,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [fuelEntries, setFuelEntries] = useState<FuelEntry[]>([]);
   const [odometerBuckets, setOdometerBuckets] = useState<OdometerBucket[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['All']));
   
   // Phase 1: Date Range & Data Context Filtering
   const { minDate, maxDate, tripIds } = useMemo(() => {
@@ -397,10 +468,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           console.error("Failed to load data", e);
           // Ensure we don't crash if API fails
           // But don't clear data if it's just a refresh failure
-          if (transactions.length === 0) setTransactions([]);
-          if (claims.length === 0) setClaims([]);
+          if (!transactions || transactions.length === 0) setTransactions([]);
+          if (!claims || claims.length === 0) setClaims([]);
       }
-  }, [driverId, driver, transactions.length, claims.length]);
+  }, [driverId, driver, transactions?.length, claims?.length]);
 
   React.useEffect(() => {
       refreshData();
@@ -896,7 +967,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // We no longer need to calculate "Report Duration" because we use the Efficiency Ratio method.
      // This ignores mismatched file dates and focuses on the Driver's Performance Profile.
 
-     trips.forEach(trip => {
+     const filteredTrips = trips.filter(t => {
+         if (selectedPlatforms.has('All')) return true;
+         return selectedPlatforms.has(t.platform || 'Other');
+     });
+
+     filteredTrips.forEach(trip => {
         const tripDateObj = new Date(trip.date);
         if (isNaN(tripDateObj.getTime())) return;
         
@@ -986,6 +1062,89 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
      });
 
+     // --- Phase 2: Dynamic Reconstruction (Source of Truth: Trip Logs) ---
+     // Filter and Sort Trips using the Utility
+     const sortedPeriodTrips = getSortedTripsInRange(filteredTrips, start, end);
+     
+     // PHASE 2.1: EXTRACT CSV SOURCE OF TRUTH (If Applicable)
+     // CRITICAL: Only apply this override if "All" platforms are selected.
+     const isAllPlatforms = selectedPlatforms.has('All');
+     
+     const relevantCsvMetrics = (isAllPlatforms && csvMetrics) ? csvMetrics.filter(m => {
+        const mStart = new Date(m.periodStart);
+        const mEnd = new Date(m.periodEnd);
+        return mStart <= end && mEnd >= start;
+     }) : [];
+
+     // Initialize Accumulators for Reconstruction
+     let recOnTripTime = 0; // Hours
+     let recOnTripDist = 0; // Km
+     let recEnrouteTime = 0; // Hours
+     let recEnrouteDist = 0; // Km
+     let recOpenTime = 0; // Hours
+     let recOpenDist = 0; // Km
+     let recUnavailableTime = 0; // Hours
+     let recUnavailableDist = 0; // Km
+
+     sortedPeriodTrips.forEach(trip => {
+         // Only process Completed trips for "On Trip" metrics
+         if (trip.status === 'Completed') {
+             // 1. On Trip Time & Distance
+             // Time: (Dropoff - Pickup) or Trip Duration Column
+             let tripDurationHours = 0;
+             const pickupTime = parseTripDate(trip.pickupTime);
+             const dropoffTime = parseTripDate(trip.dropoffTime);
+             
+             if (pickupTime && dropoffTime) {
+                 tripDurationHours = (dropoffTime.getTime() - pickupTime.getTime()) / (1000 * 60 * 60);
+             } else if (trip.duration) {
+                 tripDurationHours = trip.duration / 60; // duration is in minutes usually
+             }
+             
+             // Sanity Check: If duration is negative or > 12 hours, clamp
+             tripDurationHours = Math.max(0, Math.min(tripDurationHours, 12));
+             
+             recOnTripTime += tripDurationHours;
+             recOnTripDist += (trip.distance || 0);
+             
+             // 2. Enroute Time & Distance
+             // Time: (Pickup - Request)
+             // Fallback: (Dropoff - Request) - Trip Duration
+             let enrouteDurationHours = 0;
+             const requestTime = parseTripDate((trip as any).requestTime || trip.date);
+             
+             if (requestTime) {
+                 if (pickupTime) {
+                     enrouteDurationHours = (pickupTime.getTime() - requestTime.getTime()) / (1000 * 60 * 60);
+                 } else if (dropoffTime && tripDurationHours > 0) {
+                     const totalTime = (dropoffTime.getTime() - requestTime.getTime()) / (1000 * 60 * 60);
+                     enrouteDurationHours = totalTime - tripDurationHours;
+                 }
+             }
+             
+             // Sanity Check: Enroute shouldn't be negative or excessively long (> 2 hours)
+             enrouteDurationHours = Math.max(0, Math.min(enrouteDurationHours, 2));
+
+             // FIX: If enroute is 0 (missing timestamps), assume average 5 mins (0.083h)
+             if (enrouteDurationHours === 0) {
+                 enrouteDurationHours = 0.083;
+             }
+             
+             recEnrouteTime += enrouteDurationHours;
+             
+             // Distance: Use Pre-Calculated Uniform Average
+             const enrouteDistance = trip.normalizedEnrouteDistance ?? estimateEnrouteFallback(trip);
+             
+             recEnrouteDist += enrouteDistance;
+             
+             // NEW: Open Distance from Pre-Calculated Average (if available)
+             // We prioritize the CSV-derived uniform average over the Gap Analysis estimate
+             if (trip.normalizedOpenDistance) {
+                 recOpenDist += trip.normalizedOpenDistance;
+             }
+         }
+     });
+
      // Prepare Charts Data
      const weeklyEarningsData = Array.from(chartDataMap.entries()).map(([date, amounts]) => {
          const d = new Date(date);
@@ -996,6 +1155,160 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          };
      });
 
+     // --- Phase 3: Gap Analysis (Open vs Unavailable) ---
+     
+     // Gap Thresholds
+     const GAP_THRESHOLD_MINS = 45; // 45 minutes
+     const GAP_THRESHOLD_HOURS = GAP_THRESHOLD_MINS / 60;
+     const MIN_UNAVAILABLE_BLOCK_HOURS = 4; // 4 hours implies shift end/sleep
+     const AVG_OPEN_SPEED = 20; // km/h (Cruising for fares)
+     // const AVG_PERSONAL_SPEED = 30; // REMOVED: Causing inflation
+
+     // Helper: Add gap to appropriate bucket
+     const processGap = (gapHours: number) => {
+         if (gapHours <= 0) return;
+
+         if (gapHours > MIN_UNAVAILABLE_BLOCK_HOURS) {
+             // Huge gap -> Unavailable (Sleep/Shift End)
+             recUnavailableTime += gapHours;
+             recUnavailableDist += 0; // FIX: Assume 0km (Parked/Sleeping)
+         } else if (gapHours > GAP_THRESHOLD_HOURS) {
+             // Medium gap -> Personal/Break (Unavailable)
+             recUnavailableTime += gapHours;
+             recUnavailableDist += 0; // FIX: Assume 0km (Parked/Eating)
+         } else {
+             // Small gap -> Open (Waiting for fare)
+             recOpenTime += gapHours;
+             // recOpenDist += (gapHours * AVG_OPEN_SPEED); // REMOVED: Replaced by CSV Uniform Average Strategy
+             recOpenDist += 0; 
+         }
+     };
+
+     // Iterate through sorted trips to find gaps
+     for (let i = 0; i < sortedPeriodTrips.length - 1; i++) {
+         const currentTrip = sortedPeriodTrips[i];
+         const nextTrip = sortedPeriodTrips[i+1];
+
+         // End of Current Trip (Dropoff or Date + Duration)
+         let currentEnd = parseTripDate(currentTrip.dropoffTime);
+         if (!currentEnd && currentTrip.duration) {
+             const start = parseTripDate((currentTrip as any).requestTime || currentTrip.date);
+             if (start) currentEnd = new Date(start.getTime() + (currentTrip.duration * 60000));
+         }
+
+         // Start of Next Trip (Request Time)
+         const nextStart = parseTripDate((nextTrip as any).requestTime || nextTrip.date);
+
+         if (currentEnd && nextStart && nextStart > currentEnd) {
+             const gapHours = (nextStart.getTime() - currentEnd.getTime()) / (1000 * 60 * 60);
+             processGap(gapHours);
+         }
+     }
+     
+     // Handle Start/End of Period Boundaries?
+     // For now, we only analyze gaps BETWEEN trips to be conservative.
+     // Leading/Trailing time in the selected period is ignored unless we have shift logs.
+
+     // --- End Phase 3 ---
+
+     // --- Phase 4: Fuel Metric Finalization ---
+     
+     // PHASE 2 FIX: USE IMPORTED METRICS IF AVAILABLE
+     // "Normalization Strategy": Use Trip Logs for shape (time distribution) but CSV Report for volume (totals).
+     // This ensures the dashboard matches the official report exactly.
+     // CRITICAL: Only apply this override if "All" platforms are selected. 
+     // We cannot split the CSV total by platform, so for filtered views, we must rely on the log reconstruction.
+     // (isAllPlatforms and relevantCsvMetrics are defined above)
+
+     // Check if we have valid CSV metrics for distance (Source: driver_time_and_distance.csv)
+     const hasCsvDistance = relevantCsvMetrics.some(m => (m.onTripDistance || 0) > 0);
+
+     if (hasCsvDistance) {
+         let csvOpenDist = 0;
+         let csvEnrouteDist = 0;
+         let csvOnTripDist = 0;
+         let csvUnavailableDist = 0;
+         
+         let csvOpenTime = 0;
+         let csvEnrouteTime = 0;
+         let csvOnTripTime = 0;
+         let csvUnavailableTime = 0;
+
+         relevantCsvMetrics.forEach(m => {
+             // Sum up metrics (e.g. if we have 7 daily records for a week selection)
+             csvOpenDist += m.openDistance || 0;
+             csvEnrouteDist += m.enrouteDistance || 0;
+             csvOnTripDist += m.onTripDistance || 0;
+             csvUnavailableDist += m.unavailableDistance || 0;
+             
+             // Time Override (if available in CSV)
+             csvOpenTime += m.openTime || 0;
+             csvEnrouteTime += m.enrouteTime || 0;
+             csvOnTripTime += m.onTripHours || 0; 
+             csvUnavailableTime += m.unavailableTime || 0;
+         });
+         
+         // --- APPLING THE FIX ---
+         
+         // 1. On Trip Distance: Force match the CSV report
+         recOnTripDist = csvOnTripDist; 
+         
+         // 2. Other Distances: Force match the CSV report
+         // recOpenDist = csvOpenDist; // Handled per-trip via Uniform Average
+         // recEnrouteDist is already calculated via Uniform Average in the loop (if isAllPlatforms is true), 
+         // so it naturally sums to csvTotalEnroute (which is csvEnrouteDist).
+         // We do NOT override it here to respect the per-trip distribution.
+         // recEnrouteDist = csvEnrouteDist; 
+         recUnavailableDist = csvUnavailableDist;
+         
+         // 3. Time Metrics: Force match the CSV report (if populated)
+         if (csvOnTripTime > 0) recOnTripTime = csvOnTripTime;
+         if (csvEnrouteTime > 0) recEnrouteTime = csvEnrouteTime;
+         if (csvOpenTime > 0) recOpenTime = csvOpenTime;
+         if (csvUnavailableTime > 0) recUnavailableTime = csvUnavailableTime;
+     }
+
+     const FUEL_EFFICIENCY_KMPL = 12; // Toyota Sienta Hybrid Average
+     
+     // 1. Calculate Fuel Splits based on Reconstructed Distance
+     const fuelRideShare = (recOnTripDist + recEnrouteDist) / FUEL_EFFICIENCY_KMPL;
+     const fuelCompanyOps = recOpenDist / FUEL_EFFICIENCY_KMPL;
+     const fuelPersonal = recUnavailableDist / FUEL_EFFICIENCY_KMPL;
+     const fuelTotalEst = fuelRideShare + fuelCompanyOps + fuelPersonal;
+
+     // 2. Override Legacy Variables with New Reconstructed Data
+     // This ensures the dashboard UI updates automatically without changing JSX structure yet
+     
+     // Update Distance Metrics object (used by Fuel Usage Split Tile)
+     const reconstructedDistanceMetrics = {
+         open: recOpenDist,
+         enroute: recEnrouteDist,
+         onTrip: recOnTripDist,
+         unavailable: recUnavailableDist,
+         total: recOpenDist + recEnrouteDist + recOnTripDist + recUnavailableDist
+     };
+
+     // Update Fuel Metrics object
+     const reconstructedFuelMetrics = {
+         rideShare: fuelRideShare,
+         companyOps: fuelCompanyOps,
+         personal: fuelPersonal,
+         misc: 0,
+         total: fuelTotalEst
+     };
+
+     // Update Time Metrics (used by Utilization Chart)
+     // We replace the static CSV sums with our dynamic reconstruction
+     const reconstructedTimeMetrics = {
+         onTrip: recOnTripTime,
+         toTrip: recEnrouteTime,
+         available: recOpenTime,
+         unavailable: recUnavailableTime,
+         totalOnline: recOnTripTime + recEnrouteTime + recOpenTime
+     };
+
+     // --- End Phase 4 ---
+     
      // Earnings Breakdown Data
      const earningsBreakdownData = [
         { name: 'Base Fare', value: totalBaseFare, color: '#4f46e5' },
@@ -1027,13 +1340,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      const cancellationRate = totalTrips > 0 ? (periodCancelledTrips / totalTrips) * 100 : 0;
 
      // --- PHASE 2 FIX: USE IMPORTED METRICS IF AVAILABLE ---
-     // Only use metrics that overlap with the selected date range
-     const relevantCsvMetrics = csvMetrics?.filter(m => {
-        const mStart = new Date(m.periodStart);
-        const mEnd = new Date(m.periodEnd);
-        // Check overlap: start <= rangeEnd AND end >= rangeStart
-        return mStart <= end && mEnd >= start;
-     }) || [];
+     // (Calculated in Phase 4)
 
      const latestCsvMetric = relevantCsvMetrics.length > 0 
         ? [...relevantCsvMetrics].sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())[0]
@@ -1219,16 +1526,24 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          }) || [];
      }
 
-     // --- Phase 3: Ratio-Reconstruction Algorithm ---
-     // We now simply sum the pre-calculated fields from the Trip object.
-     // These fields were populated during import based on the fleet efficiency ratios.
-     
+     // --- Phase 4 Wiring: Inject New Metrics into UI Variables ---
+
+     // 1. Define Distance Metrics (Replacing legacy CSV logic)
+     const distanceMetrics = reconstructedDistanceMetrics;
+
+     // 2. Define Fuel Metrics (Replacing legacy estimate)
+     const fuelMetrics = reconstructedFuelMetrics;
+
+     // 3. Define Trip Ratio (Time Metrics)
      const tripRatio = {
-         onTrip: sumOnTripHours,
-         toTrip: sumToTripHours,
-         available: sumAvailableHours,
-         totalOnline: sumTotalHours
+         onTrip: reconstructedTimeMetrics.onTrip,
+         toTrip: reconstructedTimeMetrics.toTrip,
+         available: reconstructedTimeMetrics.available,
+         unavailable: reconstructedTimeMetrics.unavailable,
+         totalOnline: reconstructedTimeMetrics.totalOnline
      };
+     
+     // Note: totalDistance is currently left as "Revenue Distance" (Trip Only).
 
      return {
         periodEarnings,
@@ -1265,9 +1580,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         acceptanceRate,
         currentRating,
         tripRatio, // New
-        totalTolls
+        totalTolls,
+        distanceMetrics, // Phase 2 New
+        fuelMetrics, // New Fuel Split
+        monthlyEarnings, // Added back
+        currentTier, // Added back
+        // Phase 2.1: Expose Time Metrics for Debug/Advanced View
+        timeMetrics: reconstructedTimeMetrics
      };
-  }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver]);
+  }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms]);
 
   const handleDateSelect = (newRange: DateRange | undefined) => {
     if (newRange?.from) {
@@ -1288,6 +1609,82 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           Back to Drivers
         </Button>
         <div className="flex flex-wrap items-center gap-2">
+           {/* Platform Filter */}
+           <DropdownMenu>
+             <DropdownMenuTrigger asChild>
+               <Button variant="outline" className="w-[180px] justify-between">
+                 <div className="flex items-center gap-2">
+                   <Filter className="h-4 w-4" />
+                   <span className="truncate">
+                     {selectedPlatforms.has('All') 
+                       ? 'All Platforms' 
+                       : Array.from(selectedPlatforms).join(', ')}
+                   </span>
+                 </div>
+                 <ChevronDown className="h-4 w-4 opacity-50" />
+               </Button>
+             </DropdownMenuTrigger>
+             <DropdownMenuContent align="end" className="w-[200px]">
+               <DropdownMenuItem 
+                 onSelect={(e) => {
+                   e.preventDefault();
+                   setSelectedPlatforms(new Set(['All']));
+                 }}
+               >
+                 <div className="flex items-center gap-2">
+                   <Checkbox checked={selectedPlatforms.has('All')} />
+                   <span>All Platforms</span>
+                 </div>
+               </DropdownMenuItem>
+               <DropdownMenuSeparator />
+               {Object.keys(PLATFORM_COLORS).filter(k => k !== 'Other').map(platform => (
+                 <DropdownMenuItem
+                   key={platform}
+                   onSelect={(e) => {
+                     e.preventDefault();
+                     const newSet = new Set(selectedPlatforms);
+                     if (newSet.has('All')) newSet.delete('All');
+                     
+                     if (newSet.has(platform)) {
+                       newSet.delete(platform);
+                     } else {
+                       newSet.add(platform);
+                     }
+                     
+                     if (newSet.size === 0) newSet.add('All');
+                     setSelectedPlatforms(newSet);
+                   }}
+                 >
+                   <div className="flex items-center gap-2">
+                     <Checkbox checked={selectedPlatforms.has(platform)} />
+                     <span style={{ color: PLATFORM_COLORS[platform] }}>{platform}</span>
+                   </div>
+                 </DropdownMenuItem>
+               ))}
+               <DropdownMenuItem
+                   onSelect={(e) => {
+                     e.preventDefault();
+                     const newSet = new Set(selectedPlatforms);
+                     if (newSet.has('All')) newSet.delete('All');
+                     
+                     if (newSet.has('Other')) {
+                       newSet.delete('Other');
+                     } else {
+                       newSet.add('Other');
+                     }
+                     
+                     if (newSet.size === 0) newSet.add('All');
+                     setSelectedPlatforms(newSet);
+                   }}
+                 >
+                   <div className="flex items-center gap-2">
+                     <Checkbox checked={selectedPlatforms.has('Other')} />
+                     <span style={{ color: PLATFORM_COLORS['Other'] }}>Other</span>
+                   </div>
+                 </DropdownMenuItem>
+             </DropdownMenuContent>
+           </DropdownMenu>
+
            {/* Date Picker */}
            <div className={cn("grid gap-2")}>
             <Popover>
@@ -1444,7 +1841,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                />
                <Card>
                   <CardHeader className="pb-2">
-                     <CardTitle className="text-sm font-medium text-slate-500">Trip Meter</CardTitle>
+                     <CardTitle className="text-sm font-medium text-slate-500">Time Metrics</CardTitle>
                   </CardHeader>
                   <CardContent>
                      <div className="h-[180px] w-full relative">
@@ -1452,9 +1849,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                            <PieChart>
                               <Pie
                                  data={[
-                                    { name: 'Available', value: metrics.tripRatio.available, fill: '#1e3a8a' },
-                                    { name: 'To Trip', value: metrics.tripRatio.toTrip, fill: '#fbbf24' },
-                                    { name: 'On Trip', value: metrics.tripRatio.onTrip, fill: '#10b981' }
+                                    { name: 'Open Time', value: metrics.tripRatio.available, fill: '#1e3a8a' },
+                                    { name: 'Enroute Time', value: metrics.tripRatio.toTrip, fill: '#fbbf24' },
+                                    { name: 'On Trip Time', value: metrics.tripRatio.onTrip, fill: '#10b981' },
+                                    { name: 'Unavailable Time', value: metrics.tripRatio.unavailable, fill: '#94a3b8' }
                                  ]}
                                  cx="50%"
                                  cy="50%"
@@ -1469,6 +1867,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                  <Cell key="Available" fill="#1e3a8a" />
                                  <Cell key="To Trip" fill="#fbbf24" />
                                  <Cell key="On Trip" fill="#10b981" />
+                                 <Cell key="Unavailable" fill="#94a3b8" />
                               </Pie>
                               <Tooltip formatter={(value: number) => [value.toFixed(2) + ' hrs', 'Duration']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
                            </PieChart>
@@ -1478,28 +1877,68 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                            <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Hours Online</div>
                         </div>
                      </div>
-                     <div className="mt-4 flex justify-between px-2">
-                        <div className="flex flex-col items-center gap-1">
-                           <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.available.toFixed(2)} hrs</span>
-                           <div className="flex items-center gap-1.5">
-                              <div className="w-2 h-2 rounded-full bg-[#1e3a8a]"></div>
-                              <span className="text-xs font-medium text-slate-500">Available</span>
-                           </div>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                           <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.toTrip.toFixed(2)} hrs</span>
-                           <div className="flex items-center gap-1.5">
-                              <div className="w-2 h-2 rounded-full bg-[#fbbf24]"></div>
-                              <span className="text-xs font-medium text-slate-500">To trip</span>
-                           </div>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                           <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.onTrip.toFixed(2)} hrs</span>
-                           <div className="flex items-center gap-1.5">
-                              <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
-                              <span className="text-xs font-medium text-slate-500">On trip</span>
-                           </div>
-                        </div>
+                     <div className="mt-4 grid grid-cols-4 gap-1 text-center px-2">
+                        <TooltipProvider>
+                           <UiTooltip>
+                              <TooltipTrigger asChild>
+                                 <div className="flex flex-col items-center gap-1 cursor-help">
+                                    <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.available.toFixed(2)} h</span>
+                                    <div className="flex items-center gap-1.5">
+                                       <div className="w-2 h-2 rounded-full bg-[#1e3a8a]"></div>
+                                       <span className="text-xs font-medium text-slate-500">Open</span>
+                                    </div>
+                                 </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                 <p className="max-w-xs">The amount of time the driver was online and available to accept new trip requests (waiting for a "ping").</p>
+                              </TooltipContent>
+                           </UiTooltip>
+                           
+                           <UiTooltip>
+                              <TooltipTrigger asChild>
+                                 <div className="flex flex-col items-center gap-1 cursor-help">
+                                    <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.toTrip.toFixed(2)} h</span>
+                                    <div className="flex items-center gap-1.5">
+                                       <div className="w-2 h-2 rounded-full bg-[#fbbf24]"></div>
+                                       <span className="text-xs font-medium text-slate-500">Enroute</span>
+                                    </div>
+                                 </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                 <p className="max-w-xs">The time spent traveling to a pickup location after accepting a request.</p>
+                              </TooltipContent>
+                           </UiTooltip>
+
+                           <UiTooltip>
+                              <TooltipTrigger asChild>
+                                 <div className="flex flex-col items-center gap-1 cursor-help">
+                                    <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.onTrip.toFixed(2)} h</span>
+                                    <div className="flex items-center gap-1.5">
+                                       <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
+                                       <span className="text-xs font-medium text-slate-500">On Trip</span>
+                                    </div>
+                                 </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                 <p className="max-w-xs">The time spent with a passenger or delivery in the vehicle, from pickup to drop-off.</p>
+                              </TooltipContent>
+                           </UiTooltip>
+
+                           <UiTooltip>
+                              <TooltipTrigger asChild>
+                                 <div className="flex flex-col items-center gap-1 cursor-help">
+                                    <span className="text-sm font-bold text-slate-900">{metrics.tripRatio.unavailable.toFixed(2)} h</span>
+                                    <div className="flex items-center gap-1.5">
+                                       <div className="w-2 h-2 rounded-full bg-[#94a3b8]"></div>
+                                       <span className="text-xs font-medium text-slate-500">Unavail</span>
+                                    </div>
+                                 </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                 <p className="max-w-xs">The time the driver was logged into the system but marked as "Unavailable" (e.g., taking a break or paused).</p>
+                              </TooltipContent>
+                           </UiTooltip>
+                        </TooltipProvider>
                      </div>
                   </CardContent>
                </Card>
@@ -1516,12 +1955,201 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                            color: getPlatformColor(label)
                        }))}
                />
-               <MetricCard 
-                  title="Month-to-Date Earnings"
-                  value={`$${monthlyEarnings.toFixed(2)}`}
-                  subtext="Earnings for current month tier status"
-                  icon={<Award className="h-4 w-4 text-slate-500" />}
-               />
+               <Card>
+                  <CardHeader className="pb-2">
+                     <CardTitle className="text-sm font-medium text-slate-500">Distance Metrics</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                     {metrics.distanceMetrics ? (
+                        <>
+                           <div className="h-[180px] w-full relative">
+                              <ResponsiveContainer width="100%" height="100%">
+                                 <PieChart>
+                                    <Pie
+                                       data={[
+                                          { name: 'Open Dist', value: metrics.distanceMetrics.open, fill: '#1e3a8a' },
+                                          { name: 'Enroute Dist', value: metrics.distanceMetrics.enroute, fill: '#fbbf24' },
+                                          { name: 'On Trip Dist', value: metrics.distanceMetrics.onTrip, fill: '#10b981' },
+                                          { name: 'Unavailable Dist', value: metrics.distanceMetrics.unavailable, fill: '#94a3b8' }
+                                       ]}
+                                       cx="50%"
+                                       cy="50%"
+                                       innerRadius={55}
+                                       outerRadius={75}
+                                       paddingAngle={0}
+                                       dataKey="value"
+                                       startAngle={90}
+                                       endAngle={-270}
+                                       stroke="none"
+                                    >
+                                       <Cell key="Open" fill="#1e3a8a" />
+                                       <Cell key="Enroute" fill="#fbbf24" />
+                                       <Cell key="On Trip" fill="#10b981" />
+                                       <Cell key="Unavailable" fill="#94a3b8" />
+                                    </Pie>
+                                    <Tooltip formatter={(value: number) => [value.toFixed(2) + ' km', 'Distance']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
+                                 </PieChart>
+                              </ResponsiveContainer>
+                              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                                 <div className="text-2xl font-bold text-slate-900">{metrics.distanceMetrics.total.toFixed(2)}</div>
+                                 <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Total KM</div>
+                              </div>
+                           </div>
+                           <div className="mt-4 flex justify-between px-2">
+                              <TooltipProvider>
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.open.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5">
+                                             <div className="w-2 h-2 rounded-full bg-[#1e3a8a]"></div>
+                                             <span className="text-xs font-medium text-slate-500">Open</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Distance traveled while the driver was online and waiting for a request.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.enroute.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5">
+                                             <div className="w-2 h-2 rounded-full bg-[#fbbf24]"></div>
+                                             <span className="text-xs font-medium text-slate-500">Enroute</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Distance traveled while the driver was heading to the pickup location.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.onTrip.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5">
+                                             <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
+                                             <span className="text-xs font-medium text-slate-500">On Trip</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Distance traveled during the actual trip (from pickup to destination).</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.unavailable.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5">
+                                             <div className="w-2 h-2 rounded-full bg-[#94a3b8]"></div>
+                                             <span className="text-xs font-medium text-slate-500">Unavail</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Distance traveled while the driver was in an unavailable or offline-equivalent state.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+                              </TooltipProvider>
+                           </div>
+                        </>
+                     ) : (
+                        <div className="h-[250px] flex flex-col items-center justify-center text-slate-400">
+                           <Navigation className="h-10 w-10 mb-2 opacity-20" />
+                           <p className="text-sm">No distance breakdown</p>
+                           <p className="text-xs mt-1">Upload "Time & Distance" Report</p>
+                        </div>
+                     )}
+                  </CardContent>
+               </Card>
+
+               {/* Fuel Usage Split Tile */}
+               <Card>
+                  <CardHeader className="pb-2">
+                     <CardTitle className="text-sm font-medium text-slate-500">Fuel Usage Split</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                     {metrics.fuelMetrics ? (
+                        <>
+                           <div className="h-[180px] w-full relative">
+                              <ResponsiveContainer width="100%" height="100%">
+                                 <PieChart>
+                                    <Pie
+                                       data={[
+                                          { name: 'Ride Share', value: metrics.fuelMetrics.rideShare, fill: '#10b981' }, 
+                                          { name: 'Company Ops', value: metrics.fuelMetrics.companyOps, fill: '#fbbf24' }, 
+                                          { name: 'Personal', value: metrics.fuelMetrics.personal, fill: '#ef4444' }, 
+                                          { name: 'Misc/Leakage', value: metrics.fuelMetrics.misc, fill: '#94a3b8' } 
+                                       ]}
+                                       cx="50%"
+                                       cy="50%"
+                                       innerRadius={55}
+                                       outerRadius={75}
+                                       paddingAngle={0}
+                                       dataKey="value"
+                                       startAngle={90}
+                                       endAngle={-270}
+                                       stroke="none"
+                                    >
+                                       <Cell key="Ride Share" fill="#10b981" />
+                                       <Cell key="Company Ops" fill="#fbbf24" />
+                                       <Cell key="Personal" fill="#ef4444" />
+                                       <Cell key="Misc" fill="#94a3b8" />
+                                    </Pie>
+                                    <Tooltip formatter={(value: number) => [value.toFixed(1) + ' L', 'Fuel']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
+                                 </PieChart>
+                              </ResponsiveContainer>
+                              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                                 <div className="text-2xl font-bold text-slate-900">{metrics.fuelMetrics.total.toFixed(0)}</div>
+                                 <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Total L</div>
+                              </div>
+                           </div>
+                           <div className="mt-4 grid grid-cols-4 gap-1 text-center px-2">
+                              <div className="flex flex-col items-center gap-1">
+                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.rideShare.toFixed(1)}</span>
+                                 <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
+                                    <span className="text-xs font-medium text-slate-500 truncate w-full">RideShare</span>
+                                 </div>
+                              </div>
+                              <div className="flex flex-col items-center gap-1">
+                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.companyOps.toFixed(1)}</span>
+                                 <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-[#fbbf24]"></div>
+                                    <span className="text-xs font-medium text-slate-500 truncate w-full">Com. Ops</span>
+                                 </div>
+                              </div>
+                              <div className="flex flex-col items-center gap-1">
+                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.personal.toFixed(1)}</span>
+                                 <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-[#ef4444]"></div>
+                                    <span className="text-xs font-medium text-slate-500 truncate w-full">Personal</span>
+                                 </div>
+                              </div>
+                              <div className="flex flex-col items-center gap-1">
+                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.misc.toFixed(1)}</span>
+                                 <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-[#94a3b8]"></div>
+                                    <span className="text-xs font-medium text-slate-500 truncate w-full">Leakage</span>
+                                 </div>
+                              </div>
+                           </div>
+                        </>
+                     ) : (
+                        <div className="h-[250px] flex flex-col items-center justify-center text-slate-400">
+                           <Fuel className="h-10 w-10 mb-2 opacity-20" />
+                           <p className="text-sm">No fuel data</p>
+                           <p className="text-xs mt-1">Requires Time & Distance</p>
+                        </div>
+                     )}
+                  </CardContent>
+               </Card>
             </div>
 
             {/* Benchmarking Section */}

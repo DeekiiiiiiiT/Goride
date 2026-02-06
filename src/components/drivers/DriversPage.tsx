@@ -367,12 +367,13 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         }
 
         // Tier Logic
-        if (metric && metric.tier) {
-            driver.tier = metric.tier;
-        } else if (tiers.length > 0) {
-            // Use Real-Time Monthly Earnings Calculation
+        if (tiers.length > 0) {
+            // Priority 1: Real-Time Monthly Earnings Calculation (Matches Driver Detail View)
             const tier = TierCalculations.getTierForEarnings(driver.monthlyEarnings, tiers);
             driver.tier = tier.name;
+        } else if (metric && metric.tier) {
+             // Priority 2: Imported Metric Fallback
+            driver.tier = metric.tier;
         } else {
             // Fallback Legacy
             if (driver.totalEarnings > 5000) driver.tier = 'Platinum';

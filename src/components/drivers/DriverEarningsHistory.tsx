@@ -16,7 +16,7 @@ interface DriverEarningsHistoryProps {
   transactions: FinancialTransaction[];
 }
 
-export function DriverEarningsHistory({ driverId, transactions }: DriverEarningsHistoryProps) {
+export function DriverEarningsHistory({ driverId, transactions = [] }: DriverEarningsHistoryProps) {
   const [tiers, setTiers] = React.useState<TierConfig[]>([]);
 
   React.useEffect(() => {
@@ -24,7 +24,7 @@ export function DriverEarningsHistory({ driverId, transactions }: DriverEarnings
   }, []);
 
   const weeklyData = useMemo(() => {
-    if (transactions.length === 0 || tiers.length === 0) return [];
+    if (!transactions || transactions.length === 0 || tiers.length === 0) return [];
 
     // 1. Find date range
     const dates = transactions.map(t => new Date(t.date));

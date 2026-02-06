@@ -63,7 +63,7 @@ export interface FileData {
   name: string;
   rows: ParsedRow[];
   headers: string[];
-  type: 'uber_trip' | 'uber_payment' | 'uber_payment_driver' | 'uber_payment_org' | 'uber_driver_quality' | 'uber_vehicle_performance' | 'uber_driver_activity' | 'uber_rental_contract' | 'fuel_statement' | 'generic';
+  type: 'uber_trip' | 'uber_payment' | 'uber_payment_driver' | 'uber_payment_org' | 'uber_driver_quality' | 'uber_vehicle_performance' | 'uber_driver_activity' | 'uber_driver_time_distance' | 'uber_vehicle_time_distance' | 'uber_rental_contract' | 'fuel_statement' | 'generic';
   validationErrors?: string[];
   reportDate?: string; // ISO String
   customMapping?: Record<string, string>;
@@ -102,6 +102,14 @@ const VALIDATION_RULES = {
         required: [['Online Hours', 'Hours Online', 'Online', 'Time Online', 'Hours']], 
         anyOne: ['On Trip Hours', 'OnTrip Hours', 'Driver UUID', 'Driver Name'],
         label: 'Driver Hours' 
+    },
+    'uber_driver_time_distance': {
+        required: ['Driver UUID', 'Open Time', 'Enroute Time'],
+        label: 'Driver Time & Distance'
+    },
+    'uber_vehicle_time_distance': {
+        required: ['Vehicle UUID', 'Open Time', 'Enroute Time'],
+        label: 'Vehicle Time & Distance'
     },
     'uber_rental_contract': {
         required: ['TermUUID'],
@@ -236,6 +244,24 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
         name.includes('driver_activity')
     ) return 'uber_driver_activity';
 
+    // 7.1 Driver Time & Distance (New) - High Priority Check
+    // We strictly check for 'Driver UUID' to distinguish from Vehicle files
+    if (
+        (has('Open Time') && has('Unavailable Time') && has('Driver UUID')) ||
+        (has('Open Distance') && has('Unavailable Distance') && has('Driver UUID')) ||
+        name.includes('driver_time_and_distance') ||
+        name.includes('driver time and distance')
+    ) return 'uber_driver_time_distance';
+
+    // 7.2 Vehicle Time & Distance (New) - High Priority Check
+    // We strictly check for 'Vehicle UUID' to distinguish from Driver files
+    if (
+        (has('Open Time') && has('Unavailable Time') && has('Vehicle UUID')) || 
+        (has('Open Distance') && has('Unavailable Distance') && has('Vehicle UUID')) ||
+        name.includes('vehicle_time_and_distance') ||
+        name.includes('vehicle time and distance')
+    ) return 'uber_vehicle_time_distance';
+
     // 8. Rental Contracts
     if (has('TermUUID') || (has('OrganizationUUID') && has('Balance'))) return 'uber_rental_contract';
     
@@ -315,6 +341,8 @@ export interface ProcessedBatch {
     fuelEntries?: FuelEntry[];
     organizationName?: string; // Phase 1: Fleet Owner
     tripAnalytics?: TripAnalytics; // Phase 4
+    driverTimeData?: DriverTimeDistance[];
+    vehicleTimeData?: VehicleTimeDistance[];
     calibrationStats?: {
         fleetStats: FleetStats;
         deductionPerTrip: number;
@@ -359,13 +387,62 @@ const extractDriverName = (row: ParsedRow, schema: any = {}): string => {
 };
 
 // Phase 2: Static Import Reconstruction Helper
-interface FleetStats {
+export interface DriverTimeDistance {
+    driverUuid: string;
+    openTime: number; // Hours
+    enrouteTime: number; // Hours
+    onTripTime: number; // Hours
+    unavailableTime: number; // Hours
+    openDistance: number;
+    enrouteDistance: number;
+    onTripDistance: number;
+    unavailableDistance: number;
+}
+
+export interface VehicleTimeDistance {
+    vehicleUuid: string;
+    vehiclePlate: string;
+    openTime: number;
+    enrouteTime: number;
+    onTripTime: number;
+    unavailableTime: number;
+    openDistance: number;
+    enrouteDistance: number;
+    onTripDistance: number;
+    unavailableDistance: number;
+}
+
+export function parseHHMMSS(value: string): number {
+    if (!value) return 0;
+    const clean = value.trim();
+    const parts = clean.split(':').map(p => parseFloat(p) || 0);
+
+    // Format: HH:MM:SS (e.g. 0:00:07 = 7 seconds)
+    if (parts.length === 3) {
+        return parts[0] + (parts[1] / 60) + (parts[2] / 3600);
+    }
+    // Fallback
+    return 0;
+}
+
+export interface FleetStats {
     onTripRatio: number;
     toTripRatio: number;
     availableRatio: number;
     totalOnlineHours: number;
     totalOnJobHours: number;
     totalOnTripHours: number;
+    totalUnavailableHours: number;
+    
+    // Distance Metrics
+    totalOpenDistance?: number;
+    totalEnrouteDistance?: number;
+    totalOnTripDistance?: number;
+    totalUnavailableDistance?: number;
+
+    // Phase 4: Separate Breakdowns
+    driverStats?: FleetStats;
+    vehicleStats?: FleetStats;
 }
 
 function parseDurationToHours(raw: string): number {
@@ -390,78 +467,222 @@ function parseDurationToHours(raw: string): number {
     return parseFloat(clean.replace(/[^0-9.-]/g, '')) || 0;
 }
 
+function createFleetStatsObject(
+    sumOnline: number, 
+    sumOnJob: number, 
+    sumOnTrip: number, 
+    sumToTrip: number, 
+    sumUnavailable: number,
+    sumOpenDist: number = 0,
+    sumEnrouteDist: number = 0,
+    sumOnTripDist: number = 0,
+    sumUnavailableDist: number = 0
+): FleetStats {
+    // If sumOnJob is 0 (missing), we cannot calculate ratios correctly relative to Job.
+    // However, to prevent divide by zero, we handle it.
+    let onTripRatio = 0;
+    let toTripRatio = 0;
+    let availableRatio = 0;
+
+    if (sumOnJob > 0) {
+        onTripRatio = sumOnTrip / sumOnJob;
+        // To Trip = Job - Trip
+        toTripRatio = (sumOnJob - sumOnTrip) / sumOnJob;
+        // Available = Online - Job
+        availableRatio = (sumOnline - sumOnJob) / sumOnJob;
+    }
+
+    // Ensure no negative ratios if data is slightly dirty
+    toTripRatio = Math.max(0, toTripRatio);
+    availableRatio = Math.max(0, availableRatio);
+
+    return {
+        onTripRatio,
+        toTripRatio,
+        availableRatio,
+        totalOnlineHours: sumOnline,
+        totalOnJobHours: sumOnJob,
+        totalOnTripHours: sumOnTrip,
+        totalUnavailableHours: sumUnavailable,
+        
+        totalOpenDistance: sumOpenDist,
+        totalEnrouteDistance: sumEnrouteDist,
+        totalOnTripDistance: sumOnTripDist,
+        totalUnavailableDistance: sumUnavailableDist
+    };
+}
+
 function calculateFleetStats(files: FileData[]): FleetStats {
     let sumOnTrip = 0;
     let sumOnJob = 0;
     let sumOnline = 0;
     // Phase 2: New Variable for "To Trip" tracking
     let sumToTrip = 0;
+    let sumUnavailable = 0;
     
     let foundPerformance = false;
 
-    for (const file of files) {
-        if (file.type === 'uber_vehicle_performance') {
-            foundPerformance = true;
-            file.rows.forEach(row => {
-                 const getValRaw = (keys: string[]) => {
-                     // 1. Exact match
-                     for (const k of keys) {
-                          if (row[k] !== undefined) return String(row[k]);
-                     }
-                     // 2. Partial match (Robust)
-                     const rowKeys = Object.keys(row);
-                     for (const k of keys) {
-                         if (k === 'Hours') continue;
-                         const found = rowKeys.find(rk => rk.toLowerCase().includes(k.toLowerCase()));
-                         if (found) return String(row[found]);
-                     }
-                     return '0';
-                 };
+    // PRIORITY 1: New Time & Distance Files (Direct Mapping)
+    const driverTimeFiles = files.filter(f => f.type === 'uber_driver_time_distance');
+    const vehicleTimeFiles = files.filter(f => f.type === 'uber_vehicle_time_distance');
+    
+    let driverStats: FleetStats | undefined;
+    let vehicleStats: FleetStats | undefined;
 
-                 const oh = parseDurationToHours(getValRaw(['Hours Online', 'Online Hours', 'Total Online', 'Time Online', 'Online Duration']));
-                 const oth = parseDurationToHours(getValRaw(['Hours On Trip', 'On Trip Hours', 'Time On Trip', 'On Trip Duration']));
-                 // Expanded list to catch "Time On Job" which caused the previous failure
-                 const hoj = parseDurationToHours(getValRaw(['Hours On Job', 'Hours on Job', 'Job Hours', 'Active Hours', 'Time On Job', 'On Job Duration', 'Active Duration']));
+    if (driverTimeFiles.length > 0 || vehicleTimeFiles.length > 0) {
+        foundPerformance = true;
 
-                 sumOnline += oh;
-                 sumOnTrip += oth;
-                 sumOnJob += hoj;
+        // 1. Driver Stats
+        if (driverTimeFiles.length > 0) {
+            let dSumOnline = 0;
+            let dSumOnJob = 0;
+            let dSumOnTrip = 0;
+            let dSumToTrip = 0;
+            let dSumUnavailable = 0;
+            let dSumOpenDist = 0;
+            let dSumEnrouteDist = 0;
+            let dSumOnTripDist = 0;
+            let dSumUnavailableDist = 0;
+
+            driverTimeFiles.forEach(file => {
+                 file.rows.forEach(row => {
+                     const openTime = parseHHMMSS(String(row['Open Time'])); 
+                     const enrouteTime = parseHHMMSS(String(row['Enroute Time'])); 
+                     const onTripTime = parseHHMMSS(String(row['On Trip Time'])); 
+                     const unavailableTime = parseHHMMSS(String(row['Unavailable Time'])); 
+                     
+                     dSumOnline += (openTime + enrouteTime + onTripTime);
+                     dSumOnJob += (enrouteTime + onTripTime);
+                     dSumOnTrip += onTripTime;
+                     dSumToTrip += enrouteTime;
+                     dSumUnavailable += unavailableTime;
+
+                     dSumOpenDist += parseFloat(String(row['Open Distance'] || 0));
+                     dSumEnrouteDist += parseFloat(String(row['Enroute Distance'] || 0));
+                     dSumOnTripDist += parseFloat(String(row['On Trip Distance'] || 0));
+                     dSumUnavailableDist += parseFloat(String(row['Unavailable Distance'] || 0));
+                 });
             });
-        } else if (file.type === 'uber_driver_activity') {
-            // Treat Driver Activity strictly via Reconstruction Formula
-            // "On Job" column is assumed to be missing or unreliable.
-            foundPerformance = true;
-            file.rows.forEach(row => {
-                 const getValRaw = (keys: string[]) => {
-                     // 1. Exact match
-                     for (const k of keys) {
-                          if (row[k] !== undefined) return String(row[k]);
-                     }
-                     // 2. Partial match (Robust)
-                     const rowKeys = Object.keys(row);
-                     for (const k of keys) {
-                         if (k === 'Hours') continue;
-                         const found = rowKeys.find(rk => rk.toLowerCase().includes(k.toLowerCase()));
-                         if (found) return String(row[found]);
-                     }
-                     return '0';
-                 };
+            driverStats = createFleetStatsObject(dSumOnline, dSumOnJob, dSumOnTrip, dSumToTrip, dSumUnavailable, dSumOpenDist, dSumEnrouteDist, dSumOnTripDist, dSumUnavailableDist);
+        }
 
-                 const oh = parseDurationToHours(getValRaw(['Time Online', 'Online Duration', 'Online Hours', 'Hours Online']));
-                 const oth = parseDurationToHours(getValRaw(['Time On Trip', 'On Trip Duration', 'On Trip Hours', 'Hours On Trip']));
-                 
-                 // Phase 2: Find "Time driving to pickup" (To Trip)
-                 const toTrip = parseDurationToHours(getValRaw(['Time driving to pickup', 'Time to pickup', 'Driving to Pickup']));
+        // 2. Vehicle Stats
+        if (vehicleTimeFiles.length > 0) {
+            let vSumOnline = 0;
+            let vSumOnJob = 0;
+            let vSumOnTrip = 0;
+            let vSumToTrip = 0;
+            let vSumUnavailable = 0;
+            let vSumOpenDist = 0;
+            let vSumEnrouteDist = 0;
+            let vSumOnTripDist = 0;
+            let vSumUnavailableDist = 0;
 
-                 // RECONSTRUCTION FORMULA: On Job = On Trip + To Trip
-                 // We do NOT search for an "On Job" column here, per user instruction.
-                 const hoj = oth + toTrip;
+            vehicleTimeFiles.forEach(file => {
+                 file.rows.forEach(row => {
+                     const openTime = parseHHMMSS(String(row['Open Time'])); 
+                     const enrouteTime = parseHHMMSS(String(row['Enroute Time'])); 
+                     const onTripTime = parseHHMMSS(String(row['On Trip Time'])); 
+                     const unavailableTime = parseHHMMSS(String(row['Unavailable Time'])); 
+                     
+                     vSumOnline += (openTime + enrouteTime + onTripTime);
+                     vSumOnJob += (enrouteTime + onTripTime);
+                     vSumOnTrip += onTripTime;
+                     vSumToTrip += enrouteTime;
+                     vSumUnavailable += unavailableTime;
 
-                 sumOnline += oh;
-                 sumOnTrip += oth;
-                 sumOnJob += hoj;
-                 sumToTrip += toTrip;
+                     vSumOpenDist += parseFloat(String(row['Open Distance'] || 0));
+                     vSumEnrouteDist += parseFloat(String(row['Enroute Distance'] || 0));
+                     vSumOnTripDist += parseFloat(String(row['On Trip Distance'] || 0));
+                     vSumUnavailableDist += parseFloat(String(row['Unavailable Distance'] || 0));
+                 });
             });
+            vehicleStats = createFleetStatsObject(vSumOnline, vSumOnJob, vSumOnTrip, vSumToTrip, vSumUnavailable, vSumOpenDist, vSumEnrouteDist, vSumOnTripDist, vSumUnavailableDist);
+        }
+
+        // 3. Determine Global Fleet Stats
+        // If driver stats exist, use them as primary (more likely to have accurate unavailable time)
+        // If not, use vehicle stats.
+        // We do NOT sum them together anymore.
+        const primaryStats = driverStats || vehicleStats;
+        if (primaryStats) {
+            // Assign to the tracking variables for legacy compatibility if needed, 
+            // though we construct the object directly below.
+            return {
+                ...primaryStats,
+                driverStats,
+                vehicleStats
+            };
+        }
+    } 
+    
+    // PRIORITY 2: Legacy Files (Reconstruction) - Only run if no Time files found
+    // (This block remains largely the same, but we wrap it to ensure we don't mix logic)
+    if (!foundPerformance) {
+        for (const file of files) {
+            if (file.type === 'uber_vehicle_performance') {
+                foundPerformance = true;
+                file.rows.forEach(row => {
+                     const getValRaw = (keys: string[]) => {
+                         // 1. Exact match
+                         for (const k of keys) {
+                              if (row[k] !== undefined) return String(row[k]);
+                         }
+                         // 2. Partial match (Robust)
+                         const rowKeys = Object.keys(row);
+                         for (const k of keys) {
+                             if (k === 'Hours') continue;
+                             const found = rowKeys.find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+                             if (found) return String(row[found]);
+                         }
+                         return '0';
+                     };
+
+                     const oh = parseDurationToHours(getValRaw(['Hours Online', 'Online Hours', 'Total Online', 'Time Online', 'Online Duration']));
+                     const oth = parseDurationToHours(getValRaw(['Hours On Trip', 'On Trip Hours', 'Time On Trip', 'On Trip Duration']));
+                     // Expanded list to catch "Time On Job" which caused the previous failure
+                     const hoj = parseDurationToHours(getValRaw(['Hours On Job', 'Hours on Job', 'Job Hours', 'Active Hours', 'Time On Job', 'On Job Duration', 'Active Duration']));
+
+                     sumOnline += oh;
+                     sumOnTrip += oth;
+                     sumOnJob += hoj;
+                });
+            } else if (file.type === 'uber_driver_activity') {
+                // Treat Driver Activity strictly via Reconstruction Formula
+                // "On Job" column is assumed to be missing or unreliable.
+                foundPerformance = true;
+                file.rows.forEach(row => {
+                     const getValRaw = (keys: string[]) => {
+                         // 1. Exact match
+                         for (const k of keys) {
+                              if (row[k] !== undefined) return String(row[k]);
+                         }
+                         // 2. Partial match (Robust)
+                         const rowKeys = Object.keys(row);
+                         for (const k of keys) {
+                             if (k === 'Hours') continue;
+                             const found = rowKeys.find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+                             if (found) return String(row[found]);
+                         }
+                         return '0';
+                     };
+
+                     const oh = parseDurationToHours(getValRaw(['Time Online', 'Online Duration', 'Online Hours', 'Hours Online']));
+                     const oth = parseDurationToHours(getValRaw(['Time On Trip', 'On Trip Duration', 'On Trip Hours', 'Hours On Trip']));
+                     
+                     // Phase 2: Find "Time driving to pickup" (To Trip)
+                     const toTrip = parseDurationToHours(getValRaw(['Time driving to pickup', 'Time to pickup', 'Driving to Pickup']));
+
+                     // RECONSTRUCTION FORMULA: On Job = On Trip + To Trip
+                     // We do NOT search for an "On Job" column here, per user instruction.
+                     const hoj = oth + toTrip;
+
+                     sumOnline += oh;
+                     sumOnTrip += oth;
+                     sumOnJob += hoj;
+                     sumToTrip += toTrip;
+                });
+            }
         }
     }
 
@@ -483,14 +704,15 @@ function calculateFleetStats(files: FileData[]): FleetStats {
 
     // STRICT LOGIC: Do not guess sumOnJob if it is still 0 after reconstruction attempt.
     
-    if (!foundPerformance || (sumOnJob === 0 && sumOnline === 0)) {
+    if (!foundPerformance || (sumOnJob === 0 && sumOnline === 0 && sumUnavailable === 0)) {
          return { 
             onTripRatio: 1, 
             toTripRatio: 0, 
             availableRatio: 0,
             totalOnlineHours: 0,
             totalOnJobHours: 0,
-            totalOnTripHours: 0
+            totalOnTripHours: 0,
+            totalUnavailableHours: 0
         };
     }
 
@@ -520,7 +742,8 @@ function calculateFleetStats(files: FileData[]): FleetStats {
         availableRatio,
         totalOnlineHours: sumOnline,
         totalOnJobHours: sumOnJob,
-        totalOnTripHours: sumOnTrip
+        totalOnTripHours: sumOnTrip,
+        totalUnavailableHours: sumUnavailable
     };
 }
 
@@ -731,20 +954,148 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     const rentalContracts: RentalContract[] = [];
     const organizationMetrics: OrganizationMetrics[] = [];
     const fuelEntries: FuelEntry[] = [];
+    const driverTimeData: DriverTimeDistance[] = [];
+    const vehicleTimeData: VehicleTimeDistance[] = [];
     let organizationName = knownFleetName || ''; // Phase 1: Track Fleet Owner Name
     
     // Phase 2: Calculate Global Fleet Stats for Static Reconstruction
     const fleetStats = calculateFleetStats(files);
 
     // Phase 3: Dynamic Auto-Calibration (Phantom Lag Calculation)
-    const deductionPerTrip = calculateCalibrationDeduction(fleetStats, files);
+    // CHECK: Do we have trusted Time & Distance files?
+    const hasTrustedTimeData = files.some(f => f.type === 'uber_driver_time_distance' || f.type === 'uber_vehicle_time_distance');
+    
+    // If we have trusted data, we skip calibration (force 0). 
+    // Otherwise, we run the legacy calibration logic.
+    const deductionPerTrip = hasTrustedTimeData ? 0 : calculateCalibrationDeduction(fleetStats, files);
 
     // Phase 6: Cross-File Verification Accumulators
     let sumVehicleCash = 0; // From Vehicle Performance Report
     let sumDriverCash = 0;  // From Driver Payments Report
 
+    // Phase 6.1: Determine Batch Date (Fallback for files missing explicit dates)
+    const batchFallbackDate = files.find(f => f.reportDate)?.reportDate || new Date().toISOString();
+
+    // Map to hold VehicleMetrics to avoid duplicates and allow merging
+    // We didn't have this before (we just pushed to array), but we need it for merging Time & Distance data
+    // with potentially existing Performance data (though usually they are separate files/rows).
+    // Given the structure, we can just push to vehicleMetrics array if we treat them as separate entries,
+    // OR we can try to merge. Since `vehicleMetrics` is an array in the output, let's keep it simple
+    // but we need a way to look them up if we want to merge data from multiple files for the same vehicle/period.
+    // For now, we'll just create new entries for Time & Distance, similar to how we did for Drivers.
+    
     // 1. Process all files
     files.forEach(file => {
+        if (file.type === 'uber_driver_time_distance') {
+             file.rows.forEach(row => {
+                 const dId = cleanId(row['Driver UUID']);
+                 if (dId) {
+                     // 1. Populate Array for Fleet Stats
+                     driverTimeData.push({
+                         driverUuid: dId,
+                         openTime: parseHHMMSS(String(row['Open Time'])),
+                         enrouteTime: parseHHMMSS(String(row['Enroute Time'])),
+                         onTripTime: parseHHMMSS(String(row['On Trip Time'])),
+                         unavailableTime: parseHHMMSS(String(row['Unavailable Time'])),
+                         openDistance: parseFloat(String(row['Open Distance'] || 0)),
+                         enrouteDistance: parseFloat(String(row['Enroute Distance'] || 0)),
+                         onTripDistance: parseFloat(String(row['On Trip Distance'] || 0)),
+                         unavailableDistance: parseFloat(String(row['Unavailable Distance'] || 0))
+                     });
+
+                     // 2. Populate DriverMetrics (for Individual Driver Detail View)
+                     const current = driverMetricsMap.get(dId) || {
+                         id: `dm-dist-${dId}-${Math.random()}`,
+                         driverId: dId,
+                         driverName: extractDriverName(row) || 'Unknown Driver',
+                         periodStart: safeDateISO(file.reportDate) || batchFallbackDate,
+                         periodEnd: safeDateISO(file.reportDate) || batchFallbackDate,
+                         acceptanceRate: 0, cancellationRate: 0, completionRate: 0,
+                         ratingLast500: 0, ratingLast4Weeks: 0,
+                         onlineHours: 0, onTripHours: 0, tripsCompleted: 0,
+                         dataSources: []
+                     };
+                     
+                     // Add Source
+                     if (!current.dataSources) current.dataSources = [];
+                     if (!current.dataSources.includes('time_distance')) current.dataSources.push('time_distance');
+
+                     // Populate Fields
+                     current.openTime = parseHHMMSS(String(row['Open Time']));
+                     current.enrouteTime = parseHHMMSS(String(row['Enroute Time']));
+                     current.onTripHours = parseHHMMSS(String(row['On Trip Time'])); // Sync with standard field
+                     current.unavailableTime = parseHHMMSS(String(row['Unavailable Time']));
+                     
+                     current.openDistance = parseFloat(String(row['Open Distance'] || 0));
+                     current.enrouteDistance = parseFloat(String(row['Enroute Distance'] || 0));
+                     current.onTripDistance = parseFloat(String(row['On Trip Distance'] || 0));
+                     current.unavailableDistance = parseFloat(String(row['Unavailable Distance'] || 0));
+
+                     // Update Total Online Hours (Open + Enroute + OnTrip)
+                     current.onlineHours = current.openTime + current.enrouteTime + current.onTripHours;
+
+                     driverMetricsMap.set(dId, current);
+                 }
+            });
+            return;
+        }
+
+        if (file.type === 'uber_vehicle_time_distance') {
+             file.rows.forEach(row => {
+                 const vId = cleanId(row['Vehicle UUID']);
+                 if (vId) {
+                     // 1. Populate Array for Fleet Stats
+                     vehicleTimeData.push({
+                         vehicleUuid: vId,
+                         vehiclePlate: String(row['Vehicle License Plate'] || ''),
+                         openTime: parseHHMMSS(String(row['Open Time'])),
+                         enrouteTime: parseHHMMSS(String(row['Enroute Time'])),
+                         onTripTime: parseHHMMSS(String(row['On Trip Time'])),
+                         unavailableTime: parseHHMMSS(String(row['Unavailable Time'])),
+                         openDistance: parseFloat(String(row['Open Distance'] || 0)),
+                         enrouteDistance: parseFloat(String(row['Enroute Distance'] || 0)),
+                         onTripDistance: parseFloat(String(row['On Trip Distance'] || 0)),
+                         unavailableDistance: parseFloat(String(row['Unavailable Distance'] || 0))
+                     });
+
+                     // 2. Populate VehicleMetrics
+                     // We create a new metric entry for this report.
+                     const openTime = parseHHMMSS(String(row['Open Time']));
+                     const enrouteTime = parseHHMMSS(String(row['Enroute Time']));
+                     const onTripTime = parseHHMMSS(String(row['On Trip Time']));
+                     
+                     vehicleMetrics.push({
+                         id: `vm-dist-${vId}-${Math.random()}`,
+                         vehicleId: vId,
+                         plateNumber: String(row['Vehicle License Plate'] || 'Unknown'),
+                         vehicleName: 'Unknown Vehicle', // Not in this report
+                         periodStart: safeDateISO(file.reportDate) || batchFallbackDate,
+                         periodEnd: safeDateISO(file.reportDate) || batchFallbackDate,
+                         
+                         // Standard Fields
+                         totalEarnings: 0,
+                         earningsPerHour: 0,
+                         tripsPerHour: 0,
+                         totalTrips: 0,
+                         
+                         // Time Metrics
+                         onlineHours: openTime + enrouteTime + onTripTime,
+                         onTripHours: onTripTime,
+                         openTime: openTime,
+                         enrouteTime: enrouteTime,
+                         unavailableTime: parseHHMMSS(String(row['Unavailable Time'])),
+                         
+                         // Distance Metrics
+                         openDistance: parseFloat(String(row['Open Distance'] || 0)),
+                         enrouteDistance: parseFloat(String(row['Enroute Distance'] || 0)),
+                         onTripDistance: parseFloat(String(row['On Trip Distance'] || 0)),
+                         unavailableDistance: parseFloat(String(row['Unavailable Distance'] || 0))
+                     });
+                 }
+            });
+            return;
+        }
+
         if (file.type === 'fuel_statement') {
              const entries = processFuelData(file.rows, fuelCards);
              fuelEntries.push(...entries);
@@ -1783,6 +2134,43 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         // removed unconditional overwrite of totalCashExposure
     }
 
+    // Phase 7: Apply Uniform Average Enroute & Open Distance (Source of Truth Strategy)
+    // 1. Group Time & Distance Data by Driver
+    const driverTimeMap = new Map<string, { enroute: number, open: number }>();
+    driverTimeData.forEach(d => {
+        const current = driverTimeMap.get(d.driverUuid) || { enroute: 0, open: 0 };
+        current.enroute += d.enrouteDistance;
+        current.open += d.openDistance;
+        driverTimeMap.set(d.driverUuid, current);
+    });
+
+    // 2. Count Completed Trips per Driver
+    const driverTripCounts = new Map<string, number>();
+    mergedTrips.forEach(t => {
+        if (t.status === 'Completed' && t.driverId) {
+            driverTripCounts.set(t.driverId, (driverTripCounts.get(t.driverId) || 0) + 1);
+        }
+    });
+
+    // 3. Calculate Average and Assign to Trips
+    mergedTrips.forEach(t => {
+        if (t.status === 'Completed' && t.driverId) {
+            const totals = driverTimeMap.get(t.driverId);
+            const totalTrips = driverTripCounts.get(t.driverId);
+            
+            if (totals && totalTrips && totalTrips > 0) {
+                // Determine Uniform Average (e.g. 279.52 / 83 = 3.37 km)
+                if (totals.enroute > 0) {
+                     t.normalizedEnrouteDistance = totals.enroute / totalTrips;
+                }
+                // Determine Uniform Average Open (e.g. 75.0 / 83 = 0.90 km)
+                if (totals.open > 0) {
+                     t.normalizedOpenDistance = totals.open / totalTrips;
+                }
+            }
+        }
+    });
+
     return {
         trips: [...mergedTrips, ...genericTrips],
         driverMetrics,
@@ -1791,6 +2179,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         organizationMetrics,
         organizationName, // Return extracted name
         tripAnalytics,
+        driverTimeData,
+        vehicleTimeData,
         calibrationStats: {
             fleetStats,
             deductionPerTrip,

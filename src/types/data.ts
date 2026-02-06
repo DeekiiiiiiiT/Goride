@@ -44,6 +44,8 @@ export interface Trip {
   pickupArea?: string;  // Extracted from address
   dropoffArea?: string; // Extracted from address
   efficiency?: number;  // Amount / Distance
+  normalizedEnrouteDistance?: number; // Phase 4 Fix: Derived from CSV Totals
+  normalizedOpenDistance?: number;    // Phase 4 Fix: Derived from CSV Totals for Open Distance
   route?: RoutePoint[]; // Phase 2: Live Trip Route Data
   stops?: TripStop[];   // Phase 2.1: Multi-Stop Support
   totalWaitTime?: number; // Phase 2.1: Wait Time Tracking
@@ -241,6 +243,16 @@ export interface DriverMetrics {
   hoursOnJob?: number;
   tripsCompleted: number;
 
+  // Phase 2 (Time & Distance Reports)
+  openTime?: number;
+  enrouteTime?: number;
+  unavailableTime?: number;
+  
+  openDistance?: number;
+  enrouteDistance?: number;
+  onTripDistance?: number;
+  unavailableDistance?: number;
+
   // Financial Metrics (REPORT_TYPE_PAYMENTS_DRIVER)
   totalEarnings?: number;
   cashCollected?: number;
@@ -287,6 +299,16 @@ export interface VehicleMetrics {
   utilizationRate?: number; // (onTripHours / onlineHours) * 100
   costEfficiency?: number;  // earningsPerHour / target (default target needed)
   
+  // Phase 2 (Time & Distance Reports)
+  openTime?: number;
+  enrouteTime?: number;
+  unavailableTime?: number;
+  
+  openDistance?: number;
+  enrouteDistance?: number;
+  onTripDistance?: number;
+  unavailableDistance?: number;
+
   // Phase 4: Vehicle Health & Maintenance
   maintenanceStatus?: 'Good' | 'Due Soon' | 'Critical';
   roiScore?: number; // 0-100 score based on earnings vs average

@@ -82,7 +82,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
 
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
-  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance'].includes(currentPage);
+  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage);
   const isDrivingOpen = ['drivers', 'tier-config', 'performance'].includes(currentPage);
 
   return (
@@ -200,6 +200,23 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reconciliation'} onClick={() => onNavigate?.('fuel-reconciliation')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Reconciliation</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-stations'} onClick={() => onNavigate?.('fuel-stations')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span className="flex items-center gap-2">
+                           Gas Stations Data
+                           <Badge className="bg-indigo-500 text-white border-none h-4 px-1 text-[8px]">New</Badge>
+                        </span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-database'} onClick={() => onNavigate?.('fuel-database')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Database</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

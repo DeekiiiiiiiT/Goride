@@ -1,26 +1,47 @@
-# Solution Plan: Driver Portal Payment Log Fix
+# Enroute Distance Normalization: Uniform Average Strategy
 
-## Phase 1: Logic Analysis & Definition
-**Objective**: Define the filtering logic to match Fleet Portal behavior.
-- [x] **Step 1.1**: Analyze the "Payments Log" logic in `/components/drivers/DriverDetail.tsx`.
-- [x] **Step 1.2**: Define the `paymentTransactions` useMemo hook structure for `/components/driver-portal/DriverEarnings.tsx`.
+## Objective
+Align the "Enroute Distance" calculated from individual trip logs with the trusted "Total Enroute Distance" from the `driver_time_and_distance.csv` reference file.
 
-## Phase 2: Hook Implementation
-**Objective**: Implement the filtering logic in the target component.
-- [x] **Step 2.1**: Edit `/components/driver-portal/DriverEarnings.tsx`.
-- [x] **Step 2.2**: Insert the `paymentTransactions` useMemo hook before the return statement.
+## Strategy: "Uniform Average"
+As identified in `IDEA_1.md`, we lack granular GPS data for individual trips. Therefore, the most mathematically robust method is to calculate an **Average Enroute Distance per Trip** and apply it uniformly to all completed trips.
 
-## Phase 3: Component Integration
-**Objective**: Update the UI to use the filtered data.
-- [x] **Step 3.1**: Locate the `TransactionLedgerView` component inside the "Cash Wallet" Sheet content in `/components/driver-portal/DriverEarnings.tsx`.
-- [x] **Step 3.2**: Update the `transactions` prop.
-- [x] **Step 3.3**: Verify no other props are affected.
+**Formula:**
+`AvgEnrouteDistance = TotalCSVEnrouteDistance / TotalCompletedTrips`
 
-## Phase 4: Final Verification
-**Objective**: Confirm the implementation meets requirements.
-- [x] **Step 4.1**: Review code for syntax errors.
-  - Confirmed: Code is syntactically correct.
-- [x] **Step 4.2**: Verify that `WeeklySettlementView` (the other tab in the sheet) remains using the full `transactions` list.
-  - Confirmed: `WeeklySettlementView` still receives the full `transactions` array.
-- [x] **Step 4.3**: Confirm that the user's request "this is the ONLY transactions that should be reflected" is satisfied by the strict filter.
-  - Confirmed: The filter strictly limits the list to positive 'Cash Collection' or 'Payment_Received' events, excluding all tolls, fuel, and tag balance operations.
+## Phases
+
+### Phase 1: Foundation & Utilities
+**Goal**: Create the logic to handle the Uniform Average calculation.
+*   **Step 1.1**: Create `/utils/enrouteStrategy.ts`.
+    *   Implement `calculateAverageEnroute(totalDistance: number, tripCount: number): number`.
+    *   Implement `estimateEnrouteFallback(trip: Trip): number` (Time-based fallback for when CSV is unavailable).
+*   **Step 1.2**: Update `/types/data.ts` to ensure `Trip` interface can hold `normalizedEnrouteDistance`.
+
+### Phase 2: Data Extraction in DriverDetail
+**Goal**: Retrieve the Source of Truth (CSV) values within the main calculation loop.
+*   **Step 2.1**: In `/components/drivers/DriverDetail.tsx`, inside the `useMemo` calculation block:
+    *   Identify if `selectedPlatforms` includes "All".
+    *   Extract `csvTotalEnroute` from `relevantCsvMetrics`.
+    *   Extract `totalCompletedTrips` count for the period.
+
+### Phase 3: Logic Integration
+**Goal**: Switch between "Uniform Average" (when CSV exists) and "Time-Based Estimate" (fallback).
+*   **Step 3.1**: Calculate the `uniformEnrouteValue`.
+    *   If `isAllPlatforms` AND `csvTotalEnroute > 0`: `val = csvTotalEnroute / tripCount`.
+    *   Else: `val = null` (use fallback).
+*   **Step 3.2**: Iterate through trips.
+    *   If `val` exists: `trip.enroute = val`.
+    *   Else: `trip.enroute = estimateEnrouteFallback(trip)`.
+*   **Step 3.3**: Accumulate `recEnrouteDist` based on these assigned values.
+
+### Phase 4: Downstream Updates (Fuel & Totals)
+**Goal**: Ensure the Fuel Split calculation uses the new normalized distance.
+*   **Step 4.1**: Verify `fuelRideShare` calculation uses the accumulated `recEnrouteDist`.
+*   **Step 4.2**: Update `reconstructedDistanceMetrics` to reflect the new totals.
+*   **Step 4.3**: Ensure `relevantCsvMetrics` logic handles cases with missing data gracefully.
+
+### Phase 5: Verification & Cleanup
+**Goal**: Validate the numbers match `IDEA_1` expectations.
+*   **Step 5.1**: Verify that for the sample dataset (83 trips, 279.52km), the per-trip enroute is ~3.37km.
+*   **Step 5.2**: Clean up any unused legacy calculation code in `DriverDetail.tsx`.

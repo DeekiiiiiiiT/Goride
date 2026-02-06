@@ -333,6 +333,7 @@ export function VehiclesPage() {
         <VehicleDetail 
             vehicle={selectedVehicle} 
             trips={trips} 
+            vehicleMetrics={vehicleMetrics} // Added prop
             onBack={() => setSelectedVehicleId(null)} 
             onAssignDriver={() => handleOpenAssignModal(selectedVehicle.id)}
             onUpdate={handleVehicleUpdate}

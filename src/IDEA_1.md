@@ -1,51 +1,76 @@
-Based on the reports you provided (specifically `vehicle_performance.csv`), here is the exact logic Uber uses to allocate hours.
+Looking at your data, I can see that you want to calculate **Enroute Distance per trip**. Based on the files you provided, here's how you can calculate this:
 
-Uber breaks down the time into three distinct "buckets" based on the driver's status. To replicate this in your own system or calculate it from these sheets, you must use the **`vehicle_performance.csv`** file, as it contains the aggregate counters needed.
+## The Direct Calculation Method:
 
-### 1. The Formulas
+From the data, you have **total enroute distance** and **total trips completed**, so you can calculate the average:
 
-Here is how the hours are defined and calculated:
+```python
+import pandas as pd
 
-| Metric | Uber Definition | Calculation Formula |
-| --- | --- | --- |
-| **Available** | Time spent online *waiting* for a request. | **`Hours Online` - `Hours On Job**` |
-| **To Trip** | Time spent driving *to* the passenger (En Route). | **`Hours On Job` - `Hours On Trip**` |
-| **On Trip** | Time spent *with* the passenger (Pickup to Dropoff). | **`Hours On Trip`** (No calculation needed) |
+# Load the relevant files
+driver_time_dist = pd.read_csv('driver_time_and_distance.csv')
+driver_activity = pd.read_csv('driver_activity.csv')
 
----
+# Extract the values
+total_enroute_distance = driver_time_dist['Enroute Distance'].iloc[0]  # 279.52
+total_trips_completed = driver_activity['Trips completed'].iloc[0]    # 83
 
-### 2. Calculation Using Your Data
+# Calculate average enroute distance per trip
+avg_enroute_distance_per_trip = total_enroute_distance / total_trips_completed
+print(f"Average Enroute Distance per Trip: {avg_enroute_distance_per_trip:.2f} km")
+```
 
-Using the data from your **`vehicle_performance.csv`** (Row 2), here is the breakdown:
+**Output:**
+```
+Average Enroute Distance per Trip: 3.37 km
+```
 
-* **Hours Online:** `68.48`
-* **Hours On Job:** `57.50` (Total busy time: Driving to pickup + Driving passenger)
-* **Hours On Trip:** `39.39` (Only time with passenger)
+## Why This Is the Only Option:
 
-**The Allocation:**
+Looking at all your CSV files, **there is no direct "Enroute Distance" recorded for each individual trip**. Here's what's available:
 
-* **Available Hours:**  **`10.98 Hours`**
-*(You were online but idle for ~11 hours)*
-* **To Trip Hours:**  **`18.11 Hours`**
-*(You spent ~18 hours driving to pickups)*
-* **On Trip Hours:** **`39.39 Hours`**
-*(You spent ~39 hours driving passengers)*
+### What you HAVE:
+1. **Total Enroute Distance** for the period: 279.52 km (from `driver_time_and_distance.csv`)
+2. **Total Trips Completed**: 83 (from multiple files)
+3. **Individual Trip Distance** for each completed trip (from `trip_activity.csv` - "Trip distance" column)
+4. **Total On Trip Distance**: 799.41 km (the distance with passengers)
 
----
+### What you DON'T HAVE:
+- Enroute distance broken down per individual trip
+- GPS coordinates or detailed route data for each trip
 
-### 3. Implementing This in Your App (Trip Meter)
+## Alternative Approach (Approximation):
 
-If you are building this into your own application, you cannot calculate "To Trip" using *only* the **`trip_activity.csv`** file you uploaded.
+If you need to **estimate** enroute distance for each trip, you could use the average (3.37 km) as a uniform estimate for all trips. However, this is just an approximation.
 
-* **The Problem:** Your `trip_activity.csv` only shows `Trip request time` and `Trip drop off time`. It is missing the **"Pickup Time"**.
-* **The Solution:** To calculate "To Trip" vs "On Trip" accurately in your app, you must record three timestamps for every trip:
-1. **`T1` (Accepted):** When the driver accepts the job.
-2. **`T2` (Pickup):** When the passenger gets in the car.
-3. **`T3` (Dropoff):** When the trip ends.
+```python
+# If you want to add this estimated value to each trip in trip_activity.csv:
+trip_activity = pd.read_csv('trip_activity.csv')
+trip_activity['Estimated Enroute Distance'] = avg_enroute_distance_per_trip
+```
 
+## Key Insights from Your Data:
 
+1. **Efficiency Metrics:**
+   - Average enroute to pickup: 3.37 km per trip
+   - Total enroute distance (279.52 km) is 26% of total on-trip distance (799.41 km)
+   - For every 1 km with a passenger, the driver travels ~0.35 km to pick them up
 
-**Your App's Logic Should Be:**
+2. **Trip Statistics:**
+   - 83 completed trips
+   - 143 trips accepted (but only 83 completed)
+   - 46 trips cancelled (driver at fault)
 
-* `To Trip` = **T2 - T1**
-* `On Trip` = **T3 - T2**
+3. **Time Analysis:**
+   - Total online time: 2 days, 15 hours, 35 minutes
+   - Total enroute time: 15 minutes, 47 seconds
+   - Average enroute time per trip: ~11.4 seconds (15:47 / 143 accepted trips)
+
+## Recommendation:
+
+For accurate per-trip enroute distance, you would need:
+1. GPS tracking data showing the route taken to reach pickup location
+2. Distance calculation between driver's position when accepting trip and pickup location
+3. Or, your ride-hailing platform's API/data export that includes `distance_to_pickup` for each trip
+
+The current data only provides aggregated totals, not individual trip breakdowns for enroute distances.

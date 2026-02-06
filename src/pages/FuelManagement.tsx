@@ -25,6 +25,8 @@ import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTabl
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { FuelAuditDashboard } from '../components/fuel/FuelAuditDashboard';
 import { FuelIntegrityAuditTool } from '../components/fuel/FuelIntegrityAuditTool';
+import { GasStationAnalytics } from '../components/fuel/stations/GasStationAnalytics';
+import { StationDatabaseView } from '../components/fuel/stations/StationDatabaseView';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute, FuelScenario } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { Trip, FinancialTransaction } from '../types/data';
@@ -903,18 +905,24 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   } else if (activeTab === 'configuration') {
       pageTitle = "Fuel Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
+  } else if (activeTab === 'stations') {
+      pageTitle = "Gas Stations Data";
+      pageDescription = "Analyze fuel prices, station activity, and fleet refueling trends.";
+  } else if (activeTab === 'database') {
+      pageTitle = "Station Database";
+      pageDescription = "Manage approved gas stations and non-fuel locations.";
   }
 
   return (
     <FuelLayout 
         title={pageTitle}
         description={pageDescription}
-        onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation') ? undefined : () => {
+        onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation' || activeTab === 'stations' || activeTab === 'database') ? undefined : () => {
             setEditingLog(null);
             setIsLogModalOpen(true);
         }}
     >
-      {(activeTab !== 'configuration' && activeTab !== 'cards') && (
+      {(activeTab !== 'configuration' && activeTab !== 'cards' && activeTab !== 'stations' && activeTab !== 'database') && (
         <div className="flex justify-end items-center gap-3 mb-4">
             {isSyncing && (
                 <div className="flex items-center gap-2 text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100 animate-pulse">
@@ -1088,6 +1096,14 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
       {activeTab === 'configuration' && (
           <FuelConfiguration />
+      )}
+
+      {activeTab === 'stations' && (
+          <GasStationAnalytics logs={logs} loading={isRefreshing} />
+      )}
+
+      {activeTab === 'database' && (
+          <StationDatabaseView logs={logs} loading={isRefreshing} />
       )}
 
       {/* Modals */}

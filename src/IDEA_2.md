@@ -1,52 +1,39 @@
-# Driver Portal - Cash Wallet "Your Payments" Fix
+Time Metrics
+These columns track the duration (formatted as HH:MM:SS) spent in different operational states:
 
-## Investigation Findings
+Open Time: The amount of time the driver was online and available to accept new trip requests (waiting for a "ping").
 
-### Current State
-In the Driver Portal (`/components/driver-portal/DriverEarnings.tsx`), the "Your Payments" tab uses the `TransactionLedgerView` component. Currently, it passes the entire `transactions` array to this view without specific filtering for driver payments. This causes Fuel Expenses, Tolls, and other transaction types to appear in the list, which is incorrect.
+Enroute Time: The time spent traveling to a pickup location after accepting a request.
 
-### Reference Implementation
-In the Fleet Portal (`/components/drivers/DriverDetail.tsx`), the "Payments Log" tab correctly filters transactions to show only payments received from the driver. It uses the following logic:
-- **Excludes**: Tag Balance operations, Top-ups, Tolls, and Fuel transactions.
-- **Includes**: Transactions where category is 'Cash Collection' or type is 'Payment_Received', and the amount is positive.
+On Trip Time: The time spent with a passenger or delivery in the vehicle, from pickup to drop-off.
 
-### Proposed Solution
-To align the Driver Portal with the Fleet Portal and the user requirement:
+Unavailable Time: The time the driver was logged into the system but marked as "Unavailable" (e.g., taking a break or paused).
 
-1.  **Modify `DriverEarnings.tsx`**:
-    - Implement a `paymentTransactions` useMemo hook similar to the one in `DriverDetail.tsx`.
-    - This hook will filter the `transactions` state to include only valid driver payments.
-    - Pass this filtered `paymentTransactions` array to the `TransactionLedgerView` instead of the raw `transactions` array when `cashWalletView` is set to `'ledger'`.
+Distance Metrics
+These columns track the distance covered during each of the states mentioned above:
 
-### Code Changes Required
+Open Distance: Distance traveled while the driver was online and waiting for a request.
 
-**File**: `/components/driver-portal/DriverEarnings.tsx`
+Enroute Distance: Distance traveled while the driver was heading to the pickup location.
 
-```typescript
-// Add this memoized filter logic
-const paymentTransactions = React.useMemo(() => transactions.filter(t => {
-    // Strict Safety: Never show Tag Balance operations in Payment Log
-    if (t.paymentMethod === 'Tag Balance') return false;
-    if (t.description?.toLowerCase().includes('top-up')) return false;
+On Trip Distance: Distance traveled during the actual trip (from pickup to destination).
 
-    // Exclude tolls
-    const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
-    if (isToll) return false;
+Unavailable Distance: Distance traveled while the driver was in an unavailable or offline-equivalent state.
 
-    // Exclude fuel
-    const isFuel = (t.category || '').toLowerCase().includes('fuel') || (t.description || '').toLowerCase().includes('fuel');
-    if (isFuel) return false;
 
-    // Strict Payment Logic: Focus on Cash Collections (Money from Driver)
-    const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
-    return isPayment && t.amount > 0;
-}), [transactions]);
-```
+---
 
-**Update Render**:
-```tsx
-// Inside the return statement where TransactionLedgerView is rendered
-<TransactionLedgerView 
-    transactions={paymentTransactions} // Use the filtered list
-/>
-```
+
+
+
+driver_time_and_distance
+
+Driver UUID	Driver First Name	Driver Last Name	Open Time	Enroute Time	On Trip Time	Unavailable Time	Open Distance	Enroute Distance	On Trip Distance	Unavailable Distance
+52ff47da-ef48-41b8-93d5-80a09b85ce5b	KENNY GREGORY	RATTRAYCAS	0:10:11	0:15:47	1:14:04	0:00:07	269.58	279.52	799.41	0.03
+
+---
+
+vehicle_time_and_distance
+
+Vehicle UUID	Vehicle License Plate	Open Time	Enroute Time	On Trip Time	Unavailable Time	Open Distance	Enroute Distance	On Trip Distance	Unavailable Distance
+a6d3799c-df61-46c4-8f1d-84d3cc0768f4	5179KZ	0:10:11	0:15:47	1:14:04	0:00:07	269.58	279.52	799.41	0.03

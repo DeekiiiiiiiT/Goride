@@ -30,11 +30,11 @@ interface WeeklySettlementViewProps {
     readOnly?: boolean;
 }
 
-export function WeeklySettlementView({ trips, transactions, csvMetrics = [], onLogPayment, readOnly = false }: WeeklySettlementViewProps) {
+export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics = [], onLogPayment, readOnly = false }: WeeklySettlementViewProps) {
     
     const weeks = useMemo(() => {
         // If we have CSV metrics but no trips, we should still show something
-        if (trips.length === 0 && csvMetrics.length === 0) return [];
+        if ((!trips || trips.length === 0) && (!csvMetrics || csvMetrics.length === 0)) return [];
 
         // 1. Determine Range
         const dates = [
