@@ -29,6 +29,7 @@ interface FuelIntegrityAuditToolProps {
     onStandardizeTypes: (logs: FuelEntry[]) => Promise<void>;
     onBackfillMetadata: (records: any[]) => Promise<void>;
     onRepairNaming: (records: any[]) => Promise<void>;
+    onRunFuelIntegrityJob: () => Promise<void>;
     onDeleteLog: (id: string) => void;
     onDeleteTx: (id: string) => void;
 }
@@ -41,10 +42,12 @@ export function FuelIntegrityAuditTool({
     onSyncRecords,
     onStandardizeTypes,
     onBackfillMetadata,
+    onRunFuelIntegrityJob,
     onDeleteLog,
     onDeleteTx
 }: FuelIntegrityAuditToolProps) {
     const [isScanning, setIsScanning] = useState(false);
+    const [isRunningJob, setIsRunningJob] = useState(false);
     const [lastScanDate, setLastScanDate] = useState<Date | null>(null);
     const [filter, setFilter] = useState<'all' | 'orphaned' | 'mismatch' | 'anomaly'>('all');
     const [healingId, setHealingId] = useState<string | null>(null);
@@ -272,12 +275,20 @@ export function FuelIntegrityAuditTool({
                         </span>
                     )}
                     <Button 
-                        onClick={handleScan} 
-                        disabled={isScanning}
+                        onClick={async () => {
+                            setIsRunningJob(true);
+                            try {
+                                await onRunFuelIntegrityJob();
+                                setLastScanDate(new Date());
+                            } finally {
+                                setIsRunningJob(false);
+                            }
+                        }} 
+                        disabled={isRunningJob}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1 transition-all"
                     >
-                        {isScanning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCcw className="h-4 w-4 mr-2" />}
-                        {isScanning ? "SCANNING..." : "RUN FULL AUDIT"}
+                        {isRunningJob ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                        {isRunningJob ? "RUNNING AUDIT..." : "RECALCULATE FUEL INTEGRITY"}
                     </Button>
                 </div>
             </div>

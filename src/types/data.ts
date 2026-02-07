@@ -46,6 +46,7 @@ export interface Trip {
   efficiency?: number;  // Amount / Distance
   normalizedEnrouteDistance?: number; // Phase 4 Fix: Derived from CSV Totals
   normalizedOpenDistance?: number;    // Phase 4 Fix: Derived from CSV Totals for Open Distance
+  normalizedUnavailableDistance?: number; // Phase 4 Fix: Derived from CSV Totals for Unavailable Distance
   route?: RoutePoint[]; // Phase 2: Live Trip Route Data
   stops?: TripStop[];   // Phase 2.1: Multi-Stop Support
   totalWaitTime?: number; // Phase 2.1: Wait Time Tracking

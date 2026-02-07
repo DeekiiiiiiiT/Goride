@@ -615,6 +615,11 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
      return uniqueDocs.filter(d => !deletedDocIds.includes(String(d.id)));
   }, [vehicle, extraDocuments, deletedDocIds]);
 
+  const handleRefreshMaintenance = () => {
+      const vId = vehicle.id || vehicle.licensePlate;
+      api.getMaintenanceLogs(vId).then(setMaintenanceLogs).catch(console.error);
+  };
+
   const handleUnassignTag = async () => {
     if (!window.confirm("Are you sure you want to unlink this toll tag?")) return;
     try {
@@ -1236,6 +1241,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           <TabsList>
                               <TabsTrigger value="history">History Log</TabsTrigger>
                               <TabsTrigger value="timeline">Unified Timeline</TabsTrigger>
+                              <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
                           </TabsList>
                           <TabsContent value="history" className="mt-4">
                               <OdometerHistory 
@@ -1245,6 +1251,9 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           </TabsContent>
                           <TabsContent value="timeline" className="mt-4">
                               <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} />
+                          </TabsContent>
+                          <TabsContent value="anomalies" className="mt-4">
+                              <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} viewMode="anomalies" />
                           </TabsContent>
                       </Tabs>
                   </CardContent>
@@ -1302,90 +1311,150 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
           </TabsContent>
 
           <TabsContent value="profile" className="space-y-6 mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* ... Profile content (omitted for brevity, assume standard layout) ... */}
-                  {/* Restoring profile logic from memory/standard pattern as it wasn't fully read but standard CRUD */}
-                  <Card>
-                      <CardHeader>
-                          <div className="flex justify-between items-center">
-                              <CardTitle>Vehicle Specifications</CardTitle>
-                              <Button variant="ghost" size="sm" onClick={() => setIsEditingSpecs(!isEditingSpecs)}>
-                                  <Pencil className="h-4 w-4 mr-2" />
-                                  {isEditingSpecs ? 'Cancel' : 'Edit'}
-                              </Button>
-                          </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                          {/* Render Specs Form or View */}
-                          <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <Label className="text-xs text-slate-500">Engine Type</Label>
-                                  {isEditingSpecs ? (
-                                      <Input value={specsForm.engineType} onChange={e => setSpecsForm({...specsForm, engineType: e.target.value})} />
-                                  ) : (
-                                      <p className="font-medium">{vehicle.specifications?.engineType || '-'}</p>
-                                  )}
-                              </div>
-                              <div>
-                                  <Label className="text-xs text-slate-500">Transmission</Label>
-                                  {isEditingSpecs ? (
-                                      <Input value={specsForm.transmission} onChange={e => setSpecsForm({...specsForm, transmission: e.target.value})} />
-                                  ) : (
-                                      <p className="font-medium">{vehicle.specifications?.transmission || '-'}</p>
-                                  )}
-                              </div>
-                              {isEditingSpecs && (
-                                  <div className="col-span-2 mt-4">
-                                      <Button onClick={handleSaveSpecs} className="w-full">Save Changes</Button>
-                                  </div>
-                              )}
-                          </div>
-                      </CardContent>
-                  </Card>
+              <Tabs defaultValue="general" className="w-full">
+                  <TabsList className="w-full justify-start bg-transparent border-b border-slate-200 rounded-none h-auto p-0 mb-6 gap-6">
+                      <TabsTrigger 
+                          value="general" 
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
+                      >
+                          General Info
+                      </TabsTrigger>
+                      <TabsTrigger 
+                          value="documents" 
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
+                      >
+                          Documents
+                      </TabsTrigger>
+                      <TabsTrigger 
+                          value="maintenance" 
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
+                      >
+                          Maintenance
+                      </TabsTrigger>
+                      <TabsTrigger 
+                          value="equipment" 
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
+                      >
+                          Equipment
+                      </TabsTrigger>
+                      <TabsTrigger 
+                          value="exterior" 
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
+                      >
+                          Exterior Check
+                      </TabsTrigger>
+                  </TabsList>
 
-                  <Card>
-                      <CardHeader>
-                          <div className="flex justify-between items-center">
-                              <CardTitle>Documents</CardTitle>
-                              <Button variant="outline" size="sm" onClick={() => setIsUploadOpen(true)}>
-                                  <Upload className="h-4 w-4 mr-2" /> Upload
-                              </Button>
-                          </div>
-                      </CardHeader>
-                      <CardContent>
-                          <div className="space-y-2">
-                              {documents.map(doc => (
-                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                      <div className="flex items-center gap-3">
-                                          <FileText className="h-5 w-5 text-indigo-500" />
-                                          <div>
-                                              <p className="font-medium text-sm text-slate-900">{doc.name}</p>
-                                              <p className="text-xs text-slate-500">Expires: {doc.expiryDate || 'N/A'}</p>
-                                          </div>
-                                      </div>
-                                      <Badge variant={doc.status === 'Verified' ? 'default' : 'secondary'}>{doc.status}</Badge>
+                  <TabsContent value="general" className="space-y-6">
+                      <Card>
+                          <CardHeader>
+                              <div className="flex justify-between items-center">
+                                  <CardTitle>Vehicle Specifications</CardTitle>
+                                  <Button variant="ghost" size="sm" onClick={() => setIsEditingSpecs(!isEditingSpecs)}>
+                                      <Pencil className="h-4 w-4 mr-2" />
+                                      {isEditingSpecs ? 'Cancel' : 'Edit'}
+                                  </Button>
+                              </div>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                      <Label className="text-xs text-slate-500">Engine Type</Label>
+                                      {isEditingSpecs ? (
+                                          <Input value={specsForm.engineType} onChange={e => setSpecsForm({...specsForm, engineType: e.target.value})} />
+                                      ) : (
+                                          <p className="font-medium">{vehicle.specifications?.engineType || '-'}</p>
+                                      )}
                                   </div>
-                              ))}
-                              {documents.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No documents uploaded.</p>}
-                          </div>
-                      </CardContent>
-                  </Card>
-                  
-                  {/* Maintenance Manager */}
-                  <div className="md:col-span-2">
-                      <MaintenanceManager vehicleId={vehicle.id || vehicle.licensePlate} />
-                  </div>
-                  
-                  {/* Equipment Manager */}
-                  <div className="md:col-span-2">
+                                  <div>
+                                      <Label className="text-xs text-slate-500">Transmission</Label>
+                                      {isEditingSpecs ? (
+                                          <Input value={specsForm.transmission} onChange={e => setSpecsForm({...specsForm, transmission: e.target.value})} />
+                                      ) : (
+                                          <p className="font-medium">{vehicle.specifications?.transmission || '-'}</p>
+                                      )}
+                                  </div>
+                                  <div>
+                                      <Label className="text-xs text-slate-500">Tank Capacity (Liters)</Label>
+                                      {isEditingSpecs ? (
+                                          <Input 
+                                              type="number"
+                                              value={specsForm.tankCapacity} 
+                                              onChange={e => setSpecsForm({...specsForm, tankCapacity: e.target.value})} 
+                                          />
+                                      ) : (
+                                          <p className="font-medium">{vehicle.specifications?.tankCapacity || vehicle.fuelSettings?.tankCapacity || '-'} L</p>
+                                      )}
+                                  </div>
+                                  <div>
+                                      <Label className="text-xs text-slate-500">Fuel Economy (km/L)</Label>
+                                      {isEditingSpecs ? (
+                                          <Input 
+                                              type="number"
+                                              value={specsForm.fuelEconomy} 
+                                              onChange={e => setSpecsForm({...specsForm, fuelEconomy: e.target.value})} 
+                                          />
+                                      ) : (
+                                          <p className="font-medium">{vehicle.specifications?.fuelEconomy || vehicle.fuelSettings?.efficiencyCity || '-'} km/L</p>
+                                      )}
+                                  </div>
+                                  {isEditingSpecs && (
+                                      <div className="col-span-2 mt-4">
+                                          <Button onClick={handleSaveSpecs} className="w-full">Save Changes</Button>
+                                      </div>
+                                  )}
+                              </div>
+                          </CardContent>
+                      </Card>
+                  </TabsContent>
+
+                  <TabsContent value="documents" className="space-y-6">
+                      <Card>
+                          <CardHeader>
+                              <div className="flex justify-between items-center">
+                                  <CardTitle>Documents</CardTitle>
+                                  <Button variant="outline" size="sm" onClick={() => setIsUploadOpen(true)}>
+                                      <Upload className="h-4 w-4 mr-2" /> Upload
+                                  </Button>
+                              </div>
+                          </CardHeader>
+                          <CardContent>
+                              <div className="space-y-2">
+                                  {documents.map(doc => (
+                                      <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                          <div className="flex items-center gap-3">
+                                              <FileText className="h-5 w-5 text-indigo-500" />
+                                              <div>
+                                                  <p className="font-medium text-sm text-slate-900">{doc.name}</p>
+                                                  <p className="text-xs text-slate-500">Expires: {doc.expiryDate || 'N/A'}</p>
+                                              </div>
+                                          </div>
+                                          <Badge variant={doc.status === 'Verified' ? 'default' : 'secondary'}>{doc.status}</Badge>
+                                      </div>
+                                  ))}
+                                  {documents.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No documents uploaded.</p>}
+                              </div>
+                          </CardContent>
+                      </Card>
+                  </TabsContent>
+
+                  <TabsContent value="maintenance" className="space-y-6">
+                      <MaintenanceManager 
+                        vehicleId={vehicle.id || vehicle.licensePlate} 
+                        logs={maintenanceLogs}
+                        maintenanceStatus={maintenanceStatus}
+                        onRefresh={handleRefreshMaintenance}
+                      />
+                  </TabsContent>
+
+                  <TabsContent value="equipment" className="space-y-6">
                       <EquipmentManager vehicleId={vehicle.id || vehicle.licensePlate} />
-                  </div>
-                  
-                  {/* Exterior Manager */}
-                  <div className="md:col-span-2">
+                  </TabsContent>
+
+                  <TabsContent value="exterior" className="space-y-6">
                       <ExteriorManager vehicleId={vehicle.id || vehicle.licensePlate} />
-                  </div>
-              </div>
+                  </TabsContent>
+              </Tabs>
           </TabsContent>
       </Tabs>
 

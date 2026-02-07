@@ -63,7 +63,10 @@ export const odometerService = {
               metaData: {
                 liters: entry.liters,
                 price: entry.price,
-                totalCost: entry.totalCost
+                totalCost: entry.totalCost,
+                paymentSource: entry.paymentSource,
+                receiptUrl: entry.receiptUrl,
+                odometerMethod: entry.odometerMethod || entry.metadata?.odometerMethod
               }
             });
           }
@@ -91,7 +94,9 @@ export const odometerService = {
               createdAt: date,
               metaData: {
                 weekStart: checkIn.weekStart,
-                status: checkIn.status
+                status: checkIn.status,
+                method: checkIn.method,
+                aiReading: checkIn.aiReading
               }
             });
           }

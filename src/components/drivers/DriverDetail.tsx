@@ -1085,6 +1085,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      let recOpenDist = 0; // Km
      let recUnavailableTime = 0; // Hours
      let recUnavailableDist = 0; // Km
+     let recRiderCancelledDist = 0; // Km
+     let recDriverCancelledDist = 0; // Km
+     let recDeliveryFailedDist = 0; // Km
 
      sortedPeriodTrips.forEach(trip => {
          // Only process Completed trips for "On Trip" metrics
@@ -1141,6 +1144,26 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              // We prioritize the CSV-derived uniform average over the Gap Analysis estimate
              if (trip.normalizedOpenDistance) {
                  recOpenDist += trip.normalizedOpenDistance;
+             }
+             
+             // NEW: Unavailable Distance from Pre-Calculated Average
+             if (trip.normalizedUnavailableDistance) {
+                 recUnavailableDist += trip.normalizedUnavailableDistance;
+             }
+         } else if (trip.status === 'Cancelled' && (trip.distance || 0) > 0) {
+             // Handle Cancellation Distance (Lost Km)
+             const reason = (trip.cancellationReason || '').toLowerCase();
+             const dist = trip.distance || 0;
+             
+             if (reason.includes('rider')) {
+                 recRiderCancelledDist += dist;
+             } else if (reason.includes('driver')) {
+                 recDriverCancelledDist += dist;
+             } else if (reason.includes('delivery_failed') || reason.includes('failed')) {
+                 recDeliveryFailedDist += dist;
+             } else {
+                 // Fallback if generic cancelled with distance
+                 recRiderCancelledDist += dist; 
              }
          }
      });
@@ -1259,10 +1282,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          // so it naturally sums to csvTotalEnroute (which is csvEnrouteDist).
          // We do NOT override it here to respect the per-trip distribution.
          // recEnrouteDist = csvEnrouteDist; 
-         recUnavailableDist = csvUnavailableDist;
+         // recUnavailableDist = csvUnavailableDist; // Handled per-trip via Uniform Average
          
          // 3. Time Metrics: Force match the CSV report (if populated)
-         if (csvOnTripTime > 0) recOnTripTime = csvOnTripTime;
+         // if (csvOnTripTime > 0) recOnTripTime = csvOnTripTime; // DISABLED: User wants "On Trip" time to come strictly from Trip Activity Logs
          if (csvEnrouteTime > 0) recEnrouteTime = csvEnrouteTime;
          if (csvOpenTime > 0) recOpenTime = csvOpenTime;
          if (csvUnavailableTime > 0) recUnavailableTime = csvUnavailableTime;
@@ -1285,7 +1308,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          enroute: recEnrouteDist,
          onTrip: recOnTripDist,
          unavailable: recUnavailableDist,
-         total: recOpenDist + recEnrouteDist + recOnTripDist + recUnavailableDist
+         riderCancelled: recRiderCancelledDist,
+         driverCancelled: recDriverCancelledDist,
+         deliveryFailed: recDeliveryFailedDist,
+         total: recOpenDist + recEnrouteDist + recOnTripDist + recUnavailableDist + recRiderCancelledDist + recDriverCancelledDist + recDeliveryFailedDist
      };
 
      // Update Fuel Metrics object
@@ -1970,8 +1996,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                           { name: 'Open Dist', value: metrics.distanceMetrics.open, fill: '#1e3a8a' },
                                           { name: 'Enroute Dist', value: metrics.distanceMetrics.enroute, fill: '#fbbf24' },
                                           { name: 'On Trip Dist', value: metrics.distanceMetrics.onTrip, fill: '#10b981' },
-                                          { name: 'Unavailable Dist', value: metrics.distanceMetrics.unavailable, fill: '#94a3b8' }
-                                       ]}
+                                          { name: 'Unavailable Dist', value: metrics.distanceMetrics.unavailable, fill: '#94a3b8' },
+                                          // New Cancellation Segments
+                                          { name: 'Rider Cancelled', value: metrics.distanceMetrics.riderCancelled || 0, fill: '#f97316' }, // Orange
+                                          { name: 'Driver Cancelled', value: metrics.distanceMetrics.driverCancelled || 0, fill: '#ef4444' }, // Red
+                                          { name: 'Delivery Failed', value: metrics.distanceMetrics.deliveryFailed || 0, fill: '#475569' }, // Slate
+                                       ].filter(d => d.value > 0)}
                                        cx="50%"
                                        cy="50%"
                                        innerRadius={55}
@@ -1982,10 +2012,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                        endAngle={-270}
                                        stroke="none"
                                     >
-                                       <Cell key="Open" fill="#1e3a8a" />
-                                       <Cell key="Enroute" fill="#fbbf24" />
-                                       <Cell key="On Trip" fill="#10b981" />
-                                       <Cell key="Unavailable" fill="#94a3b8" />
+                                       {/* Colors will be taken from data 'fill' prop automatically by Pie if Cell is not used, 
+                                           but since we used Cells before, let's map them dynamically to support the filter. */}
+                                       {[
+                                          { name: 'Open Dist', value: metrics.distanceMetrics.open, fill: '#1e3a8a' },
+                                          { name: 'Enroute Dist', value: metrics.distanceMetrics.enroute, fill: '#fbbf24' },
+                                          { name: 'On Trip Dist', value: metrics.distanceMetrics.onTrip, fill: '#10b981' },
+                                          { name: 'Unavailable Dist', value: metrics.distanceMetrics.unavailable, fill: '#94a3b8' },
+                                          { name: 'Rider Cancelled', value: metrics.distanceMetrics.riderCancelled || 0, fill: '#f97316' },
+                                          { name: 'Driver Cancelled', value: metrics.distanceMetrics.driverCancelled || 0, fill: '#ef4444' },
+                                          { name: 'Delivery Failed', value: metrics.distanceMetrics.deliveryFailed || 0, fill: '#475569' }
+                                       ].filter(d => d.value > 0).map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                                       ))}
                                     </Pie>
                                     <Tooltip formatter={(value: number) => [value.toFixed(2) + ' km', 'Distance']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
                                  </PieChart>
@@ -1995,15 +2034,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                  <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Total KM</div>
                               </div>
                            </div>
-                           <div className="mt-4 flex justify-between px-2">
+                           <div className="mt-4 grid grid-cols-4 gap-2 px-2 text-center">
                               <TooltipProvider>
                                  <UiTooltip>
                                     <TooltipTrigger asChild>
                                        <div className="flex flex-col items-center gap-1 cursor-help">
                                           <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.open.toFixed(2)}</span>
-                                          <div className="flex items-center gap-1.5">
-                                             <div className="w-2 h-2 rounded-full bg-[#1e3a8a]"></div>
-                                             <span className="text-xs font-medium text-slate-500">Open</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#1e3a8a] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Open</span>
                                           </div>
                                        </div>
                                     </TooltipTrigger>
@@ -2016,9 +2055,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     <TooltipTrigger asChild>
                                        <div className="flex flex-col items-center gap-1 cursor-help">
                                           <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.enroute.toFixed(2)}</span>
-                                          <div className="flex items-center gap-1.5">
-                                             <div className="w-2 h-2 rounded-full bg-[#fbbf24]"></div>
-                                             <span className="text-xs font-medium text-slate-500">Enroute</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#fbbf24] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Enroute</span>
                                           </div>
                                        </div>
                                     </TooltipTrigger>
@@ -2031,9 +2070,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     <TooltipTrigger asChild>
                                        <div className="flex flex-col items-center gap-1 cursor-help">
                                           <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.onTrip.toFixed(2)}</span>
-                                          <div className="flex items-center gap-1.5">
-                                             <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
-                                             <span className="text-xs font-medium text-slate-500">On Trip</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#10b981] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">On Trip</span>
                                           </div>
                                        </div>
                                     </TooltipTrigger>
@@ -2046,14 +2085,60 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     <TooltipTrigger asChild>
                                        <div className="flex flex-col items-center gap-1 cursor-help">
                                           <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.unavailable.toFixed(2)}</span>
-                                          <div className="flex items-center gap-1.5">
-                                             <div className="w-2 h-2 rounded-full bg-[#94a3b8]"></div>
-                                             <span className="text-xs font-medium text-slate-500">Unavail</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#94a3b8] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Unavail</span>
                                           </div>
                                        </div>
                                     </TooltipTrigger>
                                     <TooltipContent>
                                        <p className="max-w-xs">Distance traveled while the driver was in an unavailable or offline-equivalent state.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 {/* NEW CANCELLATION STATS */}
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{(metrics.distanceMetrics.riderCancelled || 0).toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#f97316] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Rider Cx</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Distance traveled on trips cancelled by the rider.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{(metrics.distanceMetrics.driverCancelled || 0).toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Driver Cx</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Distance traveled on trips cancelled by the driver.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{(metrics.distanceMetrics.deliveryFailed || 0).toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#475569] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Failed</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Distance traveled on failed deliveries.</p>
                                     </TooltipContent>
                                  </UiTooltip>
                               </TooltipProvider>
@@ -2111,34 +2196,67 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                               </div>
                            </div>
                            <div className="mt-4 grid grid-cols-4 gap-1 text-center px-2">
-                              <div className="flex flex-col items-center gap-1">
-                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.rideShare.toFixed(1)}</span>
-                                 <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
-                                    <span className="text-xs font-medium text-slate-500 truncate w-full">RideShare</span>
-                                 </div>
-                              </div>
-                              <div className="flex flex-col items-center gap-1">
-                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.companyOps.toFixed(1)}</span>
-                                 <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full bg-[#fbbf24]"></div>
-                                    <span className="text-xs font-medium text-slate-500 truncate w-full">Com. Ops</span>
-                                 </div>
-                              </div>
-                              <div className="flex flex-col items-center gap-1">
-                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.personal.toFixed(1)}</span>
-                                 <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full bg-[#ef4444]"></div>
-                                    <span className="text-xs font-medium text-slate-500 truncate w-full">Personal</span>
-                                 </div>
-                              </div>
-                              <div className="flex flex-col items-center gap-1">
-                                 <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.misc.toFixed(1)}</span>
-                                 <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full bg-[#94a3b8]"></div>
-                                    <span className="text-xs font-medium text-slate-500 truncate w-full">Leakage</span>
-                                 </div>
-                              </div>
+                              <TooltipProvider>
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.rideShare.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#10b981] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">RideShare</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Fuel consumed during revenue-generating trips.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.companyOps.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#fbbf24] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Com. Ops</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Fuel consumed for company operations.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.personal.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Personal</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Fuel consumed for personal use.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+
+                                 <UiTooltip>
+                                    <TooltipTrigger asChild>
+                                       <div className="flex flex-col items-center gap-1 cursor-help">
+                                          <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.misc.toFixed(2)}</span>
+                                          <div className="flex items-center gap-1.5 justify-center w-full">
+                                             <div className="w-2 h-2 rounded-full bg-[#94a3b8] shrink-0"></div>
+                                             <span className="text-xs font-medium text-slate-500 truncate">Leakage</span>
+                                          </div>
+                                       </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                       <p className="max-w-xs">Unaccounted fuel consumption or leakage.</p>
+                                    </TooltipContent>
+                                 </UiTooltip>
+                              </TooltipProvider>
                            </div>
                         </>
                      ) : (

@@ -134,7 +134,18 @@ interface MaintenanceManagerProps {
     onRefresh: () => void;
 }
 
-export function MaintenanceManager({ vehicleId, logs, maintenanceStatus, onRefresh }: MaintenanceManagerProps) {
+export function MaintenanceManager({ 
+    vehicleId, 
+    logs = [], 
+    maintenanceStatus = {
+        status: 'Unknown',
+        nextTypeLabel: 'Service',
+        daysToService: 0,
+        nextOdo: 0,
+        remainingKm: 0
+    }, 
+    onRefresh 
+}: MaintenanceManagerProps) {
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [selectedLog, setSelectedLog] = useState<MaintenanceLog | null>(null);
     const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);

@@ -784,6 +784,24 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       }
   };
 
+  const handleRunFuelIntegrityJob = async () => {
+      setIsSyncing(true);
+      try {
+          const promise = api.runFuelBackfill();
+          toast.promise(promise, {
+              loading: 'Running global fuel integrity audit...',
+              success: 'Fuel integrity recalculated. Virtual tank levels updated.',
+              error: 'Audit job failed. Check server logs.'
+          });
+          await promise;
+          await loadData(true);
+      } catch (e) {
+          console.error("Integrity job failed", e);
+      } finally {
+          setIsSyncing(false);
+      }
+  };
+
   const handleDisputeUpdated = (updated: FuelDispute) => {
       setDisputes(prev => prev.map(d => d.id === updated.id ? updated : d));
   };
@@ -1065,6 +1083,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             <FuelLogTable 
                 entries={logs}
                 transactions={transactions}
+                vehicles={vehicles}
                 onEdit={(log) => { setEditingLog(log); setIsLogModalOpen(true); }}
                 onDelete={handleDeleteLog}
                 getVehicleName={getVehicleName}
@@ -1084,6 +1103,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               onSyncRecords={handleSyncRecords}
               onStandardizeTypes={handleStandardizeTypes}
               onBackfillMetadata={handleBackfillMetadata}
+              onRunFuelIntegrityJob={handleRunFuelIntegrityJob}
               onRepairNaming={handleRepairNaming}
               onDeleteLog={handleDeleteLog}
               onDeleteTx={handleDeleteExpense}

@@ -303,7 +303,11 @@ export const FuelCalculationService = {
             const varianceLiters = totalLiters - expectedFuelLiters;
             const variancePercent = expectedFuelLiters > 0 ? (varianceLiters / expectedFuelLiters) * 100 : 0;
 
-            // 8. Phase 4: Deduction Recommendation
+            // 8. Phase 1 (Logic Refactoring): 105% Overflow Anomaly
+            const tankCapacity = vehicle.fuelSettings?.tankCapacity || Number(vehicle.specifications?.tankCapacity) || 0;
+            const isOverflow = tankCapacity > 0 && totalLiters > (tankCapacity * 1.05);
+
+            // 9. Phase 4: Deduction Recommendation
             // Deduction = Gap * (Total Cost in Bucket / Total Distance in Bucket)
             // This charges the driver the actual cost of fuel for the unlogged distance.
             let deductionRecommendation = 0;
@@ -336,7 +340,7 @@ export const FuelCalculationService = {
                 unaccountedDistance,
                 deductionRecommendation: deductionRecommendation > 0 ? deductionRecommendation : undefined,
                 deductionReason: deductionReason || undefined,
-                status: (unaccountedDistance > (bucketDistance * 0.1) || Math.abs(variancePercent) > 20) ? 'Anomaly' : 'Complete'
+                status: (isOverflow || unaccountedDistance > (bucketDistance * 0.1) || Math.abs(variancePercent) > 20) ? 'Anomaly' : 'Complete'
             });
         }
 

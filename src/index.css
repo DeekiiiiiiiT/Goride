@@ -3033,8 +3033,16 @@
     background-color: #94a3b8;
   }
 
+  .bg-\[\#475569\] {
+    background-color: #475569;
+  }
+
   .bg-\[\#ef4444\] {
     background-color: #ef4444;
+  }
+
+  .bg-\[\#f97316\] {
+    background-color: #f97316;
   }
 
   .bg-\[\#fbbf24\] {
@@ -3731,6 +3739,16 @@
 
   .bg-slate-100 {
     background-color: var(--color-slate-100);
+  }
+
+  .bg-slate-100\/50 {
+    background-color: color-mix(in srgb, oklch(.968 .007 247.896) 50%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-slate-100\/50 {
+      background-color: color-mix(in oklab, var(--color-slate-100) 50%, transparent);
+    }
   }
 
   .bg-slate-200 {
@@ -4504,10 +4522,6 @@
     font-size: .7rem;
   }
 
-  .text-\[7px\] {
-    font-size: 7px;
-  }
-
   .text-\[8px\] {
     font-size: 8px;
   }
@@ -5136,6 +5150,14 @@
 
   .line-through {
     text-decoration-line: line-through;
+  }
+
+  .underline {
+    text-decoration-line: underline;
+  }
+
+  .decoration-dotted {
+    text-decoration-style: dotted;
   }
 
   .underline-offset-4 {
@@ -6871,12 +6893,6 @@
   }
 
   @media (hover: hover) {
-    .hover\:text-slate-400:hover {
-      color: var(--color-slate-400);
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:text-slate-500:hover {
       color: var(--color-slate-500);
     }
@@ -7479,6 +7495,10 @@
     background-color: #0000;
   }
 
+  .data-\[state\=active\]\:bg-white[data-state="active"] {
+    background-color: var(--color-white);
+  }
+
   .data-\[state\=active\]\:text-amber-700[data-state="active"] {
     color: var(--color-amber-700);
   }
@@ -7513,6 +7533,11 @@
 
   .data-\[state\=active\]\:shadow-none[data-state="active"] {
     --tw-shadow: 0 0 #0000;
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
+  .data-\[state\=active\]\:shadow-sm[data-state="active"] {
+    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 

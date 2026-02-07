@@ -239,6 +239,7 @@ app.get("/make-server-37f42386/vehicles/:id/tank-status", async (c) => {
         let cumulative = 0;
         let lastAnchorFound = false;
         let lastOdometer = 0;
+        let lastCycleId = null;
         
         // Find the last odometer across ALL transactions for this vehicle
         const lastTxWithOdo = lastTransactions.find(tx => Number(tx.odometer) > 0);
@@ -247,20 +248,22 @@ app.get("/make-server-37f42386/vehicles/:id/tank-status", async (c) => {
         for (const tx of lastTransactions) {
             if (tx.metadata?.isAnchor || tx.metadata?.isFullTank || tx.metadata?.isSoftAnchor) {
                 lastAnchorFound = true;
-                // Don't break yet, we want to know when it happened? 
-                // Actually for "Current Progress" we just need the liters added since then.
+                lastCycleId = tx.metadata?.cycleId;
                 break;
             }
-            cumulative += (Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0);
+            cumulative += (Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || Number(tx.liters) || 0);
         }
 
         return c.json({
             vehicleId,
             tankCapacity,
             lastOdometer,
+            currentCycleId: lastCycleId,
             currentCumulative: Number(cumulative.toFixed(2)),
             progressPercent: tankCapacity > 0 ? Number(((cumulative / tankCapacity) * 100).toFixed(1)) : 0,
-            status: cumulative > (tankCapacity * 0.85) ? 'Approaching Capacity' : 'Normal',
+            status: cumulative > (tankCapacity * 1.05) ? 'Critical: Tank Overflow' : 
+                    cumulative > (tankCapacity * 1.00) ? 'Cycle Reset Triggered' :
+                    cumulative > (tankCapacity * 0.85) ? 'Approaching Capacity' : 'Normal',
             isAnomaly: cumulative > (tankCapacity * 1.05)
         });
     } catch (e: any) {
@@ -333,6 +336,152 @@ app.post("/make-server-37f42386/admin/fuel-audit/resolve", async (c) => {
         await kv.set(`transaction:${transactionId}`, tx);
         return c.json({ success: true });
     } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Phase 3: Recalculate All History (Logic: 100% Reset / 105% Anomaly)
+app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => {
+    try {
+        console.log("[Recalculate] Starting full history recalculation (100% Logic)...");
+
+        // 1. Fetch all Vehicles (for Tank Capacity)
+        const { data: vehicleData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "vehicle:%");
+            
+        const vehicleMap = new Map();
+        (vehicleData || []).forEach((d: any) => {
+            const v = d.value;
+            if (v && v.id) {
+                const cap = Number(v.fuelSettings?.tankCapacity) || Number(v.specifications?.tankCapacity) || 0;
+                vehicleMap.set(v.id, cap);
+            }
+        });
+        console.log(`[Recalculate] Loaded ${vehicleMap.size} vehicles.`);
+
+        // 2. Fetch all Transactions
+        const { data: txData, error: txError } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "transaction:%");
+            
+        if (txError) throw txError;
+
+        const allTransactions = (txData || []).map((d: any) => d.value);
+        const fuelTransactions = allTransactions.filter((t: any) => t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
+        
+        console.log(`[Recalculate] Processing ${fuelTransactions.length} fuel transactions...`);
+
+        // 3. Group by Vehicle
+        const byVehicle = new Map<string, any[]>();
+        fuelTransactions.forEach((tx: any) => {
+            const vId = tx.vehicleId || 'unknown';
+            if (!byVehicle.has(vId)) byVehicle.set(vId, []);
+            byVehicle.get(vId)!.push(tx);
+        });
+
+        // 4. Process each vehicle
+        const updates: any[] = [];
+        let modifiedCount = 0;
+
+        for (const [vId, txs] of byVehicle.entries()) {
+            const capacity = vehicleMap.get(vId) || 0;
+            if (capacity <= 0) continue; 
+
+            // Sort by date and odometer to ensure chronological processing
+            txs.sort((a, b) => {
+                const dateStrA = a.date.includes('-') ? a.date : a.date.replace(/\//g, '-');
+                const dateStrB = b.date.includes('-') ? b.date : b.date.replace(/\//g, '-');
+                const dateA = new Date(a.time ? `${dateStrA} ${a.time}` : dateStrA).getTime();
+                const dateB = new Date(b.time ? `${dateStrB} ${b.time}` : dateStrB).getTime();
+                if (!isNaN(dateA) && !isNaN(dateB)) {
+                    if (dateA !== dateB) return dateA - dateB;
+                }
+                return (a.odometer || 0) - (b.odometer || 0);
+            });
+
+            let runningCumulative = 0;
+            let currentCycleId = crypto.randomUUID();
+            let cycleStartIndex = 0;
+
+            for (let i = 0; i < txs.length; i++) {
+                const tx = txs[i];
+                const volume = Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || Number(tx.liters) || 0;
+                
+                // Track volume before this entry
+                const prevCumulative = runningCumulative;
+                runningCumulative += volume;
+
+                const percentOfTank = (runningCumulative / capacity) * 100;
+                
+                // Logic: 
+                // 100% = Soft Anchor (System Reset)
+                // 105% = Anomaly (Overflow)
+                const isManualFull = tx.metadata?.isFullTank === true || tx.type === 'Reimbursement';
+                const isSoftAnchor = !isManualFull && percentOfTank >= 100;
+                const isAnomaly = percentOfTank > 105;
+                const isAnchor = isManualFull || isSoftAnchor;
+
+                let integrityStatus: 'stable' | 'warning' | 'critical' = 'stable';
+                if (isAnomaly) integrityStatus = 'critical';
+                else if (percentOfTank > 85) integrityStatus = 'warning';
+
+                const newMetadata = {
+                    ...tx.metadata,
+                    cumulativeLitersAtEntry: Number(runningCumulative.toFixed(2)),
+                    tankCapacityAtEntry: capacity,
+                    contributionPercentage: Number(((volume / capacity) * 100).toFixed(1)),
+                    isSoftAnchor: isSoftAnchor,
+                    isAnchor: isAnchor,
+                    isAnomaly: isAnomaly,
+                    integrityStatus: integrityStatus,
+                    cycleId: currentCycleId,
+                    recalculatedAt: new Date().toISOString()
+                };
+
+                // Check if anything meaningful changed
+                const hasChanged = 
+                    tx.metadata?.cycleId !== currentCycleId ||
+                    tx.metadata?.cumulativeLitersAtEntry !== newMetadata.cumulativeLitersAtEntry ||
+                    tx.metadata?.isAnomaly !== isAnomaly;
+
+                if (hasChanged) {
+                    tx.metadata = newMetadata;
+                    updates.push(tx);
+                    modifiedCount++;
+                }
+
+                // Reset cycle if this was an anchor
+                if (isAnchor) {
+                    runningCumulative = 0;
+                    currentCycleId = crypto.randomUUID();
+                    cycleStartIndex = i + 1;
+                }
+            }
+        }
+
+        // 5. Batch Save (Chunked)
+        if (updates.length > 0) {
+            console.log(`[Recalculate] Saving ${updates.length} updates in chunks...`);
+            const CHUNK_SIZE = 50; // Smaller chunks for better stability
+            for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+                const chunk = updates.slice(i, i + CHUNK_SIZE);
+                const keys = chunk.map(t => `transaction:${t.id}`);
+                await kv.mset(keys, chunk);
+            }
+        }
+
+        return c.json({ 
+            success: true, 
+            processed: fuelTransactions.length,
+            modified: modifiedCount,
+            cyclesIdentified: updates.filter(u => u.metadata?.isAnchor).length
+        });
+
+    } catch (e: any) {
+        console.error("Recalculate Error:", e);
         return c.json({ error: e.message }, 500);
     }
 });
@@ -1078,21 +1227,35 @@ app.post("/make-server-37f42386/transactions", async (c) => {
                 integrityStatus: 'valid'
             };
 
-            // Rule 1: Tank Overflow (> 5% buffer)
-            if (tankCapacity > 0 && cumulative > (tankCapacity * 1.05)) {
+            // Rule 1: Tank Overflow (Physical Impossibility Check)
+            // We only flag this if a SINGLE transaction exceeds the tank capacity + buffer.
+            // Previously, this checked cumulative volume, which was incorrect as it flagged legitimate
+            // multiple partial fills as an overflow.
+            const singleTxOverflow = (Number(transaction.quantity) || 0) > (tankCapacity * 1.10);
+            
+            if (tankCapacity > 0 && singleTxOverflow) {
                 transaction.metadata.integrityStatus = 'critical';
-                transaction.metadata.anomalyReason = 'Tank Overflow Detected';
+                transaction.metadata.anomalyReason = 'Tank Overflow: Single transaction exceeds tank capacity';
             }
 
-            // Step 2.3: Rule 2 - Soft Anchor Reset
-            // If we are at > 85% of tank capacity and driver didn't check full tank,
-            // we mark this as a soft anchor to "reset" the next window and prevent
-            // math errors from cascading indefinitely.
-            if (!transaction.metadata?.isFullTank && tankCapacity > 0 && cumulative > (tankCapacity * 0.85)) {
+            // Step 2.3: Rule 2 - Soft Anchor Reset (Auto-Close Cycle)
+            // If cumulative volume exceeds 85% of tank capacity, we assume the tank has been filled
+            // (or enough fuel has been added to constitute a cycle). We "close" the cycle here.
+            // This prevents "infinite cumulative volume" and false "0 km" calculations.
+            const isCumulativeFull = tankCapacity > 0 && cumulative > (tankCapacity * 0.85);
+            
+            if (!transaction.metadata?.isFullTank && isCumulativeFull) {
                 transaction.metadata.isSoftAnchor = true;
                 transaction.metadata.isAnchor = true; // Unified flag for logic
-                transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
-                transaction.metadata.softAnchorNote = 'Auto-reset: Cumulative volume reached 85% of tank capacity.';
+                
+                // If it was valid before, keep it valid. It's just an auto-reset.
+                // We do NOT downgrade to 'warning' just because we auto-detected a full tank.
+                if (transaction.metadata.integrityStatus === 'valid') {
+                     transaction.metadata.softAnchorNote = 'Cycle Reset: Cumulative volume reached tank capacity.';
+                } else {
+                     // If it was already a warning (e.g. slight mismatch), keep it but add note
+                     transaction.metadata.softAnchorNote = 'Cycle Reset: Cumulative volume reached tank capacity.';
+                }
             } else if (transaction.metadata?.isFullTank) {
                 transaction.metadata.isAnchor = true;
             }

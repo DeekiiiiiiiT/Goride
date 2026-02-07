@@ -18,7 +18,11 @@ import {
   RotateCw,
   Plus,
   Pencil,
-  Trash2
+  Trash2,
+  ScanLine,
+  Keyboard,
+  CreditCard,
+  FileText
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -61,9 +65,10 @@ import { TripManifestSheet } from './TripManifestSheet';
 interface MasterLogTimelineProps {
   vehicleId: string;
   refreshTrigger?: number;
+  viewMode?: 'timeline' | 'anomalies';
 }
 
-export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId, refreshTrigger = 0 }) => {
+export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId, refreshTrigger = 0, viewMode = 'timeline' }) => {
   const [history, setHistory] = useState<OdometerReading[]>([]);
   const [reports, setReports] = useState<Record<string, MileageReport>>({});
   const [loading, setLoading] = useState(true);
@@ -340,6 +345,12 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
 
   const latestReading = history.length > 0 ? history[0] : null;
 
+  const anomalyReports = useMemo(() => {
+     return Object.values(reports)
+        .filter(r => r.anomalyDetected)
+        .sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
+  }, [reports]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 space-y-4">
@@ -474,17 +485,136 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Timeline View */}
         <div className="lg:col-span-2 space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-lg font-bold text-slate-900">Timeline View</h3>
-                    <p className="text-sm text-slate-500">Displaying {filteredHistory.length} of {history.length} audit entries</p>
-                </div>
-                <Badge variant="outline" className="bg-white">
-                    {history.filter(h => h.isVerified).length} Anchors
-                </Badge>
-            </div>
+            {viewMode === 'anomalies' ? (
+                <div className="space-y-6">
+                     <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900">Anomaly Detection</h3>
+                            <p className="text-sm text-slate-500">Displaying {anomalyReports.length} flagged intervals</p>
+                        </div>
+                        <Badge variant="destructive" className="bg-red-50 text-red-600 border-red-200">
+                            {anomalyReports.length} Issues
+                        </Badge>
+                    </div>
 
-            <Card className="border-slate-200 shadow-sm overflow-hidden">
+                    <div className="space-y-4">
+                        {anomalyReports.map((report, idx) => (
+                             <Card key={idx} className="border-red-200 bg-red-50/30 overflow-hidden">
+                                <CardContent className="p-0">
+                                    <div className="p-4 border-b border-red-100 flex justify-between items-center bg-red-50/50">
+                                        <div className="flex items-center gap-2">
+                                            <AlertCircle className="w-5 h-5 text-red-500" />
+                                            <span className="font-semibold text-red-900">Anomaly Detected</span>
+                                        </div>
+                                        <Badge variant="outline" className="bg-white border-red-200 text-red-700">
+                                            {format(parseDateForDisplay(report.periodStart), 'MMM d')} - {format(parseDateForDisplay(report.periodEnd), 'MMM d, yyyy')}
+                                        </Badge>
+                                    </div>
+                                    <div className="p-6">
+                                        <div className="flex flex-col gap-4">
+                                            <div className="p-3 bg-white rounded border border-red-100 text-sm text-red-800">
+                                                <strong>Issue:</strong> {report.anomalyReason}
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-3 gap-4 text-center">
+                                                <div className="p-3 bg-white rounded border border-slate-100">
+                                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Physical Dist</div>
+                                                    <div className="text-lg font-mono font-bold text-slate-900">{report.totalDistance.toLocaleString()} km</div>
+                                                </div>
+                                                <div className="p-3 bg-white rounded border border-slate-100">
+                                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Reported Trips</div>
+                                                    <div className="text-lg font-mono font-bold text-indigo-600">{report.platformDistance.toFixed(1)} km</div>
+                                                </div>
+                                                <div className="p-3 bg-white rounded border border-slate-100">
+                                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Gap</div>
+                                                    <div className="text-lg font-mono font-bold text-red-600">{(report.totalDistance - report.platformDistance).toFixed(1)} km</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Smart Suggestions */}
+                                            {report.totalDistance * 1.60934 > report.platformDistance && (report.totalDistance - report.platformDistance < 0) && (
+                                                <div className="bg-amber-50 text-amber-800 text-xs p-3 rounded flex items-start gap-2 border border-amber-100">
+                                                    <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                                    <div>
+                                                        <strong>Possible Unit Mismatch:</strong> 
+                                                        <span className="block mt-0.5">
+                                                            If {report.totalDistance} was entered in <strong>Miles</strong>, it would equal <strong>{(report.totalDistance * 1.60934).toFixed(1)} km</strong>, which covers the reported distance.
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-end gap-2 mt-2">
+                                                 <Button 
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="bg-white"
+                                                    onClick={() => {
+                                                        const e = history.find(h => h.value === report.endOdometer && h.date === report.periodEnd);
+                                                        if (e) handleEdit(e);
+                                                        else toast.error("Could not find anchor to edit");
+                                                    }}
+                                                 >
+                                                    <Pencil className="w-3 h-3 mr-2" />
+                                                    Fix Odometer
+                                                 </Button>
+                                                 <Button 
+                                                    size="sm" 
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        // Find the items to trigger manifest view
+                                                        // We need the original OdometerReading objects
+                                                        const startItem = history.find(h => h.id.includes(report.startOdometer.toString()) || h.value === report.startOdometer); // heuristic
+                                                        // Better: We stored IDs in the report key usually? No, report key is `${start.id}_${end.id}`.
+                                                        // But we don't have the IDs in the report object explicitly except via closure?
+                                                        // Wait, in fetchTimelineData: newReports[`${start.id}_${end.id}`]
+                                                        // I should probably pass IDs in the report object to be safe.
+                                                        // The report object has: vehicleId, periodStart, periodEnd...
+                                                        // It does NOT have startId/endId. 
+                                                        // I should add them to MileageReport type or just find them by date/value.
+                                                        
+                                                        // Finding by value/date is safe enough for this context
+                                                        const s = history.find(h => h.value === report.startOdometer && h.date === report.periodStart);
+                                                        const e = history.find(h => h.value === report.endOdometer && h.date === report.periodEnd);
+                                                        
+                                                        if (s && e) {
+                                                            setManifestGap({ start: s, end: e });
+                                                        } else {
+                                                            toast.error("Could not load manifest for this gap.");
+                                                        }
+                                                    }}
+                                                 >
+                                                    View Trip Manifest
+                                                 </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                             </Card>
+                        ))}
+
+                        {anomalyReports.length === 0 && (
+                            <div className="text-center p-12 bg-slate-50 border border-slate-200 rounded-lg border-dashed">
+                                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                                <h3 className="text-lg font-medium text-slate-900">All Clear</h3>
+                                <p className="text-slate-500">No anomalies detected in verified gaps.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900">Timeline View</h3>
+                        <p className="text-sm text-slate-500">Displaying {filteredHistory.length} of {history.length} audit entries</p>
+                    </div>
+                    <Badge variant="outline" className="bg-white">
+                        {history.filter(h => h.isVerified).length} Anchors
+                    </Badge>
+                </div>
+
+                <Card className="border-slate-200 shadow-sm overflow-hidden">
                 <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 grid grid-cols-12 text-xs font-bold text-slate-500 uppercase tracking-wider">
                     <div className="col-span-3">Timestamp</div>
                     <div className="col-span-2">Anchor Source</div>
@@ -532,11 +662,55 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                                     )}
                                 </div>
                                 <div className="col-span-3 flex flex-col items-start gap-1">
-                                    <p className="text-sm text-slate-600 truncate w-full" title={item.notes}>{item.notes}</p>
-                                    <Badge className={`text-[10px] h-5 px-1.5 flex items-center gap-1 ${item.isVerified ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
-                                        {item.isVerified ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                                        {item.isVerified ? 'Verified' : 'Unverified'}
-                                    </Badge>
+                                    <div className="flex flex-col items-start gap-1">
+                                        <p className="text-sm text-slate-600 truncate w-full" title={item.notes}>{item.notes}</p>
+                                        <div className="flex gap-2">
+                                            <Badge className={`text-[10px] h-5 px-1.5 flex items-center gap-1 ${item.isVerified ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
+                                                {item.isVerified ? (
+                                                    item.metaData?.method === 'ai_verified' ? (
+                                                        <ScanLine className="w-3 h-3" />
+                                                    ) : (
+                                                        <CheckCircle2 className="w-3 h-3" />
+                                                    )
+                                                ) : <AlertCircle className="w-3 h-3" />}
+                                                {item.isVerified ? (item.metaData?.method === 'ai_verified' ? 'AI Scanned' : 'Verified') : 'Unverified'}
+                                            </Badge>
+                                            
+                                            {item.metaData?.method === 'manual_override' && (
+                                                <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-slate-500 bg-slate-50">
+                                                    <Keyboard className="w-3 h-3" />
+                                                    Manual Entry
+                                                </Badge>
+                                            )}
+                                            
+                                            {item.source === 'fuel' && (
+                                                <>
+                                                    {item.metaData?.odometerMethod === 'ai_verified' ? (
+                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-green-600 bg-green-50 border-green-200">
+                                                            <ScanLine className="w-3 h-3" />
+                                                            AI Scanned
+                                                        </Badge>
+                                                    ) : item.metaData?.paymentSource === 'Gas_Card' ? (
+                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-blue-600 bg-blue-50 border-blue-200">
+                                                            <CreditCard className="w-3 h-3" />
+                                                            Fuel Card
+                                                        </Badge>
+                                                    ) : (
+                                                       <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-slate-500 bg-slate-50">
+                                                            <Keyboard className="w-3 h-3" />
+                                                            Manual Log
+                                                        </Badge>
+                                                    )}
+                                                    {item.metaData?.receiptUrl && (
+                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-slate-500 bg-slate-50">
+                                                            <FileText className="w-3 h-3" />
+                                                            Receipt
+                                                        </Badge>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                                     <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <DropdownMenu>
@@ -626,6 +800,8 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                     )}
                 </div>
             </Card>
+            </>
+            )}
         </div>
 
         {/* Sidebar */}

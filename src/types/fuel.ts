@@ -152,6 +152,23 @@ export interface OdometerBucket {
   status: 'Complete' | 'Partial' | 'Anomaly';
 }
 
+export interface FuelCycle {
+  id: string;
+  vehicleId: string;
+  startDate: string;
+  endDate: string;
+  totalLiters: number;
+  totalCost: number;
+  avgPricePerLiter: number;
+  transactions: FuelEntry[];
+  status: 'Complete' | 'Active' | 'Anomaly';
+  distance: number;
+  efficiency: number; // KM/L
+  resetType: 'Manual' | 'Auto_Soft' | 'Auto_Anomaly';
+  startOdometer?: number;
+  endOdometer?: number;
+}
+
 export type DisputeStatus = 'Open' | 'Resolved' | 'Rejected';
 
 export type DisputeReason = 

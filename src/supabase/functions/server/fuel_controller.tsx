@@ -12,6 +12,10 @@ const supabase = createClient(
 
 const BASE_PATH = "/make-server-37f42386";
 
+// --- CONSTANTS ---
+const SOFT_ANCHOR_THRESHOLD = 1.0; // 100% capacity triggers a reset
+const CRITICAL_THRESHOLD = 1.05;   // 105% capacity flags a critical anomaly
+
 // --- FUEL CARDS ---
 app.get(`${BASE_PATH}/fuel-cards`, async (c) => {
   try {
@@ -200,12 +204,47 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
 
             let cumulative = 0;
             for (const ve of vehicleEntries) {
-                if (ve.metadata?.isAnchor || ve.metadata?.isFullTank || ve.metadata?.isSoftAnchor) break;
+                // Phase 14: Logic check - Is the previous record a reset point?
+                if (ve.metadata?.isAnchor || ve.metadata?.isFullTank || ve.metadata?.isSoftAnchor) {
+                    // If the previous record was a reset point, the cumulative sum before THIS entry 
+                    // is just the liters from the reset point itself (not 0, because the reset point
+                    // is the first entry of the new cycle).
+                    // Wait, if ve is the reset point, it should NOT be added to cumulative of NEXT?
+                    // No, the reset point IS the first entry.
+                    // So for the entry AFTER a reset, cumulative = liters of reset.
+                    break;
+                }
                 cumulative += (Number(ve.liters) || 0);
             }
 
-            const newCumulative = cumulative + (Number(entry.liters) || 0);
+            const rawCumulative = cumulative + (Number(entry.liters) || 0);
             
+            // Phase 1 (Logic Refactoring): Soft Anchor Detection at 100%
+            const approachingSoftAnchor = tankCapacity > 0 && rawCumulative >= (tankCapacity * SOFT_ANCHOR_THRESHOLD);
+            const isHardAnchor = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
+            
+            // Calculate contribution percentage for the new UI
+            const contributionPercentage = tankCapacity > 0 ? (Number(entry.liters) / tankCapacity) * 100 : 0;
+
+            // If it's a soft anchor, the cumulative for display is just this entry's liters
+            const newCumulative = (isHardAnchor || approachingSoftAnchor) ? (Number(entry.liters) || 0) : rawCumulative;
+
+            if (approachingSoftAnchor && !isHardAnchor) {
+                entry.metadata = {
+                    ...entry.metadata,
+                    isSoftAnchor: true,
+                    softAnchorNote: `Soft Anchor: Cumulative volume (${rawCumulative.toFixed(1)}L) reached or exceeded 100% of ${tankCapacity}L capacity.`
+                };
+            }
+
+            // Add contribution metadata
+            entry.metadata = {
+                ...entry.metadata,
+                contributionPercentage: Number(contributionPercentage.toFixed(2)),
+                // Data Consistency: Tag with Cycle ID
+                cycleId: `cycle_${entry.vehicleId}_${vehicleEntries.find((e: any) => e.metadata?.isFullTank || e.metadata?.isAnchor || e.metadata?.isSoftAnchor)?.odometer || 'start'}`
+            };
+
             // Phase 7: Advanced Predictive Baseline Logic
             // Fetch vehicle efficiency baseline (rolling average or spec)
             let predictedEconomy = 10; // Default L/100km
@@ -215,7 +254,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
 
             // 3. Rule 1 - Tank Overflow Detection (Phase 2 & 8.2)
             // Use 5% expansion buffer
-            const overflowThreshold = tankCapacity * 1.05;
+            const overflowThreshold = tankCapacity > 0 ? tankCapacity * CRITICAL_THRESHOLD : Infinity;
             
             if (tankCapacity > 0 && newCumulative > overflowThreshold) {
                 // Phase 7: Wait-and-See Observation
@@ -232,13 +271,12 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 entry.isFlagged = true;
                 entry.auditStatus = 'Flagged';
             } else if (tankCapacity > 0 && newCumulative > (tankCapacity * 0.85)) {
-                // Rule 2 - Approaching Capacity -> Start Observation
-                // Phase 7: Mark as 'Observing' to avoid premature alerts
+                // Note: We keep the 85% "Warning" visual but it doesn't trigger a reset anymore
                 entry.metadata = {
                     ...entry.metadata,
                     integrityStatus: 'warning',
                     auditStatus: 'Observing',
-                    observationReason: 'High Cumulative Volume (Wait for Anchor)',
+                    observationReason: 'Approaching Full Capacity (Wait for Anchor)',
                     cumulativeLitersAtEntry: newCumulative,
                     observationStartedAt: new Date().toISOString()
                 };
@@ -314,24 +352,37 @@ app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
                 .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
             let runningCumulative = 0;
+            let lastResetOdo = 0;
 
             for (const entry of vehicleEntries) {
-                // If this entry is an anchor (Full Tank), it resets the cumulative to its own volume
-                if (entry.metadata?.isFullTank || entry.metadata?.isAnchor) {
-                    runningCumulative = Number(entry.liters) || 0;
+                // Phase 1 (Logic Refactoring): Soft Anchor Logic - Reset only if Full, Hard Anchor, or Cumulative reached 100%
+                const isHardAnchor = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
+                const currentVolume = Number(entry.liters) || 0;
+                const approachingThreshold = tankCapacity > 0 && (runningCumulative + currentVolume) >= (tankCapacity * SOFT_ANCHOR_THRESHOLD);
+                
+                // Determine if this entry SHOULD be a soft anchor
+                const shouldBeSoftAnchor = !isHardAnchor && approachingThreshold;
+
+                if (isHardAnchor || shouldBeSoftAnchor) {
+                    runningCumulative = currentVolume;
                 } else {
-                    runningCumulative += Number(entry.liters) || 0;
+                    runningCumulative += currentVolume;
                 }
 
                 // Check Integrity
-                const overflowThreshold = tankCapacity * 1.05;
-                const status = runningCumulative > overflowThreshold ? 'critical' : 
-                               runningCumulative > (tankCapacity * 0.85) ? 'warning' : 'valid';
+                const overflowThreshold = tankCapacity > 0 ? tankCapacity * CRITICAL_THRESHOLD : Infinity;
+                const status = tankCapacity > 0 && runningCumulative > overflowThreshold ? 'critical' : 
+                               tankCapacity > 0 && runningCumulative > (tankCapacity * 0.85) ? 'warning' : 'valid';
                 
+                const contributionPercentage = tankCapacity > 0 ? (currentVolume / tankCapacity) * 100 : 0;
+
                 const updatedMetadata = {
                     ...(entry.metadata || {}),
                     cumulativeLitersAtEntry: Number(runningCumulative.toFixed(2)),
+                    contributionPercentage: Number(contributionPercentage.toFixed(2)),
                     integrityStatus: status,
+                    isSoftAnchor: shouldBeSoftAnchor || entry.metadata?.isSoftAnchor,
+                    softAnchorNote: shouldBeSoftAnchor ? `Auto-reset: Cumulative volume reached or exceeded 100% of ${tankCapacity}L tank.` : entry.metadata?.softAnchorNote,
                     anomalyReason: status === 'critical' ? 'Tank Overflow' : 
                                    status === 'warning' ? 'Approaching Capacity' : null,
                     backfilledAt: new Date().toISOString()
@@ -345,6 +396,14 @@ app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
 
                 if (status === 'critical') anomalyCount++;
                 
+                // Add Cycle ID to metadata to help frontend grouping (Data Consistency)
+                const currentCycleId = `cycle_${vehicleId}_${lastResetOdo || 'start'}`;
+                updatedMetadata.cycleId = currentCycleId;
+                
+                if (isHardAnchor || shouldBeSoftAnchor) {
+                    lastResetOdo = entry.odometer || 0;
+                }
+
                 await kv.set(`fuel_entry:${entry.id}`, updatedEntry);
                 processedCount++;
             }

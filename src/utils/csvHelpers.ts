@@ -546,10 +546,11 @@ function calculateFleetStats(files: FileData[]): FleetStats {
 
             driverTimeFiles.forEach(file => {
                  file.rows.forEach(row => {
-                     const openTime = parseHHMMSS(String(row['Open Time'])); 
-                     const enrouteTime = parseHHMMSS(String(row['Enroute Time'])); 
-                     const onTripTime = parseHHMMSS(String(row['On Trip Time'])); 
-                     const unavailableTime = parseHHMMSS(String(row['Unavailable Time'])); 
+                     // Updated to use parseDurationToHours to support D:H:M format (e.g. 1:14:04 = 1d 14h 4m)
+                     const openTime = parseDurationToHours(String(row['Open Time'])); 
+                     const enrouteTime = parseDurationToHours(String(row['Enroute Time'])); 
+                     const onTripTime = parseDurationToHours(String(row['On Trip Time'])); 
+                     const unavailableTime = parseDurationToHours(String(row['Unavailable Time'])); 
                      
                      dSumOnline += (openTime + enrouteTime + onTripTime);
                      dSumOnJob += (enrouteTime + onTripTime);
@@ -580,10 +581,11 @@ function calculateFleetStats(files: FileData[]): FleetStats {
 
             vehicleTimeFiles.forEach(file => {
                  file.rows.forEach(row => {
-                     const openTime = parseHHMMSS(String(row['Open Time'])); 
-                     const enrouteTime = parseHHMMSS(String(row['Enroute Time'])); 
-                     const onTripTime = parseHHMMSS(String(row['On Trip Time'])); 
-                     const unavailableTime = parseHHMMSS(String(row['Unavailable Time'])); 
+                     // Updated to use parseDurationToHours to support D:H:M format
+                     const openTime = parseDurationToHours(String(row['Open Time'])); 
+                     const enrouteTime = parseDurationToHours(String(row['Enroute Time'])); 
+                     const onTripTime = parseDurationToHours(String(row['On Trip Time'])); 
+                     const unavailableTime = parseDurationToHours(String(row['Unavailable Time'])); 
                      
                      vSumOnline += (openTime + enrouteTime + onTripTime);
                      vSumOnJob += (enrouteTime + onTripTime);
@@ -1201,7 +1203,14 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     if (row[schema.distance]) current.distance = parseFloat(String(row[schema.distance]).replace(/[^0-9.]/g, '')) || 0;
                     if (row[schema.status]) {
                         const s = String(row[schema.status]).toLowerCase();
+                        
+                        // Capture raw status for detailed breakdown
+                        if (s.includes('cancel') || s.includes('failed')) {
+                             current.cancellationReason = s;
+                        }
+
                         if (s.includes('cancel')) current.status = 'Cancelled';
+                        else if (s.includes('failed')) current.status = 'Cancelled';
                         else if (s.includes('complet')) current.status = 'Completed';
                         else current.status = 'Processing';
                     }
@@ -2134,13 +2143,14 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         // removed unconditional overwrite of totalCashExposure
     }
 
-    // Phase 7: Apply Uniform Average Enroute & Open Distance (Source of Truth Strategy)
+    // Phase 7: Apply Uniform Average Enroute & Open Distance & Unavailable Distance (Source of Truth Strategy)
     // 1. Group Time & Distance Data by Driver
-    const driverTimeMap = new Map<string, { enroute: number, open: number }>();
+    const driverTimeMap = new Map<string, { enroute: number, open: number, unavailable: number }>();
     driverTimeData.forEach(d => {
-        const current = driverTimeMap.get(d.driverUuid) || { enroute: 0, open: 0 };
+        const current = driverTimeMap.get(d.driverUuid) || { enroute: 0, open: 0, unavailable: 0 };
         current.enroute += d.enrouteDistance;
         current.open += d.openDistance;
+        current.unavailable += d.unavailableDistance;
         driverTimeMap.set(d.driverUuid, current);
     });
 
@@ -2166,6 +2176,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 // Determine Uniform Average Open (e.g. 75.0 / 83 = 0.90 km)
                 if (totals.open > 0) {
                      t.normalizedOpenDistance = totals.open / totalTrips;
+                }
+                // Determine Uniform Average Unavailable
+                if (totals.unavailable > 0) {
+                     t.normalizedUnavailableDistance = totals.unavailable / totalTrips;
                 }
             }
         }
