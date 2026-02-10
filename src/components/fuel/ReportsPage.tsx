@@ -13,11 +13,13 @@ import { FuelEntry } from '../../types/fuel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { FuelPerformanceAnalytics } from './FuelPerformanceAnalytics';
+import { TabLoadingSkeleton } from '../ui/TabLoadingSkeleton';
 
 export function ReportsPage() {
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [reportType, setReportType] = useState('weekly');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [reportData, setReportData] = useState<FuelEntry[] | null>(null);
     const [allEntries, setAllEntries] = useState<FuelEntry[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
@@ -26,18 +28,25 @@ export function ReportsPage() {
 
     useEffect(() => {
         const loadInitial = async () => {
-            const [entries, vData] = await Promise.all([
-                fuelService.getFuelEntries(),
-                api.getVehicles()
-            ]);
-            setAllEntries(entries);
-            setVehicles(vData);
-            
-            const vMap: Record<string, string> = {};
-            if (Array.isArray(vData)) {
-                 vData.forEach((v: any) => vMap[v.id] = v.name || v.licensePlate);
+            setIsLoading(true);
+            try {
+                const [entries, vData] = await Promise.all([
+                    fuelService.getFuelEntries(),
+                    api.getVehicles()
+                ]);
+                setAllEntries(entries);
+                setVehicles(vData);
+                
+                const vMap: Record<string, string> = {};
+                if (Array.isArray(vData)) {
+                     vData.forEach((v: any) => vMap[v.id] = v.name || v.licensePlate);
+                }
+                setVehiclesMap(vMap);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsLoading(false);
             }
-            setVehiclesMap(vMap);
         };
         loadInitial();
     }, []);
@@ -73,6 +82,10 @@ export function ReportsPage() {
             setIsGenerating(false);
         }
     };
+
+    if (isLoading) {
+        return <TabLoadingSkeleton />;
+    }
 
     return (
         <div className="space-y-6">

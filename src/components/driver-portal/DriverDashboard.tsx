@@ -275,11 +275,11 @@ export function DriverDashboard() {
   }, [user?.id, driverRecord?.id, driverRecord?.driverId, driverLoading]);
 
   const handleAction = (action: string) => {
-    if (action === 'Fuel Log') {
+    if (action === 'Fuel Log' || action === 'log_fuel') {
         setFuelFormOpen(true);
-    } else if (action === 'Service Request' || action === 'Issue Report') {
+    } else if (action === 'Service Request' || action === 'Issue Report' || action === 'request_service') {
         setServiceFormOpen(true);
-    } else if (action === 'Log Trip') {
+    } else if (action === 'Log Trip' || action === 'start_trip') {
         setTripInitialData(undefined); // Clear any previous timer data
         setManualTripFormOpen(true);
     } else {

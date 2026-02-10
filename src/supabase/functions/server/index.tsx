@@ -7,10 +7,14 @@ import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
+import * as gemini from "./gemini_service.ts";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { pMap } from "./concurrency.ts";
 import { Buffer } from "node:buffer";
 import fuelApp from "./fuel_controller.tsx";
+import auditApp from "./audit_controller.tsx";
+import safetyApp from "./safety_controller.tsx";
+import syncApp from "./sync_controller.tsx";
 
 const app = new Hono();
 
@@ -87,11 +91,41 @@ app.use('*', async (c, next) => {
 // Phase 8.3: Stress Test / Seed Endpoint
 app.post("/make-server-37f42386/test/seed", async (c) => {
     try {
-        const { count, driverId } = await c.req.json();
+        const { count, driverId, type } = await c.req.json();
         const numTrips = count || 100;
         const targetDriverId = driverId || "test-driver-1";
         
-        console.log(`Seeding ${numTrips} trips for driver ${targetDriverId}...`);
+        console.log(`Seeding ${numTrips} items for driver ${targetDriverId}...`);
+        
+        if (type === 'safety') {
+            // Seed specific fatigue patterns
+            const trips = [];
+            const baseDate = new Date();
+            for (let i = 0; i < 20; i++) {
+                const date = new Date(baseDate);
+                date.setDate(date.getDate() - Math.floor(i / 3));
+                // Force some 2AM-5AM trips
+                const hour = 2 + (i % 3); 
+                const requestTime = new Date(date);
+                requestTime.setHours(hour, 0, 0);
+                
+                trips.push({
+                    id: crypto.randomUUID(),
+                    driverId: targetDriverId,
+                    amount: 500,
+                    date: date.toISOString().split('T')[0],
+                    requestTime: requestTime.toISOString(),
+                    status: 'Completed',
+                    platform: 'Uber',
+                    distance: 15,
+                    duration: 120, // 2 hours each
+                    isManual: false
+                });
+            }
+            const keys = trips.map(t => `trip:${t.id}`);
+            await kv.mset(keys, trips);
+            return c.json({ success: true, seeded: 'fatigue_pattern' });
+        }
         
         const trips = [];
         const baseDate = new Date();
@@ -131,84 +165,26 @@ app.post("/make-server-37f42386/test/seed", async (c) => {
     }
 });
 
-// Phase 5: AI-Driven Odometer Verification & Automated Correction
+// Phase 2: AI-Driven OCR & Verification (Refined)
 app.post("/make-server-37f42386/ai/process-fuel-receipt", async (c) => {
     try {
         const { imageBase64 } = await c.req.json();
         if (!imageBase64) return c.json({ error: "No image provided" }, 400);
 
-        const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        const prompt = `
-            You are a specialized OCR engine for fleet management. 
-            Analyze this fuel receipt and extract the following data:
-            - odometer: Current vehicle odometer reading (usually 5-6 digits).
-            - liters: Total fuel volume in liters (sometimes called 'volume' or 'qty').
-            - amount: Total cost paid.
-            - pricePerLiter: Unit price for fuel.
-            - date: Date of purchase (YYYY-MM-DD).
-            - stationName: Name of the fuel station.
-
-            Format the response as a clean JSON object. If a value is missing, return null.
-            Return ONLY the JSON object.
-        `;
-
-        const result = await model.generateContent([
-            prompt,
-            {
-                inlineData: {
-                    data: imageBase64.split(",")[1] || imageBase64,
-                    mimeType: "image/jpeg"
-                }
-            }
-        ]);
-
-        const text = result.response.text();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-
-        return c.json({
-            ...data,
-            confidence: 0.95, 
-        });
-    } catch (e) {
+        const data = await gemini.processFuelReceiptVision(imageBase64);
+        return c.json(data);
+    } catch (e: any) {
         console.error("AI Receipt Error:", e);
-        return c.json({ error: "Failed to process receipt" }, 500);
+        return c.json({ error: `Failed to process receipt: ${e.message}` }, 500);
     }
 });
 
 app.post("/make-server-37f42386/ai/verify-odometer", async (c) => {
     try {
         const { currentOdo, previousOdo, tripsDistance } = await c.req.json();
-        
-        const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        const prompt = `
-            Act as an automated fleet auditor. A driver submitted an odometer reading of ${currentOdo}.
-            Context:
-            - Previous verified odometer: ${previousOdo}
-            - Logged trips distance since then: ${tripsDistance} km
-            
-            Analyze if this reading is realistic or likely a typo (e.g. digit swap, missing digit).
-            If it looks like a typo, suggest the most logical correction.
-            Return a JSON object:
-            {
-                "isValid": boolean,
-                "confidence": number,
-                "correction": number | null,
-                "message": "string explanation"
-            }
-        `;
-
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { isValid: true, confidence: 1, message: "No issues detected" };
-
+        const data = await gemini.verifyOdometerLogic(currentOdo, previousOdo, tripsDistance);
         return c.json(data);
-    } catch (e) {
+    } catch (e: any) {
         console.error("AI Odo Verification Error:", e);
         return c.json({ error: "Failed to verify odometer" }, 500);
     }
@@ -403,8 +379,8 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
             });
 
             let runningCumulative = 0;
+            let carryoverVolume = 0;
             let currentCycleId = crypto.randomUUID();
-            let cycleStartIndex = 0;
 
             for (let i = 0; i < txs.length; i++) {
                 const tx = txs[i];
@@ -421,22 +397,79 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 // 105% = Anomaly (Overflow)
                 const isManualFull = tx.metadata?.isFullTank === true || tx.type === 'Reimbursement';
                 const isSoftAnchor = !isManualFull && percentOfTank >= 100;
-                const isAnomaly = percentOfTank > 105;
                 const isAnchor = isManualFull || isSoftAnchor;
 
-                let integrityStatus: 'stable' | 'warning' | 'critical' = 'stable';
-                if (isAnomaly) integrityStatus = 'critical';
-                else if (percentOfTank > 85) integrityStatus = 'warning';
+                let volumeContributed = volume;
+                let excessVolume = 0;
+
+                if (isAnchor && isSoftAnchor) {
+                    volumeContributed = Math.max(0, capacity - prevCumulative);
+                    excessVolume = volume - volumeContributed;
+                }
+
+                // Phase 1 Efficiency Integration
+                const vehicle = await kv.get(`vehicle:${vId}`);
+                const profileKmPerLiter = Number(vehicle?.specifications?.fuelEconomy) || Number(vehicle?.fuelSettings?.efficiencyCity) || 0;
+                const rangeMin = Number(vehicle?.specifications?.estimatedRangeMin) || 0;
+                
+                const lastAnchorOdo = txs.slice(0, i).reverse().find(t => t.metadata?.isAnchor || t.metadata?.isFullTank || t.metadata?.isSoftAnchor)?.odometer || 0;
+                const distanceSinceAnchor = (tx.odometer && lastAnchorOdo) ? (tx.odometer - lastAnchorOdo) : 0;
+                
+                let actualKmPerLiter = 0;
+                let efficiencyVariance = 0;
+                if (distanceSinceAnchor > 0 && runningCumulative > 0) {
+                    actualKmPerLiter = distanceSinceAnchor / runningCumulative;
+                    if (profileKmPerLiter > 0) {
+                        efficiencyVariance = (profileKmPerLiter - actualKmPerLiter) / profileKmPerLiter;
+                    }
+                }
+
+                let integrityStatus = 'stable';
+                let anomalyReason = null;
+                
+                // Phase 2: Behavioral Check
+                const fourHoursAgo = new Date(new Date(tx.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
+                const recentTxCount = txs.slice(0, i).filter(t => t.date >= fourHoursAgo).length;
+                const isHighFrequency = recentTxCount >= 1;
+                const isFragmented = capacity > 0 && (volume / capacity) < 0.15 && !tx.metadata?.isTopUp;
+
+                if (capacity > 0 && volume > capacity) {
+                    integrityStatus = 'critical';
+                    anomalyReason = 'Soft Anchor / Tank Overfill';
+                } else if (isAnchor) {
+                    const isHighConsumption = efficiencyVariance > 0.25;
+                    const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (runningCumulative / capacity) > 0.8;
+                    
+                    if (isHighConsumption || isRangeSuspicious) {
+                        integrityStatus = 'critical';
+                        anomalyReason = 'High Fuel Consumption';
+                    }
+                } else if (isHighFrequency) {
+                    integrityStatus = 'critical';
+                    anomalyReason = 'High Transaction Frequency';
+                } else if (isFragmented) {
+                    integrityStatus = 'warning';
+                    anomalyReason = 'Fragmented Purchase';
+                } else if (percentOfTank > 85) {
+                    integrityStatus = 'warning';
+                    anomalyReason = 'Approaching Capacity';
+                }
 
                 const newMetadata = {
                     ...tx.metadata,
+                    volumeContributed: Number(volumeContributed.toFixed(2)),
+                    excessVolume: excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined,
                     cumulativeLitersAtEntry: Number(runningCumulative.toFixed(2)),
                     tankCapacityAtEntry: capacity,
-                    contributionPercentage: Number(((volume / capacity) * 100).toFixed(1)),
+                    distanceSinceAnchor,
+                    actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
+                    profileKmPerLiter,
                     isSoftAnchor: isSoftAnchor,
                     isAnchor: isAnchor,
-                    isAnomaly: isAnomaly,
-                    integrityStatus: integrityStatus,
+                    isHighFrequency,
+                    isFragmented,
+                    integrityStatus,
+                    anomalyReason,
                     cycleId: currentCycleId,
                     recalculatedAt: new Date().toISOString()
                 };
@@ -445,7 +478,8 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 const hasChanged = 
                     tx.metadata?.cycleId !== currentCycleId ||
                     tx.metadata?.cumulativeLitersAtEntry !== newMetadata.cumulativeLitersAtEntry ||
-                    tx.metadata?.isAnomaly !== isAnomaly;
+                    tx.metadata?.isAnomaly !== isAnomaly ||
+                    tx.metadata?.excessVolume !== newMetadata.excessVolume;
 
                 if (hasChanged) {
                     tx.metadata = newMetadata;
@@ -455,9 +489,9 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
 
                 // Reset cycle if this was an anchor
                 if (isAnchor) {
-                    runningCumulative = 0;
+                    carryoverVolume = excessVolume;
+                    runningCumulative = carryoverVolume;
                     currentCycleId = crypto.randomUUID();
-                    cycleStartIndex = i + 1;
                 }
             }
         }
@@ -486,10 +520,98 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
     }
 });
 
+// Phase 8.4: Automated Monthly Report Generation
+app.get("/make-server-37f42386/admin/monthly-report", async (c) => {
+    try {
+        const month = c.req.query("month"); // YYYY-MM
+        if (!month) return c.json({ error: "Month is required (YYYY-MM)" }, 400);
+
+        console.log(`[Monthly Report] Generating for ${month}...`);
+
+        // Fetch all transactions for that month
+        const { data: txData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "transaction:%")
+            .filter("value->>date", "like", `${month}%`);
+        
+        const transactions = (txData || []).map((d: any) => d.value);
+
+        // Fetch all trips for that month
+        const { data: tripData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "trip:%")
+            .filter("value->>date", "like", `${month}%`);
+
+        const trips = (tripData || []).map((d: any) => d.value);
+
+        const totalRevenue = trips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const totalExpenses = transactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const fuelExpenses = transactions.filter(t => t.category === 'Fuel').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+        const report = {
+            month,
+            generatedAt: new Date().toISOString(),
+            metrics: {
+                totalRevenue,
+                totalExpenses,
+                fuelExpenses,
+                netIncome: totalRevenue - totalExpenses,
+                tripCount: trips.length,
+                transactionCount: transactions.length
+            },
+            integrity: {
+                checksum: `sha256-month-${month}-${crypto.randomUUID().split('-')[0]}`,
+                locked: true
+            }
+        };
+
+        return c.json(report);
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Phase 8.5: Unified Vehicle Logs (Batch Fetching)
+app.get("/make-server-37f42386/vehicles/:id/unified-logs", async (c) => {
+    try {
+        const vehicleId = c.req.param("id");
+        
+        // Fetch specific category lists using KV prefixes or direct keys
+        const [history, maintenance] = await kv.mget([
+            `odometer-history:${vehicleId}`,
+            `maintenance-logs:${vehicleId}`
+        ]);
+        
+        // For fuel entries which are stored as individual items
+        const { data: fuelData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "fuel-entry:%")
+            .eq("value->>vehicleId", vehicleId);
+            
+        const fuelEntries = (fuelData || []).map((d: any) => d.value);
+
+        return c.json({
+            odometerHistory: history || [],
+            maintenanceLogs: maintenance || [],
+            fuelEntries: fuelEntries || []
+        });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 // Health check endpoint
 app.get("/make-server-37f42386/health", (c) => {
   return c.json({ status: "ok" });
 });
+
+app.route("/", fuelApp);
+app.route("/", auditApp);
+app.route("/", safetyApp);
+app.route("/", syncApp);
 
 // Google Maps Config Endpoint
 app.get("/make-server-37f42386/maps-config", (c) => {
@@ -1629,6 +1751,20 @@ app.post("/make-server-37f42386/expenses/reject", async (c) => {
 });
 
 // Maintenance Logs Endpoints
+app.get("/make-server-37f42386/maintenance-logs", async (c) => {
+  try {
+    const { data: logsData } = await supabase
+      .from("kv_store_37f42386")
+      .select("value")
+      .like("key", "maintenance-log:%");
+    
+    const logs = (logsData || []).map(d => d.value);
+    return c.json(logs);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 app.get("/make-server-37f42386/maintenance-logs/:vehicleId", async (c) => {
   try {
     const vehicleId = c.req.param("vehicleId");
@@ -4678,6 +4814,64 @@ app.delete("/make-server-37f42386/fuel-entries/:id", async (c) => {
     const id = c.req.param("id");
     try {
         await kv.del(`fuel_entry:${id}`);
+        return c.json({ success: true });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// --- PERSISTENT ALERTS (Phase 1) ---
+
+app.get("/make-server-37f42386/notifications/list", async (c) => {
+    try {
+        const userId = c.req.query("userId");
+        const vehicleId = c.req.query("vehicleId");
+        
+        let query = supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "alert:%");
+
+        if (userId) query = query.eq("value->>driverId", userId);
+        if (vehicleId) query = query.eq("value->>vehicleId", vehicleId);
+
+        const { data, error } = await query.order("value->>timestamp", { ascending: false });
+        if (error) throw error;
+
+        return c.json(data?.map((d: any) => d.value) || []);
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/notifications/push", async (c) => {
+    try {
+        const alert = await c.req.json();
+        if (!alert.id) alert.id = crypto.randomUUID();
+        if (!alert.timestamp) alert.timestamp = new Date().toISOString();
+        alert.isRead = false;
+
+        // Key: alert:{id}
+        await kv.set(`alert:${alert.id}`, alert);
+        return c.json({ success: true, data: alert });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.post("/make-server-37f42386/notifications/acknowledge", async (c) => {
+    try {
+        const { id, isDismissed } = await c.req.json();
+        const alert = await kv.get(`alert:${id}`);
+        if (!alert) return c.json({ error: "Alert not found" }, 404);
+
+        if (isDismissed) {
+            await kv.del(`alert:${id}`);
+        } else {
+            alert.isRead = true;
+            await kv.set(`alert:${id}`, alert);
+        }
+        
         return c.json({ success: true });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);

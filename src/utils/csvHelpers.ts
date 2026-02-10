@@ -193,6 +193,27 @@ export function extractReportDate(file: FileData): string | undefined {
     return undefined; // Default to "Upload Date" later if undefined
 }
 
+// Phase 3: Audit Locking Helpers
+export function isRecordLocked(dateStr: string, anchorDateStr?: string): boolean {
+    if (!anchorDateStr) return false;
+    const recordDate = new Date(dateStr);
+    const anchorDate = new Date(anchorDateStr);
+    return recordDate < anchorDate;
+}
+
+export function validateImmutableRecord(row: ParsedRow, lastAnchorDate?: string, override: boolean = false): { valid: boolean; error?: string } {
+    if (!lastAnchorDate || override) return { valid: true };
+    
+    const dateField = row['date'] || row['Trip request time'] || row['Date'];
+    if (dateField && isRecordLocked(String(dateField), lastAnchorDate)) {
+        return { 
+            valid: false, 
+            error: `Historical Lock: Record precedes Verified Anchor (${lastAnchorDate}). Modification requires Audit Override.` 
+        };
+    }
+    return { valid: true };
+}
+
 export function detectFileType(headers: string[], fileName: string = ''): FileData['type'] {
     const has = (keyword: string) => headers.some(h => h.toLowerCase().includes(keyword.toLowerCase()));
     const name = fileName.toLowerCase();
@@ -1959,36 +1980,75 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             efficiency: (amount > 0 && distance > 0) ? amount / distance : 0,
             ...t
         } as Trip;
-    }).filter(t => {
-        // Phase 1: Logic Correction (Phantom Trip Filtering)
-        // REFINED: Only filter if it's truly empty (No money AND No distance).
-        // If it has money (> $5), we must keep it for accounting even if distance is 0 (e.g. Tips, Adjustments, or Glitched GPS).
-        // If it has distance, we keep it.
+    });
+
+    // Phase 1: Logic Correction (Phantom Trip Filtering)
+    const finalizedTrips = mergedTrips.filter(t => {
         const hasMoney = Math.abs(t.amount) > 5;
         const hasDistance = t.distance && t.distance > 0.05;
-        
-        // Keep if it has either money or distance
-        // The only "Phantom" is something with NO money AND NO distance (and usually Completed status implies it should have one)
         if (hasMoney || hasDistance) return true;
-        
-        // If we are here, it has no money and no distance.
-        // If it's Cancelled, that's normal (cancelled before start).
-        // If it's Completed but has no money/distance, it's likely a CSV artifact or header row.
         if (t.status === 'Completed') return false;
-        
         return true;
     });
 
-    // --- PHASE 4: AGGREGATE ANALYTICS ---
-    const tripAnalytics: TripAnalytics = {
-        geographic: { topPickups: [], topDropoffs: [], mostProfitableRoutes: [] },
-        patterns: { avgDistance: 0, avgDuration: 0, peakHours: [] },
-        cancellations: { rate: 0, byHour: [] }
+    // --- PHASE 3: CROSS-PROVIDER DUPLICATE DETECTION (Step 3.1) ---
+    // Heuristic: Same Driver + Overlapping Request/Dropoff Window = Potential Conflict
+    // We sort by requestTime to optimize the scan
+    finalizedTrips.sort((a, b) => {
+        const timeA = new Date(a.requestTime || a.date).getTime();
+        const timeB = new Date(b.requestTime || b.date).getTime();
+        return timeA - timeB;
+    });
+
+    for (let i = 0; i < finalizedTrips.length; i++) {
+        const tripA = finalizedTrips[i];
+        if (!tripA.driverId || tripA.driverId === 'unknown') continue;
+        
+        const startA = new Date(tripA.requestTime || tripA.date).getTime();
+        // Assume 20 min duration if dropoffTime is missing for overlap calculation
+        const endA = tripA.dropoffTime ? new Date(tripA.dropoffTime).getTime() : startA + (20 * 60000);
+
+        for (let j = i + 1; j < finalizedTrips.length; j++) {
+            const tripB = finalizedTrips[j];
+            if (!tripB.driverId || tripB.driverId === 'unknown' || tripA.driverId !== tripB.driverId) continue;
+
+            const startB = new Date(tripB.requestTime || tripB.date).getTime();
+            const endB = tripB.dropoffTime ? new Date(tripB.dropoffTime).getTime() : startB + (20 * 60000);
+
+            // Temporal Overlap Check
+            const hasOverlap = Math.max(startA, startB) < Math.min(endA, endB);
+            
+            if (hasOverlap) {
+                const isCrossProvider = tripA.platform !== tripB.platform;
+                console.log(`[Duplicate Audit] Overlap detected for ${tripA.driverId} between ${tripA.platform} and ${tripB.platform}`);
+                
+                if (!tripA.metadata) tripA.metadata = {};
+                if (!tripB.metadata) tripB.metadata = {};
+                
+                tripA.metadata.isDuplicateCandidate = true;
+                tripA.metadata.conflictSource = tripB.id;
+                tripA.metadata.conflictProvider = tripB.platform;
+                
+                tripB.metadata.isDuplicateCandidate = true;
+                tripB.metadata.conflictSource = tripA.id;
+                tripB.metadata.conflictProvider = tripA.platform;
+            }
+
+            // Optimization: If tripB starts more than 2 hours after tripA ends, no more overlaps possible in sorted list
+            if (startB > endA + (2 * 3600000)) break;
+        }
+    }
+
+    // --- AGGREGATE ANALYTICS ---
+    const tripAnalytics = {
+        geographic: { topPickups: [] as any[], topDropoffs: [] as any[], mostProfitableRoutes: [] as any[] },
+        patterns: { avgDistance: 0, avgDuration: 0, peakHours: [] as any[] },
+        cancellations: { rate: 0, byHour: [] as any[] }
     };
 
-    if (mergedTrips.length > 0) {
+    if (finalizedTrips.length > 0) {
         // 1. Patterns
-        const completedTrips = mergedTrips.filter(t => t.status === 'Completed');
+        const completedTrips = finalizedTrips.filter(t => t.status === 'Completed');
         const totalDist = completedTrips.reduce((acc, t) => acc + (t.distance || 0), 0);
         const totalDur = completedTrips.reduce((acc, t) => acc + (t.duration || 0), 0);
         
@@ -1997,7 +2057,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
         // Peak Hours
         const hourCounts: Record<number, number> = {};
-        mergedTrips.forEach(t => {
+        finalizedTrips.forEach(t => {
             const h = t.timeOfDay ?? new Date(t.date).getHours();
             hourCounts[h] = (hourCounts[h] || 0) + 1;
         });
@@ -2008,7 +2068,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         // 2. Geographic
         const areaCounts = (key: 'pickupArea' | 'dropoffArea') => {
             const counts: Record<string, number> = {};
-            mergedTrips.forEach(t => {
+            finalizedTrips.forEach(t => {
                 const area = t[key];
                 if (area && area !== 'Unknown') counts[area] = (counts[area] || 0) + 1;
             });
@@ -2036,11 +2096,11 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             .slice(0, 5);
 
         // 3. Cancellations
-        const cancelled = mergedTrips.filter(t => t.status === 'Cancelled').length;
-        tripAnalytics.cancellations.rate = (cancelled / mergedTrips.length) * 100;
+        const cancelled = finalizedTrips.filter(t => t.status === 'Cancelled').length;
+        tripAnalytics.cancellations.rate = (cancelled / finalizedTrips.length) * 100;
         
         const cancelHours: Record<number, number> = {};
-        mergedTrips.filter(t => t.status === 'Cancelled').forEach(t => {
+        finalizedTrips.filter(t => t.status === 'Cancelled').forEach(t => {
              const h = t.timeOfDay ?? new Date(t.date).getHours();
              cancelHours[h] = (cancelHours[h] || 0) + 1;
         });
@@ -2049,144 +2109,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             .sort((a, b) => b.count - a.count);
     }
 
-    // --- PHASE 6: AGGREGATION & SYNTHESIS ---
-    
-    // REVENUE CALCULATION (Option 2: Bottom-Up)
-    // We ignore the "Summary" columns from the CSVs to avoid double-counting.
-    // Instead, we sum the actual transactions we processed.
-    
-    // Option 2: The Ledger Method Logic
-    // "Sum up all values... The result will be a negative number... multiply by -1"
-    // We sum the signed values from tripMap first to handle corrections (e.g. -10 + 10 = 0), then take Absolute.
-    const ledgerSum = Array.from(tripMap.values()).reduce((sum, t) => sum + (t.cashCollected || 0), 0);
-    const calculatedCashExposure = Math.abs(ledgerSum);
-    
-    const calculatedTotalEarnings = mergedTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
-    // const calculatedCashExposure = mergedTrips.reduce((sum, t) => sum + (t.cashCollected || 0), 0); // Replaced by signed ledger sum above
-    const calculatedNetFare = mergedTrips.reduce((sum, t) => sum + (t.netTransaction || 0), 0);
-
-    // If no explicit organization report, create a synthetic one from the bottom-up data
-    if (organizationMetrics.length === 0 && (driverMetrics.length > 0 || vehicleMetrics.length > 0 || mergedTrips.length > 0)) {
-         organizationMetrics.push({
-             periodStart: new Date().toISOString(), 
-             periodEnd: new Date().toISOString(),
-             balanceStart: 0,
-             balanceEnd: 0,
-             totalEarnings: calculatedTotalEarnings,
-             netFare: calculatedNetFare,
-             periodChange: 0,
-             fleetProfitMargin: 0,
-             cashPosition: 0
-         });
-    } else if (organizationMetrics.length > 0) {
-        // Sort Organization Metrics to prioritize valid ledger data (Largest magnitude Balance)
-        // This handles cases where multiple files might be detected as Org files, but some are empty.
-        organizationMetrics.sort((a, b) => (Math.abs(b.balanceEnd || 0) - Math.abs(a.balanceEnd || 0)));
-
-        // If we DO have summary reports, we use them as the primary source of truth.
-        // We only backfill from calculated numbers if the summary is missing data.
-        organizationMetrics.forEach(om => {
-            // Prioritize Summary Report Values (Source of Truth)
-            // Only backfill if the summary report was incomplete (e.g. older format)
-            if (!om.totalEarnings) om.totalEarnings = calculatedTotalEarnings;
-            if (!om.netFare) om.netFare = calculatedNetFare;
-            
-            // FIX: Respect the totalCashExposure from the summary report if it exists.
-            // This fixes the "Cash Collected in Hand" discrepancy where transaction-summing differs from the official statement.
-            // Priority Order:
-            // 1. Payment Organization Report (Direct Statement)
-            // 2. Vehicle Performance Report (Aggregated Cash)
-            // 3. Calculated Sum (Transaction Logs - Prone to noise/adjustments)
-            if (om.totalCashExposure === undefined || om.totalCashExposure === 0) {
-                 if (sumVehicleCash > 0) {
-                     om.totalCashExposure = sumVehicleCash;
-                 } else {
-                     om.totalCashExposure = calculatedCashExposure;
-                 }
-            }
-            
-            // Re-calculate derived metrics based on the final values
-            const earnings = om.totalEarnings;
-            const cash = om.totalCashExposure || 0;
-            const net = om.netFare || 0;
-            
-            om.cashPosition = earnings > 0 ? cash / earnings : 0;
-            om.fleetProfitMargin = earnings > 0 ? (net / earnings) * 100 : 0;
-        });
-    }
-
-    // Populate Phase 6 fields
-    if (organizationMetrics.length > 0) {
-        const om = organizationMetrics[0];
-        
-        // 1. Counts
-        const activeDrivers = new Set(driverMetrics.map(d => d.driverId)).size || new Set(mergedTrips.map(t => t.driverId).filter(id => id && id !== 'unknown' && id !== 'fleet-org-ignore')).size;
-        const activeVehicles = new Set(vehicleMetrics.map(v => v.vehicleId)).size || new Set(mergedTrips.map(t => t.vehicleId).filter(Boolean)).size;
-        
-        // FIX: Only count COMPLETED trips for the KPI to match user expectation (42 trips vs 50 requests)
-        const totalTrips = mergedTrips.filter(t => t.status === 'Completed').length; 
-
-        // 2. Fleet Utilization (Average of vehicle utilization)
-        let avgUtilization = 0;
-        if (vehicleMetrics.length > 0) {
-            const totalUtil = vehicleMetrics.reduce((sum, v) => sum + (v.utilizationRate || 0), 0);
-            avgUtilization = totalUtil / vehicleMetrics.length;
-        }
-
-        // 3. Total Cash Exposure (Risk) - Already calculated above
-        
-        // 4. Update Metric Object
-        om.activeDrivers = activeDrivers;
-        om.activeVehicles = activeVehicles;
-        om.totalTrips = totalTrips;
-        om.fleetUtilization = avgUtilization;
-        // removed unconditional overwrite of totalCashExposure
-    }
-
-    // Phase 7: Apply Uniform Average Enroute & Open Distance & Unavailable Distance (Source of Truth Strategy)
-    // 1. Group Time & Distance Data by Driver
-    const driverTimeMap = new Map<string, { enroute: number, open: number, unavailable: number }>();
-    driverTimeData.forEach(d => {
-        const current = driverTimeMap.get(d.driverUuid) || { enroute: 0, open: 0, unavailable: 0 };
-        current.enroute += d.enrouteDistance;
-        current.open += d.openDistance;
-        current.unavailable += d.unavailableDistance;
-        driverTimeMap.set(d.driverUuid, current);
-    });
-
-    // 2. Count Completed Trips per Driver
-    const driverTripCounts = new Map<string, number>();
-    mergedTrips.forEach(t => {
-        if (t.status === 'Completed' && t.driverId) {
-            driverTripCounts.set(t.driverId, (driverTripCounts.get(t.driverId) || 0) + 1);
-        }
-    });
-
-    // 3. Calculate Average and Assign to Trips
-    mergedTrips.forEach(t => {
-        if (t.status === 'Completed' && t.driverId) {
-            const totals = driverTimeMap.get(t.driverId);
-            const totalTrips = driverTripCounts.get(t.driverId);
-            
-            if (totals && totalTrips && totalTrips > 0) {
-                // Determine Uniform Average (e.g. 279.52 / 83 = 3.37 km)
-                if (totals.enroute > 0) {
-                     t.normalizedEnrouteDistance = totals.enroute / totalTrips;
-                }
-                // Determine Uniform Average Open (e.g. 75.0 / 83 = 0.90 km)
-                if (totals.open > 0) {
-                     t.normalizedOpenDistance = totals.open / totalTrips;
-                }
-                // Determine Uniform Average Unavailable
-                if (totals.unavailable > 0) {
-                     t.normalizedUnavailableDistance = totals.unavailable / totalTrips;
-                }
-            }
-        }
-    });
-
     return {
-        trips: [...mergedTrips, ...genericTrips],
+        trips: [...finalizedTrips, ...genericTrips],
         driverMetrics,
         vehicleMetrics,
         rentalContracts,

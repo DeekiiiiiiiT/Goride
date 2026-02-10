@@ -96,16 +96,11 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 editReason: initialData.metadata?.editReason || '',
             });
             
-            // Extract Time
-            try {
-                const d = new Date(initialData.date);
-                if (!isNaN(d.getTime())) {
-                    const hours = d.getHours().toString().padStart(2, '0');
-                    const minutes = d.getMinutes().toString().padStart(2, '0');
-                    setTime(`${hours}:${minutes}`);
-                }
-            } catch (e) {
-                console.error("Error parsing date for time extraction", e);
+            // Initialize Time from data
+            if (initialData.time) {
+                // Ensure format is HH:mm for the input
+                setTime(initialData.time.substring(0, 5));
+            } else {
                 setTime('');
             }
         } else {
@@ -201,26 +196,14 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             return;
         }
 
-        // Combine Date and Time
-        let fullDate = formData.date;
-        let finalTime = undefined;
-
-        if (time) {
-            try {
-                const dateObj = new Date(`${formData.date}T${time}`);
-                if (!isNaN(dateObj.getTime())) {
-                    fullDate = dateObj.toISOString().split('T')[0];
-                    finalTime = `${time}:00`;
-                }
-            } catch (e) {
-                console.error("Error constructing date time", e);
-            }
-        }
+        // Use raw strings to prevent timezone shifting
+        const fullDate = formData.date;
+        const finalTime = time ? (time.length === 5 ? `${time}:00` : time) : initialData?.time;
 
         const entry: FuelEntry = {
             ...initialData,
             id: initialData?.id || crypto.randomUUID(),
-            date: fullDate,
+            date: fullDate as string,
             time: finalTime,
             type: formData.type === 'Manual_Entry' ? 'Fuel_Manual_Entry' : formData.type,
             amount: Number(formData.amount),

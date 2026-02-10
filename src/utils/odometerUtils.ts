@@ -19,23 +19,28 @@ export const deduplicateEntries = (entries: UnifiedOdometerEntry[]): UnifiedOdom
     const PRIORITY = { 'fuel': 4, 'service': 3, 'checkin': 2, 'manual': 1 };
 
     entries.forEach(entry => {
-        // Create a unique key based on time (minute precision) and value
-        // We trim seconds/milliseconds to handle slight drift if needed, or keep exact ISO if strict.
-        // Requirement says "exact timestamp + value". Let's assume ISO string exact match for now, 
-        // but maybe safer to use getTime()
         const time = new Date(entry.date).getTime();
         const key = `${time}-${entry.value}`;
 
         if (uniqueMap.has(key)) {
             const existing = uniqueMap.get(key)!;
+            
+            // Priority 1: Explicit Anchor Point
+            if (entry.isAnchorPoint && !existing.isAnchorPoint) {
+                uniqueMap.set(key, entry);
+                return;
+            }
+            if (!entry.isAnchorPoint && existing.isAnchorPoint) {
+                return;
+            }
+
+            // Priority 2: Source Priority
             const existingPriority = PRIORITY[existing.source] || 0;
             const newPriority = PRIORITY[entry.source] || 0;
 
             if (newPriority > existingPriority) {
-                // Replace with higher priority source
                 uniqueMap.set(key, entry);
             }
-            // Else, keep existing
         } else {
             uniqueMap.set(key, entry);
         }

@@ -30,7 +30,8 @@ export const ODOMETER_CSV_COLUMNS: CsvColumn<OdometerReading>[] = [
     { key: 'date', label: 'date' },
     { key: 'vehicleId', label: 'vehicleId' },
     { key: 'value', label: 'value' },
-    { key: 'source', label: 'source' }
+    { key: 'source', label: 'source' },
+    { key: 'isVerified', label: 'isVerified' }
 ];
 
 export const CHECKIN_CSV_COLUMNS: CsvColumn<any>[] = [

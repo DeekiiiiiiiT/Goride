@@ -1,11 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from "../ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { 
   Calendar,
   Download,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  LayoutDashboard,
+  FileSpreadsheet,
+  FileText
 } from "lucide-react";
 import { startOfWeek } from "date-fns";
 import { 
@@ -27,7 +30,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { DashboardMetricsEngine } from '../../utils/dashboardMetricsEngine';
-import { Trip, Notification, DriverMetrics, VehicleMetrics, OrganizationMetrics, TripAnalytics, DashboardMetrics, DashboardAlert, ImportBatch } from '../../types/data';
+import { Trip, Notification, DriverMetrics, VehicleMetrics, DashboardAlert } from '../../types/data';
 import { exportToCSV } from '../../utils/csvHelpers';
 import { AlertEngine } from '../../utils/alertEngine'; // Phase 8 Logic
 import { DriverPerformanceView } from './DriverPerformanceView';
@@ -45,7 +48,6 @@ import { PredictiveAnalyticsPanel } from './PredictiveAnalyticsPanel';
 import { AlertsConfigView } from './AlertsConfigView';
 import { CheckInReviewModal } from './CheckInReviewModal';
 import { useAdminCheckIn } from '../../hooks/useAdminCheckIn';
-import { FileSpreadsheet, FileText, LayoutDashboard } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 
 export function Dashboard() {
@@ -94,6 +96,12 @@ export function Dashboard() {
     staleTime: 1000 * 60 * 1,
   });
 
+  const { data: persistentAlerts = [] } = useQuery({
+    queryKey: ['persistent-alerts'],
+    queryFn: () => api.getPersistentAlerts(),
+    staleTime: 1000 * 60 * 1,
+  });
+
   const { data: rules = [] } = useQuery({
     queryKey: ['alertRules'],
     queryFn: () => api.getAlertRules(),
@@ -120,29 +128,17 @@ export function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
+  const { data: maintenanceLogs = [] } = useQuery({
+    queryKey: ['maintenanceLogs'],
+    queryFn: () => api.getAllMaintenanceLogs(),
+    staleTime: 1000 * 60 * 5,
+  });
+
   const loading = statsLoading || tripsLoading || driversLoading || vehiclesLoading || batchesLoading || notificationsLoading;
-
-  // Phase 7: Review Modal Helpers
-  const selectedCheckIn = useMemo(() => {
-      return checkIns.find((c: any) => c.id === reviewCheckInId);
-  }, [checkIns, reviewCheckInId]);
-  
-  const selectedDriverName = useMemo(() => {
-      if (!selectedCheckIn) return '';
-      return driverMetrics.find((d: any) => d.driverId === selectedCheckIn.driverId)?.driverName || 'Unknown Driver';
-  }, [selectedCheckIn, driverMetrics]);
-
-  const handleReviewSubmit = async (id: string, status: 'approved' | 'rejected', notes?: string) => {
-      await reviewCheckIn(id, status, notes);
-      queryClient.invalidateQueries({ queryKey: ['checkIns'] });
-      setReviewCheckInId(null);
-      toast.success(`Check-In ${status === 'approved' ? 'Approved' : 'Rejected'}`);
-  };
 
   // 2. Derived State (Memoized)
   const fleetMetrics = useMemo(() => {
     if (serverStats) {
-      // Map server response to DashboardMetrics
       return {
         timestamp: new Date().toISOString(),
         date: serverStats.date,
@@ -163,24 +159,22 @@ export function Dashboard() {
         lastUpdateTime: new Date().toISOString()
       };
     } else if (trips.length > 0) {
-       // Fallback to client-side engine
        return DashboardMetricsEngine.calculateMetrics(trips, driverMetrics);
     }
     return null;
   }, [serverStats, trips, driverMetrics, vehicleMetrics]);
 
   const { fleetAlerts, notifications } = useMemo(() => {
-     // Generate Real-time Alerts (Phase 4 Engine)
      const realAlerts = AlertEngine.generateDashboardAlerts(
         driverMetrics, 
         vehicleMetrics, 
         trips,
         fuelEntries,
         adjustments,
-        checkIns
+        checkIns,
+        maintenanceLogs
      );
      
-     // Merge AI Insights (Notifications) into Dashboard Alerts
      const aiAlerts: DashboardAlert[] = apiNotifications.map(n => ({
         id: n.id,
         definitionId: 'ai_insight',
@@ -192,10 +186,7 @@ export function Dashboard() {
         active: true
      }));
 
-     // Check Rules - DYNAMIC LOGIC
      const localAlerts = AlertEngine.checkRules(rules, driverMetrics, trips);
-     
-     // Convert localAlerts (Notification[]) to DashboardAlert[]
      const ruleBasedAlerts: DashboardAlert[] = localAlerts.map(n => ({
         id: n.id,
         definitionId: 'custom_rule',
@@ -207,19 +198,58 @@ export function Dashboard() {
         active: true
      }));
 
-     // Update Fleet Alerts State (Dashboard Panel)
      const combinedAlerts = [...realAlerts, ...aiAlerts, ...ruleBasedAlerts].sort((a,b) => 
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
      );
 
-     // Update Notifications State (Executive View)
      const allNotifications = trips.length > 0 
         ? [...localAlerts, ...apiNotifications].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         : apiNotifications;
       
      return { fleetAlerts: combinedAlerts, notifications: allNotifications };
+  }, [driverMetrics, vehicleMetrics, trips, apiNotifications, rules, fuelEntries, adjustments, checkIns, maintenanceLogs]);
 
-  }, [driverMetrics, vehicleMetrics, trips, apiNotifications, rules]);
+  // Phase 1 Backbone: Sync critical alerts to server persistent store (Side-effect)
+  useEffect(() => {
+    const criticalToSync = fleetAlerts.filter(a => a.severity === 'critical');
+    if (criticalToSync.length > 0) {
+        criticalToSync.forEach(async (alert) => {
+            const alreadyInPersistent = apiNotifications.some(n => n.id === alert.id) || 
+                                       persistentAlerts.some((pa: any) => pa.id === alert.id);
+            if (!alreadyInPersistent) {
+                try {
+                    await api.pushAlert({
+                        id: alert.id,
+                        type: 'alert',
+                        severity: 'critical',
+                        title: alert.title,
+                        message: alert.description,
+                        timestamp: alert.timestamp,
+                        metadata: alert.metadata
+                    });
+                } catch (e) {
+                    console.error("Failed to sync critical alert", e);
+                }
+            }
+        });
+    }
+  }, [fleetAlerts, apiNotifications, persistentAlerts]);
+
+  const selectedCheckIn = useMemo(() => {
+      return checkIns.find((c: any) => c.id === reviewCheckInId);
+  }, [checkIns, reviewCheckInId]);
+  
+  const selectedDriverName = useMemo(() => {
+      if (!selectedCheckIn) return '';
+      return driverMetrics.find((d: any) => d.driverId === selectedCheckIn.driverId)?.driverName || 'Unknown Driver';
+  }, [selectedCheckIn, driverMetrics]);
+
+  const handleReviewSubmit = async (id: string, status: 'approved' | 'rejected', notes?: string) => {
+      await reviewCheckIn(id, status, notes);
+      queryClient.invalidateQueries({ queryKey: ['checkIns'] });
+      setReviewCheckInId(null);
+      toast.success(`Check-In ${status === 'approved' ? 'Approved' : 'Rejected'}`);
+  };
 
   const handleViewChange = (val: string) => {
       setViewMode(val);
@@ -234,27 +264,19 @@ export function Dashboard() {
   };
 
   const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    queryClient.invalidateQueries({ queryKey: ['trips'] });
-    queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });
-    queryClient.invalidateQueries({ queryKey: ['vehicleMetrics'] });
-    queryClient.invalidateQueries({ queryKey: ['batches'] });
-    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    queryClient.invalidateQueries();
     toast.success("Refreshing dashboard data...");
   };
 
   const handleExport = (type: 'trips' | 'financials' | 'drivers') => {
     if (type === 'trips') {
       exportToCSV(trips, `trips_export_${new Date().toISOString().split('T')[0]}`);
-    } else if (type === 'financials') {
-      exportToCSV([], `financials_export`);
     } else if (type === 'drivers') {
       exportToCSV(driverMetrics, `driver_performance`);
     }
   };
   
   const handleNavigate = (page: string) => {
-      console.log(`Navigate to ${page}`);
       if (page === 'drivers') setActiveTab('drivers');
       if (page === 'vehicles') setActiveTab('vehicles');
       if (page === 'transactions') setActiveTab('financials');
@@ -278,7 +300,6 @@ export function Dashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-           {/* Phase 6: Custom Views */}
            <Select value={viewMode} onValueChange={handleViewChange}>
             <SelectTrigger className="w-[160px] h-9">
               <LayoutDashboard className="w-4 h-4 mr-2 text-slate-500"/>
@@ -297,7 +318,6 @@ export function Dashboard() {
 
            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block" />
 
-           {/* Phase 5: Quick Actions */}
            <BroadcastMessageModal />
            <MeetingSchedulerModal />
            <DailyBriefingModal />
@@ -323,16 +343,10 @@ export function Dashboard() {
               <DropdownMenuItem onClick={() => handleExport('financials')}>
                 <FileText className="mr-2 h-4 w-4 text-slate-600" /> PDF Summary
               </DropdownMenuItem>
-              
               <DropdownMenuSeparator />
-              
               <DropdownMenuLabel>View Detailed Reports</DropdownMenuLabel>
-              <DropdownMenuItem>
-                 Live Operations Report
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                 Driver Performance Summary
-              </DropdownMenuItem>
+              <DropdownMenuItem>Live Operations Report</DropdownMenuItem>
+              <DropdownMenuItem>Driver Performance Summary</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -350,21 +364,15 @@ export function Dashboard() {
           <TabsTrigger value="health">System Health</TabsTrigger>
         </TabsList>
         
-        {/* PHASE 2: New Three-Column Dashboard Layout */}
         <TabsContent value="overview" className="space-y-6">
            {fleetMetrics && (
                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[800px] md:h-[600px]">
-                   {/* Left Column: Key Metrics (20%) */}
                    <div className="md:col-span-3 h-full overflow-y-auto pr-1">
                        <FleetMetricCards metrics={fleetMetrics} trips={trips} onNavigate={handleNavigate} />
                    </div>
-
-                   {/* Middle Column: Map (50%) */}
                    <div className="md:col-span-6 h-full">
                        <FleetMap vehicleMetrics={vehicleMetrics} trips={trips} />
                    </div>
-
-                   {/* Right Column: Alerts & Leaderboard (30%) */}
                    <div className="md:col-span-3 h-full overflow-y-auto pl-1">
                        <FleetAlertsPanel 
                            alerts={fleetAlerts} 
@@ -378,7 +386,6 @@ export function Dashboard() {
            )}
         </TabsContent>
 
-        {/* PHASE 7.1: Executive Dashboard View */}
         <TabsContent value="executive" className="space-y-6">
           <ExecutiveDashboard 
             trips={trips}
@@ -390,25 +397,20 @@ export function Dashboard() {
           />
         </TabsContent>
 
-        {/* PHASE 7.3: Financial Dashboard View */}
         <TabsContent value="financials" className="space-y-6">
           <FinancialsView trips={trips} />
         </TabsContent>
 
-        {/* PHASE 7.2: Driver Performance Dashboard View */}
         <TabsContent value="drivers" className="space-y-6">
           <DriverPerformanceView trips={trips} driverMetrics={driverMetrics} />
         </TabsContent>
 
-        {/* PHASE 7.4: Vehicle Dashboard View */}
         <TabsContent value="vehicles" className="space-y-6">
           <VehiclePerformanceView trips={trips} vehicleMetrics={vehicleMetrics} />
         </TabsContent>
 
-        {/* PHASE 8: Alerts & Configuration View */}
         <TabsContent value="alerts" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                 {/* Live Alerts Panel */}
                  <div className="h-[600px] overflow-hidden rounded-lg border bg-white shadow-sm">
                      {fleetMetrics && (
                         <FleetAlertsPanel 
@@ -420,19 +422,16 @@ export function Dashboard() {
                         />
                      )}
                  </div>
-                 {/* Rule Configuration */}
                  <div>
                     <AlertsConfigView />
                  </div>
             </div>
         </TabsContent>
 
-        {/* PHASE 6: Predictive Analytics View */}
         <TabsContent value="analytics" className="space-y-6">
            <PredictiveAnalyticsPanel trips={trips} />
         </TabsContent>
 
-        {/* PHASE 9.1: System Health View */}
         <TabsContent value="health" className="space-y-6">
           <SystemHealthView 
              trips={trips}
@@ -444,7 +443,6 @@ export function Dashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Review Modal */}
       {selectedCheckIn && (
           <CheckInReviewModal 
               isOpen={!!selectedCheckIn}

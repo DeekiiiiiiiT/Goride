@@ -184,7 +184,8 @@ export const calculateDashboardKPIs = (logs: FuelEntry[], regionalMinPrice: numb
   // Potential Savings
   // Based on (Avg Price Paid This Week - Regional Min Price) * Total Volume
   // If user paid exactly min price, savings potential is 0.
-  const potentialSavings = (avgPriceThisWeek - regionalMinPrice) * totalVolumeThisWeek;
+  // If no regional min price is available, savings potential is 0.
+  const potentialSavings = (regionalMinPrice > 0) ? (avgPriceThisWeek - regionalMinPrice) * totalVolumeThisWeek : 0;
 
   return {
     avgPriceThisWeek,

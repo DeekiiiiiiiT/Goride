@@ -105,16 +105,18 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-orange-100 rounded-lg">
-                <Fuel className="h-5 w-5 text-orange-600" />
+        <DialogHeader className="space-y-3 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-orange-100 rounded-2xl">
+                <Fuel className="h-6 w-6 text-orange-600" />
             </div>
-            <DialogTitle>Log Fuel Purchase</DialogTitle>
+            <div>
+                <DialogTitle className="text-xl font-bold">Log Fuel Purchase</DialogTitle>
+                <DialogDescription className="text-xs">
+                    Record your fuel details. Reimbursements are processed weekly.
+                </DialogDescription>
+            </div>
           </div>
-          <DialogDescription>
-            Record your fuel details. Reimbursements are processed weekly.
-          </DialogDescription>
         </DialogHeader>
         
         {/* Phase 4: Tank Progress Awareness */}
@@ -153,29 +155,29 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
           
           {/* Payment Method Selection */}
           <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
-            <Label className="text-base font-semibold">How did you pay?</Label>
+            <Label className="text-base font-bold">How did you pay?</Label>
             <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="grid gap-3">
                 
-                <Label className={`flex items-start space-x-3 p-3 rounded-md border cursor-pointer transition-all ${paymentMethod === 'reimbursement' ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/20' : 'border-slate-200 dark:border-slate-700'}`}>
-                    <RadioGroupItem value="reimbursement" id="pm-reimbursement" className="mt-1" />
+                <Label className={`flex items-start space-x-3 p-4 rounded-xl border cursor-pointer transition-all min-h-[70px] ${paymentMethod === 'reimbursement' ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <RadioGroupItem value="reimbursement" id="pm-reimbursement" className="mt-1 h-5 w-5" />
                     <div className="grid gap-1">
-                        <span className="font-medium text-slate-900 dark:text-slate-100">Cash (Request Reimbursement)</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">Cash (Request Reimbursement)</span>
                         <span className="text-xs text-slate-500">I paid with my own money. Please pay me back.</span>
                     </div>
                 </Label>
 
-                <Label className={`flex items-start space-x-3 p-3 rounded-md border cursor-pointer transition-all ${paymentMethod === 'card' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-700'}`}>
-                    <RadioGroupItem value="card" id="pm-card" className="mt-1" />
+                <Label className={`flex items-start space-x-3 p-4 rounded-xl border cursor-pointer transition-all min-h-[70px] ${paymentMethod === 'card' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <RadioGroupItem value="card" id="pm-card" className="mt-1 h-5 w-5" />
                     <div className="grid gap-1">
-                        <span className="font-medium text-slate-900 dark:text-slate-100">Fuel Card</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">Fuel Card</span>
                         <span className="text-xs text-slate-500">I used the company card (Fleet/Advance Card).</span>
                     </div>
                 </Label>
 
-                <Label className={`flex items-start space-x-3 p-3 rounded-md border cursor-pointer transition-all ${paymentMethod === 'personal' ? 'border-slate-400 bg-slate-100 dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700'}`}>
-                    <RadioGroupItem value="personal" id="pm-personal" className="mt-1" />
+                <Label className={`flex items-start space-x-3 p-4 rounded-xl border cursor-pointer transition-all min-h-[70px] ${paymentMethod === 'personal' ? 'border-slate-400 bg-slate-100 dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <RadioGroupItem value="personal" id="pm-personal" className="mt-1 h-5 w-5" />
                     <div className="grid gap-1">
-                        <span className="font-medium text-slate-900 dark:text-slate-100">Personal Expense</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">Personal Expense</span>
                         <span className="text-xs text-slate-500">This was for personal use. Do not reimburse.</span>
                     </div>
                 </Label>
@@ -185,16 +187,16 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
           <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="odometer">Odometer (km)</Label>
+                <Label htmlFor="odometer" className="text-sm font-semibold">Odometer (km)</Label>
                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-wider">Verified Anchor</span>
               </div>
               <div className="relative">
-                <Hash className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <Hash className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                 <Input 
                   id="odometer" 
                   type="number" 
-                  inputMode="decimal"
-                  className="pl-9 border-indigo-200 focus-visible:ring-indigo-500"
+                  inputMode="numeric"
+                  className="pl-9 h-11 text-base border-indigo-200 focus-visible:ring-indigo-500"
                   placeholder="e.g. 45320"
                   value={formData.odometer}
                   onChange={e => setFormData({...formData, odometer: e.target.value})}
@@ -206,28 +208,29 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="price">Price/Liter ($)</Label>
+              <Label htmlFor="price" className="text-sm font-semibold">Price/Liter ($)</Label>
               <Input 
                 id="price" 
                 type="number" 
                 inputMode="decimal"
                 step="0.001"
                 placeholder="0.000"
+                className="h-11 text-base"
                 value={formData.pricePerLiter}
                 onChange={e => setFormData({...formData, pricePerLiter: e.target.value})}
                 required 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cost">Cash Spent ($)</Label>
+              <Label htmlFor="cost" className="text-sm font-semibold">Cash Spent ($)</Label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <DollarSign className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                 <Input 
                   id="cost" 
                   type="number" 
                   inputMode="decimal"
                   step="0.01"
-                  className="pl-9"
+                  className="pl-9 h-11 text-base"
                   placeholder="e.g. 6500.00"
                   value={formData.totalCost}
                   onChange={e => setFormData({...formData, totalCost: e.target.value})}
@@ -237,9 +240,10 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 p-3 bg-slate-50 rounded-lg border border-slate-100">
+          <div className="flex items-center space-x-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
             <Checkbox 
                 id="full-tank" 
+                className="h-5 w-5"
                 checked={formData.isFullTank}
                 onCheckedChange={(checked) => setFormData({...formData, isFullTank: !!checked})}
             />
@@ -256,9 +260,9 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
             </div>
           </div>
 
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" className="bg-orange-600 hover:bg-orange-700" disabled={isUploading}>
+          <DialogFooter className="pt-4 flex-col sm:flex-row gap-3">
+            <Button type="button" variant="ghost" className="h-11 text-base w-full sm:w-auto" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" className="h-11 text-base w-full sm:flex-1 bg-orange-600 hover:bg-orange-700 font-bold" disabled={isUploading}>
                 {isUploading ? "Processing..." : (paymentMethod === 'reimbursement' ? "Request Reimbursement" : "Save Log")}
             </Button>
           </DialogFooter>

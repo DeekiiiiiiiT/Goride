@@ -122,6 +122,8 @@ export interface Vehicle {
       aerodynamicAids?: string;
       fuelEconomy?: string; // Storing as string to allow "24.6 km/L" format if user prefers, or mapped to numeric
       tankCapacity?: string; // Display string
+      estimatedRangeMin?: number;
+      estimatedRangeMax?: number;
       
       // Descriptions (keeping these for display if needed, but the form might just capture values)
       engineDescription?: string;
@@ -148,6 +150,7 @@ export interface OdometerReading {
   referenceId?: string; // ID of the service log, document, or trip batch
   imageUrl?: string; // Photo of the odometer
   isVerified: boolean;
+  isAnchorPoint?: boolean;
   isManagerVerified?: boolean;
   verifiedBy?: string; // Manager Name
   verifiedAt?: string;

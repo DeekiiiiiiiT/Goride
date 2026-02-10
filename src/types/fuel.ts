@@ -36,6 +36,11 @@ export interface FuelEntry {
   // Link to financial transaction
   transactionId?: string;
 
+  // Phase 1: Ledger Accounting & Threshold Cap
+  volumeContributed?: number; // How much of this receipt went into the specific cycle
+  isCarryover?: boolean; // If this entry was carried over from a previous overfill
+  carryoverVolume?: number; // The amount carried over to the NEXT cycle
+  
   // Phase 1 Refactor: Anchor Tracking
   anchorPeriodId?: string; // Links this entry to a specific odometer window
   reconciliationStatus?: 'Pending' | 'Verified' | 'Flagged' | 'Observing' | 'Archived';
@@ -167,6 +172,11 @@ export interface FuelCycle {
   resetType: 'Manual' | 'Auto_Soft' | 'Auto_Anomaly';
   startOdometer?: number;
   endOdometer?: number;
+  
+  // Phase 1: Threshold Cap & Reset
+  startingPercentage?: number;
+  isCapped?: boolean;
+  excessVolume?: number;
 }
 
 export type DisputeStatus = 'Open' | 'Resolved' | 'Rejected';

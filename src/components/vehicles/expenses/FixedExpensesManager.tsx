@@ -35,7 +35,7 @@ interface FixedExpensesManagerProps {
     vehicleId: string;
 }
 
-export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = ({ vehicleId }) => {
+export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.memo(({ vehicleId }) => {
     const [expenses, setExpenses] = useState<FixedExpenseConfig[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -414,4 +414,4 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = ({ vehi
             />
         </div>
     );
-};
+});

@@ -61,6 +61,8 @@ import { odometerService } from '../../../services/odometerService';
 import { mileageCalculationService } from '../../../services/mileageCalculationService';
 import { api } from '../../../services/api';
 import { TripManifestSheet } from './TripManifestSheet';
+import { SourceEvidenceModal } from './SourceEvidenceModal';
+import { AuditTrailModal } from './AuditTrailModal';
 
 interface MasterLogTimelineProps {
   vehicleId: string;
@@ -68,7 +70,7 @@ interface MasterLogTimelineProps {
   viewMode?: 'timeline' | 'anomalies';
 }
 
-export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId, refreshTrigger = 0, viewMode = 'timeline' }) => {
+const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAttributes<HTMLDivElement>> = ({ vehicleId, refreshTrigger = 0, viewMode = 'timeline', ...props }) => {
   const [history, setHistory] = useState<OdometerReading[]>([]);
   const [reports, setReports] = useState<Record<string, MileageReport>>({});
   const [loading, setLoading] = useState(true);
@@ -79,8 +81,27 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
   const [editTime, setEditTime] = useState('');
   const [editOdometer, setEditOdometer] = useState('');
   
+  const [evidenceData, setEvidenceData] = useState<any | null>(null);
+  const [auditTrailId, setAuditTrailId] = useState<string | null>(null);
   const [manifestGap, setManifestGap] = useState<{start: OdometerReading, end: OdometerReading} | null>(null);
   
+  // Virtualization State
+  const [visibleCount, setVisibleCount] = useState(20);
+  const bottomRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!bottomRef.current) return;
+    
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount(prev => prev + 20);
+      }
+    }, { threshold: 0.1 });
+    
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -185,23 +206,35 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
   }, [fetchTimelineData, refreshTrigger]);
 
   const handleReview = async (readingId: string, status: 'approved' | 'rejected') => {
+    // Optimistic Update
+    const originalHistory = [...history];
+    const itemIndex = history.findIndex(h => h.id === readingId);
+    if (itemIndex === -1) return;
+
+    const newHistory = [...history];
+    newHistory[itemIndex] = {
+        ...newHistory[itemIndex],
+        isVerified: status === 'approved',
+        isAnchorPoint: status === 'approved',
+        isManagerVerified: status === 'approved',
+        verifiedBy: 'Fleet Manager (Pending...)',
+        verifiedAt: new Date().toISOString()
+    };
+    setHistory(newHistory);
+    
     setReviewingId(readingId);
     try {
-      const reading = history.find(h => h.id === readingId);
-      if (!reading) return;
-
+      const reading = newHistory[itemIndex];
       const updatedReading: Partial<OdometerReading> = {
         ...reading,
-        isVerified: status === 'approved',
-        isManagerVerified: status === 'approved',
         verifiedBy: 'Fleet Manager',
-        verifiedAt: new Date().toISOString()
       };
 
       await api.addOdometerReading(updatedReading);
       toast.success(`Reading ${status === 'approved' ? 'approved' : 'flagged'}`);
-      fetchTimelineData();
+      // fetchTimelineData(); // Refresh in background if needed, but optimistic UI is enough for now
     } catch (error) {
+      setHistory(originalHistory);
       toast.error("Failed to update status");
     } finally {
       setReviewingId(null);
@@ -218,6 +251,20 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
     setEditDate(format(dateObj, 'yyyy-MM-dd'));
     setEditTime(format(dateObj, 'HH:mm'));
     setEditOdometer(item.value.toString());
+  };
+
+  const handleViewSource = (item: OdometerReading) => {
+    setEvidenceData({
+        id: item.id,
+        type: item.source,
+        source: item.source,
+        date: item.date,
+        value: item.value,
+        imageUrl: item.metaData?.receiptUrl || item.metaData?.odometerProofUrl,
+        notes: item.notes,
+        metadata: item.metaData,
+        isVerified: item.isVerified
+    });
   };
 
   const saveEdit = async () => {
@@ -237,13 +284,26 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
     // For others, keep as is
 
     try {
+        const newValue = Number(editOdometer);
+        
+        // Phase 4: Create Audit Log before update
+        await api.logAuditAction({
+            entityId: editingItem.id,
+            entityType: 'odometer_reading',
+            action: 'update',
+            oldValue: editingItem.value,
+            newValue: newValue,
+            reason: 'Manual adjustment via Master Log',
+            userId: 'fleet-manager-1' // In a real app, this would be the session user
+        });
+
         await api.updateAnchor(cleanId, {
             date: newDateStr,
-            value: Number(editOdometer),
+            value: newValue,
             type: editingItem.source,
             vehicleId
         });
-        toast.success("Anchor updated successfully");
+        toast.success("Anchor updated successfully (Audit Logged)");
         fetchTimelineData();
         setEditingItem(null);
     } catch (e) {
@@ -255,8 +315,27 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
   const confirmDelete = async () => {
       if (!deleteId) return;
 
+      // Find original item for logging
+      const originalItem = history.find(h => h.id === deleteId);
+
+      // Optimistic Update
+      const originalHistory = [...history];
+      setHistory(prev => prev.filter(h => h.id !== deleteId));
+
       setReviewingId(deleteId);
       try {
+          // Phase 4: Audit Log for deletion
+          if (originalItem) {
+              await api.logAuditAction({
+                  entityId: deleteId,
+                  entityType: 'odometer_reading',
+                  action: 'delete',
+                  oldValue: originalItem.value,
+                  reason: 'Manual deletion via Master Log',
+                  userId: 'fleet-manager-1'
+              });
+          }
+
           if (deleteId.startsWith('checkin_')) {
             await api.deleteCheckIn(deleteId.replace('checkin_', ''));
           } else if (deleteId.startsWith('fuel_')) {
@@ -268,8 +347,9 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
           }
 
           toast.success("Odometer reading deleted");
-          fetchTimelineData();
+          // fetchTimelineData();
       } catch (error) {
+          setHistory(originalHistory);
           console.error(error);
           toast.error("Failed to delete reading");
       } finally {
@@ -361,7 +441,7 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-2">
+    <div className="space-y-6 max-w-7xl mx-auto p-2" {...props}>
       
       {/* Live Fleet Status Card */}
       <Card className="bg-slate-950 text-white border-slate-800 overflow-hidden relative">
@@ -615,189 +695,182 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
                 </div>
 
                 <Card className="border-slate-200 shadow-sm overflow-hidden">
-                <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 grid grid-cols-12 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    <div className="col-span-3">Timestamp</div>
-                    <div className="col-span-2">Anchor Source</div>
-                    <div className="col-span-2 text-right pr-4">Odometer</div>
-                    <div className="col-span-2 text-right pr-4">Distance Δ</div>
-                    <div className="col-span-3">Description / Verification</div>
-                </div>
-                <div className="divide-y divide-slate-100">
-                    {filteredHistory.map((item, index) => {
-                        const prevItem = index < filteredHistory.length - 1 ? filteredHistory[index + 1] : null;
-                        const delta = prevItem ? item.value - prevItem.value : 0;
-                        const isPlus = delta >= 0;
+                <div className="overflow-x-auto">
+                    <div className="min-w-[800px]">
+                        <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 grid grid-cols-12 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <div className="col-span-3">Timestamp</div>
+                            <div className="col-span-2">Anchor Source</div>
+                            <div className="col-span-2 text-right pr-4">Odometer</div>
+                            <div className="col-span-2 text-right pr-4">Distance Δ</div>
+                            <div className="col-span-3">Description / Verification</div>
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                            {filteredHistory.slice(0, visibleCount).map((item, index) => {
+                                const prevItem = index < filteredHistory.length - 1 ? filteredHistory[index + 1] : null;
+                                const delta = prevItem ? item.value - prevItem.value : 0;
+                                const isPlus = delta >= 0;
 
-                        // Check if there is a report for the gap leading to this item (from previous chronological item)
-                        // In the list, the previous chronological item is at index + 1 (because list is sorted DESC)
-                        // So the gap is between item (End) and prevItem (Start)
-                        // wait, report key is `${start.id}_${end.id}`
-                        // start is prevItem (older), end is item (newer)
-                        const report = prevItem ? reports[`${prevItem.id}_${item.id}`] : null;
+                                // Check if there is a report for the gap leading to this item (from previous chronological item)
+                                // In the list, the previous chronological item is at index + 1 (because list is sorted DESC)
+                                // So the gap is between item (End) and prevItem (Start)
+                                // wait, report key is `${prevItem.id}_${item.id}`
+                                // start is prevItem (older), end is item (newer)
+                                const report = prevItem ? reports[`${prevItem.id}_${item.id}`] : null;
 
-                        return (
-                            <React.Fragment key={item.id}>
-                            <div className="grid grid-cols-12 px-6 py-4 items-center hover:bg-slate-50 transition-colors group relative z-10 bg-white">
-                                <div className="col-span-3">
-                                    <p className="text-sm font-semibold text-slate-900">{format(parseDateForDisplay(item.date), 'MMM d, yyyy')}</p>
-                                    <p className="text-xs text-slate-400">{format(parseDateForDisplay(item.date), 'HH:mm')}</p>
-                                </div>
-                                <div className="col-span-2 flex items-center gap-2">
-                                    <div className="p-1.5 rounded-full bg-indigo-100 text-indigo-600">
-                                        {getSourceIcon(item.source)}
-                                    </div>
-                                    <span className="text-sm font-medium text-slate-700">
-                                        {getSourceLabel(item.source)}
-                                    </span>
-                                </div>
-                                <div className="col-span-2 text-right pr-4">
-                                    <p className="text-sm font-mono font-bold text-slate-900">{item.value.toLocaleString()}</p>
-                                    <p className="text-[10px] text-slate-400">KM</p>
-                                </div>
-                                <div className="col-span-2 text-right pr-4">
-                                    {prevItem && (
-                                        <Badge variant="outline" className={`font-mono font-normal ${isPlus ? 'bg-slate-50 text-slate-600' : 'bg-red-50 text-red-600'}`}>
-                                            {isPlus ? '+' : ''}{delta.toFixed(1)}
-                                        </Badge>
-                                    )}
-                                </div>
-                                <div className="col-span-3 flex flex-col items-start gap-1">
-                                    <div className="flex flex-col items-start gap-1">
-                                        <p className="text-sm text-slate-600 truncate w-full" title={item.notes}>{item.notes}</p>
-                                        <div className="flex gap-2">
-                                            <Badge className={`text-[10px] h-5 px-1.5 flex items-center gap-1 ${item.isVerified ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
-                                                {item.isVerified ? (
-                                                    item.metaData?.method === 'ai_verified' ? (
-                                                        <ScanLine className="w-3 h-3" />
-                                                    ) : (
-                                                        <CheckCircle2 className="w-3 h-3" />
-                                                    )
-                                                ) : <AlertCircle className="w-3 h-3" />}
-                                                {item.isVerified ? (item.metaData?.method === 'ai_verified' ? 'AI Scanned' : 'Verified') : 'Unverified'}
-                                            </Badge>
-                                            
-                                            {item.metaData?.method === 'manual_override' && (
-                                                <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-slate-500 bg-slate-50">
-                                                    <Keyboard className="w-3 h-3" />
-                                                    Manual Entry
-                                                </Badge>
-                                            )}
-                                            
-                                            {item.source === 'fuel' && (
-                                                <>
-                                                    {item.metaData?.odometerMethod === 'ai_verified' ? (
-                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-green-600 bg-green-50 border-green-200">
-                                                            <ScanLine className="w-3 h-3" />
-                                                            AI Scanned
-                                                        </Badge>
-                                                    ) : item.metaData?.paymentSource === 'Gas_Card' ? (
-                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-blue-600 bg-blue-50 border-blue-200">
-                                                            <CreditCard className="w-3 h-3" />
-                                                            Fuel Card
-                                                        </Badge>
-                                                    ) : (
-                                                       <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-slate-500 bg-slate-50">
-                                                            <Keyboard className="w-3 h-3" />
-                                                            Manual Log
-                                                        </Badge>
-                                                    )}
-                                                    {item.metaData?.receiptUrl && (
-                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 flex items-center gap-1 text-slate-500 bg-slate-50">
-                                                            <FileText className="w-3 h-3" />
-                                                            Receipt
-                                                        </Badge>
-                                                    )}
-                                                </>
-                                            )}
+                                return (
+                                    <div key={item.id} className="divide-y divide-slate-100">
+                                    <div className="grid grid-cols-12 px-6 py-5 items-center hover:bg-slate-50 transition-colors group relative z-10 bg-white min-h-[72px]">
+                                        <div className="col-span-3">
+                                            <p className="text-sm font-semibold text-slate-900">{format(parseDateForDisplay(item.date), 'MMM d, yyyy')}</p>
+                                            <p className="text-xs text-slate-400">{format(parseDateForDisplay(item.date), 'HH:mm')}</p>
                                         </div>
-                                    </div>
-                                </div>
-                                    <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                    <MoreVertical className="h-4 w-4 text-slate-400" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                {!item.isVerified && (
-                                                    <DropdownMenuItem onClick={() => handleReview(item.id, 'approved')}>
-                                                        <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-500" />
-                                                        Mark as Verified
-                                                    </DropdownMenuItem>
-                                                )}
-                                                <DropdownMenuItem onClick={() => handleEdit(item)}>
-                                                    <Pencil className="mr-2 h-4 w-4 text-slate-500" />
-                                                    Edit Entry
-                                                </DropdownMenuItem>
-                                                {item.isVerified && (
-                                                    <DropdownMenuItem onClick={() => handleReview(item.id, 'rejected')}>
-                                                        <XCircle className="mr-2 h-4 w-4 text-amber-500" />
-                                                        Flag as Unverified
-                                                    </DropdownMenuItem>
-                                                )}
-                                                <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600 focus:text-red-600 focus:bg-red-50">
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Delete Entry
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                            </div>
-
-                            {/* Gap Report Visualization (The line between anchors) */}
-                            {report && (
-                                <div className="col-span-12 px-12 py-2 bg-slate-50 border-t border-b border-slate-100">
-                                    <div className="flex items-center gap-6 text-xs">
-                                        <div className="flex items-center gap-2 text-slate-500">
-                                            <TrendingUp className="w-4 h-4" />
-                                            <span className="font-semibold">Audit Gap Analysis</span>
-                                        </div>
-                                        <div className="h-4 w-px bg-slate-300"></div>
-                                        <div>
-                                            <span className="text-slate-400 uppercase text-[10px] font-bold mr-2">Trips</span>
-                                            <span className="font-mono font-bold text-slate-700">{report.tripCount}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 uppercase text-[10px] font-bold mr-2">Business</span>
-                                            <span className="font-mono font-bold text-slate-700">{report.platformDistance.toFixed(1)} km</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 uppercase text-[10px] font-bold mr-2">Personal</span>
-                                            <span className={`font-mono font-bold ${report.personalDistance > 0 ? 'text-indigo-600' : 'text-slate-700'}`}>
-                                                {report.personalDistance.toFixed(1)} km
+                                        <div className="col-span-2 flex items-center gap-2">
+                                            <div className="p-2 rounded-full bg-indigo-100 text-indigo-600">
+                                                {getSourceIcon(item.source)}
+                                            </div>
+                                            <span className="text-sm font-medium text-slate-700">
+                                                {getSourceLabel(item.source)}
                                             </span>
                                         </div>
-
-                                        <div className="ml-auto flex items-center gap-4">
-                                            {report.anomalyDetected && (
-                                                <Badge variant="destructive" className="text-[10px]">
-                                                    Anomaly Detected
+                                        <div className="col-span-2 text-right pr-4">
+                                            <p className="text-sm font-mono font-bold text-slate-900">{item.value.toLocaleString()}</p>
+                                            <p className="text-[10px] text-slate-400">KM</p>
+                                        </div>
+                                        <div className="col-span-2 text-right pr-4">
+                                            {prevItem && (
+                                                <Badge variant="outline" className={`font-mono font-normal ${isPlus ? 'bg-slate-50 text-slate-600' : 'bg-red-50 text-red-600'}`}>
+                                                    {isPlus ? '+' : ''}{delta.toFixed(1)}
                                                 </Badge>
                                             )}
-                                            
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="h-7 text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50"
-                                                onClick={() => prevItem && setManifestGap({ start: prevItem, end: item })}
-                                            >
-                                                View Trip Manifest
-                                            </Button>
+                                        </div>
+                                        <div className="col-span-3 flex flex-col items-start gap-1">
+                                            <div className="flex flex-col items-start gap-1">
+                                                <button 
+                                                    className="text-sm text-slate-600 truncate w-full text-left hover:text-indigo-600 hover:underline transition-colors" 
+                                                    title="Click to view source evidence"
+                                                    onClick={() => handleViewSource(item)}
+                                                >
+                                                    {item.notes}
+                                                </button>
+                                                <div className="flex gap-2">
+                                                    <Badge className={`text-[10px] h-6 px-2 flex items-center gap-1 ${item.isVerified ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
+                                                        {item.isVerified ? (
+                                                            item.metaData?.method === 'ai_verified' ? (
+                                                                <ScanLine className="w-3.5 h-3.5" />
+                                                            ) : (
+                                                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                                            )
+                                                        ) : <AlertCircle className="w-3.5 h-3.5" />}
+                                                        {item.isVerified ? (item.metaData?.method === 'ai_verified' ? 'AI Scanned' : 'Verified') : 'Unverified'}
+                                                    </Badge>
+                                                    
+                                                    {item.metaData?.method === 'manual_override' && (
+                                                        <Badge variant="outline" className="text-[10px] h-6 px-2 flex items-center gap-1 text-slate-500 bg-slate-50">
+                                                            <Keyboard className="w-3.5 h-3.5" />
+                                                            Manual Entry
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="absolute right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-10 w-10">
+                                                        <MoreVertical className="h-5 w-5 text-slate-400" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => handleViewSource(item)}>
+                                                        <FileText className="mr-2 h-4 w-4 text-indigo-500" />
+                                                        View Source Evidence
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => setAuditTrailId(item.id)}>
+                                                        <History className="mr-2 h-4 w-4 text-slate-500" />
+                                                        View Audit Trail
+                                                    </DropdownMenuItem>
+                                                    {!item.isVerified && (
+                                                        <DropdownMenuItem onClick={() => handleReview(item.id, 'approved')}>
+                                                            <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-500" />
+                                                            Mark as Verified
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                        <Pencil className="mr-2 h-4 w-4 text-slate-500" />
+                                                        Edit Entry
+                                                    </DropdownMenuItem>
+                                                    {item.isVerified && (
+                                                        <DropdownMenuItem onClick={() => handleReview(item.id, 'rejected')}>
+                                                            <XCircle className="mr-2 h-4 w-4 text-amber-500" />
+                                                            Flag as Unverified
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600 focus:text-red-600 focus:bg-red-50">
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        Delete Entry
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </div>
+
+                                    {/* Gap Report Visualization */}
+                                    {report && (
+                                        <div className="px-12 py-3 bg-slate-50 border-t border-b border-slate-100">
+                                            <div className="flex items-center gap-6 text-xs">
+                                                <div className="flex items-center gap-2 text-slate-500">
+                                                    <TrendingUp className="w-4 h-4" />
+                                                    <span className="font-semibold">Audit Gap Analysis</span>
+                                                </div>
+                                                <div className="h-4 w-px bg-slate-300"></div>
+                                                <div>
+                                                    <span className="text-slate-400 uppercase text-[10px] font-bold mr-2">Trips</span>
+                                                    <span className="font-mono font-bold text-slate-700">{report.tripCount}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-400 uppercase text-[10px] font-bold mr-2">Business</span>
+                                                    <span className="font-mono font-bold text-slate-700">{report.platformDistance.toFixed(1)} km</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-400 uppercase text-[10px] font-bold mr-2">Personal</span>
+                                                    <span className={`font-mono font-bold ${report.personalDistance > 0 ? 'text-indigo-600' : 'text-slate-700'}`}>
+                                                        {report.personalDistance.toFixed(1)} km
+                                                    </span>
+                                                </div>
+
+                                                <div className="ml-auto flex items-center gap-4">
+                                                    {report.anomalyDetected && (
+                                                        <Badge variant="destructive" className="text-[10px]">
+                                                            Anomaly Detected
+                                                        </Badge>
+                                                    )}
+                                                    
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        className="h-9 px-4 text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                                                        onClick={() => prevItem && setManifestGap({ start: prevItem, end: item })}
+                                                    >
+                                                        View Trip Manifest
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    </div>
+                                );
+                            })}
+                            
+                            <div ref={bottomRef} className="h-4 w-full" />
+
+                            {filteredHistory.length === 0 && (
+                                <div className="p-12 text-center text-slate-500">
+                                    <ShieldCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                    <p>No verified anchors found.</p>
                                 </div>
                             )}
-                            </React.Fragment>
-                        );
-                    })}
-                    
-                    {filteredHistory.length === 0 && (
-                        <div className="p-12 text-center text-slate-500">
-                            <ShieldCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                            <p>No verified anchors found.</p>
                         </div>
-                    )}
+                    </div>
                 </div>
             </Card>
             </>
@@ -865,6 +938,18 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
         </div>
       </div>
       
+      <SourceEvidenceModal 
+        isOpen={!!evidenceData}
+        onClose={() => setEvidenceData(null)}
+        evidence={evidenceData}
+      />
+
+      <AuditTrailModal 
+        isOpen={!!auditTrailId}
+        onClose={() => setAuditTrailId(null)}
+        entityId={auditTrailId}
+      />
+
       <TripManifestSheet 
         isOpen={!!manifestGap}
         onClose={() => setManifestGap(null)}
@@ -921,3 +1006,5 @@ export const MasterLogTimeline: React.FC<MasterLogTimelineProps> = ({ vehicleId,
     </div>
   );
 };
+
+export const MasterLogTimeline = React.memo(MasterLogTimelineInternal);

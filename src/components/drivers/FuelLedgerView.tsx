@@ -88,7 +88,7 @@ interface FuelLedgerViewProps {
   onRefresh?: () => void;
 }
 
-export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
+export const FuelLedgerView: React.FC<FuelLedgerViewProps> = React.memo(({
   transactions,
   fuelEntries,
   buckets,
@@ -98,6 +98,7 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
   const [expandedBuckets, setExpandedBuckets] = useState<Record<string, boolean>>({});
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleGroupsCount, setVisibleGroupsCount] = useState(10);
   const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>({
     start: null,
     end: null
@@ -797,23 +798,22 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
               <TableHead className="w-[140px] md:w-[180px]">Date</TableHead>
               <TableHead>Description & Metadata</TableHead>
               <TableHead className="hidden sm:table-cell w-[120px]">Status</TableHead>
-              <TableHead className="text-right w-[100px] md:w-[140px]">Debit</TableHead>
+              <TableHead className="text-right w-[100px] md:max-w-[140px]">Debit</TableHead>
               <TableHead className="hidden md:table-cell text-right w-[140px]">Credit</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {ledgerGroups.map((group, gIdx) => {
-              const isPendingGroup = !group.bucket;
-              const groupId = group.bucket?.id || 'pending';
-              const isExpanded = expandedBuckets[groupId] || (isPendingGroup && (group.entries.length > 0 || group.transactions.length > 0));
+          {ledgerGroups.slice(0, visibleGroupsCount).map((group, gIdx) => {
+            const isPendingGroup = !group.bucket;
+            const groupId = group.bucket?.id || 'pending';
+            const isExpanded = expandedBuckets[groupId] || (isPendingGroup && (group.entries.length > 0 || group.transactions.length > 0));
 
-              // Don't show empty groups unless it's the pending group with items
-              if (isPendingGroup && group.entries.length === 0 && group.transactions.length === 0) return null;
+            // Don't show empty groups unless it's the pending group with items
+            if (isPendingGroup && group.entries.length === 0 && group.transactions.length === 0) return null;
 
-              return (
-                <React.Fragment key={groupId}>
-                  {/* Parent Row - Anchor Window or Pending Header */}
+            return (
+              <TableBody key={groupId}>
+                {/* Parent Row - Anchor Window or Pending Header */}
                   <TableRow 
                     className={cn(
                       "group cursor-pointer hover:bg-slate-50/80",
@@ -923,9 +923,8 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
                   </TableRow>
 
                   {/* Child Rows - Transactions & Entries */}
-                  {isExpanded && (
-                    <>
-                    {group.entries.map((entry) => (
+                  {isExpanded && [
+                    ...group.entries.map((entry) => (
                       <TableRow key={entry.id} className="bg-white/50 border-l-4 border-l-slate-100">
                         <TableCell className="pl-6 md:pl-8 text-[10px] md:text-xs text-slate-500 whitespace-nowrap">
                           {formatSafeDate(entry.date, entry.time)}
@@ -1004,9 +1003,9 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )),
 
-                    {group.transactions.map((tx) => (
+                    ...group.transactions.map((tx) => (
                       <TableRow key={tx.id} className="bg-white/50 border-l-4 border-l-slate-100 hover:bg-slate-50/50 transition-colors">
                         <TableCell className="pl-6 md:pl-8 text-[10px] md:text-xs text-slate-500 whitespace-nowrap">
                           {formatSafeDate(tx.date, tx.time)}
@@ -1094,15 +1093,26 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </>
-                )}
-              </React.Fragment>
+                    ))
+                  ]}
+              </TableBody>
             );
           })}
-        </TableBody>
         </Table>
       </div>
+      
+      {ledgerGroups.length > visibleGroupsCount && (
+        <div className="flex justify-center pt-4">
+          <Button 
+            variant="outline" 
+            onClick={() => setVisibleGroupsCount(prev => prev + 10)}
+            className="gap-2 text-slate-600 border-slate-200"
+          >
+            <ChevronDown className="w-4 h-4" />
+            View More Periods ({ledgerGroups.length - visibleGroupsCount} remaining)
+          </Button>
+        </div>
+      )}
       
       {ledgerGroups.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 px-4 border-2 border-dashed rounded-xl bg-slate-50/50 transition-all hover:bg-slate-50/80">
@@ -1188,4 +1198,4 @@ export const FuelLedgerView: React.FC<FuelLedgerViewProps> = ({
       </Dialog>
     </div>
   );
-};
+});

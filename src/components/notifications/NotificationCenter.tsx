@@ -18,97 +18,82 @@ import {
   X,
   Settings,
   Mail,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
 import { Notification, NotificationType, NotificationSeverity } from '../../types/data';
 import { api } from '../../services/api';
 import { Badge } from "../ui/badge";
 import { cn } from "../ui/utils";
+import { toast } from 'sonner@2.0.3';
 
 export function NotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [persistentAlerts, setPersistentAlerts] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchNotifications();
-    // Poll every minute
-    const interval = setInterval(fetchNotifications, 60000);
-    return () => clearInterval(interval);
+    fetchData();
+    // Poll every 45 seconds for Phase 1 backbone
+    const interval = setInterval(fetchData, 45000);
+    
+    // Listen for events to open the center
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('open-alert-center', handleOpen);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('open-alert-center', handleOpen);
+    };
   }, []);
 
-  const fetchNotifications = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      let data = await api.getNotifications();
+      const [notifs, alerts] = await Promise.all([
+        api.getNotifications().catch(() => []),
+        api.getPersistentAlerts().catch(() => [])
+      ]);
       
-      // If no notifications, seed some sample ones for demonstration
-      if (data.length === 0) {
-        await seedNotifications();
-        data = await api.getNotifications();
-      }
+      setNotifications(notifs);
+      setPersistentAlerts(alerts);
       
-      setNotifications(data);
-      setUnreadCount(data.filter(n => !n.read).length);
+      const totalUnread = notifs.filter(n => !n.read).length + alerts.filter(a => !a.read).length;
+      setUnreadCount(totalUnread);
     } catch (error) {
-      console.error("Failed to fetch notifications", error);
+      console.error("Failed to fetch data", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const seedNotifications = async () => {
-    const samples: Partial<Notification>[] = [
-      {
-        type: 'alert',
-        severity: 'critical',
-        title: 'High Cancellation Rate Detected',
-        message: 'Cancellation rate in Downtown zone exceeded 15% in the last hour.',
-        read: false,
-      },
-      {
-        type: 'update',
-        severity: 'success',
-        title: 'Weekly Payout Processed',
-        message: 'Your payout of $1,245.50 has been sent to your bank account.',
-        read: false,
-      },
-      {
-        type: 'reminder',
-        severity: 'warning',
-        title: 'Vehicle Inspection Due',
-        message: 'Toyota Camry (License 8XYZ123) is due for inspection in 3 days.',
-        read: true,
-      },
-      {
-        type: 'info',
-        severity: 'info',
-        title: 'New Feature: Export Reports',
-        message: 'You can now export comprehensive PDF reports from the dashboard.',
-        read: false,
-      }
-    ];
-
-    for (const n of samples) {
-      await api.createNotification(n);
-    }
-  };
-
-  const markAsRead = async (id: string) => {
+  const markAsRead = async (id: string, isAlert: boolean = false) => {
     try {
-      await api.markNotificationAsRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      if (isAlert) {
+        await api.acknowledgeAlert(id, false);
+        setPersistentAlerts(prev => prev.map(a => a.id === id ? { ...a, read: true, isRead: true } : a));
+      } else {
+        await api.markNotificationAsRead(id);
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      }
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error("Failed to mark as read", error);
     }
   };
 
-  const markAllAsRead = async () => {
-    const unread = notifications.filter(n => !n.read);
-    for (const n of unread) {
-      markAsRead(n.id);
+  const dismissAlert = async (id: string) => {
+    try {
+      await api.acknowledgeAlert(id, true);
+      setPersistentAlerts(prev => prev.filter(a => a.id !== id));
+      toast.success("Alert dismissed");
+      
+      // Recalculate unread
+      fetchData();
+    } catch (error) {
+      toast.error("Failed to dismiss alert");
     }
   };
 
@@ -134,42 +119,54 @@ export function NotificationCenter() {
       <SheetContent className="w-full sm:w-[540px] flex flex-col p-0">
         <SheetHeader className="p-6 border-b">
           <div className="flex items-center justify-between">
-            <SheetTitle>Notifications</SheetTitle>
-            {unreadCount > 0 && (
-               <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs">
-                 Mark all as read
-               </Button>
-            )}
+            <SheetTitle>Fleet Inbox</SheetTitle>
+            <Badge variant="outline" className="ml-2">
+              {unreadCount} New
+            </Badge>
           </div>
           <SheetDescription>
-            Stay updated with alerts and system messages.
+            Production-ready persistent notifications and critical alerts.
           </SheetDescription>
         </SheetHeader>
         
-        <Tabs defaultValue="all" className="flex-1 flex flex-col">
+        <Tabs defaultValue="alerts" className="flex-1 flex flex-col">
           <div className="px-6 pt-4">
-             <TabsList className="w-full justify-start">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="unread">Unread</TabsTrigger>
-              <TabsTrigger value="alerts">Alerts</TabsTrigger>
+             <TabsList className="w-full justify-start bg-slate-100 p-1">
+              <TabsTrigger value="alerts" className="flex-1">
+                Persistent Alerts ({persistentAlerts.length})
+              </TabsTrigger>
+              <TabsTrigger value="notifs" className="flex-1">
+                System Log ({notifications.length})
+              </TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="all" className="flex-1 p-0 m-0">
-            <NotificationList notifications={notifications} onRead={markAsRead} getIcon={getIcon} />
+          <TabsContent value="alerts" className="flex-1 p-0 m-0">
+            <NotificationList 
+              notifications={persistentAlerts} 
+              onRead={(id) => markAsRead(id, true)} 
+              onDismiss={dismissAlert}
+              getIcon={getIcon} 
+              isAlert
+            />
           </TabsContent>
-          <TabsContent value="unread" className="flex-1 p-0 m-0">
-            <NotificationList notifications={notifications.filter(n => !n.read)} onRead={markAsRead} getIcon={getIcon} />
-          </TabsContent>
-           <TabsContent value="alerts" className="flex-1 p-0 m-0">
-            <NotificationList notifications={notifications.filter(n => n.type === 'alert')} onRead={markAsRead} getIcon={getIcon} />
+          <TabsContent value="notifs" className="flex-1 p-0 m-0">
+            <NotificationList 
+              notifications={notifications} 
+              onRead={(id) => markAsRead(id, false)} 
+              getIcon={getIcon} 
+            />
           </TabsContent>
         </Tabs>
 
-        <div className="p-4 border-t bg-slate-50 dark:bg-slate-900 mt-auto">
-          <Button variant="outline" className="w-full" size="sm">
+        <div className="p-4 border-t bg-slate-50 dark:bg-slate-900 mt-auto flex gap-2">
+          <Button variant="outline" className="flex-1" size="sm" onClick={fetchData} disabled={loading}>
+            <Clock className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+            Sync Now
+          </Button>
+          <Button variant="outline" className="flex-1" size="sm">
             <Settings className="mr-2 h-4 w-4" />
-            Notification Preferences
+            Config
           </Button>
         </div>
       </SheetContent>
@@ -177,55 +174,80 @@ export function NotificationCenter() {
   );
 }
 
-function NotificationList({ notifications, onRead, getIcon }: { notifications: Notification[], onRead: (id: string) => void, getIcon: (s: NotificationSeverity) => React.ReactNode }) {
+interface ListProps {
+  notifications: Notification[];
+  onRead: (id: string) => void;
+  onDismiss?: (id: string) => void;
+  getIcon: (s: NotificationSeverity) => React.ReactNode;
+  isAlert?: boolean;
+}
+
+function NotificationList({ notifications, onRead, onDismiss, getIcon, isAlert }: ListProps) {
   if (notifications.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center text-slate-500">
         <Mail className="h-12 w-12 mb-4 opacity-20" />
-        <p>No notifications to show</p>
+        <p>{isAlert ? "No critical alerts active" : "No system logs to show"}</p>
       </div>
     );
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-200px)]">
+    <ScrollArea className="h-[calc(100vh-220px)]">
       <div className="flex flex-col divide-y">
-        {notifications.map((notification) => (
-          <div 
-            key={notification.id} 
-            className={cn(
-              "p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex gap-4 items-start",
-              !notification.read ? "bg-slate-50/50 dark:bg-slate-800/30" : ""
-            )}
-          >
-            <div className="mt-1 flex-shrink-0">
-              {getIcon(notification.severity)}
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <p className={cn("text-sm font-medium", !notification.read ? "text-slate-900 dark:text-slate-100" : "text-slate-600 dark:text-slate-400")}>
-                  {notification.title}
-                </p>
-                <span className="text-xs text-slate-400 whitespace-nowrap ml-2">
-                  {new Date(notification.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
-                {notification.message}
-              </p>
-              {!notification.read && (
-                <Button 
-                  variant="link" 
-                  size="sm" 
-                  className="px-0 h-auto text-xs text-indigo-600"
-                  onClick={() => onRead(notification.id)}
-                >
-                  Mark as read
-                </Button>
+        {notifications.map((notification) => {
+          const isUnread = !notification.read && !(notification as any).isRead;
+          
+          return (
+            <div 
+              key={notification.id} 
+              className={cn(
+                "p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex gap-4 items-start",
+                isUnread ? "bg-indigo-50/30 border-l-2 border-indigo-500" : ""
               )}
+            >
+              <div className="mt-1 flex-shrink-0">
+                {getIcon(notification.severity)}
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <p className={cn("text-sm font-semibold", isUnread ? "text-slate-900" : "text-slate-500")}>
+                    {notification.title}
+                  </p>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 whitespace-nowrap ml-2">
+                    {new Date(notification.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {notification.message}
+                </p>
+                <div className="flex items-center gap-4 pt-1">
+                  {isUnread && (
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="px-0 h-auto text-xs text-indigo-600 font-bold"
+                      onClick={() => onRead(notification.id)}
+                    >
+                      Acknowledge
+                    </Button>
+                  )}
+                  {isAlert && onDismiss && (
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="px-0 h-auto text-xs text-slate-400 hover:text-rose-500"
+                      onClick={() => onDismiss(notification.id)}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Dismiss
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </ScrollArea>
   );

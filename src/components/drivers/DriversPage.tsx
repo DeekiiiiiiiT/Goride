@@ -348,7 +348,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
     // Finalize Metrics (Rate, Tier, Status)
     const processedDrivers = Array.from(driverMap.values()).map(driver => {
-        const stats = driverStats.get(driver.id)!;
+        const stats = driverStats.get(driver.id) || { completed: 0, cancelled: 0 };
         const total = stats.completed + stats.cancelled;
         
         // Find matched metric from CSV
@@ -532,7 +532,11 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
   // If a driver is selected, show the detail view with filtered trips
   if (selectedDriverId) {
-    const selectedDriver = drivers.find(d => d.id === selectedDriverId);
+    const selectedDriver = drivers.find(d => 
+        d.id === selectedDriverId || 
+        d.uberDriverId === selectedDriverId || 
+        d.inDriveDriverId === selectedDriverId
+    );
     // Use trips that were explicitly linked to this driver during aggregation
     const driverTrips = selectedDriver?.linkedTrips || [];
     

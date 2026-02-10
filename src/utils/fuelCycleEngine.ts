@@ -1,11 +1,16 @@
 import { FuelEntry, FuelCycle } from '../types/fuel';
+import { Vehicle } from '../types/vehicle';
 
 /**
  * Transforms a flat list of fuel entries into grouped fuel cycles.
  * Logic: A cycle begins after a "Full Tank" event and ends at the next "Full Tank" event.
+ * Enhanced: Implements "Threshold Cap & Reset" where cycles are capped at 100% capacity.
  */
-export function calculateFuelCycles(entries: FuelEntry[]): FuelCycle[] {
+export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = []): FuelCycle[] {
     if (!entries || entries.length === 0) return [];
+
+    const vehicleMap = new Map<string, Vehicle>();
+    vehicles.forEach(v => vehicleMap.set(v.id, v));
 
     // 1. Group by vehicle
     const vehicleGroups = new Map<string, FuelEntry[]>();
@@ -21,18 +26,17 @@ export function calculateFuelCycles(entries: FuelEntry[]): FuelCycle[] {
 
     // 2. Process each vehicle group
     vehicleGroups.forEach((vehicleEntries, vehicleId) => {
+        const vehicle = vehicleMap.get(vehicleId);
+        const tankCapacity = vehicle?.fuelSettings?.tankCapacity || 40; // Default to 40L if unknown
+
         // Sort entries by date/time and then odometer
         const sorted = [...vehicleEntries].sort((a, b) => {
-            // Robust date parsing: avoid "T" separator with M/D/YYYY dates which causes Invalid Date
             const dateStrA = a.date.includes('-') ? a.date : a.date.replace(/\//g, '-');
             const dateStrB = b.date.includes('-') ? b.date : b.date.replace(/\//g, '-');
-            
             const fullDateA = a.time ? `${dateStrA} ${a.time}` : dateStrA;
             const fullDateB = b.time ? `${dateStrB} ${b.time}` : dateStrB;
-            
             const dateA = new Date(fullDateA).getTime();
             const dateB = new Date(fullDateB).getTime();
-            
             if (!isNaN(dateA) && !isNaN(dateB)) {
                 if (dateA !== dateB) return dateA - dateB;
             }
@@ -42,70 +46,120 @@ export function calculateFuelCycles(entries: FuelEntry[]): FuelCycle[] {
         let currentCycleEntries: FuelEntry[] = [];
         let lastAnchorOdometer: number | undefined = undefined;
         let lastAnchorDate: string | undefined = undefined;
+        
+        let carryoverVolume = 0;
+        let startingPercentage = 0;
 
         sorted.forEach((entry, index) => {
-            // A "Full Tank" event is either a metadata flag or a Reimbursement type (which are anchors)
-            const isFullTank = 
-                entry.metadata?.isFullTank || 
-                entry.metadata?.isAnchor || 
-                entry.metadata?.isSoftAnchor ||
-                entry.type === 'Reimbursement';
+            const entryVolume = entry.liters || 0;
+            // Volume already in the tank + this entry
+            const currentTotalVolume = currentCycleEntries.reduce((sum, e) => sum + (e.volumeContributed || 0), 0) + carryoverVolume;
             
-            // Add entry to current working set
-            currentCycleEntries.push(entry);
+            // Determine if this entry causes a "Full Tank" or "Capped" event
+            // We removed the automatic "Reimbursement" anchor to prevent over-splitting
+            const isExplicitFullTank = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
+            const wouldExceedCapacity = (currentTotalVolume + entryVolume) >= tankCapacity;
+            
+            const isCycleEnd = isExplicitFullTank || wouldExceedCapacity;
 
-            if (isFullTank) {
+            if (isCycleEnd) {
                 // If we have a previous anchor, we can close a cycle
                 if (lastAnchorOdometer !== undefined) {
                     const distance = (entry.odometer || 0) - lastAnchorOdometer;
                     
-                    // Liters consumed to cover this distance are all receipts AFTER the last anchor up to this one
-                    // In our current list, it's everything in currentCycleEntries except the one that started it?
-                    // Wait, if we use the "Full to Full" method:
-                    // We start the distance at Anchor A. We end at Anchor B.
-                    // The liters at Anchor B (plus any intermediate ones) are the ones that filled the tank back up.
-                    
-                    // However, if the very first entry is an anchor, we don't have a distance yet.
-                    
                     if (distance > 0) {
-                        const totalLiters = currentCycleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
-                        const totalCost = currentCycleEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
-                        
+                        // Calculate contribution
+                        let volumeContributed = entryVolume;
+                        let excessVolume = 0;
+                        let isCapped = false;
+
+                        if (wouldExceedCapacity) {
+                            volumeContributed = Math.max(0, tankCapacity - currentTotalVolume);
+                            excessVolume = entryVolume - volumeContributed;
+                            isCapped = true;
+                        }
+
+                        // Prepare entries for the cycle
+                        // The current entry is included with its "volumeContributed"
+                        const cycleTransactions = [...currentCycleEntries, { 
+                            ...entry, 
+                            volumeContributed,
+                            carryoverVolume: excessVolume > 0 ? excessVolume : undefined
+                        }];
+
+                        const totalLiters = cycleTransactions.reduce((sum, e) => sum + (e.volumeContributed || 0), 0) + carryoverVolume;
+                        const totalCost = cycleTransactions.reduce((sum, e) => {
+                            // Calculate proportional cost for the split entry
+                            if (e.id === entry.id && entry.liters && entry.liters > 0) {
+                                return sum + ((e.amount || 0) * (volumeContributed / entry.liters));
+                            }
+                            return sum + (e.amount || 0);
+                        }, 0);
+
                         const status = entry.metadata?.integrityStatus === 'critical' ? 'Anomaly' : 'Complete';
-                        const resetType = entry.metadata?.isSoftAnchor ? 'Auto_Soft' : 
+                        const resetType = isCapped ? 'Auto_Soft' : 
                                         entry.metadata?.integrityStatus === 'critical' ? 'Auto_Anomaly' : 'Manual';
 
                         allCycles.push({
-                            id: `cycle_${entry.id}`,
+                            id: `cycle_${entry.id}_${index}`,
                             vehicleId,
                             startDate: lastAnchorDate || entry.date,
                             endDate: entry.date,
                             totalLiters,
                             totalCost,
                             avgPricePerLiter: totalLiters > 0 ? totalCost / totalLiters : 0,
-                            transactions: [...currentCycleEntries],
+                            transactions: cycleTransactions,
                             status,
                             distance,
                             efficiency: totalLiters > 0 ? distance / totalLiters : 0,
                             resetType,
                             startOdometer: lastAnchorOdometer,
-                            endOdometer: entry.odometer || 0
+                            endOdometer: entry.odometer || 0,
+                            startingPercentage,
+                            isCapped,
+                            excessVolume: excessVolume > 0 ? excessVolume : undefined
                         });
-                    }
-                }
 
-                // Reset for next cycle
-                // Note: The closing anchor of the PREVIOUS cycle is NOT included in the liters of the NEXT cycle
-                // It just sets the starting odometer for the next distance measurement.
-                currentCycleEntries = [];
+                        // Prepare carryover for NEXT cycle
+                        carryoverVolume = excessVolume;
+                        startingPercentage = (carryoverVolume / tankCapacity) * 100;
+                        
+                        // New cycle starting data
+                        currentCycleEntries = [];
+                        // If there was excess, we create a "virtual" entry for the next cycle
+                        if (excessVolume > 0) {
+                            currentCycleEntries.push({
+                                ...entry,
+                                volumeContributed: excessVolume,
+                                isCarryover: true
+                            });
+                        }
+                    } else {
+                        // Distance is 0, might be a double entry or same-day fill
+                        // Just accumulate
+                        currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });
+                    }
+                } else {
+                    // First anchor
+                    lastAnchorOdometer = entry.odometer || 0;
+                    lastAnchorDate = entry.date;
+                    currentCycleEntries = [];
+                    carryoverVolume = 0;
+                    startingPercentage = 0;
+                }
+                
+                // Update anchor points
                 lastAnchorOdometer = entry.odometer || 0;
                 lastAnchorDate = entry.date;
+            } else {
+                // Not a cycle end, just add to current cycle
+                currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });
             }
         });
 
         // 3. Handle Active Cycle (In-progress)
         if (currentCycleEntries.length > 0 && lastAnchorOdometer !== undefined) {
-            const totalLiters = currentCycleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+            const totalLiters = currentCycleEntries.reduce((sum, e) => sum + (e.volumeContributed || 0), 0) + carryoverVolume;
             const totalCost = currentCycleEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
             const latestOdo = Math.max(...currentCycleEntries.map(e => e.odometer || 0), lastAnchorOdometer);
             const distance = latestOdo - lastAnchorOdometer;
@@ -113,8 +167,8 @@ export function calculateFuelCycles(entries: FuelEntry[]): FuelCycle[] {
             allCycles.push({
                 id: `active_${vehicleId}`,
                 vehicleId,
-                startDate: lastAnchorDate || currentCycleEntries[0].date,
-                endDate: currentCycleEntries[currentCycleEntries.length - 1].date,
+                startDate: lastAnchorDate || (currentCycleEntries.length > 0 ? currentCycleEntries[0].date : lastAnchorDate || ''),
+                endDate: currentCycleEntries.length > 0 ? currentCycleEntries[currentCycleEntries.length - 1].date : lastAnchorDate || '',
                 totalLiters,
                 totalCost,
                 avgPricePerLiter: totalLiters > 0 ? totalCost / totalLiters : 0,
@@ -122,13 +176,19 @@ export function calculateFuelCycles(entries: FuelEntry[]): FuelCycle[] {
                 status: 'Active',
                 distance,
                 efficiency: (totalLiters > 0 && distance > 0) ? distance / totalLiters : 0,
-                resetType: 'Manual', // Placeholder
+                resetType: 'Manual',
                 startOdometer: lastAnchorOdometer,
-                endOdometer: latestOdo
+                endOdometer: latestOdo,
+                startingPercentage
             });
         }
     });
 
     // Return all cycles sorted by end date descending
-    return allCycles.sort((a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime());
+    return allCycles.sort((a, b) => {
+        const dateA = new Date(a.endDate).getTime();
+        const dateB = new Date(b.endDate).getTime();
+        if (dateA !== dateB) return dateB - dateA;
+        return 0;
+    });
 }

@@ -97,6 +97,7 @@ import { format, subDays, isSameDay, getDay, getHours, differenceInDays, addDays
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
@@ -235,6 +236,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       fuelType: vehicle.fuelSettings?.fuelType || 'Gasoline_87',
       fuelEconomy: vehicle.specifications?.fuelEconomy || '24.6',
       tankCapacity: vehicle.specifications?.tankCapacity || '36',
+      estimatedRangeMin: vehicle.specifications?.estimatedRangeMin || 650,
+      estimatedRangeMax: vehicle.specifications?.estimatedRangeMax || 720,
       bodyType: vehicle.bodyType || 'MPV',
       fuelScenarioId: vehicle.fuelScenarioId || ''
   });
@@ -260,6 +263,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                   aerodynamicAids: specsForm.aerodynamicAids,
                   fuelEconomy: specsForm.fuelEconomy,
                   tankCapacity: specsForm.tankCapacity,
+                  estimatedRangeMin: Number(specsForm.estimatedRangeMin),
+                  estimatedRangeMax: Number(specsForm.estimatedRangeMax),
               },
               fuelSettings: {
                   ...vehicle.fuelSettings,
@@ -662,6 +667,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
               date: newOdometerDate,
               source: 'Manual Update',
               type: 'Hard',
+              isVerified: true,
+              isAnchorPoint: true,
               notes: newOdometerNotes
           });
           
@@ -1013,7 +1020,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
           </TabsContent>
 
           <TabsContent value="performance" className="space-y-6 mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <ErrorBoundary name="PerformanceCharts">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Card>
                       <CardContent className="p-6">
                           <div className="flex justify-between items-start mb-2">
@@ -1085,7 +1093,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           </ResponsiveContainer>
                       </CardContent>
                   </Card>
-              </div>
+                </div>
+              </ErrorBoundary>
           </TabsContent>
 
           <TabsContent value="utilization" className="mt-6">
@@ -1231,33 +1240,35 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
           </TabsContent>
 
           <TabsContent value="odometer" className="space-y-6 mt-6">
-              <Card>
-                  <CardHeader>
-                      <CardTitle>Odometer History</CardTitle>
-                      <CardDescription>Track mileage verification and history</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <Tabs defaultValue="history">
-                          <TabsList>
-                              <TabsTrigger value="history">History Log</TabsTrigger>
-                              <TabsTrigger value="timeline">Unified Timeline</TabsTrigger>
-                              <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
-                          </TabsList>
-                          <TabsContent value="history" className="mt-4">
-                              <OdometerHistory 
-                                  vehicleId={vehicle.id || vehicle.licensePlate} 
-                                  refreshTrigger={odometerRefreshTrigger}
-                              />
-                          </TabsContent>
-                          <TabsContent value="timeline" className="mt-4">
-                              <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} />
-                          </TabsContent>
-                          <TabsContent value="anomalies" className="mt-4">
-                              <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} viewMode="anomalies" />
-                          </TabsContent>
-                      </Tabs>
-                  </CardContent>
-              </Card>
+              <ErrorBoundary name="OdometerView">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Odometer History</CardTitle>
+                        <CardDescription>Track mileage verification and history</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Tabs defaultValue="history">
+                            <TabsList>
+                                <TabsTrigger value="history">History Log</TabsTrigger>
+                                <TabsTrigger value="timeline">Unified Timeline</TabsTrigger>
+                                <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="history" className="mt-4">
+                                <OdometerHistory 
+                                    vehicleId={vehicle.id || vehicle.licensePlate} 
+                                    refreshTrigger={odometerRefreshTrigger}
+                                />
+                            </TabsContent>
+                            <TabsContent value="timeline" className="mt-4">
+                                <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} />
+                            </TabsContent>
+                            <TabsContent value="anomalies" className="mt-4">
+                                <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} viewMode="anomalies" />
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
+              </ErrorBoundary>
           </TabsContent>
 
           <TabsContent value="km-tracking" className="space-y-6 mt-6">
@@ -1396,6 +1407,32 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                           />
                                       ) : (
                                           <p className="font-medium">{vehicle.specifications?.fuelEconomy || vehicle.fuelSettings?.efficiencyCity || '-'} km/L</p>
+                                      )}
+                                  </div>
+                                  <div>
+                                      <Label className="text-xs text-slate-500">Estimated Range (km)</Label>
+                                      {isEditingSpecs ? (
+                                          <div className="flex gap-2 items-center">
+                                              <Input 
+                                                  type="number"
+                                                  value={specsForm.estimatedRangeMin} 
+                                                  onChange={e => setSpecsForm({...specsForm, estimatedRangeMin: e.target.value})} 
+                                                  placeholder="Min"
+                                              />
+                                              <span className="text-slate-400">to</span>
+                                              <Input 
+                                                  type="number"
+                                                  value={specsForm.estimatedRangeMax} 
+                                                  onChange={e => setSpecsForm({...specsForm, estimatedRangeMax: e.target.value})} 
+                                                  placeholder="Max"
+                                              />
+                                          </div>
+                                      ) : (
+                                          <p className="font-medium">
+                                              {vehicle.specifications?.estimatedRangeMin && vehicle.specifications?.estimatedRangeMax 
+                                                  ? `${vehicle.specifications.estimatedRangeMin} km - ${vehicle.specifications.estimatedRangeMax} km` 
+                                                  : '-'}
+                                          </p>
                                       )}
                                   </div>
                                   {isEditingSpecs && (

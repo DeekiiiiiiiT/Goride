@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+// Build stability ping: 2026-02-10 03:45
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { LoginPage } from './components/auth/LoginPage';
 import { AppLayout } from './components/layout/AppLayout';
@@ -29,17 +30,32 @@ import { DriverClaims } from './components/driver-portal/DriverClaims';
 import { DriverExpenses } from './components/driver-portal/DriverExpenses';
 import { DriverEquipment } from './components/driver-portal/DriverEquipment';
 
+import { useAlertPusher } from './hooks/useAlertPusher';
+import { OfflineProvider } from './components/providers/OfflineProvider';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      cacheTime: 1000 * 60 * 30, // 30 minutes
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
 function AppContent() {
   const { user, role, loading, signOut } = useAuth();
+  useAlertPusher(); // Phase 5: Simulated Push Alerts
+  
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverPage, setDriverPage] = useState('dashboard');
   const [isDriverMenuOpen, setDriverMenuOpen] = useState(false);
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
 
-  // ... (rest of the state logic)
-
   // OAuth Callback Handler
-  React.useEffect(() => {
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     // Check if we are in a popup
@@ -47,7 +63,7 @@ function AppContent() {
         // Send code to main window
         window.opener.postMessage({ type: 'uber-auth-code', code }, '*');
         window.close();
-        return; // Stop execution
+        return; 
     }
   }, []);
 
@@ -67,9 +83,6 @@ function AppContent() {
                   <p className="text-slate-600 mb-6 max-w-sm mx-auto">
                       Uber returned an error: <br/>
                       <code className="bg-slate-200 px-2 py-1 rounded text-sm mt-2 inline-block">{authError}</code>
-                  </p>
-                  <p className="text-sm text-slate-500 mb-6">
-                    This usually means the "Scopes" in your Uber Dashboard don't match what the app requested (profile, history).
                   </p>
                   <button 
                       onClick={() => window.close()}
@@ -165,20 +178,6 @@ function AppContent() {
     </AppLayout>
   );
 }
-
-import { OfflineProvider } from './components/providers/OfflineProvider';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      cacheTime: 1000 * 60 * 30, // 30 minutes
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 export default function App() {
   return (

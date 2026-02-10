@@ -7,7 +7,6 @@ import {
     YAxis, 
     CartesianGrid, 
     Tooltip, 
-    ResponsiveContainer, 
     AreaChart, 
     Area, 
     BarChart, 
@@ -15,6 +14,7 @@ import {
     Legend,
     Cell
 } from 'recharts';
+import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { FuelEntry } from '../../types/fuel';
 import { Vehicle } from '../../types/vehicle';
 import { format, subMonths, isAfter, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';

@@ -4,10 +4,11 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Loader2, Upload, FileText, Check, ShieldCheck, ArrowRight, ArrowLeft, Sparkles, ScanLine, CreditCard, Calendar, Hash, Car, Globe, Camera, Lock } from 'lucide-react';
+import { Loader2, Upload, FileText, Check, ShieldCheck, ArrowRight, ArrowLeft, Sparkles, ScanLine, CreditCard, Calendar, Hash, Car, Globe, Camera, Lock, AlertTriangle } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { cn } from "../ui/utils";
+import { findMatchingDriver } from '../../utils/identityMatcher';
 
 interface AddDriverModalProps {
   isOpen: boolean;
@@ -144,6 +145,7 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   const [isScanning, setIsScanning] = useState(false);
   const [step, setStep] = useState(1);
   const [licenseStep, setLicenseStep] = useState<'front-upload' | 'front-review' | 'back-upload' | 'back-review'>('front-upload');
+  const [existingDrivers, setExistingDrivers] = React.useState<any[]>([]);
   
   // Personal Details
   const [firstName, setFirstName] = useState('');
@@ -167,6 +169,22 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   const [licenseToDrive, setLicenseToDrive] = useState('');
   const [controlNumber, setControlNumber] = useState('');
   const [originalIssueDate, setOriginalIssueDate] = useState('');
+
+  // Identity Matching (Phase 4)
+  const matchedDriver = React.useMemo(() => {
+      if (!firstName && !lastName && !licenseNumber) return null;
+      return findMatchingDriver({
+          name: `${firstName} ${lastName}`.trim(),
+          externalId: licenseNumber
+      }, existingDrivers);
+  }, [firstName, lastName, licenseNumber, existingDrivers]);
+
+  // Load existing drivers for matching
+  React.useEffect(() => {
+    if (isOpen) {
+        api.getDrivers().then(setExistingDrivers).catch(console.error);
+    }
+  }, [isOpen]);
 
   // Verification
   const [address, setAddress] = useState('');
@@ -554,6 +572,20 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
                                 : "Details verified. Please confirm to finish."}
                         </span>
                     </div>
+
+                    {/* Identity Match Alert (Phase 4) */}
+                    {matchedDriver && (
+                        <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 mb-6 flex items-start gap-3 animate-in zoom-in-95 duration-300">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-amber-900">Identity Match Detected</h4>
+                                <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                                    A driver named <span className="font-bold underline">{matchedDriver.name}</span> already exists in the system with this ID/Name. 
+                                    Submitting will update the existing profile instead of creating a duplicate.
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Front License Details Specific View */}
                     {step === 1 && licenseStep === 'front-review' ? (

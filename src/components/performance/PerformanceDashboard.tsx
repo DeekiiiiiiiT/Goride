@@ -14,6 +14,8 @@ import { Calendar as CalendarIcon, RefreshCw, Settings, Users, DollarSign, Activ
 import { cn } from "../ui/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { WeeklyCheckInLogs } from './WeeklyCheckInLogs';
+import { SafetyEfficiencyTab } from './SafetyEfficiencyTab';
+import { ShieldAlert } from 'lucide-react';
 
 export function PerformanceDashboard() {
   // Quick filters state
@@ -198,6 +200,10 @@ export function PerformanceDashboard() {
             <ClipboardList className="h-4 w-4" />
             Weekly Check-In
           </TabsTrigger>
+          <TabsTrigger value="safety" className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4" />
+            Safety & Efficiency
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -207,6 +213,10 @@ export function PerformanceDashboard() {
 
         <TabsContent value="checkins">
           <WeeklyCheckInLogs />
+        </TabsContent>
+
+        <TabsContent value="safety">
+          <SafetyEfficiencyTab />
         </TabsContent>
       </Tabs>
     </div>

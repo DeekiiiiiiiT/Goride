@@ -34,6 +34,7 @@ import { api } from '../services/api';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
+import { useFuelAnchors } from '../hooks/useFuelAnchors';
 import { toast } from "sonner@2.0.3";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { DateRange } from "react-day-picker";
@@ -308,6 +309,42 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const handleDeleteLog = async (id: string) => {
       setDeleteLogConfirmationId(id);
       setCascadeDelete(true);
+  };
+
+  const handleVerifyLog = async (id: string) => {
+      // Optimistic UI Update (Phase 3: Fuel Management & Odometer Audit Core)
+      const originalLogs = [...logs];
+      const entry = logs.find(l => l.id === id);
+      
+      if (!entry) return;
+
+      const updatedEntry = {
+          ...entry,
+          metadata: {
+              ...entry.metadata,
+              isVerified: true,
+              verifiedAt: new Date().toISOString()
+          }
+      };
+
+      setLogs(prev => prev.map(l => l.id === id ? updatedEntry : l));
+
+      try {
+          await fuelService.saveFuelEntry(updatedEntry);
+          toast.success("Log verified successfully");
+          
+          // Trigger integrity recalculation
+          const promise = api.runFuelBackfill();
+          toast.promise(promise, {
+              loading: 'Recalculating fleet integrity...',
+              success: 'Audit trail updated',
+              error: 'Background sync failed'
+          });
+      } catch (e) {
+          console.error("Verify Log Error:", e);
+          setLogs(originalLogs); // Rollback
+          toast.error("Failed to verify log. Reverting changes.");
+      }
   };
 
   // Reimbursement Handlers
@@ -802,6 +839,40 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       }
   };
 
+  const handleRepairAssetIdentity = async (duplicates: any[]) => {
+      setIsSyncing(true);
+      try {
+          for (const group of duplicates) {
+              const master = group.list[0];
+              const ghosts = group.list.slice(1);
+              
+              for (const ghost of ghosts) {
+                  // 1. Re-map logs
+                  const ghostLogs = logs.filter(l => l.vehicleId === ghost.id);
+                  for (const log of ghostLogs) {
+                      await fuelService.saveFuelEntry({ ...log, vehicleId: master.id });
+                  }
+                  
+                  // 2. Re-map transactions
+                  const ghostTxs = transactions.filter(t => t.vehicleId === ghost.id);
+                  for (const tx of ghostTxs) {
+                      await api.saveTransaction({ ...tx, vehicleId: master.id });
+                  }
+                  
+                  // 3. Delete ghost vehicle
+                  await api.deleteVehicle(ghost.id);
+              }
+          }
+          toast.success("Asset identities repaired. Ghost records collapsed into Master profiles.");
+          await loadData(true);
+      } catch (e) {
+          console.error("Identity repair failed", e);
+          toast.error("Failed to repair asset identities");
+      } finally {
+          setIsSyncing(false);
+      }
+  };
+
   const handleDisputeUpdated = (updated: FuelDispute) => {
       setDisputes(prev => prev.map(d => d.id === updated.id ? updated : d));
   };
@@ -830,6 +901,21 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       return d ? d.name : 'Unknown Driver';
   };
 
+  // Phase 7: Shared Anchor Logic
+  const { validAnchorIds, getLinkedTransaction } = useFuelAnchors(logs, transactions);
+
+  const isManualEntry = (entry: FuelEntry) => {
+      if (validAnchorIds.has(entry.id)) return false;
+      const tx = getLinkedTransaction(entry);
+      const isManualType = entry.type === 'Manual_Entry' || entry.type === 'Fuel_Manual_Entry';
+      const hasManualPortalType = entry.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.portal_type === 'Manual_Entry';
+      const hasManualSource = entry.metadata?.source?.toLowerCase().includes('manual') || 
+                             entry.metadata?.source?.toLowerCase().includes('fuel log') ||
+                             tx?.metadata?.source?.toLowerCase().includes('manual') ||
+                             tx?.metadata?.source?.toLowerCase().includes('fuel log');
+      return isManualType || hasManualPortalType || hasManualSource;
+  };
+
   // Phase 4: Decoupled Summary Stats (Step 4.2)
   const statsScopeLogs = logs.filter(log => {
     if (!logDateRange?.from && !logDateRange?.to) return true;
@@ -856,10 +942,14 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
     return true;
   });
 
-  const weeklySpend = statsScopeLogs.reduce((sum, log) => sum + log.amount, 0);
+  const totalSpend = statsScopeLogs.reduce((sum, log) => sum + log.amount, 0);
 
   const anchorTotalSpent = statsScopeLogs
-    .filter(log => log.type === 'Reimbursement' && (log.metadata?.isEdited || log.transactionId))
+    .filter(log => validAnchorIds.has(log.id))
+    .reduce((sum, log) => sum + log.amount, 0);
+
+  const pendingAuditSpend = statsScopeLogs
+    .filter(log => isManualEntry(log))
     .reduce((sum, log) => sum + log.amount, 0);
 
   const handleFinalize = async (reports: WeeklyFuelReport[]) => {
@@ -899,36 +989,42 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   };
 
   // Determine Page Title and Description based on activeTab
-  let pageTitle = "Fuel Management";
-  let pageDescription = "Track consumption, reconcile expenses, and manage gas cards.";
+  let pageTitle = "Fleet Integrity Management";
+  let pageDescription = "Audit fleet integrity, reconcile fuel consumption, and manage gas cards.";
 
-  if (activeTab === 'reconciliation') {
-      pageTitle = "Fuel Reconciliation";
+  if (activeTab === 'dashboard') {
+      pageTitle = "Fleet Integrity Overview";
+      pageDescription = "Track consumption, reconcile expenses, and manage gas cards.";
+  } else if (activeTab === 'reconciliation') {
+      pageTitle = "Consumption Reconciliation";
       pageDescription = "Compare actual gas card charges against estimated operating costs.";
   } else if (activeTab === 'reimbursements') {
       pageTitle = "Reimbursement Queue";
       pageDescription = "Review and approve driver reimbursement requests.";
   } else if (activeTab === 'cards') {
-      pageTitle = "Fuel Card Inventory";
+      pageTitle = "Card Inventory";
       pageDescription = "Manage gas cards and their assignments.";
   } else if (activeTab === 'logs') {
       pageTitle = "Transaction Logs";
       pageDescription = "History of all fuel purchases and manual entries.";
   } else if (activeTab === 'reports') {
-      pageTitle = "Fuel Reports";
+      pageTitle = "Consumption Reports";
       pageDescription = "View and export detailed fuel consumption reports.";
   } else if (activeTab === 'maintenance') {
-      pageTitle = "System Maintenance";
+      pageTitle = "Ledger Integrity Repair";
       pageDescription = "Repair historical data drift and orphaned records.";
   } else if (activeTab === 'configuration') {
-      pageTitle = "Fuel Configuration";
+      pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
   } else if (activeTab === 'stations') {
-      pageTitle = "Gas Stations Data";
+      pageTitle = "Refueling Analytics";
       pageDescription = "Analyze fuel prices, station activity, and fleet refueling trends.";
   } else if (activeTab === 'database') {
       pageTitle = "Station Database";
       pageDescription = "Manage approved gas stations and non-fuel locations.";
+  } else if (activeTab === 'audit') {
+      pageTitle = "Fleet Integrity Audit";
+      pageDescription = "Audit fleet integrity using Stop-to-Stop odometer verification and behavioral anomaly detection.";
   }
 
   return (
@@ -970,7 +1066,29 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                     </div>
                     <div>
                         <p className="text-sm text-slate-500 font-medium">Total Spend</p>
-                        <h3 className="text-2xl font-bold text-slate-900">${weeklySpend.toFixed(2)}</h3>
+                        <h3 className="text-2xl font-bold text-slate-900">${totalSpend.toFixed(2)}</h3>
+                    </div>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardContent className="p-6 flex items-center gap-4">
+                    <div className="p-3 bg-emerald-100 text-emerald-600 rounded-full">
+                        <ShieldCheck className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-500 font-medium">Verified Anchors</p>
+                        <h3 className="text-2xl font-bold text-slate-900">${anchorTotalSpent.toFixed(2)}</h3>
+                    </div>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardContent className="p-6 flex items-center gap-4">
+                    <div className="p-3 bg-orange-100 text-orange-600 rounded-full">
+                        <AlertTriangle className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-500 font-medium">Pending Audit</p>
+                        <h3 className="text-2xl font-bold text-slate-900">${pendingAuditSpend.toFixed(2)}</h3>
                     </div>
                 </CardContent>
             </Card>
@@ -982,28 +1100,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                     <div>
                         <p className="text-sm text-slate-500 font-medium">Active Cards</p>
                         <h3 className="text-2xl font-bold text-slate-900">{cards.filter(c => c.status === 'Active').length}</h3>
-                    </div>
-                </CardContent>
-            </Card>
-             <Card>
-                <CardContent className="p-6 flex items-center gap-4">
-                    <div className="p-3 bg-orange-100 text-orange-600 rounded-full">
-                        <Banknote className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-slate-500 font-medium">Pending Approvals</p>
-                        <h3 className="text-2xl font-bold text-slate-900">{transactions.filter(t => t.status === 'Pending' && t.type === 'Reimbursement' && (t.category === 'Fuel' || t.category === 'Fuel Reimbursement')).length}</h3>
-                    </div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardContent className="p-6 flex items-center gap-4">
-                    <div className="p-3 bg-emerald-100 text-emerald-600 rounded-full">
-                        <ShieldCheck className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-slate-500 font-medium">Anchor Total Spent</p>
-                        <h3 className="text-2xl font-bold text-slate-900">${anchorTotalSpent.toFixed(2)}</h3>
                     </div>
                 </CardContent>
             </Card>
@@ -1070,6 +1166,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             
             <FuelCardList 
                 cards={cards}
+                drivers={drivers}
                 onEdit={(card) => { setEditingCard(card); setIsCardModalOpen(true); }}
                 onDelete={handleDeleteCard}
                 getVehicleName={getVehicleName}
@@ -1086,6 +1183,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 vehicles={vehicles}
                 onEdit={(log) => { setEditingLog(log); setIsLogModalOpen(true); }}
                 onDelete={handleDeleteLog}
+                onVerifyLog={handleVerifyLog}
                 getVehicleName={getVehicleName}
                 getDriverName={getDriverName}
                 dateRange={logDateRange}
@@ -1098,12 +1196,15 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           <FuelIntegrityAuditTool 
               logs={logs}
               transactions={transactions}
+              vehicles={vehicles}
+              drivers={drivers}
               onHealLogToTx={handleHealLogToTx}
               onHealTxToLog={handleHealTxToLog}
               onSyncRecords={handleSyncRecords}
               onStandardizeTypes={handleStandardizeTypes}
               onBackfillMetadata={handleBackfillMetadata}
               onRunFuelIntegrityJob={handleRunFuelIntegrityJob}
+              onRepairAssetIdentity={handleRepairAssetIdentity}
               onRepairNaming={handleRepairNaming}
               onDeleteLog={handleDeleteLog}
               onDeleteTx={handleDeleteExpense}

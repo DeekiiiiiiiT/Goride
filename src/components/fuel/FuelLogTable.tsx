@@ -45,7 +45,7 @@ import {
 } from "../ui/accordion";
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
-import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { FuelEntry, FuelCard, FuelCycle } from '../../types/fuel';
@@ -53,9 +53,13 @@ import { FinancialTransaction } from '../../types/data';
 import { Vehicle } from '../../types/vehicle';
 import { api } from '../../services/api';
 import { useFuelCycles } from '../../hooks/useFuelCycles';
+import { useFuelAnchors } from '../../hooks/useFuelAnchors';
 
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
+import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
+import { FUEL_CSV_COLUMNS } from '../../types/csv-schemas';
+import { Download } from 'lucide-react';
 
 interface FuelLogTableProps {
     entries: FuelEntry[];
@@ -63,6 +67,7 @@ interface FuelLogTableProps {
     vehicles: Vehicle[];
     onEdit: (entry: FuelEntry) => void;
     onDelete: (id: string) => void;
+    onVerifyLog?: (id: string) => void;
     getVehicleName: (id?: string) => string;
     getDriverName: (id?: string) => string;
     dateRange?: DateRange;
@@ -75,6 +80,7 @@ export function FuelLogTable({
     vehicles,
     onEdit, 
     onDelete, 
+    onVerifyLog,
     getVehicleName, 
     getDriverName,
     dateRange,
@@ -89,7 +95,10 @@ export function FuelLogTable({
     const [activeView, setActiveView] = useState<'transactions' | 'cycles'>('transactions');
 
     // Phase 2: Cycle Mapping
-    const allCycles = useFuelCycles(entries);
+    const allCycles = useFuelCycles(entries, vehicles);
+    
+    // Phase 7: Shared Anchor Logic
+    const { validAnchorIds, anchorFailures, getLinkedTransaction } = useFuelAnchors(entries, transactions);
 
     const uniqueVehicles = useMemo(() => {
         const ids = Array.from(new Set(entries.map(e => e.vehicleId).filter(Boolean))) as string[];
@@ -116,75 +125,6 @@ export function FuelLogTable({
         setFilterAnchor('all');
         setFilterStatus('all');
     };
-
-    const transactionMap = useMemo(() => {
-        return new Map(transactions.map(t => [t.id, t]));
-    }, [transactions]);
-
-    const getLinkedTransaction = (entry: FuelEntry) => {
-        if (entry.transactionId) return transactionMap.get(entry.transactionId);
-        return transactions.find(t => t.metadata?.sourceId === entry.id);
-    };
-
-    const trustedEntryIds = useMemo(() => {
-        const trusted = new Set<string>();
-        entries.forEach(entry => {
-            const isModifiedAnchor = (entry.metadata?.isEdited === true || !!entry.metadata?.editReason) && entry.type === 'Reimbursement';
-            if (isModifiedAnchor) {
-                trusted.add(entry.id);
-                return;
-            }
-            const tx = getLinkedTransaction(entry);
-            const isOriginallyTrusted = tx && tx.metadata?.source !== 'Manual' && tx.metadata?.source !== 'Fuel Log';
-            if (isOriginallyTrusted) trusted.add(entry.id);
-        });
-        return trusted;
-    }, [entries, transactions, transactionMap]);
-
-    const { validAnchorIds, anchorFailures } = useMemo(() => {
-        const anchors = new Set<string>();
-        const failures = new Map<string, string>();
-        const candidates: FuelEntry[] = [];
-        
-        entries.forEach(e => {
-            if (e.type !== 'Reimbursement') return;
-            if ((e.odometer ?? 0) <= 0) {
-                failures.set(e.id, "Invalid Odometer (0)");
-                return;
-            }
-            if (!trustedEntryIds.has(e.id)) {
-                 failures.set(e.id, "Unverified Source (Manual/Admin)");
-                 return;
-            }
-            candidates.push(e);
-        });
-
-        const byVehicle = new Map<string, FuelEntry[]>();
-        candidates.forEach(e => {
-            const vId = e.vehicleId || 'unknown';
-            if (!byVehicle.has(vId)) byVehicle.set(vId, []);
-            byVehicle.get(vId)!.push(e);
-        });
-
-        byVehicle.forEach((vehicleEntries) => {
-            vehicleEntries.sort((a, b) => {
-                const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
-                if (dateDiff !== 0) return dateDiff;
-                return (a.odometer || 0) - (b.odometer || 0);
-            });
-            let maxOdometer = 0;
-            vehicleEntries.forEach(entry => {
-                const odo = entry.odometer || 0;
-                if (odo >= maxOdometer) {
-                    anchors.add(entry.id);
-                    maxOdometer = odo;
-                } else {
-                    failures.set(entry.id, `Sequential Error (${odo} < ${maxOdometer})`);
-                }
-            });
-        });
-        return { validAnchorIds: anchors, anchorFailures: failures };
-    }, [entries, trustedEntryIds]);
 
     const isManualEntry = (entry: FuelEntry) => {
         if (validAnchorIds.has(entry.id)) return false;
@@ -348,7 +288,7 @@ export function FuelLogTable({
                     <div className="flex-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fuel Integrity</p>
                         <div className="flex items-baseline gap-3">
-                            <div><p className="text-xl font-bold text-emerald-600">{stats.completedCycles}</p><p className="text-[10px] text-slate-500">Verified</p></div>
+                            <div><p className="text-xl font-bold text-emerald-600">{stats.completedCycles}</p><p className="text-[10px] text-slate-500">Verified Cycles</p></div>
                             <div className="h-8 w-px bg-slate-100 mx-1"></div>
                             <div>
                                 <Tooltip>
@@ -426,17 +366,32 @@ export function FuelLogTable({
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                         <Input placeholder="Search..." className="pl-8 h-9 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
-                    <Popover>
-                        <PopoverTrigger asChild><Button variant="outline" size="sm" className="gap-2 h-9 border-dashed"><FilterIcon className="h-3.5 w-3.5" /> Filters</Button></PopoverTrigger>
-                        <PopoverContent className="w-80"><div className="grid gap-2">
-                            <Label>Vehicle</Label>
-                            <Select value={filterVehicle} onValueChange={setFilterVehicle}>
-                                <SelectTrigger><SelectValue placeholder="All Vehicles" /></SelectTrigger>
-                                <SelectContent><SelectItem value="all">All Vehicles</SelectItem>{uniqueVehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2 text-xs">Clear Filters</Button>
-                        </div></PopoverContent>
-                    </Popover>
+                    <div className="flex gap-2">
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="gap-2 h-9"
+                            onClick={() => {
+                                const csv = jsonToCsv(filteredEntries, FUEL_CSV_COLUMNS);
+                                downloadBlob(csv, `fuel_logs_${new Date().toISOString().split('T')[0]}.csv`);
+                                toast.success("Exporting fuel logs...");
+                            }}
+                        >
+                            <Download className="h-3.5 w-3.5" />
+                            Export
+                        </Button>
+                        <Popover>
+                            <PopoverTrigger asChild><Button variant="outline" size="sm" className="gap-2 h-9 border-dashed"><FilterIcon className="h-3.5 w-3.5" /> Filters</Button></PopoverTrigger>
+                            <PopoverContent className="w-80"><div className="grid gap-2">
+                                <Label>Vehicle</Label>
+                                <Select value={filterVehicle} onValueChange={setFilterVehicle}>
+                                    <SelectTrigger><SelectValue placeholder="All Vehicles" /></SelectTrigger>
+                                    <SelectContent><SelectItem value="all">All Vehicles</SelectItem>{uniqueVehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                                <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2 text-xs">Clear Filters</Button>
+                            </div></PopoverContent>
+                        </Popover>
+                    </div>
                     {onDateRangeChange && <DatePickerWithRange date={dateRange} setDate={onDateRangeChange} />}
                 </div>
                 <div className="text-xs text-slate-500">Showing {activeView === 'transactions' ? filteredEntries.length : filteredCycles.length} records</div>
@@ -462,7 +417,26 @@ export function FuelLogTable({
                             filteredEntries.map(entry => (
                                 <TableRow key={entry.id}>
                                     <TableCell>{formatDate(entry.date)}</TableCell>
-                                    <TableCell><div className="flex items-center gap-2">{getTypeIcon(entry.type)}<span className="text-xs">{entry.type.replace('_', ' ')}</span></div></TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            {getTypeIcon(entry.type)}
+                                            <span className="text-xs">{entry.type.replace('_', ' ')}</span>
+                                            {(validAnchorIds.has(entry.id) || entry.metadata?.isFullTank || entry.metadata?.isAnchor || entry.metadata?.isSoftAnchor || entry.metadata?.isVerified) && (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 cursor-help flex-shrink-0" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p className="text-xs font-bold">Verified Log</p>
+                                                        <p className="text-[10px]">Odometer and transaction sequence verified against fleet history.</p>
+                                                        {(entry.metadata?.isFullTank || entry.metadata?.isSoftAnchor) && (
+                                                            <p className="text-[10px] text-emerald-600 font-bold mt-1 italic">Cycle Reset Point</p>
+                                                        )}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                        </div>
+                                    </TableCell>
                                     <TableCell className="font-medium text-xs">{getVehicleName(entry.vehicleId)}</TableCell>
                                     <TableCell className="text-xs">{getDriverName(entry.driverId)}</TableCell>
                                     <TableCell>
@@ -531,9 +505,22 @@ export function FuelLogTable({
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                <DropdownMenuItem onClick={() => onEdit(entry)}>
-                                                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                                                <DropdownMenuItem 
+                                                    onClick={() => onEdit(entry)}
+                                                    disabled={entry.metadata?.isVerified}
+                                                    className={cn(entry.metadata?.isVerified && "opacity-50 cursor-not-allowed")}
+                                                >
+                                                    <Pencil className="mr-2 h-4 w-4" /> 
+                                                    {entry.metadata?.isVerified ? "Edit (Locked)" : "Edit"}
                                                 </DropdownMenuItem>
+                                                {onVerifyLog && !validAnchorIds.has(entry.id) && !entry.metadata?.isFullTank && (
+                                                    <DropdownMenuItem 
+                                                        className="cursor-pointer text-emerald-600 focus:text-emerald-700"
+                                                        onClick={() => onVerifyLog(entry.id)}
+                                                    >
+                                                        <ShieldCheck className="mr-2 h-4 w-4" /> Verify Log
+                                                    </DropdownMenuItem>
+                                                )}
                                                 <DropdownMenuItem 
                                                     className="cursor-pointer"
                                                     onClick={async () => {
@@ -572,8 +559,13 @@ export function FuelLogTable({
                                                     {entry.metadata?.isFullTank ? "Unmark Full Tank" : "Mark as Full Tank"}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem onClick={() => onDelete(entry.id)} className="text-red-600">
-                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                <DropdownMenuItem 
+                                                    onClick={() => onDelete(entry.id)} 
+                                                    disabled={entry.metadata?.isVerified}
+                                                    className={cn(entry.metadata?.isVerified ? "opacity-50 cursor-not-allowed" : "text-red-600")}
+                                                >
+                                                    <Trash2 className="mr-2 h-4 w-4" /> 
+                                                    {entry.metadata?.isVerified ? "Delete (Locked)" : "Delete"}
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
@@ -586,15 +578,39 @@ export function FuelLogTable({
                     <div className="p-4">
                         {filteredCycles.length === 0 ? <div className="h-24 flex items-center justify-center">No fuel cycles identified</div> : 
                         <Accordion type="multiple" className="space-y-3">
-                            {filteredCycles.map(cycle => (
+                            {filteredCycles.map(cycle => {
+                                const vehicle = vehicles.find(v => v.id === cycle.vehicleId);
+                                const tankCap = vehicle?.fuelSettings?.tankCapacity || 40;
+                                const calculatedEndPct = Math.min(100, (cycle.startingPercentage || 0) + (cycle.totalLiters / tankCap) * 100);
+                                
+                                return (
                                 <AccordionItem key={cycle.id} value={cycle.id} className="border rounded-xl px-4 py-1 hover:bg-slate-50/50 transition-colors">
                                     <AccordionTrigger className="hover:no-underline py-3">
-                                        <div className="flex items-center gap-8 w-full text-left">
+                                        <div className="flex items-center gap-6 w-full text-left">
                                             <div className="flex flex-col"><span className="text-[10px] text-slate-400 font-bold uppercase">{cycle.status === 'Active' ? 'Started' : 'Cycle End'}</span><span className="text-sm font-bold">{formatDate(cycle.status === 'Active' ? cycle.startDate : cycle.endDate)}</span></div>
-                                            <div className="flex flex-col min-w-[120px]"><span className="text-[10px] text-slate-400 font-bold uppercase">Vehicle</span><span className="text-sm font-medium">{getVehicleName(cycle.vehicleId)}</span></div>
+                                            <div className="flex flex-col min-w-[110px]"><span className="text-[10px] text-slate-400 font-bold uppercase">Vehicle</span><span className="text-sm font-medium">{getVehicleName(cycle.vehicleId)}</span></div>
                                             <div className="flex flex-col"><span className="text-[10px] text-slate-400 font-bold uppercase">Distance</span><span className="text-sm font-bold text-indigo-600">{cycle.distance.toLocaleString()} km</span></div>
-                                            <div className="flex flex-col"><span className="text-[10px] text-slate-400 font-bold uppercase">Volume</span><span className="text-sm font-bold">{cycle.totalLiters.toFixed(1)} L</span></div>
                                             <div className="flex flex-col"><span className="text-[10px] text-slate-400 font-bold uppercase">Efficiency</span><span className="text-sm font-bold text-emerald-600">{cycle.efficiency.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">km/L</span></span></div>
+                                            
+                                            {/* Tank Visualization */}
+                                            <div className="flex flex-col min-w-[120px]">
+                                                <span className="text-[10px] text-slate-400 font-bold uppercase">Tank Range</span>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className="text-[10px] font-bold text-slate-500">{(cycle.startingPercentage || 0).toFixed(0)}%</span>
+                                                    <div className="h-1.5 w-14 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200/50">
+                                                        <div 
+                                                            className="h-full bg-slate-200" 
+                                                            style={{ width: `${cycle.startingPercentage || 0}%` }} 
+                                                        />
+                                                        <div 
+                                                            className="h-full bg-emerald-500" 
+                                                            style={{ width: `${Math.min(100 - (cycle.startingPercentage || 0), (cycle.totalLiters / tankCap) * 100)}%` }} 
+                                                        />
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-emerald-600">{cycle.isCapped ? '100%' : `${calculatedEndPct.toFixed(0)}%`}</span>
+                                                </div>
+                                            </div>
+
                                             <div className="flex-1" />
                                             {cycle.status === 'Anomaly' ? (
                                                 <Tooltip>
@@ -608,8 +624,8 @@ export function FuelLogTable({
                                                         <div className="space-y-1">
                                                             <p className="font-bold text-xs text-rose-600">Cycle Issues Detected:</p>
                                                             <ul className="text-[10px] list-disc pl-4 space-y-0.5">
-                                                                {(cycle.totalLiters / (vehicles.find(v => v.id === cycle.vehicleId)?.fuelSettings?.tankCapacity || 1)) * 100 > 105 && (
-                                                                    <li>Critical tank overflow (&gt;105%)</li>
+                                                                {cycle.isCapped && cycle.excessVolume && cycle.excessVolume > 5 && (
+                                                                    <li>Significant overflow carried forward ({cycle.excessVolume.toFixed(1)} L)</li>
                                                                 )}
                                                                 {cycle.efficiency < 8 && cycle.distance > 0 && <li>Efficiency below target baseline</li>}
                                                                 {cycle.distance === 0 && <li>Incomplete distance data</li>}
@@ -628,30 +644,69 @@ export function FuelLogTable({
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent className="pt-4 pb-2 border-t mt-1">
-                                        <div className="grid grid-cols-4 gap-6 bg-slate-50 p-4 rounded-lg mb-4 border border-slate-100">
+                                        <div className="grid grid-cols-5 gap-6 bg-slate-50 p-4 rounded-lg mb-4 border border-slate-100">
                                             <div><p className="text-[10px] font-bold text-slate-400 uppercase">Odo Range</p><p className="text-xs font-mono">{cycle.startOdometer?.toLocaleString()} → {cycle.endOdometer?.toLocaleString()}</p></div>
+                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase">Total Fuel</p><p className="text-sm font-bold">{cycle.totalLiters.toFixed(1)} L</p></div>
                                             <div><p className="text-[10px] font-bold text-slate-400 uppercase">Total Cost</p><p className="text-sm font-bold">${cycle.totalCost.toFixed(2)}</p></div>
                                             <div><p className="text-[10px] font-bold text-slate-400 uppercase">Avg Price/L</p><p className="text-sm">${cycle.avgPricePerLiter.toFixed(3)}</p></div>
-                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase">Reset Mode</p><Badge variant="outline" className="text-[9px] font-bold">{cycle.resetType}</Badge></div>
+                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase">Reset Mode</p>
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <Badge variant="outline" className="text-[9px] font-bold">{cycle.resetType}</Badge>
+                                                    {cycle.isCapped && <Badge className="text-[8px] bg-amber-100 text-amber-700 border-amber-200">CAPPED @ 100%</Badge>}
+                                                </div>
+                                            </div>
                                         </div>
                                         <Table>
-                                            <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="h-8 text-[10px]">Date</TableHead><TableHead className="h-8 text-[10px]">Type</TableHead><TableHead className="h-8 text-[10px]">Volume</TableHead><TableHead className="h-8 text-[10px]">Cost</TableHead><TableHead className="h-8 text-[10px]">Odo</TableHead><TableHead className="h-8 text-[10px] text-right">Action</TableHead></TableRow></TableHeader>
+                                            <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="h-8 text-[10px]">Date</TableHead><TableHead className="h-8 text-[10px]">Type</TableHead><TableHead className="h-8 text-[10px]">Contrib. Volume</TableHead><TableHead className="h-8 text-[10px]">Contrib. Cost</TableHead><TableHead className="h-8 text-[10px]">Odo</TableHead><TableHead className="h-8 text-[10px] text-right">Action</TableHead></TableRow></TableHeader>
                                             <TableBody>
-                                                {cycle.transactions.map(tx => (
-                                                    <TableRow key={tx.id} className="group hover:bg-slate-50">
-                                                        <TableCell className="py-2 text-xs">{formatDate(tx.date)}</TableCell>
+                                                {cycle.transactions.map((tx, txIdx) => (
+                                                    <TableRow key={`${tx.id}-${txIdx}`} className={cn("group hover:bg-slate-50", tx.isCarryover && "bg-blue-50/30")}>
+                                                        <TableCell className="py-2 text-xs">
+                                                            <div className="flex flex-col">
+                                                                <span>{formatDate(tx.date)}</span>
+                                                                {tx.isCarryover && <span className="text-[9px] text-blue-600 font-bold uppercase flex items-center gap-0.5"><RotateCcw className="h-2 w-2" /> Balance from Prev.</span>}
+                                                            </div>
+                                                        </TableCell>
                                                         <TableCell className="py-2 text-xs"><div className="flex items-center gap-1">{getTypeIcon(tx.type)}{tx.type.replace('_', ' ')}</div></TableCell>
-                                                        <TableCell className="py-2 text-xs font-medium">{tx.liters?.toFixed(1)} L</TableCell>
-                                                        <TableCell className="py-2 text-xs font-bold">${tx.amount.toFixed(2)}</TableCell>
+                                                        <TableCell className="py-2 text-xs font-medium">
+                                                            <div className="flex items-center gap-1.5">
+                                                                {tx.volumeContributed?.toFixed(1) || tx.liters?.toFixed(1)} L
+                                                                {tx.volumeContributed !== undefined && tx.liters !== undefined && tx.volumeContributed < tx.liters && !tx.isCarryover && (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <div className="flex items-center text-[9px] text-amber-600 bg-amber-50 px-1 rounded border border-amber-200 cursor-help font-bold">
+                                                                                <Scissors className="h-2 w-2 mr-0.5" /> SPLIT
+                                                                            </div>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>
+                                                                            <p className="text-xs font-bold">Partial Fill applied to this cycle</p>
+                                                                            <p className="text-[10px]">Receipt: {tx.liters.toFixed(1)} L</p>
+                                                                            <p className="text-[10px] text-emerald-600 font-medium">{(tx.liters - tx.volumeContributed).toFixed(1)} L carried to next tank</p>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="py-2 text-xs font-bold">
+                                                            ${(tx.volumeContributed !== undefined && tx.liters !== undefined && tx.liters > 0 && !tx.isCarryover
+                                                                ? (tx.amount * (tx.volumeContributed / tx.liters)) 
+                                                                : (tx.isCarryover ? 0 : tx.amount)).toFixed(2)}
+                                                        </TableCell>
                                                         <TableCell className="py-2 text-xs font-mono">{tx.odometer?.toLocaleString() || '-'}</TableCell>
-                                                        <TableCell className="py-2 text-right"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(tx)}><Pencil className="h-3 w-3" /></Button></TableCell>
+                                                        <TableCell className="py-2 text-right">
+                                                            {!tx.isCarryover && (
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(tx)}>
+                                                                    <Pencil className="h-3 w-3" />
+                                                                </Button>
+                                                            )}
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                         </Table>
                                     </AccordionContent>
                                 </AccordionItem>
-                            ))}
+                            )})}
                         </Accordion>}
                     </div>
                 )}

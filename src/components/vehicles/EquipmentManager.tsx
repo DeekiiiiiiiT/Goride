@@ -16,7 +16,7 @@ interface EquipmentManagerProps {
     vehicleId: string;
 }
 
-export function EquipmentManager({ vehicleId }: EquipmentManagerProps) {
+const EquipmentManagerComponent: React.FC<EquipmentManagerProps> = ({ vehicleId }) => {
     const [items, setItems] = useState<EquipmentItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -403,4 +403,6 @@ export function EquipmentManager({ vehicleId }: EquipmentManagerProps) {
             </Dialog>
         </div>
     );
-}
+};
+
+export const EquipmentManager = React.memo(EquipmentManagerComponent);

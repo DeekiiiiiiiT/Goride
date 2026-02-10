@@ -63,7 +63,7 @@ async function fetchAllServiceLogs(): Promise<ServiceRequest[]> {
 /**
  * Normalizes Fuel Entries into Odometer Readings
  */
-function normalizeFuelReadings(fuelEntries: FuelEntry[]): OdometerReading[] {
+function normalizeFuelReadings(fuelEntries: FuelEntry[], verifiedIds: Set<string>): OdometerReading[] {
     return fuelEntries
         .filter(entry => entry.odometer && entry.odometer > 0)
         .map(entry => ({
@@ -74,7 +74,7 @@ function normalizeFuelReadings(fuelEntries: FuelEntry[]): OdometerReading[] {
             type: 'Hard',
             source: 'Fuel Log',
             createdAt: entry.createdAt || new Date().toISOString(),
-            isVerified: true,
+            isVerified: verifiedIds.has(entry.id) || entry.metadata?.isVerified === true,
             referenceId: entry.id
         } as OdometerReading));
 }

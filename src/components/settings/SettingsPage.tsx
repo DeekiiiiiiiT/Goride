@@ -56,8 +56,8 @@ import {
 import { Separator } from "../ui/separator";
 
 import { DataResetModal } from '../admin/DataResetModal';
-
 import { SystemHardeningPanel } from '../admin/SystemHardeningPanel';
+import { SyncCenter } from '../sync/SyncCenter';
 
 export function SettingsPage() {
   return (
@@ -794,6 +794,8 @@ function MaintenancePanel() {
           </div>
         </CardContent>
       </Card>
+
+      <SyncCenter />
     </div>
   );
 }

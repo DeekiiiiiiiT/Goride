@@ -134,7 +134,7 @@ interface MaintenanceManagerProps {
     onRefresh: () => void;
 }
 
-export function MaintenanceManager({ 
+const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({ 
     vehicleId, 
     logs = [], 
     maintenanceStatus = {
@@ -145,7 +145,7 @@ export function MaintenanceManager({
         remainingKm: 0
     }, 
     onRefresh 
-}: MaintenanceManagerProps) {
+}) => {
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [selectedLog, setSelectedLog] = useState<MaintenanceLog | null>(null);
     const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -799,4 +799,6 @@ export function MaintenanceManager({
             </Dialog>
         </div>
     );
-}
+};
+
+export const MaintenanceManager = React.memo(MaintenanceManagerComponent);

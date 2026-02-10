@@ -267,6 +267,14 @@ export const api = {
     return response.json();
   },
 
+  async getUnifiedVehicleLogs(vehicleId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${vehicleId}/unified-logs`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch unified logs");
+    return response.json();
+  },
+
   async clearAllData() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
       method: 'DELETE',
@@ -292,6 +300,88 @@ export const api = {
       throw new Error(`Failed to fetch notifications: ${response.status} ${errorText}`);
     }
 
+    return response.json();
+  },
+
+  // Persistent Alerts (Phase 1)
+  async getPersistentAlerts(userId?: string, vehicleId?: string): Promise<Notification[]> {
+    const url = new URL(`${API_ENDPOINTS.admin}/notifications/list`);
+    if (userId) url.searchParams.append('userId', userId);
+    if (vehicleId) url.searchParams.append('vehicleId', vehicleId);
+    
+    const response = await fetchWithRetry(url.toString(), {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch persistent alerts");
+    return response.json();
+  },
+
+  async pushAlert(alert: Partial<Notification>) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/push`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(alert)
+    });
+    if (!response.ok) throw new Error("Failed to push alert");
+    return response.json();
+  },
+
+  // Audit Endpoints (Phase 4)
+  async logAuditAction(payload: { 
+    entityId: string, 
+    entityType: string, 
+    action: string, 
+    oldValue?: any, 
+    newValue?: any, 
+    reason: string, 
+    userId: string 
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/audit/logs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error("Failed to create audit log");
+    return response.json();
+  },
+
+  async getAuditLogs(entityId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/audit/logs/${entityId}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch audit logs");
+    return response.json();
+  },
+
+  async verifyIntegrity(record: any, signature: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/audit/verify-integrity`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ record, signature })
+    });
+    if (!response.ok) throw new Error("Failed to verify integrity");
+    return response.json();
+  },
+
+  async acknowledgeAlert(id: string, isDismissed: boolean = false) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/acknowledge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ id, isDismissed })
+    });
+    if (!response.ok) throw new Error("Failed to acknowledge alert");
     return response.json();
   },
 
@@ -407,9 +497,12 @@ export const api = {
     return response.json();
   },
 
-  // Fuel Audit Endpoints (Phase 6)
-  async getFuelAuditSummary() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/summary`, {
+  // Fuel Audit Endpoints (Phase 4 & 5 & 6)
+  async getFuelAuditSummary(vehicleId?: string) {
+    const url = vehicleId 
+      ? `${API_ENDPOINTS.fuel}/fuel-audit/summary?vehicleId=${vehicleId}`
+      : `${API_ENDPOINTS.fuel}/fuel-audit/fleet-stats`;
+    const response = await fetchWithRetry(url, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch audit summary");
@@ -417,11 +510,13 @@ export const api = {
   },
 
   async getFlaggedTransactions() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/flagged`, {
+    // Flagged transactions are just fuel entries with isFlagged: true
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch flagged transactions");
-    return response.json();
+    const all = await response.json();
+    return all.filter((e: any) => e.isFlagged);
   },
 
   async resolveFuelAnomaly(transactionId: string, status: 'resolved' | 'disputed' | 'rejected', note: string) {
@@ -461,6 +556,19 @@ export const api = {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to delete vehicle");
+    return response.json();
+  },
+
+    async saveFuelEntry(entry: any) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(entry)
+    });
+    if (!response.ok) throw new Error("Failed to save fuel entry");
     return response.json();
   },
 
@@ -725,6 +833,14 @@ export const api = {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       if (!response.ok) throw new Error("Failed to fetch maintenance logs");
+      return response.json();
+  },
+
+  async getAllMaintenanceLogs() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      });
+      if (!response.ok) throw new Error("Failed to fetch all maintenance logs");
       return response.json();
   },
 

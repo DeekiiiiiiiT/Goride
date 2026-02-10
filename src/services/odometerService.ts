@@ -36,6 +36,7 @@ export const odometerService = {
                     ...r,
                     source: mappedSource, 
                     referenceId: r.id, // Self-referential for manual entries
+                    isAnchorPoint: r.isAnchorPoint || r.isVerified || false,
                     metaData: {
                         originalSource: r.source // Keep original source string for context
                     }
@@ -59,6 +60,7 @@ export const odometerService = {
               notes: entry.location ? `Fuel at ${entry.location}` : 'Fuel Entry',
               referenceId: entry.id,
               isVerified: true, // Fuel logs are generally considered verified/hard readings
+              isAnchorPoint: true, // Fuel logs act as physical anchors
               createdAt: entry.date,
               metaData: {
                 liters: entry.liters,
@@ -90,6 +92,7 @@ export const odometerService = {
               referenceId: checkIn.id,
               imageUrl: checkIn.photoUrl,
               isVerified: checkIn.verified || false,
+              isAnchorPoint: checkIn.reviewStatus === 'approved' || checkIn.reviewStatus === 'auto_approved',
               isManagerVerified: checkIn.reviewStatus === 'approved' || checkIn.reviewStatus === 'auto_approved',
               createdAt: date,
               metaData: {
@@ -118,6 +121,7 @@ export const odometerService = {
               notes: log.serviceType || 'Maintenance Service',
               referenceId: log.id,
               isVerified: true,
+              isAnchorPoint: true, // Service logs are trusted anchors
               createdAt: log.date,
               metaData: {
                 serviceType: log.serviceType,
@@ -202,7 +206,8 @@ export const odometerService = {
                       source: mappedSource as any,
                       referenceId: entry.referenceId,
                       notes: finalNotes,
-                      isVerified: true
+                      isVerified: true,
+                      isAnchorPoint: entry.isAnchorPoint || true
                       // We do NOT send 'id', let DB generate a new UUID for this row
                   };
 

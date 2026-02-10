@@ -2,6 +2,7 @@
 import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import * as fuelLogic from "./fuel_logic.ts";
 
 const app = new Hono();
 
@@ -13,8 +14,8 @@ const supabase = createClient(
 const BASE_PATH = "/make-server-37f42386";
 
 // --- CONSTANTS ---
-const SOFT_ANCHOR_THRESHOLD = 1.0; // 100% capacity triggers a reset
-const CRITICAL_THRESHOLD = 1.05;   // 105% capacity flags a critical anomaly
+const SOFT_ANCHOR_THRESHOLD = 0.98; // Adjusted to Roadmap: 98% capacity triggers a reset
+const OVERFILL_THRESHOLD = 1.02;    // Adjusted to Roadmap: 102% capacity flags a critical anomaly
 
 // --- FUEL CARDS ---
 app.get(`${BASE_PATH}/fuel-cards`, async (c) => {
@@ -105,11 +106,16 @@ app.post(`${BASE_PATH}/admin/chaos-seeder`, async (c) => {
 
         for (let i = 0; i < count; i++) {
             const vehicle = vehicles[Math.floor(Math.random() * vehicles.length)];
+            const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 40;
             const date = new Date(baseDate);
             date.setMinutes(date.getMinutes() - (i * 120)); // Every 2 hours
             
-            const isAnomaly = Math.random() > 0.95; // 5% chance of anomaly
-            const liters = isAnomaly ? 85 : 45; // 85L is usually over capacity for standard cars
+            // Randomly generate volume to trigger splits
+            // Some small fills, some large fills
+            const rand = Math.random();
+            let liters = 15 + (Math.random() * 10); // Normal fill 15-25L
+            if (rand > 0.8) liters = tankCapacity * 0.9; // Large fill (90% tank)
+            if (rand > 0.95) liters = tankCapacity * 1.2; // Overfill anomaly (120% tank)
 
             entries.push({
                 id: crypto.randomUUID(),
@@ -125,7 +131,7 @@ app.post(`${BASE_PATH}/admin/chaos-seeder`, async (c) => {
                 paymentSource: 'Gas_Card',
                 metadata: {
                     isSynthetic: true,
-                    chaosBatch: 'phase-8-stress'
+                    chaosBatch: 'phase-4-threshold-test'
                 }
             });
         }
@@ -187,135 +193,161 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
 
-    // Phase 8.2: Server-Side Validation & Integrity Protection
-    // We prevent manipulation of "valid" statuses and calculate integrity server-side
-    
-    // 1. Fetch Vehicle to check tank capacity
+    // Step 3.1: Immutability Lockdown
+    const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
+    if (existingEntry) {
+        // Only allow updating resolution metadata, not core audit data
+        const protectedFields = ['liters', 'amount', 'odometer', 'date', 'vehicleId'];
+        const isAttemptingIllegalChange = protectedFields.some(f => existingEntry[f] !== undefined && entry[f] !== undefined && existingEntry[f] !== entry[f]);
+        
+        if (isAttemptingIllegalChange) {
+            entry.liters = existingEntry.liters;
+            entry.amount = existingEntry.amount;
+            entry.odometer = existingEntry.odometer;
+            entry.date = existingEntry.date;
+            entry.vehicleId = existingEntry.vehicleId;
+        }
+    }
+
+    // 1. Fetch Vehicle to check tank capacity and efficiency baselines
     if (entry.vehicleId) {
         const vehicle = await kv.get(`vehicle:${entry.vehicleId}`);
         if (vehicle) {
-            const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0;
+            const { tankCapacity, baselineEfficiency, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
+            const profileKmPerLiter = baselineEfficiency;
+
+            // 2. Fetch recent entries to calculate cycle state using Step 1.3 Helper
+            const lastAnchor = await fuelLogic.getLastAnchor(entry.vehicleId);
+            const lastAnchorOdo = Number(lastAnchor?.odometer) || 0;
+            const lastAnchorDate = lastAnchor?.date || null;
             
-            // 2. Fetch recent entries to calculate current cumulative
-            const allEntries = await kv.getByPrefix("fuel_entry:");
-            const vehicleEntries = allEntries
+            const cycleEntries = await fuelLogic.getEntriesSinceLastAnchor(entry.vehicleId, lastAnchorDate);
+            
+            // Step 2.1: Accumulation Logic (with carryover support)
+            let carryoverFromLastAnchor = 0;
+            if (lastAnchor?.metadata?.isSoftAnchor && lastAnchor?.metadata?.excessVolume) {
+                carryoverFromLastAnchor = Number(lastAnchor.metadata.excessVolume) || 0;
+            }
+
+            let runningCumulative = carryoverFromLastAnchor;
+            for (const ce of cycleEntries) {
+                if (ce.id !== entry.id) {
+                    runningCumulative = Number((runningCumulative + (Number(ce.liters) || 0)).toFixed(4));
+                }
+            }
+
+            const volumeAtEntry = (Number(entry.liters) || 0);
+            const prevCumulative = runningCumulative;
+            const totalVolumeInCycle = Number((runningCumulative + volumeAtEntry).toFixed(4));
+            const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
+            
+            // Step 2.2: Trigger Thresholding (Roadmap: 98%)
+            const isHardAnchor = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
+            const approachingSoftAnchor = tankCapacity > 0 && totalVolumeInCycle >= (tankCapacity * SOFT_ANCHOR_THRESHOLD);
+            const isSoftAnchor = !isHardAnchor && approachingSoftAnchor;
+            
+            // Step 2.3: Virtual Reset Implementation
+            let volumeContributed = volumeAtEntry;
+            let excessVolume = 0;
+            if (isSoftAnchor) {
+                volumeContributed = Math.max(0, tankCapacity - prevCumulative);
+                excessVolume = Number((volumeAtEntry - volumeContributed).toFixed(4));
+            }
+
+            // Efficiency Math
+            let actualKmPerLiter = 0;
+            let efficiencyVariance = 0;
+            if (distanceSinceAnchor > 0 && totalVolumeInCycle > 0) {
+                actualKmPerLiter = distanceSinceAnchor / totalVolumeInCycle;
+                if (profileKmPerLiter > 0) {
+                    efficiencyVariance = (profileKmPerLiter - actualKmPerLiter) / profileKmPerLiter;
+                }
+            }
+
+            // Step 3.2: Behavioral Integrity - Frequency Check
+            const recentTimeWindow = new Date(new Date(entry.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
+            const allEntriesRaw = await kv.getByPrefix("fuel_entry:");
+            const vehicleEntries = allEntriesRaw
                 .filter((e: any) => e.vehicleId === entry.vehicleId && e.id !== entry.id)
                 .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                
+            const recentTxCount = vehicleEntries.filter(e => e.date >= recentTimeWindow).length;
 
-            let cumulative = 0;
-            for (const ve of vehicleEntries) {
-                // Phase 14: Logic check - Is the previous record a reset point?
-                if (ve.metadata?.isAnchor || ve.metadata?.isFullTank || ve.metadata?.isSoftAnchor) {
-                    // If the previous record was a reset point, the cumulative sum before THIS entry 
-                    // is just the liters from the reset point itself (not 0, because the reset point
-                    // is the first entry of the new cycle).
-                    // Wait, if ve is the reset point, it should NOT be added to cumulative of NEXT?
-                    // No, the reset point IS the first entry.
-                    // So for the entry AFTER a reset, cumulative = liters of reset.
-                    break;
-                }
-                cumulative += (Number(ve.liters) || 0);
+            // Step 5.1: Odometer Sequence Audit
+            const prevEntry = vehicleEntries[0]; // Most recent past entry
+            const odoAudit = fuelLogic.auditOdometerSequence({
+                currentOdo: Number(entry.odometer),
+                prevOdo: Number(prevEntry?.odometer || 0),
+                maxExpectedDistance: rangeMin * 1.5
+            });
+
+            // Step 3.3: Integrated Integrity Engine
+            const integrity = fuelLogic.calculateIntegrity({
+                volume: volumeAtEntry,
+                tankCapacity,
+                prevCumulative,
+                distanceSinceAnchor,
+                profileEfficiency: profileKmPerLiter,
+                recentTxCount,
+                isTopUp: entry.metadata?.isTopUp,
+                isAnchor: isHardAnchor || isSoftAnchor,
+                rangeMin
+            });
+
+            // Override if Odo Audit is more severe
+            let integrityStatus = integrity.status;
+            let anomalyReason = integrity.reason;
+            let auditStatus = integrity.auditStatus;
+
+            if (odoAudit.status === 'critical' || (odoAudit.status === 'warning' && integrityStatus === 'valid')) {
+                integrityStatus = odoAudit.status;
+                anomalyReason = odoAudit.reason;
+                auditStatus = odoAudit.auditStatus || auditStatus;
             }
 
-            const rawCumulative = cumulative + (Number(entry.liters) || 0);
-            
-            // Phase 1 (Logic Refactoring): Soft Anchor Detection at 100%
-            const approachingSoftAnchor = tankCapacity > 0 && rawCumulative >= (tankCapacity * SOFT_ANCHOR_THRESHOLD);
-            const isHardAnchor = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
-            
-            // Calculate contribution percentage for the new UI
-            const contributionPercentage = tankCapacity > 0 ? (Number(entry.liters) / tankCapacity) * 100 : 0;
+            const isHighFrequency = recentTxCount >= 1; 
+            const isFragmented = tankCapacity > 0 && (volumeAtEntry / tankCapacity) < 0.15 && !entry.metadata?.isTopUp;
 
-            // If it's a soft anchor, the cumulative for display is just this entry's liters
-            const newCumulative = (isHardAnchor || approachingSoftAnchor) ? (Number(entry.liters) || 0) : rawCumulative;
-
-            if (approachingSoftAnchor && !isHardAnchor) {
-                entry.metadata = {
-                    ...entry.metadata,
-                    isSoftAnchor: true,
-                    softAnchorNote: `Soft Anchor: Cumulative volume (${rawCumulative.toFixed(1)}L) reached or exceeded 100% of ${tankCapacity}L capacity.`
-                };
-            }
-
-            // Add contribution metadata
+            // Update Entry Metadata (Step 1.1 Schema)
             entry.metadata = {
                 ...entry.metadata,
-                contributionPercentage: Number(contributionPercentage.toFixed(2)),
-                // Data Consistency: Tag with Cycle ID
-                cycleId: `cycle_${entry.vehicleId}_${vehicleEntries.find((e: any) => e.metadata?.isFullTank || e.metadata?.isAnchor || e.metadata?.isSoftAnchor)?.odometer || 'start'}`
+                volumeContributed: Number(volumeContributed.toFixed(2)),
+                excessVolume: excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined,
+                cumulativeLitersAtEntry: Number(totalVolumeInCycle.toFixed(2)),
+                tankUtilizationPercentage: tankCapacity > 0 ? Number(((totalVolumeInCycle / tankCapacity) * 100).toFixed(1)) : 0,
+                distanceSinceAnchor,
+                actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
+                profileKmPerLiter,
+                efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
+                isSoftAnchor,
+                integrityStatus,
+                anomalyReason,
+                auditStatus,
+                isFragmented,
+                isHighFrequency,
+                cycleId: `cycle_${entry.vehicleId}_${lastAnchorOdo || 'start'}`,
+                flaggedAt: (integrityStatus === 'critical' || integrityStatus === 'warning') ? new Date().toISOString() : undefined
             };
 
-            // Phase 7: Advanced Predictive Baseline Logic
-            // Fetch vehicle efficiency baseline (rolling average or spec)
-            let predictedEconomy = 10; // Default L/100km
-            if (vehicle?.fuelSettings?.targetEfficiency) {
-                predictedEconomy = Number(vehicle.fuelSettings.targetEfficiency);
+            entry.isFlagged = integrityStatus === 'critical';
+            entry.auditStatus = auditStatus;
+
+            if (isSoftAnchor) {
+                entry.metadata.softAnchorNote = `Soft Anchor: Cumulative volume (${totalVolumeInCycle.toFixed(1)}L) reached 100% of ${tankCapacity}L. Resetting cycle.`;
             }
 
-            // 3. Rule 1 - Tank Overflow Detection (Phase 2 & 8.2)
-            // Use 5% expansion buffer
-            const overflowThreshold = tankCapacity > 0 ? tankCapacity * CRITICAL_THRESHOLD : Infinity;
-            
-            if (tankCapacity > 0 && newCumulative > overflowThreshold) {
-                // Phase 7: Wait-and-See Observation
-                // Instead of immediate Critical flag, if it's within a "High Velocity" window (but not physically impossible)
-                // we might use 'observing'. But Overflow (>105% tank) is physically impossible -> Flagged.
-                entry.metadata = {
-                    ...entry.metadata,
-                    integrityStatus: 'critical',
-                    auditStatus: 'Flagged',
-                    anomalyReason: 'Tank Overflow',
-                    cumulativeLitersAtEntry: newCumulative,
-                    flaggedAt: new Date().toISOString()
-                };
-                entry.isFlagged = true;
-                entry.auditStatus = 'Flagged';
-            } else if (tankCapacity > 0 && newCumulative > (tankCapacity * 0.85)) {
-                // Note: We keep the 85% "Warning" visual but it doesn't trigger a reset anymore
-                entry.metadata = {
-                    ...entry.metadata,
-                    integrityStatus: 'warning',
-                    auditStatus: 'Observing',
-                    observationReason: 'Approaching Full Capacity (Wait for Anchor)',
-                    cumulativeLitersAtEntry: newCumulative,
-                    observationStartedAt: new Date().toISOString()
-                };
-                entry.auditStatus = 'Observing';
-            } else {
-                entry.metadata = {
-                    ...entry.metadata,
-                    integrityStatus: 'valid',
-                    auditStatus: 'Clear',
-                    cumulativeLitersAtEntry: newCumulative
-                };
-                entry.auditStatus = 'Clear';
-            }
-
-            // Phase 7: Auto-Resolution Loop
-            // If this entry IS a full tank (Anchor), attempt to resolve previous 'Observing' entries
-            if (entry.metadata?.isFullTank || entry.metadata?.isAnchor) {
-                const pendingObservations = vehicleEntries.filter((e: any) => e.auditStatus === 'Observing');
-                if (pendingObservations.length > 0) {
-                    // Logic: Get last anchor before these observations
-                    const lastAnchor = vehicleEntries.find((e: any) => (e.metadata?.isFullTank || e.metadata?.isAnchor) && e.id !== entry.id);
-                    if (lastAnchor && entry.odometer && lastAnchor.odometer) {
-                        const distance = entry.odometer - lastAnchor.odometer;
-                        const totalLitersInWindow = pendingObservations.reduce((sum: number, e: any) => sum + (Number(e.liters) || 0), 0) + (Number(entry.liters) || 0);
-                        const actualEconomy = (totalLitersInWindow / distance) * 100;
-                        
-                        // If actual economy is within 15% of predicted, auto-resolve
-                        const variance = Math.abs(actualEconomy - predictedEconomy) / predictedEconomy;
-                        if (variance < 0.15) {
-                            for (const po of pendingObservations) {
-                                po.auditStatus = 'Auto-Resolved';
-                                po.metadata = {
-                                    ...po.metadata,
-                                    resolvedAt: new Date().toISOString(),
-                                    actualEconomy: Number(actualEconomy.toFixed(2)),
-                                    predictedEconomy: predictedEconomy
-                                };
-                                await kv.set(`fuel_entry:${po.id}`, po);
-                            }
+            // Step 3.2: Automated Healing Logic
+            if (isHardAnchor || isSoftAnchor) {
+                const isAggregatedEfficiencyValid = efficiencyVariance < 0.15; // Within 15% on aggregate
+                if (isAggregatedEfficiencyValid) {
+                    for (const ce of cycleEntries) {
+                        if (ce.auditStatus === 'Flagged' || ce.auditStatus === 'Observing') {
+                            ce.metadata.isHealed = true;
+                            ce.metadata.healedAt = new Date().toISOString();
+                            ce.metadata.auditStatus = 'Auto-Resolved';
+                            ce.metadata.healingReason = `Healed by anchor ${entry.id}: Cycle efficiency (${actualKmPerLiter.toFixed(2)} km/L) is valid.`;
+                            ce.auditStatus = 'Auto-Resolved';
+                            await kv.set(`fuel_entry:${ce.id}`, ce);
                         }
                     }
                 }
@@ -352,39 +384,108 @@ app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
                 .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
             let runningCumulative = 0;
+            let carryoverVolume = 0;
             let lastResetOdo = 0;
 
             for (const entry of vehicleEntries) {
-                // Phase 1 (Logic Refactoring): Soft Anchor Logic - Reset only if Full, Hard Anchor, or Cumulative reached 100%
-                const isHardAnchor = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
                 const currentVolume = Number(entry.liters) || 0;
-                const approachingThreshold = tankCapacity > 0 && (runningCumulative + currentVolume) >= (tankCapacity * SOFT_ANCHOR_THRESHOLD);
-                
-                // Determine if this entry SHOULD be a soft anchor
-                const shouldBeSoftAnchor = !isHardAnchor && approachingThreshold;
+                // Step 2.1: Accumulation Logic (with carryover support)
+                let carryoverFromPrev = carryoverVolume;
+                const prevCumulative = runningCumulative;
+                const totalWithEntry = Number((runningCumulative + currentVolume).toFixed(4));
 
+                // Step 2.2: Trigger Thresholding
+                const isHardAnchor = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
+                const approachingThreshold = tankCapacity > 0 && totalWithEntry >= (tankCapacity * SOFT_ANCHOR_THRESHOLD);
+                const shouldBeSoftAnchor = !isHardAnchor && approachingThreshold;
+                
+                let volumeContributed = currentVolume;
+                let excessVolume = 0;
+
+                // Step 2.3: Virtual Reset Implementation
                 if (isHardAnchor || shouldBeSoftAnchor) {
-                    runningCumulative = currentVolume;
-                } else {
-                    runningCumulative += currentVolume;
+                    if (shouldBeSoftAnchor) {
+                        volumeContributed = Math.max(0, tankCapacity - (prevCumulative - carryoverFromPrev));
+                        excessVolume = Number((currentVolume - volumeContributed).toFixed(4));
+                    }
+                }
+
+                // Phase 1 Efficiency Integration
+                const profileKmPerLiter = Number(vehicle?.specifications?.fuelEconomy) || Number(vehicle?.fuelSettings?.efficiencyCity) || 0;
+                const rangeMin = Number(vehicle?.specifications?.estimatedRangeMin) || 0;
+                
+                const lastAnchorOdo = vehicleEntries.slice(0, vehicleEntries.indexOf(entry)).reverse().find(t => t.metadata?.isAnchor || t.metadata?.isFullTank || t.metadata?.isSoftAnchor)?.odometer || 0;
+                const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
+                
+                let actualKmPerLiter = 0;
+                let efficiencyVariance = 0;
+                if (distanceSinceAnchor > 0 && totalWithEntry > 0) {
+                    actualKmPerLiter = distanceSinceAnchor / totalWithEntry;
+                    if (profileKmPerLiter > 0) {
+                        efficiencyVariance = (profileKmPerLiter - actualKmPerLiter) / profileKmPerLiter;
+                    }
                 }
 
                 // Check Integrity
-                const overflowThreshold = tankCapacity > 0 ? tankCapacity * CRITICAL_THRESHOLD : Infinity;
-                const status = tankCapacity > 0 && runningCumulative > overflowThreshold ? 'critical' : 
-                               tankCapacity > 0 && runningCumulative > (tankCapacity * 0.85) ? 'warning' : 'valid';
+                let status = 'valid';
+                let anomalyReason = null;
                 
-                const contributionPercentage = tankCapacity > 0 ? (currentVolume / tankCapacity) * 100 : 0;
+                // Step 5.1: Odometer Sequence Audit (Backfill)
+                const prevEntryInLoop = vehicleEntries[vehicleEntries.indexOf(entry) - 1];
+                const odoAudit = fuelLogic.auditOdometerSequence({
+                    currentOdo: Number(entry.odometer),
+                    prevOdo: Number(prevEntryInLoop?.odometer || 0),
+                    maxExpectedDistance: rangeMin * 1.5
+                });
+
+                // Phase 2: Behavioral
+                const fourHoursAgo = new Date(new Date(entry.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
+                const recentTxCount = vehicleEntries.slice(0, vehicleEntries.indexOf(entry)).filter(e => e.date >= fourHoursAgo).length;
+                const isHighFrequency = recentTxCount >= 1;
+                const isFragmented = tankCapacity > 0 && (currentVolume / tankCapacity) < 0.15 && !entry.metadata?.isTopUp;
+
+                if (odoAudit.status === 'critical') {
+                    status = 'critical';
+                    anomalyReason = odoAudit.reason;
+                } else if (tankCapacity > 0 && currentVolume > (tankCapacity * OVERFILL_THRESHOLD)) {
+                    status = 'critical';
+                    anomalyReason = 'Tank Overfill Anomaly';
+                } else if (isHardAnchor || shouldBeSoftAnchor) {
+                    const isHighConsumption = efficiencyVariance > 0.25;
+                    const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (totalWithEntry / tankCapacity) > 0.8;
+                    
+                    if (isHighConsumption || isRangeSuspicious) {
+                        status = 'critical';
+                        anomalyReason = 'High Fuel Consumption';
+                    }
+                } else if (odoAudit.status === 'warning') {
+                    status = 'warning';
+                    anomalyReason = odoAudit.reason;
+                } else if (isHighFrequency) {
+                    status = 'critical';
+                    anomalyReason = 'High Transaction Frequency';
+                } else if (isFragmented) {
+                    status = 'warning';
+                    anomalyReason = 'Fragmented Purchase';
+                } else if (tankCapacity > 0 && totalWithEntry > (tankCapacity * 0.85)) {
+                    status = 'warning';
+                    anomalyReason = 'Approaching Capacity';
+                }
 
                 const updatedMetadata = {
                     ...(entry.metadata || {}),
-                    cumulativeLitersAtEntry: Number(runningCumulative.toFixed(2)),
-                    contributionPercentage: Number(contributionPercentage.toFixed(2)),
+                    volumeContributed: Number(volumeContributed.toFixed(2)),
+                    excessVolume: excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined,
+                    cumulativeLitersAtEntry: Number(totalWithEntry.toFixed(2)),
+                    distanceSinceAnchor,
+                    actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
+                    profileKmPerLiter,
+                    isHighFrequency,
+                    isFragmented,
                     integrityStatus: status,
                     isSoftAnchor: shouldBeSoftAnchor || entry.metadata?.isSoftAnchor,
-                    softAnchorNote: shouldBeSoftAnchor ? `Auto-reset: Cumulative volume reached or exceeded 100% of ${tankCapacity}L tank.` : entry.metadata?.softAnchorNote,
-                    anomalyReason: status === 'critical' ? 'Tank Overflow' : 
-                                   status === 'warning' ? 'Approaching Capacity' : null,
+                    softAnchorNote: shouldBeSoftAnchor ? `Auto-reset: Cumulative volume reached or exceeded 100% of ${tankCapacity}L tank. Split: ${volumeContributed.toFixed(1)}L applied, ${excessVolume.toFixed(1)}L carryover.` : entry.metadata?.softAnchorNote,
+                    anomalyReason: anomalyReason,
                     backfilledAt: new Date().toISOString()
                 };
 
@@ -401,7 +502,11 @@ app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
                 updatedMetadata.cycleId = currentCycleId;
                 
                 if (isHardAnchor || shouldBeSoftAnchor) {
+                    carryoverVolume = excessVolume;
+                    runningCumulative = carryoverVolume;
                     lastResetOdo = entry.odometer || 0;
+                } else {
+                    runningCumulative += currentVolume;
                 }
 
                 await kv.set(`fuel_entry:${entry.id}`, updatedEntry);
@@ -417,6 +522,38 @@ app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
         });
     } catch (e: any) {
         console.error("[Backfill Error]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// --- AUDIT & SUMMARIES (Phase 4) ---
+app.get(`${BASE_PATH}/fuel-audit/summary`, async (c) => {
+    try {
+        const vehicleId = c.req.query("vehicleId");
+        const allEntries = await kv.getByPrefix("fuel_entry:");
+        const summary = fuelLogic.generateAuditSummary(allEntries, vehicleId);
+        return c.json(summary);
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.get(`${BASE_PATH}/fuel-audit/fleet-stats`, async (c) => {
+    try {
+        const allEntries = await kv.getByPrefix("fuel_entry:");
+        const vehicles = await kv.getByPrefix("vehicle:");
+        
+        const vehicleSummaries = vehicles.map((v: any) => {
+            return fuelLogic.generateAuditSummary(allEntries, v.id);
+        });
+
+        const fleetSummary = fuelLogic.generateAuditSummary(allEntries);
+        
+        return c.json({
+            fleet: fleetSummary,
+            vehicles: vehicleSummaries
+        });
+    } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }
 });
@@ -453,380 +590,6 @@ app.post(`${BASE_PATH}/mileage-adjustments`, async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
-});
-
-app.delete(`${BASE_PATH}/mileage-adjustments/:id`, async (c) => {
-  const id = c.req.param("id");
-  try {
-    await kv.del(`fuel_adjustment:${id}`);
-    return c.json({ success: true });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-// --- MAINTENANCE LOGS ---
-app.get(`${BASE_PATH}/maintenance-logs/:vehicleId`, async (c) => {
-  try {
-    const vehicleId = c.req.param("vehicleId");
-    const logs = await kv.getByPrefix(`maintenance_log:${vehicleId}:`);
-    logs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    return c.json(logs);
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.post(`${BASE_PATH}/maintenance-logs`, async (c) => {
-  try {
-    const log = await c.req.json();
-    if (!log.id) log.id = crypto.randomUUID();
-    if (!log.vehicleId) return c.json({ error: "Vehicle ID is required" }, 400);
-    await kv.set(`maintenance_log:${log.vehicleId}:${log.id}`, log);
-    return c.json({ success: true, data: log });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-// --- TOLL TAGS ---
-app.get(`${BASE_PATH}/toll-tags`, async (c) => {
-  try {
-    const tags = await kv.getByPrefix("toll_tag:");
-    return c.json(tags || []);
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.post(`${BASE_PATH}/toll-tags`, async (c) => {
-  try {
-    const tag = await c.req.json();
-    if (!tag.id) tag.id = crypto.randomUUID();
-    if (!tag.createdAt) tag.createdAt = new Date().toISOString();
-    await kv.set(`toll_tag:${tag.id}`, tag);
-    return c.json({ success: true, data: tag });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.delete(`${BASE_PATH}/toll-tags/:id`, async (c) => {
-  const id = c.req.param("id");
-  try {
-    await kv.del(`toll_tag:${id}`);
-    return c.json({ success: true });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-// --- ODOMETER HISTORY ---
-app.get(`${BASE_PATH}/odometer-history/:vehicleId`, async (c) => {
-  try {
-    const vehicleId = c.req.param("vehicleId");
-    const history = await kv.getByPrefix(`odometer_reading:${vehicleId}:`);
-    history.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    return c.json(history);
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.post(`${BASE_PATH}/odometer-history`, async (c) => {
-  try {
-    const reading = await c.req.json();
-    if (!reading.id) reading.id = crypto.randomUUID();
-    if (!reading.vehicleId) return c.json({ error: "Vehicle ID required" }, 400);
-    if (!reading.createdAt) reading.createdAt = new Date().toISOString();
-    await kv.set(`odometer_reading:${reading.vehicleId}:${reading.id}`, reading);
-    return c.json({ success: true, data: reading });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-// --- FUEL DISPUTES (Stubbed) ---
-app.get(`${BASE_PATH}/fuel-disputes`, async (c) => {
-  try {
-    const items = await kv.getByPrefix("fuel_dispute:");
-    return c.json(items || []);
-  } catch (e: any) { return c.json({ error: e.message }, 500); }
-});
-
-app.post(`${BASE_PATH}/fuel-disputes`, async (c) => {
-  try {
-    const item = await c.req.json();
-    if (!item.id) item.id = crypto.randomUUID();
-    await kv.set(`fuel_dispute:${item.id}`, item);
-    return c.json({ success: true, data: item });
-  } catch (e: any) { return c.json({ error: e.message }, 500); }
-});
-
-app.delete(`${BASE_PATH}/fuel-disputes/:id`, async (c) => {
-  const id = c.req.param("id");
-  try { await kv.del(`fuel_dispute:${id}`); return c.json({ success: true }); }
-  catch (e: any) { return c.json({ error: e.message }, 500); }
-});
-
-// --- FUEL SCENARIOS ---
-app.get(`${BASE_PATH}/scenarios`, async (c) => {
-  try {
-    let items = await kv.getByPrefix("fuel_scenario:");
-    
-    // Seed Default if empty
-    if (!items || items.length === 0) {
-        const defaultScenario = {
-            id: crypto.randomUUID(),
-            name: "Standard Ride Share",
-            description: "Company covers all business trips and authorized operations. Driver covers personal usage.",
-            isDefault: true,
-            rules: [
-                {
-                    id: crypto.randomUUID(),
-                    category: 'Fuel',
-                    coverageType: 'Full', // Company pays Operating + Misc
-                    conditions: {}
-                }
-            ],
-            createdAt: new Date().toISOString()
-        };
-        await kv.set(`fuel_scenario:${defaultScenario.id}`, defaultScenario);
-        items = [defaultScenario];
-    }
-    
-    return c.json(items);
-  } catch (e: any) { return c.json({ error: e.message }, 500); }
-});
-
-app.post(`${BASE_PATH}/scenarios`, async (c) => {
-  try {
-    const item = await c.req.json();
-    if (!item.id) item.id = crypto.randomUUID();
-    await kv.set(`fuel_scenario:${item.id}`, item);
-    return c.json({ success: true, data: item });
-  } catch (e: any) { return c.json({ error: e.message }, 500); }
-});
-
-app.delete(`${BASE_PATH}/scenarios/:id`, async (c) => {
-  const id = c.req.param("id");
-  try { await kv.del(`fuel_scenario:${id}`); return c.json({ success: true }); }
-  catch (e: any) { return c.json({ error: e.message }, 500); }
-});
-
-// --- RECONCILIATION FINALIZATION ---
-app.post(`${BASE_PATH}/reconciliation/finalize`, async (c) => {
-  try {
-    const { reports } = await c.req.json();
-    if (!reports || !Array.isArray(reports)) return c.json({ error: "Reports array required" }, 400);
-
-    const results = [];
-    const timestamp = new Date().toISOString();
-
-    for (const report of reports) {
-      // 1. Mark report as finalized
-      report.status = 'Finalized';
-      report.finalizedAt = timestamp;
-      await kv.set(`fuel_report:${report.vehicleId}:${report.weekStart}`, report);
-
-      // 2. Create Ledger Transaction
-      // We post the Driver Share as a deduction (negative)
-      // and any Paid By Driver as a credit (positive)
-      // Resulting in a "Net Fuel Adjustment"
-      
-      // First, find all fuel entries for this vehicle/week to mark as reconciled
-      const entries = await kv.getByPrefix("fuel_entry:");
-      const vehicleEntries = entries.filter((e: any) => 
-        e.vehicleId === report.vehicleId && 
-        e.date >= report.weekStart && 
-        e.date <= report.weekEnd
-      );
-
-      let driverOutOfPocket = 0;
-      for (const entry of vehicleEntries) {
-        entry.isReconciled = true;
-        entry.reconciledAt = timestamp;
-        entry.reconciliationId = report.id;
-        await kv.set(`fuel_entry:${entry.id}`, entry);
-        
-        if (entry.type === 'Reimbursement' || entry.type === 'Manual_Entry' || entry.type === 'Fuel_Manual_Entry') {
-          driverOutOfPocket += entry.amount;
-        }
-      }
-
-      const netAdjustment = driverOutOfPocket - report.driverShare;
-
-      const ledgerTx = {
-        id: crypto.randomUUID(),
-        type: netAdjustment >= 0 ? 'Credit' : 'Deduction',
-        category: 'Fuel Settlement',
-        amount: Math.abs(netAdjustment),
-        status: 'Approved',
-        date: timestamp.split('T')[0],
-        timestamp: timestamp,
-        driverId: report.driverId,
-        vehicleId: report.vehicleId,
-        description: `Weekly fuel settlement: ${report.weekStart} to ${report.weekEnd}`,
-        metadata: {
-          reportId: report.id,
-          driverShare: report.driverShare,
-          outOfPocket: driverOutOfPocket,
-          netAdjustment
-        }
-      };
-
-      await kv.set(`transaction:${ledgerTx.id}`, ledgerTx);
-      results.push({ vehicleId: report.vehicleId, transactionId: ledgerTx.id });
-    }
-
-    return c.json({ success: true, processed: results.length, details: results });
-  } catch (e: any) {
-    console.error("Finalization Error:", e);
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-// Update Anchor (Generic PATCH endpoint that was previously in API config but missing)
-app.patch(`${BASE_PATH}/anchors/:id`, async (c) => {
-    try {
-        const id = c.req.param("id");
-        const payload = await c.req.json();
-        
-        // We assume anchors are fuel entries with odometer readings
-        // Fetch existing
-        const entry = await kv.get(`fuel_entry:${id}`);
-        if (!entry) return c.json({ error: "Anchor not found" }, 404);
-        
-        // Update fields
-        const updated = { ...entry, ...payload };
-        if (payload.value) updated.odometer = payload.value; // Map 'value' to 'odometer'
-        
-        await kv.set(`fuel_entry:${id}`, updated);
-        return c.json(updated);
-    } catch (e: any) {
-        return c.json({ error: e.message }, 500);
-    }
-});
-
-// --- Phase 5: Integrity Repair Engine (Server-Side) ---
-app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
-    try {
-        console.log("[Integrity] Starting server-side fingerprint matching...");
-        
-        // 1. Fetch all data
-        const transactions = await kv.getByPrefix("transaction:");
-        const entries = await kv.getByPrefix("fuel_entry:");
-        
-        // 2. Filter for Orphans
-        // Fuel Transactions that lack a link
-        const orphansTx = transactions.filter((tx: any) => 
-            (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement' || tx.description?.toLowerCase().includes('fuel') || tx.description?.toLowerCase().includes('gas')) &&
-            !tx.metadata?.linkedFuelId && 
-            !tx.metadata?.sourceId
-        );
-
-        // Fuel Entries that are not verified
-        const orphanLogs = entries.filter((e: any) => 
-            e.reconciliationStatus !== 'Verified' &&
-            !e.transactionId // If it has a transactionId, it's likely already linked explicitly
-        );
-
-        let linkedCount = 0;
-        let anomalyFixedCount = 0;
-        const updates: any[] = [];
-        const updateKeys: string[] = [];
-
-        // Helper to check if date is within 1 day (Anomaly Window)
-        const isDateMatch = (d1: string, d2: string) => {
-            if (d1 === d2) return true;
-            const t1 = new Date(d1).getTime();
-            const t2 = new Date(d2).getTime();
-            const diff = Math.abs(t1 - t2);
-            return diff <= 86400000; // 24 hours in ms
-        };
-
-        // 3. Match Fingerprints
-        for (const tx of orphansTx) {
-            // Find a log that matches Amount and Date (Exact or Window)
-            const txDate = tx.date; // YYYY-MM-DD
-            const txAmount = Math.abs(Number(tx.amount));
-
-            // Collision Resolution: Find ALL matches first
-            const potentialMatches = orphanLogs.filter((log: any) => {
-                const logDate = log.date.split('T')[0];
-                const logAmount = Math.abs(Number(log.amount));
-                
-                // Match amount (allow tiny float variance) and Date Window
-                return Math.abs(txAmount - logAmount) < 0.01 && isDateMatch(txDate, logDate);
-            });
-
-            if (potentialMatches.length > 0) {
-                // Best match strategy: Prefer EXACT date match over Window match
-                let bestMatch = potentialMatches.find((log: any) => log.date.split('T')[0] === txDate);
-                
-                // If no exact match, take the first window match (Anomaly Re-anchoring)
-                if (!bestMatch) {
-                    bestMatch = potentialMatches[0];
-                    anomalyFixedCount++;
-                }
-
-                if (bestMatch) {
-                    // Link TX -> Log
-                    tx.metadata = { ...tx.metadata, linkedFuelId: bestMatch.id, integrityNote: 'Auto-Linked via Integrity Repair' };
-                    
-                    // Link Log -> Status
-                    bestMatch.reconciliationStatus = 'Verified';
-                    bestMatch.reconciledAt = new Date().toISOString();
-                    bestMatch.transactionId = tx.id;
-                    bestMatch.metadata = { ...bestMatch.metadata, autoLinked: true };
-                    
-                    // If date was mismatched, anchor log to tx date (Source of Truth)
-                    if (bestMatch.date.split('T')[0] !== txDate) {
-                        const timePart = bestMatch.date.includes('T') ? bestMatch.date.split('T')[1] : '12:00:00.000Z';
-                        bestMatch.date = `${txDate}T${timePart}`;
-                        bestMatch.metadata.dateAdjusted = true;
-                    }
-
-                    // Add to updates
-                    updates.push(tx);
-                    updateKeys.push(`transaction:${tx.id}`);
-                    
-                    updates.push(bestMatch);
-                    updateKeys.push(`fuel_entry:${bestMatch.id}`);
-                    
-                    // Remove from pool so we don't double link
-                    const idx = orphanLogs.findIndex((l: any) => l.id === bestMatch.id);
-                    if (idx !== -1) orphanLogs.splice(idx, 1);
-                    
-                    linkedCount++;
-                }
-            }
-        }
-
-        // 4. Atomic Commit with Chunking
-        if (updates.length > 0) {
-            const BATCH_SIZE = 50;
-            for (let i = 0; i < updateKeys.length; i += BATCH_SIZE) {
-                const chunkKeys = updateKeys.slice(i, i + BATCH_SIZE);
-                const chunkValues = updates.slice(i, i + BATCH_SIZE);
-                
-                // Create object map for mset
-                // kv.mset expects (keys, values) or Object?
-                // kv_store.tsx: mset(keys: string[], values: any[])
-                await kv.mset(chunkKeys, chunkValues);
-            }
-        }
-
-        return c.json({ 
-            success: true, 
-            linkedCount, 
-            anomalyFixedCount,
-            message: `Successfully linked ${linkedCount} orphaned records (${anomalyFixedCount} window anomalies resolved).` 
-        });
-    } catch (e: any) {
-        console.error("[Integrity Error]", e);
-        return c.json({ error: e.message }, 500);
-    }
 });
 
 export default app;

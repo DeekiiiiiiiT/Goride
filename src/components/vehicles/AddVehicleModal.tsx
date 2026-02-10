@@ -4,12 +4,13 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Loader2, Upload, FileText, Check, Camera, Car, FileCheck, Sparkles } from 'lucide-react';
+import { Loader2, Upload, FileText, Check, Camera, Car, FileCheck, Sparkles, AlertTriangle } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { Vehicle } from '../../types/vehicle';
 import { cn } from "../ui/utils";
 import { convertPdfToImage } from '../../utils/pdf-helper';
+import { findMatchingVehicle } from '../../utils/identityMatcher';
 
 interface AddVehicleModalProps {
   isOpen: boolean;
@@ -158,6 +159,13 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     registrationIssueDate: '',
     registrationExpiryDate: ''
   });
+
+  const matchedVehicle = React.useMemo(() => {
+      if (!formData.licensePlate) return null;
+      return findMatchingVehicle({
+          licensePlate: formData.licensePlate
+      }, existingVehicles);
+  }, [formData.licensePlate, existingVehicles]);
 
   const formatDateForInput = (dateStr: string | undefined | null): string => {
       if (!dateStr) return '';
@@ -452,7 +460,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[900px] overflow-hidden max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[900px] overflow-hidden max-h-[90vh] overflow-y-auto z-[100]">
         <DialogHeader>
           <DialogTitle>Add New Vehicle</DialogTitle>
           <DialogDescription>
@@ -507,6 +515,20 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                         Re-upload documents
                     </Button>
                 </div>
+
+                {/* Identity Match Alert (Phase 4) */}
+                {matchedVehicle && (
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 mb-6 flex items-start gap-3 animate-in zoom-in-95 duration-300">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                            <h4 className="text-sm font-bold text-amber-900">Identity Match Detected</h4>
+                            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                                A vehicle with license plate <span className="font-bold underline">{matchedVehicle.licensePlate}</span> already exists in the system. 
+                                Submitting will update the existing asset profile instead of creating a duplicate.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Column 1: Certificate of Fitness */}

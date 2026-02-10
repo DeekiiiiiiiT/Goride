@@ -473,7 +473,7 @@ Parts Store,Car Parts Plus,45 Main St,Mandeville,Manchester,Jamaica,8769876543,a
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[900px] gap-0 p-0 overflow-hidden bg-slate-50">
+      <DialogContent className="sm:max-w-[900px] gap-0 p-0 overflow-hidden bg-slate-50 z-[100]">
         <DialogHeader className="p-6 bg-white border-b border-slate-200">
           <DialogTitle>Import {mode === 'fuel' ? 'Stations' : 'Locations'}</DialogTitle>
           <DialogDescription>

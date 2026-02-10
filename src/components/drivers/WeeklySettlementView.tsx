@@ -33,13 +33,18 @@ interface WeeklySettlementViewProps {
 export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics = [], onLogPayment, readOnly = false }: WeeklySettlementViewProps) {
     
     const weeks = useMemo(() => {
+        // Safe access to arrays and filtering out null/undefined items
+        const safeTrips = Array.isArray(trips) ? trips.filter(Boolean) : [];
+        const safeTransactions = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
+        const safeCsvMetrics = Array.isArray(csvMetrics) ? csvMetrics.filter(Boolean) : [];
+
         // If we have CSV metrics but no trips, we should still show something
-        if ((!trips || trips.length === 0) && (!csvMetrics || csvMetrics.length === 0)) return [];
+        if (safeTrips.length === 0 && safeCsvMetrics.length === 0) return [];
 
         // 1. Determine Range
         const dates = [
-            ...trips.map(t => new Date(t.date)),
-            ...csvMetrics.map(m => new Date(m.periodStart))
+            ...safeTrips.map(t => new Date(t.date)),
+            ...safeCsvMetrics.map(m => new Date(m.periodStart))
         ];
         
         if (dates.length === 0) return [];
@@ -59,7 +64,8 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
             const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
             
             // --- Calculate Owed (Cash Collected + Float Issued) ---
-            const relevantCsvMetrics = csvMetrics.filter(m => {
+            const relevantCsvMetrics = safeCsvMetrics.filter(m => {
+                if (!m || !m.periodStart || !m.periodEnd) return false;
                 const mStart = parseISO(m.periodStart);
                 const mEnd = parseISO(m.periodEnd);
                 const overlaps = areIntervalsOverlapping({ start: mStart, end: mEnd }, { start: weekStart, end: weekEnd });
@@ -73,7 +79,10 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
 
             const csvCash = relevantCsvMetrics.reduce((sum, m) => sum + (m.cashCollected || 0), 0);
 
-            const weekTrips = trips.filter(t => isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd }));
+            const weekTrips = safeTrips.filter(t => {
+                if (!t || !t.date) return false;
+                return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
+            });
 
             const tripCalculatedCash = weekTrips.reduce((sum, t) => {
                 const cash = Number(t.cashCollected || 0);
@@ -86,8 +95,9 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
             }, 0);
 
             // Float Issued in this week (Increases Debt)
-            const weeklyFloat = transactions
+            const weeklyFloat = safeTransactions
                 .filter(t => {
+                    if (!t || !t.date) return false;
                     const tDate = new Date(t.date);
                     return t.category === 'Float Issue' && isWithinInterval(tDate, { start: weekStart, end: weekEnd });
                 })
@@ -99,7 +109,8 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
             // --- Calculate Credits (Allocated Payments + Approved Cash Tolls) ---
             
             // 1. Allocated Payments (Metadata based)
-            const allocatedPayments = transactions.filter(t => {
+            const allocatedPayments = safeTransactions.filter(t => {
+                if (!t) return false;
                 if (t.metadata?.workPeriodStart) {
                     const payStart = parseISO(t.metadata.workPeriodStart);
                     const payEnd = t.metadata.workPeriodEnd ? parseISO(t.metadata.workPeriodEnd) : payStart;
@@ -109,8 +120,9 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
             });
 
             // 2. Approved Cash Toll Expenses (Treated as Credit/Payment)
-            const weeklyExpenses = transactions
+            const weeklyExpenses = safeTransactions
                 .filter(t => {
+                    if (!t || !t.date) return false;
                     const tDate = new Date(t.date);
                     const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
                     const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl;
@@ -136,7 +148,8 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
         // Phase 2: Distribute Unallocated Payments (FIFO)
         // 1. Identify Unallocated Transactions
         // Exclude floats, expenses, and allocated payments
-        const unallocatedTransactions = transactions.filter(t => {
+        const unallocatedTransactions = safeTransactions.filter(t => {
+             if (!t) return false;
              // Exclude Float Issue (Debt)
              if (t.category === 'Float Issue') return false;
              

@@ -1,7 +1,7 @@
 import { format, differenceInDays } from 'date-fns';
-import { odometerService } from '../../services/odometerService';
-import { Vehicle, OdometerReading } from '../../types/vehicle';
-import { Trip } from '../../types/data';
+import { odometerService } from '../services/odometerService';
+import { Vehicle, OdometerReading } from '../types/vehicle';
+import { Trip } from '../types/data';
 
 /**
  * Merges persistent odometer readings with calculated mileage from trips.
@@ -116,29 +116,33 @@ export async function calculateLiveMileage(vehicleId: string, currentOdo: number
             };
         }
 
-        // Sort desc by date (already done by mergeTripsIntoHistory but safe to ensure)
-        const sorted = mergedHistory; // mergeTripsIntoHistory returns desc sorted
-        const lastReading = sorted[0];
+        // Sort desc by date
+        const sorted = mergedHistory; 
         
-        const lastDate = new Date(lastReading.date);
+        // Find the most recent ANCHOR point for baseline accuracy
+        const latestAnchor = sorted.find(r => r.isAnchorPoint || r.type === 'Hard');
+        const lastReading = sorted[0]; // Absolute latest (might be calculated)
+        
+        const baselineReading = latestAnchor || lastReading;
+        const baselineDate = new Date(baselineReading.date);
         const today = new Date();
-        const daysDiff = differenceInDays(today, lastDate);
+        const daysDiff = differenceInDays(today, baselineDate);
 
         // If data is from today (or future?), return it as is
         if (daysDiff <= 0) {
             return {
-                estimatedOdo: lastReading.value,
+                estimatedOdo: baselineReading.value,
                 isProjected: false,
-                lastReadingDate: lastReading.date,
+                lastReadingDate: baselineReading.date,
                 dailyAverage: 0
             };
         }
 
-        // Calculate Average Daily Usage (last 30 days window from the last reading backwards)
-        // Find a reading close to 30 days before the last reading
-        // If not enough history, fallback to a default or total lifetime avg
-        
-        let pastReading = sorted.find(r => differenceInDays(lastDate, new Date(r.date)) >= 30);
+        // Calculate Average Daily Usage (last 30 days window)
+        // We look for a reading ~30 days before our baseline anchor
+        let pastReading = sorted.find(r => 
+            differenceInDays(baselineDate, new Date(r.date)) >= 30
+        );
         
         // If we can't find one 30 days ago, take the oldest one we have
         if (!pastReading && sorted.length > 1) {
@@ -148,27 +152,24 @@ export async function calculateLiveMileage(vehicleId: string, currentOdo: number
         let dailyAvg = 0;
 
         if (pastReading) {
-            const periodDays = differenceInDays(lastDate, new Date(pastReading.date));
-            const periodDist = lastReading.value - pastReading.value;
+            const periodDays = differenceInDays(baselineDate, new Date(pastReading.date));
+            const periodDist = baselineReading.value - pastReading.value;
             
             if (periodDays > 0 && periodDist > 0) {
                 dailyAvg = periodDist / periodDays;
             }
         } else {
-             // Fallback: If only one reading exists, we can't calculate a trend.
-             // We could use a fleet average default (e.g. 50km/day) or just 0.
-             // Let's use 0 to be safe and not halllucinate mileage.
              dailyAvg = 0;
         }
 
-        // Apply projection
+        // Apply projection from the baseline
         const projectedAdd = Math.round(dailyAvg * daysDiff);
-        const estimated = lastReading.value + projectedAdd;
+        const estimated = baselineReading.value + projectedAdd;
 
         return {
             estimatedOdo: estimated,
             isProjected: true,
-            lastReadingDate: lastReading.date,
+            lastReadingDate: baselineReading.date,
             dailyAverage: dailyAvg
         };
 

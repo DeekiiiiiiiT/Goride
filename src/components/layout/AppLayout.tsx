@@ -40,7 +40,9 @@ import {
   Fuel,
   CreditCard,
   FileSpreadsheet,
-  LayoutGrid
+  LayoutGrid,
+  TrendingUp,
+  Award
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -83,7 +85,6 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
   const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage);
-  const isDrivingOpen = ['drivers', 'tier-config', 'performance'].includes(currentPage);
 
   return (
     <Sidebar className="border-r border-slate-200 dark:border-slate-800">
@@ -108,45 +109,25 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             active={currentPage === 'imports'} 
             onClick={() => onNavigate?.('imports')}
           />
+          <NavItem 
+            icon={<Users className="h-4 w-4" />} 
+            label="Drivers" 
+            active={currentPage === 'drivers'} 
+            onClick={() => onNavigate?.('drivers')}
+          />
+          <NavItem 
+            icon={<TrendingUp className="h-4 w-4" />} 
+            label="Performance" 
+            active={currentPage === 'performance'} 
+            onClick={() => onNavigate?.('performance')}
+          />
+          <NavItem 
+            icon={<Award className="h-4 w-4" />} 
+            label="Tier Config" 
+            active={currentPage === 'tier-config'} 
+            onClick={() => onNavigate?.('tier-config')}
+          />
           
-          {/* Driving Section */}
-          <Collapsible defaultOpen={isDrivingOpen} className="group/collapsible">
-            <SidebarMenuItem>
-              <CollapsibleTrigger asChild>
-                <SidebarMenuButton tooltip="Driving">
-                  <Users className="h-4 w-4" />
-                  <span>Driving</span>
-                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                </SidebarMenuButton>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarMenuSub>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'drivers'} onClick={() => onNavigate?.('drivers')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Drivers</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'tier-config'} onClick={() => onNavigate?.('tier-config')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Tier Config</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'performance'} onClick={() => onNavigate?.('performance')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Performance</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
-              </CollapsibleContent>
-            </SidebarMenuItem>
-          </Collapsible>
-
           <NavItem 
             icon={<Car className="h-4 w-4" />} 
             label="Vehicles" 

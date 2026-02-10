@@ -66,7 +66,7 @@ interface OdometerHistoryProps {
   refreshTrigger?: number;
 }
 
-export const OdometerHistory: React.FC<OdometerHistoryProps> = ({ 
+const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({ 
   vehicleId, 
   onCorrectReading, 
   refreshTrigger = 0 
@@ -628,3 +628,5 @@ export const OdometerHistory: React.FC<OdometerHistoryProps> = ({
     </div>
   );
 };
+
+export const OdometerHistory = React.memo(OdometerHistoryInternal);

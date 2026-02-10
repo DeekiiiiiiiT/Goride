@@ -121,13 +121,16 @@ export function FleetAlertsPanel({ alerts, metrics, driverMetrics = [], onNaviga
                                              if (alert.definitionId === 'def-manual-odometer') {
                                                  if (onReview && alert.metadata?.checkInId) {
                                                      onReview(alert.metadata.checkInId);
-                                                 } else {
-                                                     console.warn("Review handler missing or no CheckIn ID linked");
                                                  }
+                                             } else if (alert.definitionId === 'def-maintenance-due') {
+                                                 onNavigate('vehicles');
+                                             } else {
+                                                 // Default action
+                                                 console.log("Action triggered for", alert.definitionId);
                                              }
                                          }}
                                      >
-                                         {alert.definitionId === 'def-manual-odometer' ? 'Review' : 'Act'}
+                                         {alert.definitionId === 'def-manual-odometer' ? 'Review' : 'View'}
                                      </Button>
                                  </div>
                              </div>

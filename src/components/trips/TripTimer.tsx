@@ -546,13 +546,13 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             {tripStatus === 'DRIVING' && (
               <Button 
                 onClick={handleArriveAtStop}
-                className="bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm"
+                className="h-12 bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm font-bold"
               >
-                <MapPin className="h-4 w-4" />
+                <MapPin className="h-5 w-5" />
                 <span>{getOrdinal(stops.length + 1)} Stop</span>
               </Button>
             )}
@@ -560,39 +560,41 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             {tripStatus === 'WAITING' && (
               <Button 
                 onClick={handleResumeTrip}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm"
+                className="h-12 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm font-bold"
               >
-                <Play className="h-4 w-4" />
+                <Play className="h-5 w-5" />
                 <span>Resume Trip</span>
               </Button>
             )}
             
-            <Button
-              onClick={cancelTrip}
-              variant="outline"
-              className="border-red-200 text-red-600 hover:bg-red-100 hover:text-red-700 hover:border-red-300 gap-2 px-3"
-              title="Cancel Trip"
-            >
-                <X className="h-4 w-4" />
-                <span>Cancel</span>
-            </Button>
+            <div className="flex gap-2">
+                <Button
+                  onClick={cancelTrip}
+                  variant="outline"
+                  className="h-12 border-red-200 text-red-600 hover:bg-red-100 hover:text-red-700 hover:border-red-300 gap-2 px-4 flex-1"
+                  title="Cancel Trip"
+                >
+                    <X className="h-5 w-5" />
+                    <span className="sm:hidden">Cancel</span>
+                </Button>
 
-            <Button 
-              onClick={stopTrip} 
-              variant="destructive"
-              className="gap-2 shadow-sm"
-              disabled={isStopping}
-            >
-              {isStopping ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> <span>Finalizing...</span>
-                  </>
-              ) : (
-                  <>
-                    <Square className="h-4 w-4 fill-current" /> <span>Complete</span>
-                  </>
-              )}
-            </Button>
+                <Button 
+                  onClick={stopTrip} 
+                  variant="destructive"
+                  className="h-12 gap-2 shadow-sm font-bold flex-[2]"
+                  disabled={isStopping}
+                >
+                  {isStopping ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" /> <span>Finalizing...</span>
+                      </>
+                  ) : (
+                      <>
+                        <Square className="h-5 w-5 fill-current" /> <span>Complete</span>
+                      </>
+                  )}
+                </Button>
+            </div>
           </div>
         </div>
         

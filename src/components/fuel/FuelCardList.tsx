@@ -23,13 +23,14 @@ import { FuelCard } from '../../types/fuel';
 
 interface FuelCardListProps {
     cards: FuelCard[];
+    drivers: any[];
     onEdit: (card: FuelCard) => void;
     onDelete: (cardId: string) => void;
     getVehicleName: (id?: string) => string;
     getDriverName: (id?: string) => string;
 }
 
-export function FuelCardList({ cards, onEdit, onDelete, getVehicleName, getDriverName }: FuelCardListProps) {
+export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName, getDriverName }: FuelCardListProps) {
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredCards = cards.filter(card => 
@@ -100,13 +101,26 @@ export function FuelCardList({ cards, onEdit, onDelete, getVehicleName, getDrive
                                         )}
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline" className={
-                                            card.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                            card.status === 'Lost' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                                            'bg-slate-50 text-slate-700'
-                                        }>
-                                            {card.status}
-                                        </Badge>
+                                        <div className="flex flex-col gap-1">
+                                            <Badge variant="outline" className={
+                                                card.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                card.status === 'Lost' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                                'bg-slate-50 text-slate-700'
+                                            }>
+                                                {card.status}
+                                            </Badge>
+                                            {(() => {
+                                                const assignedDriver = drivers.find(d => d.id === card.assignedDriverId || d.driverId === card.assignedDriverId);
+                                                if (assignedDriver?.status === 'Inactive' && card.status === 'Active') {
+                                                    return (
+                                                        <Badge className="bg-rose-600 text-white border-none animate-pulse text-[8px] font-black uppercase tracking-tighter">
+                                                            DEACTIVATION REQUIRED
+                                                        </Badge>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         {card.expiryDate ? new Date(card.expiryDate).toLocaleDateString() : '-'}

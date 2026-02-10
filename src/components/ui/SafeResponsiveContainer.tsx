@@ -11,7 +11,7 @@ import { ResponsiveContainer, ResponsiveContainerProps } from 'recharts';
  * instead of letting it measure itself ("100%"). This eliminates the "width(-1)" error
  * which happens when Recharts tries to measure a container that might be in a transition state.
  */
-export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
+const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
   const divRef = useRef<HTMLDivElement>(null);
   const [shouldRender, setShouldRender] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -60,6 +60,9 @@ export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
 
   const { width = '100%', height = '100%', minWidth, minHeight, className, style, children, ...others } = props;
 
+  // FIX: To avoid the "width(-1)" error while also avoiding the "fixed numbers" warning,
+  // we pass "100%" to the ResponsiveContainer but wrap it in a div that is explicitly
+  // sized to the dimensions we've measured.
   return (
     <div 
       ref={divRef} 
@@ -73,14 +76,18 @@ export const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
       }}
     >
       {shouldRender && dimensions.width > 0 && dimensions.height > 0 ? (
-        <ResponsiveContainer 
-            width={dimensions.width}
-            height={dimensions.height}
-            {...others}
-        >
-          {children}
-        </ResponsiveContainer>
+        <div style={{ width: dimensions.width, height: dimensions.height }}>
+            <ResponsiveContainer 
+                width="100%"
+                height="100%"
+                {...others}
+            >
+              {children}
+            </ResponsiveContainer>
+        </div>
       ) : null}
     </div>
   );
 };
+
+export { SafeResponsiveContainer };

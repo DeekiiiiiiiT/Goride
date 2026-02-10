@@ -1,7 +1,7 @@
 import { DriverMetrics, Trip, AlertRule, Notification, VehicleMetrics, DashboardAlert } from '../types/data';
 import { WeeklyCheckIn } from '../types/check-in';
 import { FuelEntry, MileageAdjustment } from '../types/fuel';
-import { startOfWeek, isAfter, setDay } from 'date-fns';
+import { startOfWeek, isAfter, setDay, differenceInDays } from 'date-fns';
 
 export const AlertEngine = {
     /**
@@ -14,16 +14,17 @@ export const AlertEngine = {
         trips: Trip[],
         fuelEntries: FuelEntry[] = [],
         adjustments: MileageAdjustment[] = [],
-        checkIns: WeeklyCheckIn[] = []
+        checkIns: WeeklyCheckIn[] = [],
+        maintenanceLogs: any[] = [] // Added Phase 8
     ): DashboardAlert[] => {
         const alerts: DashboardAlert[] = [];
         const now = new Date();
         const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 }).toISOString().split('T')[0];
 
         // --- 1. Driver Checks (Every 15 min in real system) ---
+        // ... (existing logic) ...
         driverMetrics.forEach(driver => {
             // Condition 1: Acceptance Rate < 50%
-            // Ensure we have a valid acceptance rate (0-1)
             const acceptance = driver.acceptanceRate !== undefined ? driver.acceptanceRate : 1; 
             if (acceptance < 0.5) {
                 alerts.push({
@@ -60,7 +61,7 @@ export const AlertEngine = {
                     id: `drv-rat-${driver.driverId}-${crypto.randomUUID()}`,
                     definitionId: 'def-low-rating',
                     timestamp: now.toISOString(),
-                    severity: 'medium', // Mapped 'Warning' to 'medium' or 'high'
+                    severity: 'medium',
                     title: `Driver ${driver.driverName} rating dropped to ${rating.toFixed(2)}`,
                     description: `Driver rating is below 4.5 quality standard.`,
                     status: 'new',
@@ -72,7 +73,6 @@ export const AlertEngine = {
         // --- 2. Vehicle Checks (Hourly) ---
         vehicleMetrics.forEach(vehicle => {
             // Condition: Utilization < 40%
-            // Utilization might be pre-calculated or needs calc
             let utilization = vehicle.utilizationRate;
             if (utilization === undefined && vehicle.onlineHours > 0) {
                 utilization = (vehicle.onTripHours / vehicle.onlineHours) * 100;
@@ -80,7 +80,7 @@ export const AlertEngine = {
                 utilization = 0;
             }
 
-            if (utilization < 40 && vehicle.onlineHours > 1) { // Only alert if vehicle was actually online for a bit
+            if (utilization < 40 && vehicle.onlineHours > 1) { 
                 alerts.push({
                     id: `veh-util-${vehicle.vehicleId}-${crypto.randomUUID()}`,
                     definitionId: 'def-low-utilization',
@@ -91,6 +91,99 @@ export const AlertEngine = {
                     status: 'new',
                     vehicleId: vehicle.vehicleId
                 });
+            }
+
+            // --- Phase 8: Predictive Maintenance Alerts ---
+            const vLogs = (maintenanceLogs || []).filter(log => log.vehicleId === vehicle.vehicleId);
+            const currentOdo = vehicle.odometer || 0;
+            
+            // Find latest service odometer and date
+            const latestLog = vLogs.length > 0 
+                ? [...vLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                : null;
+            
+            const lastServiceOdo = latestLog?.odo || 0;
+            const lastServiceDate = latestLog?.date ? new Date(latestLog.date) : null;
+            
+            const kmSinceService = currentOdo - lastServiceOdo;
+            const SERVICE_INTERVAL = 5000;
+            const kmRemaining = SERVICE_INTERVAL - (kmSinceService % SERVICE_INTERVAL);
+            const daysSinceService = lastServiceDate ? differenceInDays(now, lastServiceDate) : 0;
+            
+            if (kmRemaining < 500 || daysSinceService > 150) {
+                 const isCritical = kmRemaining < 100 || daysSinceService > 180;
+                 const isHigh = kmRemaining < 500 || daysSinceService > 165;
+                 const severity = isCritical ? 'critical' : (isHigh ? 'high' : 'medium');
+                 
+                 const nextDue = Math.ceil((currentOdo + kmRemaining) / 5000) * 5000;
+                 
+                 // Priority Scoring (0-100)
+                 const odoUrgency = Math.max(0, (500 - kmRemaining) / 500) * 50;
+                 const timeUrgency = Math.max(0, (daysSinceService - 150) / 30) * 50;
+                 const severityScore = Math.min(100, Math.round(odoUrgency + timeUrgency));
+
+                 let description = `Vehicle is due for Service in ${kmRemaining.toFixed(0)} km.`;
+                 if (daysSinceService > 150 && kmRemaining >= 500) {
+                     description = `Temporal service limit approaching: ${daysSinceService} days since last service.`;
+                 }
+
+                 alerts.push({
+                    id: `maint-due-${vehicle.vehicleId}-${severityScore}`,
+                    definitionId: 'def-maintenance-due',
+                    timestamp: now.toISOString(),
+                    severity: severity,
+                    title: `Maintenance Required: ${vehicle.plateNumber}`,
+                    description: `${description} Target Odometer: ${nextDue.toLocaleString()} km.`,
+                    status: 'new',
+                    vehicleId: vehicle.vehicleId,
+                    metadata: {
+                        nextServiceType: (nextDue % 10000 === 0) ? 'B' : 'A',
+                        remainingKm: kmRemaining,
+                        daysSinceService,
+                        severityScore
+                    }
+                });
+            }
+
+            // --- Step 2.3: Predictive Fuel Fatigue Alerts ---
+            const vFuel = (fuelEntries || [])
+                .filter(e => e.vehicleId === vehicle.vehicleId && (e.odometer || 0) > 0)
+                .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            if (vFuel.length >= 4) {
+                const efficiencies = [];
+                for (let i = 0; i < vFuel.length - 1; i++) {
+                    const current = vFuel[i];
+                    const prev = vFuel[i+1];
+                    const dist = current.odometer! - prev.odometer!;
+                    const liters = prev.liters || (prev.amount / 1.5); // Fallback estimate
+                    if (dist > 0 && liters > 0) {
+                        efficiencies.push(dist / liters);
+                    }
+                }
+
+                if (efficiencies.length >= 3) {
+                    const latestEff = efficiencies[0];
+                    const avgPrevEff = (efficiencies[1] + efficiencies[2]) / 2;
+                    
+                    if (latestEff < avgPrevEff * 0.82) { // 18% drop
+                        alerts.push({
+                            id: `fuel-fatigue-${vehicle.vehicleId}-${now.getTime()}`,
+                            definitionId: 'def-fuel-fatigue',
+                            timestamp: now.toISOString(),
+                            severity: 'medium',
+                            title: `Mechanical Health Alert: ${vehicle.plateNumber}`,
+                            description: `Detected 18%+ drop in fuel efficiency (km/L). Suggests engine strain or spark plug wear.`,
+                            status: 'new',
+                            vehicleId: vehicle.vehicleId,
+                            metadata: {
+                                efficiencyDrop: ((1 - (latestEff / avgPrevEff)) * 100).toFixed(1),
+                                currentKmPerL: latestEff.toFixed(2),
+                                baselineKmPerL: avgPrevEff.toFixed(2)
+                            }
+                        });
+                    }
+                }
             }
         });
 
@@ -159,7 +252,7 @@ export const AlertEngine = {
                     definitionId: 'def-fuel-leakage',
                     timestamp: now.toISOString(),
                     severity: 'high',
-                    title: `Fuel Leakage Detected: ${vehicle.plateNumber}`,
+                    title: `High Consumption Detected: ${vehicle.plateNumber}`,
                     description: `Spend ($${totalSpend.toFixed(0)}) exceeds estimate ($${estimatedCost.toFixed(0)}) by $${leakage.toFixed(0)}.`,
                     status: 'new',
                     vehicleId: vehicle.vehicleId

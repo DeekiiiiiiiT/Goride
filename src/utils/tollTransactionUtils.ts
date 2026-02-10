@@ -1,4 +1,4 @@
-import { FinancialTransaction, Claim } from "../../types/data";
+import { FinancialTransaction, Claim } from "../types/data";
 
 export type TransactionClassification = 
     | 'Standard_Credit'   // Normal Toll Expense (Driver paid, we owe)

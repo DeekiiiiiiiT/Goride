@@ -5,8 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
-import { FinancialTransaction } from "../../types/data";
-import { downloadCSV } from "../../utils/export";
+import { FinancialTransaction } from "../../../types/data";
+import { downloadCSV } from "../../../utils/export";
 import { FileDown, Printer, FileText, BarChart3, PieChart } from "lucide-react";
 import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths, startOfYear, endOfYear } from "date-fns";
 

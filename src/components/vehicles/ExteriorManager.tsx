@@ -20,7 +20,7 @@ interface ExteriorManagerProps {
     vehicleId: string;
 }
 
-export function ExteriorManager({ vehicleId }: ExteriorManagerProps) {
+const ExteriorManagerComponent: React.FC<ExteriorManagerProps> = ({ vehicleId }) => {
     const [items, setItems] = useState<EquipmentItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -694,4 +694,6 @@ export function ExteriorManager({ vehicleId }: ExteriorManagerProps) {
             </Dialog>
         </div>
     );
-}
+};
+
+export const ExteriorManager = React.memo(ExteriorManagerComponent);

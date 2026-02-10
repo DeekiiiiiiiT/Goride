@@ -14,15 +14,20 @@ import {
     Loader2,
     Search,
     Filter,
-    Trash2
+    Trash2,
+    RotateCcw,
+    ShieldCheck
 } from "lucide-react";
 import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
 import { cn } from "../ui/utils";
+import { normalizeIdentityString } from '../../utils/identityMatcher';
 
 interface FuelIntegrityAuditToolProps {
     logs: FuelEntry[];
     transactions: FinancialTransaction[];
+    vehicles: any[];
+    drivers: any[];
     onHealLogToTx: (log: FuelEntry) => Promise<void>;
     onHealTxToLog: (tx: FinancialTransaction) => Promise<void>;
     onSyncRecords: (log: FuelEntry, tx: FinancialTransaction, source: 'log' | 'tx') => Promise<void>;
@@ -30,6 +35,7 @@ interface FuelIntegrityAuditToolProps {
     onBackfillMetadata: (records: any[]) => Promise<void>;
     onRepairNaming: (records: any[]) => Promise<void>;
     onRunFuelIntegrityJob: () => Promise<void>;
+    onRepairAssetIdentity?: (duplicates: any[]) => Promise<void>;
     onDeleteLog: (id: string) => void;
     onDeleteTx: (id: string) => void;
 }
@@ -37,11 +43,14 @@ interface FuelIntegrityAuditToolProps {
 export function FuelIntegrityAuditTool({ 
     logs, 
     transactions, 
+    vehicles,
+    drivers,
     onHealLogToTx, 
     onHealTxToLog, 
     onSyncRecords,
     onStandardizeTypes,
     onBackfillMetadata,
+    onRepairAssetIdentity,
     onRunFuelIntegrityJob,
     onDeleteLog,
     onDeleteTx
@@ -49,7 +58,7 @@ export function FuelIntegrityAuditTool({
     const [isScanning, setIsScanning] = useState(false);
     const [isRunningJob, setIsRunningJob] = useState(false);
     const [lastScanDate, setLastScanDate] = useState<Date | null>(null);
-    const [filter, setFilter] = useState<'all' | 'orphaned' | 'mismatch' | 'anomaly'>('all');
+    const [filter, setFilter] = useState<'all' | 'orphaned' | 'mismatch' | 'anomaly' | 'identity'>('all');
     const [healingId, setHealingId] = useState<string | null>(null);
 
     // Scan Engine
@@ -91,6 +100,34 @@ export function FuelIntegrityAuditTool({
                 description: `${namingMismatches.length} manual records found with inconsistent source labels. Fixing this ensures they appear correctly in the Pending "To-Do" list.`,
                 data: { records: namingMismatches },
                 action: 'repair_naming'
+            });
+        }
+
+        // 0.4 Check for Duplicate Assets (Phase 4: Step 4.3)
+        const plateGroups = new Map<string, any[]>();
+        vehicles.forEach(v => {
+            const normalized = normalizeIdentityString(v.licensePlate);
+            if (!normalized) return;
+            const group = plateGroups.get(normalized) || [];
+            group.push(v);
+            plateGroups.set(normalized, group);
+        });
+
+        const duplicateVehicles: any[] = [];
+        plateGroups.forEach((vList, plate) => {
+            if (vList.length > 1) {
+                duplicateVehicles.push({ plate, list: vList });
+            }
+        });
+
+        if (duplicateVehicles.length > 0) {
+            issues.push({
+                id: 'duplicate-assets',
+                type: 'Duplicate Asset Identity',
+                severity: 'high',
+                description: `${duplicateVehicles.length} instances of duplicate vehicles found (Multiple IDs for the same license plate). This causes fragmented audit trails.`,
+                data: { duplicates: duplicateVehicles },
+                action: 'repair_asset_identity'
             });
         }
 
@@ -239,6 +276,8 @@ export function FuelIntegrityAuditTool({
                 await onBackfillMetadata(issue.data.records);
             } else if (issue.action === 'repair_naming') {
                 await onRepairNaming(issue.data.records);
+            } else if (issue.action === 'repair_asset_identity') {
+                if (onRepairAssetIdentity) await onRepairAssetIdentity(issue.data.duplicates);
             } else if (issue.action === 'delete') {
                 if (issue.data.log) onDeleteLog(issue.data.log.id);
                 else if (issue.data.tx) onDeleteTx(issue.data.tx.id);
@@ -253,6 +292,7 @@ export function FuelIntegrityAuditTool({
         if (filter === 'orphaned') return i.type.includes('Orphaned');
         if (filter === 'mismatch') return i.type === 'Data Drift';
         if (filter === 'anomaly') return i.type === 'Velocity Alert' || i.type === 'Odometer Drift';
+        if (filter === 'identity') return i.type === 'Duplicate Asset Identity';
         return true;
     });
 
@@ -370,6 +410,14 @@ export function FuelIntegrityAuditTool({
                                         onClick={() => setFilter('anomaly')}
                                     >
                                         ANOMALIES
+                                    </Button>
+                                    <Button 
+                                        variant={filter === 'identity' ? 'default' : 'outline'} 
+                                        size="sm" 
+                                        className="h-7 text-[10px]"
+                                        onClick={() => setFilter('identity')}
+                                    >
+                                        IDENTITY
                                     </Button>
                                 </div>
                             </div>

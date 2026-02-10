@@ -230,6 +230,7 @@ interface DriverDetailProps {
 
 export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, vehicleMetrics, onBack, fleetStats }: DriverDetailProps) {
   const [activeTab, setActiveTab] = useState("overview");
+  const [localLoading, setLocalLoading] = useState(true);
   const [tripSearch, setTripSearch] = useState("");
   const [tripPage, setTripPage] = useState(1);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
@@ -254,8 +255,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const { minDate, maxDate, tripIds } = useMemo(() => {
       if (!trips || trips.length === 0) return { minDate: null, maxDate: null, tripIds: new Set<string>() };
       
-      const timestamps = trips.map(t => new Date(t.date).getTime());
-      const ids = new Set(trips.map(t => t.id));
+      const validTrips = trips.filter(Boolean);
+      const timestamps = validTrips.map(t => new Date(t.date).getTime());
+      const ids = new Set(validTrips.map(t => t.id));
       
       return {
           minDate: new Date(Math.min(...timestamps)),
@@ -278,7 +280,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const bufferedStart = new Date(start.getTime() - bufferMs);
       const bufferedEnd = new Date(end.getTime() + bufferMs);
 
-      return transactions.filter(tx => {
+      return (transactions || []).filter(tx => {
+          if (!tx) return false;
           // 1. If explicitly linked to a visible trip, always include
           // This keeps trip-linked items strictly bound to the trip's visibility
           if (tx.tripId && tripIds.has(tx.tripId)) return true;
@@ -304,7 +307,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           }
       });
 
-      const processed = dateFilteredTransactions.map(t => {
+      const processed = (dateFilteredTransactions || []).filter(Boolean).map(t => {
             // Find linked claim
             const claim = claimMap.get(t.id);
             
@@ -324,6 +327,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const hidden: FinancialTransaction[] = [];
 
       processed.forEach(t => {
+          if (!t) return;
           const c = t._classification;
           if (c === 'Ignored' || c === 'Pending_Dispute') {
               // Phase 1: Filter Hidden items to only show relevant Toll activity
@@ -357,7 +361,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   }, [dateFilteredTransactions, claims]);
 
   // Phase 4: Payment Transactions
-  const paymentTransactions = useMemo(() => dateFilteredTransactions.filter(t => {
+  const paymentTransactions = useMemo(() => (dateFilteredTransactions || []).filter(t => {
+      if (!t) return false;
       // Strict Safety: Never show Tag Balance operations in Payment Log
       if (t.paymentMethod === 'Tag Balance') return false;
       if (t.description?.toLowerCase().includes('top-up')) return false;
@@ -373,9 +378,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       // Strict Payment Logic: Focus on Cash Collections (Money from Driver)
       const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
       return isPayment && t.amount > 0;
-  }), [transactions]);
+  }), [dateFilteredTransactions]);
 
-  const fuelTransactions = useMemo(() => dateFilteredTransactions.filter(t => {
+  const fuelTransactions = useMemo(() => (dateFilteredTransactions || []).filter(t => {
+      if (!t) return false;
       const cat = (t.category || '').toLowerCase();
       const desc = (t.description || '').toLowerCase();
       const type = (t.type || '').toLowerCase();
@@ -441,6 +447,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   // Fetch Transactions & Claims
   const refreshData = React.useCallback(async () => {
+      setLocalLoading(true);
       try {
           // Collect all relevant driver IDs to query
           const driverIds = [
@@ -457,7 +464,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           ]);
 
           // Server-side filtering is now enabled for getTransactions(driverIds)
-          setTransactions(Array.isArray(driverTx) ? driverTx : []);
+          setTransactions(Array.isArray(driverTx) ? driverTx.filter(Boolean) : []);
           
           // Filter claims locally if needed, or just use all for linking (safer)
           setClaims(Array.isArray(allClaims) ? allClaims : []);
@@ -470,8 +477,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           // But don't clear data if it's just a refresh failure
           if (!transactions || transactions.length === 0) setTransactions([]);
           if (!claims || claims.length === 0) setClaims([]);
+      } finally {
+          setLocalLoading(false);
       }
-  }, [driverId, driver, transactions?.length, claims?.length]);
+  }, [driverId, driver]);
 
   React.useEffect(() => {
       refreshData();
@@ -497,7 +506,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const txByTrip = new Map<string, FinancialTransaction[]>();
       const orphanTx: FinancialTransaction[] = [];
 
-      activeTransactions.forEach(tx => {
+      (activeTransactions || []).forEach(tx => {
+          if (!tx) return;
           let targetTripId = tx.tripId;
 
           // If no direct tripId, check if it's a child of a transaction that HAS a tripId
@@ -523,7 +533,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const tripGroups: { type: 'trip', data: Trip, children: FinancialTransaction[] }[] = [];
       const tripsWithTx = new Set<string>();
 
-      trips.forEach(trip => {
+      (trips || []).forEach(trip => {
+          if (!trip) return;
           const children = txByTrip.get(trip.id);
           if (children && children.length > 0) {
               tripGroups.push({
@@ -538,8 +549,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       // 3. Handle Orphans (Transactions with tripId that wasn't found in trips list, or no tripId)
       // Note: If we fetched *all* transactions but only *some* trips (pagination?), we might miss some parents.
       // For now, any transaction whose tripId wasn't found in the `trips` array is treated as an orphan.
-      activeTransactions.forEach(tx => {
-          if (tx.tripId && !tripsWithTx.has(tx.tripId)) {
+      (activeTransactions || []).forEach(tx => {
+          if (tx && tx.tripId && !tripsWithTx.has(tx.tripId)) {
               // This is a transaction with a tripId, but the trip isn't loaded in the current view.
               // We treat it as an orphan for now.
               orphanTx.push(tx);
@@ -559,6 +570,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       ];
 
       const sortedList = unifiedList.sort((a, b) => {
+          if (!a.data || !b.data) return 0;
           const dateA = new Date(a.data.date).getTime();
           const dateB = new Date(b.data.date).getTime();
           return dateB - dateA;
@@ -709,11 +721,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const confirmDeleteTransaction = async () => {
       if (!transactionToDelete) return;
 
+      // Optimistic Update
+      const originalTransactions = [...transactions];
+      setTransactions(prev => prev.filter(t => t.id !== transactionToDelete));
+
       try {
           await api.deleteTransaction(transactionToDelete);
-          setTransactions(prev => prev.filter(t => t.id !== transactionToDelete));
           toast.success("Transaction deleted");
       } catch (e) {
+          setTransactions(originalTransactions);
           console.error("Failed to delete transaction", e);
           toast.error("Failed to delete transaction");
       } finally {
@@ -1424,33 +1440,35 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      // 1. Calculate Float Issued (Cash given to driver)
      // In transactions, floats are negative (money leaving fleet). We need the absolute value.
-     const totalFloatIssued = Math.abs(transactions
-        .filter(t => t.category === "Float Issue")
-        .reduce((sum, t) => sum + (t.amount || 0), 0));
+     const totalFloatIssued = Math.abs((transactions || [])
+        .filter(t => t && t.category === "Float Issue")
+        .reduce((sum, t) => sum + (t?.amount || 0), 0));
 
      // 2. Calculate Payments Received (Cash returned to fleet)
      // Strictly look for 'Payment_Received' type or 'Cash Collection' category.
      // These are positive values (money entering fleet).
-     const totalPaymentsReceived = transactions
+     const totalPaymentsReceived = (transactions || [])
         .filter(t => {
+            if (!t) return false;
             // Strict Safety: Never include Tag Balance operations as Driver Payments
             if (t.paymentMethod === 'Tag Balance') return false;
             
             return (t.type === 'Payment_Received' || t.category === 'Cash Collection') && t.amount > 0;
         })
-        .reduce((sum, t) => sum + (t.amount || 0), 0);
+        .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
      // 3. Calculate Approved Cash Toll Expenses (Valid expenses paid by driver)
      // These must be CASH payments (receipts) that are RESOLVED (Reimbursed/Written Off).
      // These reduce the liability.
-     const approvedCashTollExpenses = transactions
+     const approvedCashTollExpenses = (transactions || [])
         .filter(t => {
+            if (!t) return false;
             const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
             const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl; // Assumption: Receipts imply cash/personal payment
             const isResolved = t.status === 'Resolved'; // Only count if approved
             return isToll && isCash && isResolved;
         })
-        .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+        .reduce((sum, t) => sum + Math.abs(t?.amount || 0), 0);
 
      // 4. Final Net Outstanding Calculation
      // (Cash They Took) - (Cash They Gave Back) - (Valid Expenses They Paid)
@@ -1459,28 +1477,29 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
      const cashReceived = totalPaymentsReceived; // Alias for backward compatibility if needed, but we used refined logic above.
 
-     const periodCashReceived = transactions
+     const periodCashReceived = (transactions || [])
         .filter(t => {
+            if (!t) return false;
             const d = new Date(t.date);
             if (t.paymentMethod === 'Tag Balance') return false;
             return isWithinInterval(d, { start, end }) && (t.type === 'Payment_Received' || t.category === 'Cash Collection');
         })
-        .reduce((sum, t) => sum + (t.amount || 0), 0);
+        .reduce((sum, t) => sum + (t?.amount || 0), 0);
      
      const periodNetChange = cashCollected - periodCashReceived;
 
      // Wallet State Logic (Phase 5)
      // Float Held: Total sum of negative transactions categorized as "Float Issue"
      // Note: In transactions, floats are negative.
-     const floatHeld = Math.abs(transactions
-        .filter(t => t.category === "Float Issue")
-        .reduce((sum, t) => sum + (t.amount || 0), 0));
+     const floatHeld = Math.abs((transactions || [])
+        .filter(t => t && t.category === "Float Issue")
+        .reduce((sum, t) => sum + (t?.amount || 0), 0));
 
      // Pending Clearance: Sum of transactions with status "Pending"
      // Only count positive payments (inflows) as pending clearance, not floats or adjustments unless positive
-     const pendingClearance = transactions
-        .filter(t => t.status === 'Pending' && t.amount > 0)
-        .reduce((sum, t) => sum + t.amount, 0);
+     const pendingClearance = (transactions || [])
+        .filter(t => t && t.status === 'Pending' && t.amount > 0)
+        .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
      // Trip Ratio Logic (from Vehicle Metrics)
      // Solution 1: "The Bridge" - Link Driver to Vehicle via Trips
@@ -1621,6 +1640,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       setDateRange(newRange);
     }
   };
+
+  if (localLoading && !metrics) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+        <p className="text-slate-500 font-medium">Restoring rich performance dashboard...</p>
+      </div>
+    );
+  }
 
   if (!metrics) return <div className="flex h-[50vh] items-center justify-center text-muted-foreground">Please select a date range to view driver metrics.</div>;
 
@@ -1774,6 +1802,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           <div className="space-y-1">
              <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{driverName}</h1>
+                <Badge className={cn(
+                    "px-3 py-0.5 font-bold uppercase tracking-widest text-[10px]",
+                    driver?.status === 'Inactive' ? "bg-rose-600 text-white animate-pulse border-none shadow-lg shadow-rose-200" : "bg-emerald-100 text-emerald-700"
+                )}>
+                    {driver?.status === 'Inactive' ? 'TERMINATED' : driver?.status || 'Active'}
+                </Badge>
                 <Badge className="bg-emerald-500 hover:bg-emerald-600">Active</Badge>
              </div>
              <div className="text-sm text-slate-500 flex flex-col gap-1">
@@ -1823,6 +1857,20 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          </TabsList>
 
          <TabsContent value="overview" className="space-y-6">
+            {driver?.status === 'Inactive' && (
+                <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-4 animate-pulse">
+                    <div className="p-2 bg-rose-100 rounded-full">
+                        <AlertTriangle className="h-6 w-6 text-rose-600" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-black text-rose-900 uppercase tracking-widest">Driver Terminated</h3>
+                        <p className="text-xs text-rose-700 mt-1 font-medium leading-relaxed">
+                            This driver account is inactive. Ensure all fuel cards are collected and deactivated. 
+                            Manual ledger operations are restricted for terminated assets to prevent data drift.
+                        </p>
+                    </div>
+                </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                <MetricCard 
                   title={isToday ? "Today's Earnings" : "Period Earnings"} 
@@ -1830,6 +1878,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   trend={`${metrics.trendPercent}% vs prev`} 
                   trendUp={metrics.trendUp}
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
+                  loading={localLoading}
                    breakdown={Object.entries(metrics.platformStats)
                        .filter(([_, stats]: [string, any]) => stats.earnings > 0 || stats.completed > 0)
                        .map(([label, stats]: [string, any]) => ({
@@ -1843,6 +1892,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   value={`$${metrics.cashCollected.toFixed(2)}`} 
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   tooltip="Total cash collected from trips during this period"
+                  loading={localLoading}
                   breakdown={[
                       ...Object.entries(metrics.platformStats)
                           .filter(([_, stats]: [string, any]) => stats.cashCollected > 0)
@@ -1857,6 +1907,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   title="Km Driven for Period" 
                   value={`${metrics.totalDistance.toFixed(1)} km`} 
                   icon={<Navigation className="h-4 w-4 text-slate-500" />}
+                  loading={localLoading}
                    breakdown={Object.entries(metrics.platformStats)
                        .filter(([_, stats]: [string, any]) => stats.distance > 0)
                        .map(([label, stats]: [string, any]) => ({
@@ -1871,6 +1922,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardHeader>
                   <CardContent>
                      <div className="h-[180px] w-full relative">
+                        {localLoading && (
+                            <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
+                                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                            </div>
+                        )}
                         <ResponsiveContainer width="100%" height="100%">
                            <PieChart>
                               <Pie
@@ -1973,6 +2029,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   value={`$${metrics.totalTolls.toFixed(2)}`}
                   subtext="Added to Debt (Cash Risk)"
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
+                  loading={localLoading}
                    breakdown={Object.entries(metrics.platformStats)
                        .filter(([_, stats]: [string, any]) => stats.tolls > 0)
                        .map(([label, stats]: [string, any]) => ({
@@ -1989,6 +2046,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      {metrics.distanceMetrics ? (
                         <>
                            <div className="h-[180px] w-full relative">
+                              {localLoading && (
+                                  <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
+                                      <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                                  </div>
+                              )}
                               <ResponsiveContainer width="100%" height="100%">
                                  <PieChart>
                                     <Pie
@@ -2163,6 +2225,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      {metrics.fuelMetrics ? (
                         <>
                            <div className="h-[180px] w-full relative">
+                              {localLoading && (
+                                  <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
+                                      <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                                  </div>
+                              )}
                               <ResponsiveContainer width="100%" height="100%">
                                  <PieChart>
                                     <Pie
@@ -2646,7 +2713,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                         {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                                                                     </div>
                                                                                 )}
-                                                                                {format(new Date(trip.date), 'MMM d, yyyy')}
+                                                                                {(() => {
+                                                    const d = parseTripDate(trip.date);
+                                                    return d ? format(d, 'MMM d, yyyy') : '-';
+                                                })()}
                                                                             </div>
                                                                         </TableCell>
                                                                         <TableCell>
@@ -2668,7 +2738,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                         {trip.platform}
                                                                                     </Badge>
                                                                                     <span className="text-xs text-slate-400 font-mono">
-                                                                                        {format(new Date(trip.date), 'HH:mm')}
+                                                                                        {format(parseTripDate(trip.date) || new Date(), 'HH:mm')}
                                                                                     </span>
                                                                                 </div>
                                                                             </div>
@@ -2721,7 +2791,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                     <div className="absolute left-6 top-0 bottom-1/2 w-px bg-slate-200"></div>
                                                                                     <div className="absolute left-6 top-1/2 w-4 h-px bg-slate-200"></div>
                                                                                     <span className="text-slate-500 text-xs font-mono">
-                                                                                        {child.time || format(new Date(child.date), 'HH:mm')}
+                                                                                        {child.time || (() => { const d = parseTripDate(child.date); return d ? format(d, 'HH:mm') : '-'; })()}
                                                                                     </span>
                                                                                 </TableCell>
                                                                                 <TableCell>
@@ -2861,7 +2931,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                             return (
                                                                 <TableRow key={tx.id} className="hover:bg-slate-50">
                                                                     <TableCell className="font-medium text-slate-600">
-                                                                        {format(new Date(tx.date), 'MMM d, yyyy')}
+                                                                        {(() => { const d = parseTripDate(tx.date); return d ? format(d, 'MMM d, yyyy') : '-'; })()}
                                                                     </TableCell>
                                                                     <TableCell>
                                                                         <div className="flex flex-col max-w-[250px]">
@@ -3031,7 +3101,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                 {paymentTransactions.length > 0 ? (
                                                     paymentTransactions.map((tx) => (
                                                         <TableRow key={tx.id}>
-                                                            <TableCell className="font-medium text-slate-600">{format(new Date(tx.date), 'MMM d, yyyy')}</TableCell>
+                                                            <TableCell className="font-medium text-slate-600">{(() => { const d = parseTripDate(tx.date); return d ? format(d, 'MMM d, yyyy') : '-'; })()}</TableCell>
                                                             <TableCell>
                                                                 <div className="flex flex-col">
                                                                     <span className="font-medium text-slate-900">{tx.description}</span>
@@ -3219,6 +3289,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     value={metrics.currentRating.toFixed(1)} 
                     subtext="Last 4 weeks"
                     icon={<Star className="h-4 w-4 text-slate-500" />}
+                    loading={localLoading}
                      breakdown={[
                         { label: 'Uber', value: metrics.platformStats.Uber.ratingCount > 0 ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#3b82f6' },
                         { label: 'InDrive', value: metrics.platformStats.InDrive.ratingCount > 0 ? (metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#10b981' }
@@ -3231,18 +3302,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     progress={metrics.completionRate}
                     progressColor="bg-emerald-500"
                     target="Target: 95%"
+                    loading={localLoading}
                  />
                  <MetricCard 
                     title="Cancelled Trips" 
                     value={metrics.periodCancelledTrips} 
                     icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
                     subtext="In selected period"
+                    loading={localLoading}
                  />
                  <MetricCard 
                     title="Safety Score" 
                     value="98/100" 
                     icon={<Shield className="h-4 w-4 text-slate-500" />}
                     subtext="Based on harsh braking events"
+                    loading={localLoading}
                  />
                <MetricCard 
                   title="Acceptance Rate" 
@@ -3251,6 +3325,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   progress={metrics.acceptanceRate || 0}
                   progressColor={!metrics.acceptanceRate ? "bg-slate-200" : metrics.acceptanceRate >= 80 ? "bg-emerald-500" : metrics.acceptanceRate < 40 ? "bg-rose-600" : "bg-amber-500"}
                   icon={(metrics.acceptanceRate !== null && metrics.acceptanceRate < 40) ? <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" /> : <ThumbsUp className="h-4 w-4 text-slate-500" />}
+                  loading={localLoading}
                    breakdown={[
                        { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
                        { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
@@ -3264,6 +3339,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   progressColor={metrics.cancellationRate < 5 ? "bg-emerald-500" : "bg-rose-500"}
                   tooltip={`Calculated from ${metrics.periodCancelledTrips} cancelled trips out of ${metrics.totalTrips} total trips in the selected period.`}
                   icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
+                  loading={localLoading}
                    breakdown={[
                        { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(( (metrics.platformStats.Uber.trips - metrics.platformStats.Uber.completed) / metrics.platformStats.Uber.trips) * 100).toFixed(1)}%` : '-', color: '#3b82f6' },
                        { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${(( (metrics.platformStats.InDrive.trips - metrics.platformStats.InDrive.completed) / metrics.platformStats.InDrive.trips) * 100).toFixed(1)}%` : '-', color: '#10b981' }
@@ -3434,8 +3510,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     return (
                                     <TableRow key={trip.id} className={isPhantom ? "bg-rose-50 hover:bg-rose-100 border-l-2 border-l-rose-500" : ""}>
                                     <TableCell>
-                                        <div className="font-medium">{format(new Date(trip.date), 'MMM d, yyyy')}</div>
-                                        <div className="text-xs text-slate-500">{format(new Date(trip.date), 'h:mm a')}</div>
+                                        <div className="font-medium">{format(parseTripDate(trip.date) || new Date(), 'MMM d, yyyy')}</div>
+                                        <div className="text-xs text-slate-500">{format(parseTripDate(trip.date) || new Date(), 'h:mm a')}</div>
                                         {isPhantom && <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Phantom Trip Detected</span>}
                                     </TableCell>
                                     <TableCell>
@@ -3568,7 +3644,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                             <TableCell className={
                                                 new Date(doc.expiryDate) < new Date() ? 'text-rose-600 font-medium' : ''
                                             }>
-                                                {format(new Date(doc.expiryDate), 'MMM d, yyyy')}
+                                                {(() => { const d = parseTripDate(doc.expiryDate); return d ? format(d, 'MMM d, yyyy') : '-'; })()}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button 
@@ -3666,7 +3742,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             <DialogHeader className="p-4 pb-2">
                 <DialogTitle>{selectedDocument?.name}</DialogTitle>
                 <DialogDescription>
-                    {selectedDocument?.type} • Uploaded on {selectedDocument?.uploadDate && format(new Date(selectedDocument.uploadDate), 'MMM d, yyyy')}
+                    {selectedDocument?.type} • Uploaded on {selectedDocument?.uploadDate && (() => { const d = parseTripDate(selectedDocument.uploadDate); return d ? format(d, 'MMM d, yyyy') : '-'; })()}
                 </DialogDescription>
             </DialogHeader>
             <div className="flex-1 bg-slate-900 flex items-center justify-center p-4 overflow-auto min-h-[400px]">
@@ -3709,7 +3785,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   <div className="space-y-1">
                       <Label className="text-slate-500 text-xs">Date & Time</Label>
                       <div className="font-medium">
-                          {selectedTrip.date ? format(new Date(selectedTrip.date), 'MMM d, yyyy h:mm a') : 'N/A'}
+                          {selectedTrip.date ? format(parseTripDate(selectedTrip.date) || new Date(), 'MMM d, yyyy h:mm a') : 'N/A'}
                       </div>
                   </div>
                   <div className="space-y-1">
@@ -3818,9 +3894,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   );
 }
 
-function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action, tooltip }: any) {
+function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action, tooltip, loading }: any) {
    return (
-      <Card>
+      <Card className={cn(loading && "animate-pulse")}>
          <CardContent className="p-6">
             <div className="flex items-center justify-between space-y-0 pb-2">
                <div className="flex items-center gap-2">
@@ -3841,8 +3917,12 @@ function MetricCard({ title, value, trend, trendUp, target, progress, progressCo
                {icon}
             </div>
             <div className="flex items-baseline gap-2 mt-2">
-               <h2 className="text-2xl font-bold">{value}</h2>
-               {trend && (
+               {loading ? (
+                   <div className="h-8 w-24 bg-slate-200 rounded animate-pulse"></div>
+               ) : (
+                   <h2 className="text-2xl font-bold">{value}</h2>
+               )}
+               {trend && !loading && (
                   <span className={`text-xs font-medium ${trendUp ? 'text-emerald-600' : 'text-rose-600'}`}>
                      {trend}
                   </span>
@@ -3852,74 +3932,37 @@ function MetricCard({ title, value, trend, trendUp, target, progress, progressCo
                <div className="mt-3 space-y-1">
                   {target && <p className="text-xs text-slate-500">{target}</p>}
                   {progress !== undefined && (
-                     <Progress value={progress} className="h-1.5" indicatorClassName={progressColor} />
+                     <Progress value={loading ? 0 : progress} className="h-1.5" indicatorClassName={progressColor} />
                   )}
                </div>
             )}
-            {subtext && <p className="text-xs text-slate-500 mt-1">{subtext}</p>}
+            {subtext && !loading && <p className="text-xs text-slate-500 mt-1">{subtext}</p>}
+            {loading && !target && !progress && <div className="h-3 w-32 bg-slate-100 rounded mt-2"></div>}
             
             {breakdown && breakdown.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
-                    {breakdown.map((item: any, index: number) => (
-                        <div key={index} className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 flex items-center gap-1.5">
-                                <span className={`w-2 h-2 rounded-full`} style={{ backgroundColor: item.color }}></span>
-                                {item.label}
-                            </span>
-                            <span className="font-medium text-slate-700">{item.value}</span>
-                        </div>
-                    ))}
+                    {loading ? (
+                        [1, 2].map(i => <div key={i} className="flex justify-between h-3 bg-slate-50 rounded"></div>)
+                    ) : (
+                        breakdown.map((item: any, index: number) => (
+                            <div key={index} className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500 flex items-center gap-1.5">
+                                    <span className={`w-2 h-2 rounded-full`} style={{ backgroundColor: item.color }}></span>
+                                    {item.label}
+                                </span>
+                                <span className="font-medium text-slate-700">{item.value}</span>
+                            </div>
+                        ))
+                    )}
                 </div>
             )}
             
-            {action && (
+            {action && !loading && (
                 <div className="mt-4 pt-2 border-t border-slate-100">
                     {action}
                 </div>
             )}
          </CardContent>
       </Card>
-   )
-}
-
-function CreditCardIcon(props: any) {
-   return (
-      <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect width="20" height="14" x="2" y="5" rx="2" />
-      <line x1="2" x2="22" y1="10" y2="10" />
-    </svg>
-   )
-}
-
-function CarIcon(props: any) {
-   return (
-      <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />
-      <circle cx="7" cy="17" r="2" />
-      <path d="M9 17h6" />
-      <circle cx="17" cy="17" r="2" />
-    </svg>
    )
 }
