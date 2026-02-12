@@ -1,3 +1,4 @@
+// cache-bust: force recompile — 2026-02-10
 import React, { useState, useEffect } from 'react';
 import { toast } from "sonner@2.0.3"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
@@ -97,7 +98,8 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
         odometer: '',
         pricePerLiter: '',
         totalCost: '',
-        notes: ''
+        notes: '',
+        isFullTank: false
     });
     setPaymentMethod('reimbursement');
   };

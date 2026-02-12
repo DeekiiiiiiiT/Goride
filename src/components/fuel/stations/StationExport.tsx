@@ -2,6 +2,7 @@ import React from 'react';
 import { StationProfile } from '../../../types/station';
 import { Button } from '../../ui/button';
 import { Download } from 'lucide-react';
+import { downloadCSV as globalDownloadCSV } from '../../../utils/export';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -16,57 +17,24 @@ interface StationExportProps {
 
 export function StationExport({ stations, filename = 'stations-export' }: StationExportProps) {
   
-  const downloadCSV = () => {
-    // Define Headers
-    const headers = [
-      'Name',
-      'Brand',
-      'Address',
-      'Status',
-      'Amenities',
-      'Avg Price',
-      'Last Price',
-      'Total Visits',
-      'Last Updated',
-      'Data Source',
-      'Lat',
-      'Lng'
-    ];
-
+  const downloadCSV = async () => {
     // Map Data
-    const rows = stations.map(s => [
-      s.name,
-      s.brand,
-      s.address,
-      s.status || 'active',
-      (s.amenities || []).join('|'),
-      s.stats.avgPrice.toFixed(2),
-      s.stats.lastPrice.toFixed(2),
-      s.stats.totalVisits,
-      new Date(s.stats.lastUpdated).toISOString(),
-      s.dataSource || 'manual',
-      s.location?.lat || '',
-      s.location?.lng || ''
-    ]);
+    const rows = stations.map(s => ({
+      Name: s.name,
+      Brand: s.brand,
+      Address: s.address,
+      Status: s.status || 'active',
+      Amenities: (s.amenities || []).join('|'),
+      Avg_Price: s.stats.avgPrice.toFixed(2),
+      Last_Price: s.stats.lastPrice.toFixed(2),
+      Total_Visits: s.stats.totalVisits,
+      Last_Updated: new Date(s.stats.lastUpdated).toISOString(),
+      Data_Source: s.dataSource || 'manual',
+      Lat: s.location?.lat || '',
+      Lng: s.location?.lng || ''
+    }));
 
-    // Build CSV String
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    // Trigger Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${filename}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+    await globalDownloadCSV(rows, filename, { checksum: true });
   };
 
   const downloadJSON = () => {

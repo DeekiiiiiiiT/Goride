@@ -1991,6 +1991,72 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         return true;
     });
 
+    // --- PHASE 4: DISTANCE METRICS NORMALIZATION (Uniform Average Distribution) ---
+    // Distribute aggregate distance components from Time & Distance reports across individual trips.
+    // This ensures metrics correctly aggregate in UI tiles (like Distance Metrics in DriverDetail).
+    
+    // 1. Driver Distribution
+    if (driverTimeData.length > 0) {
+        // Group totals by driver to handle multiple files/rows for the same driver
+        const driverDistTotals = new Map<string, { open: number, enroute: number, unavailable: number }>();
+        driverTimeData.forEach(d => {
+            const existing = driverDistTotals.get(d.driverUuid) || { open: 0, enroute: 0, unavailable: 0 };
+            driverDistTotals.set(d.driverUuid, {
+                open: existing.open + (d.openDistance || 0),
+                enroute: existing.enroute + (d.enrouteDistance || 0),
+                unavailable: existing.unavailable + (d.unavailableDistance || 0)
+            });
+        });
+
+        // Apply to trips
+        driverDistTotals.forEach((totals, driverId) => {
+            const driverTrips = finalizedTrips.filter(t => t.driverId === driverId && t.status === 'Completed');
+            if (driverTrips.length > 0) {
+                const openPerTrip = totals.open / driverTrips.length;
+                const enroutePerTrip = totals.enroute / driverTrips.length;
+                const unavailablePerTrip = totals.unavailable / driverTrips.length;
+
+                driverTrips.forEach(t => {
+                    t.normalizedOpenDistance = openPerTrip;
+                    t.normalizedEnrouteDistance = enroutePerTrip;
+                    t.normalizedUnavailableDistance = unavailablePerTrip;
+                });
+                console.log(`[Normalization] Distributed Driver ${driverId} metrics: Enroute=${totals.enroute.toFixed(2)}km across ${driverTrips.length} trips.`);
+            }
+        });
+    }
+
+    // 2. Vehicle Distribution (Fallback/Supplemental)
+    // If a trip doesn't have driver-normalized metrics but has a vehicleId, we can use vehicle metrics.
+    if (vehicleTimeData.length > 0) {
+        const vehicleDistTotals = new Map<string, { open: number, enroute: number, unavailable: number }>();
+        vehicleTimeData.forEach(v => {
+            const vId = v.vehicleUuid;
+            const existing = vehicleDistTotals.get(vId) || { open: 0, enroute: 0, unavailable: 0 };
+            vehicleDistTotals.set(vId, {
+                open: existing.open + (v.openDistance || 0),
+                enroute: existing.enroute + (v.enrouteDistance || 0),
+                unavailable: existing.unavailable + (v.unavailableDistance || 0)
+            });
+        });
+
+        vehicleDistTotals.forEach((totals, vId) => {
+            const vehicleTrips = finalizedTrips.filter(t => t.vehicleId === vId && t.status === 'Completed');
+            if (vehicleTrips.length > 0) {
+                const openPerTrip = totals.open / vehicleTrips.length;
+                const enroutePerTrip = totals.enroute / vehicleTrips.length;
+                const unavailablePerTrip = totals.unavailable / vehicleTrips.length;
+
+                vehicleTrips.forEach(t => {
+                    // Only apply if not already set by driver metrics (Driver > Vehicle for individual details)
+                    if (t.normalizedOpenDistance === undefined) t.normalizedOpenDistance = openPerTrip;
+                    if (t.normalizedEnrouteDistance === undefined) t.normalizedEnrouteDistance = enroutePerTrip;
+                    if (t.normalizedUnavailableDistance === undefined) t.normalizedUnavailableDistance = unavailablePerTrip;
+                });
+            }
+        });
+    }
+
     // --- PHASE 3: CROSS-PROVIDER DUPLICATE DETECTION (Step 3.1) ---
     // Heuristic: Same Driver + Overlapping Request/Dropoff Window = Potential Conflict
     // We sort by requestTime to optimize the scan

@@ -58,10 +58,11 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
     const endDate = c.req.query("endDate");
 
     // Phase 8: Direct Supabase query with pagination for performance
+    const customPrefix = c.req.query("prefix") || "fuel_entry";
     let query = supabase
         .from("kv_store_37f42386")
         .select("value", { count: 'exact' })
-        .like("key", "fuel_entry:%");
+        .like("key", `${customPrefix}:%`);
 
     if (vehicleId) {
         query = query.eq("value->>vehicleId", vehicleId);
@@ -587,6 +588,26 @@ app.post(`${BASE_PATH}/mileage-adjustments`, async (c) => {
     if (!adj.id) adj.id = crypto.randomUUID();
     await kv.set(`fuel_adjustment:${adj.id}`, adj);
     return c.json({ success: true, data: adj });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// --- PARENT COMPANIES ---
+app.get(`${BASE_PATH}/parent-companies`, async (c) => {
+  try {
+    const companies = await kv.get("parent_companies");
+    return c.json(companies || []);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/parent-companies`, async (c) => {
+  try {
+    const companies = await c.req.json();
+    await kv.set("parent_companies", companies);
+    return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

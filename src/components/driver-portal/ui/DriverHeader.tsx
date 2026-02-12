@@ -1,3 +1,4 @@
+// cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { Button } from "../../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../../ui/avatar";

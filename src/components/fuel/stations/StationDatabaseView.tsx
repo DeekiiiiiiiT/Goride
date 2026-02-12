@@ -7,6 +7,7 @@ import { StationDetailView } from './StationDetailView';
 import { StationImportWizard } from './StationImportWizard';
 import { StationExport } from './StationExport';
 import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
+import { ParentCompanyManager } from './ParentCompanyManager';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Switch } from '../../ui/switch';
 import { Label } from '../../ui/label';
@@ -220,8 +221,12 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
             
             <TabsList>
               <TabsTrigger value="all-stations">All Gas Stations</TabsTrigger>
+              <TabsTrigger value="verified-stations">Verified Gas Station</TabsTrigger>
+              <TabsTrigger value="parent-company">Parent Company</TabsTrigger>
+              <TabsTrigger value="unverified-stations">Unverified Gas Stations</TabsTrigger>
               <TabsTrigger value="accepted-stations">Accepted Gas Stations</TabsTrigger>
               <TabsTrigger value="non-fuel">Non-Fuel Locations</TabsTrigger>
+              <TabsTrigger value="learnt-locations">Learnt Location</TabsTrigger>
             </TabsList>
           </div>
 
@@ -275,8 +280,21 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
              </div>
           </TabsContent>
 
-          {/* --- Accepted Gas Stations Tab (Formerly Gas Stations) --- */}
-          <TabsContent value="accepted-stations" className="m-0 p-0 border-0">
+          {/* --- Verified Gas Station Tab --- */}
+          <TabsContent value="verified-stations" className="m-0 p-0 border-0">
+             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+               <p className="text-lg font-medium">Verified Gas Station</p>
+               <p className="text-sm">Information for this section will be added soon.</p>
+             </div>
+          </TabsContent>
+
+          {/* --- Parent Company Tab --- */}
+          <TabsContent value="parent-company" className="m-0 p-0 border-0">
+             <ParentCompanyManager />
+          </TabsContent>
+
+          {/* --- Unverified Gas Stations Tab --- */}
+          <TabsContent value="unverified-stations" className="m-0 p-0 border-0">
              <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
                {/* Preferred Toggle */}
                 <div className="flex items-center space-x-2 mr-2">
@@ -325,6 +343,14 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
              </div>
           </TabsContent>
 
+          {/* --- Accepted Gas Stations Tab --- */}
+          <TabsContent value="accepted-stations" className="m-0 p-0 border-0">
+             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+               <p className="text-lg font-medium">Accepted Gas Stations</p>
+               <p className="text-sm">Information for this section will be added soon.</p>
+             </div>
+          </TabsContent>
+
           {/* --- Non-Fuel Locations Tab --- */}
           <TabsContent value="non-fuel" className="m-0 p-0 border-0">
              <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
@@ -352,6 +378,14 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                   onSelectStation={handleStationSelect} 
                   variant="manager"
                />
+             </div>
+          </TabsContent>
+
+          {/* --- Learnt Location Tab --- */}
+          <TabsContent value="learnt-locations" className="m-0 p-0 border-0">
+             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+               <p className="text-lg font-medium">No data available</p>
+               <p className="text-sm">Information for this section will be added soon.</p>
              </div>
           </TabsContent>
         </Tabs>

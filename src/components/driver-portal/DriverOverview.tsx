@@ -1,18 +1,16 @@
+// cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { 
   Trophy, 
   Star, 
   ChevronRight, 
-  Fuel, 
-  Wrench,
   ShieldAlert
 } from 'lucide-react';
 import { Card, CardContent } from "../ui/card";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "../ui/drawer";
 import { cn } from "../ui/utils";
 import { DriverMetrics, TierConfig, DriverGoals, Trip } from '../../types/data';
-import { DriverFuelDisputes } from './DriverFuelDisputes';
 
 export interface DriverOverviewProps {
   tierState: {
@@ -163,31 +161,6 @@ export function DriverOverview({
                 <span className="text-lg font-bold text-slate-900">${(todayEarnings?.breakdown?.indrive || 0).toFixed(2)}</span>
             </div>
         </div>
-      </div>
-
-      {/* Quick Actions - PHASE 6: Thumb-Friendly Targets */}
-      <div className="flex flex-col gap-3">
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider ml-1">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-3">
-              <Button 
-                onClick={() => onAction('log_fuel')}
-                className="h-16 rounded-2xl bg-white border border-slate-100 shadow-sm text-slate-900 hover:bg-slate-50 flex flex-col items-center justify-center gap-1 group transition-all active:scale-[0.98]"
-              >
-                  <div className="p-2 rounded-lg bg-orange-50 text-orange-600 group-hover:bg-orange-100 transition-colors">
-                    <Fuel className="h-5 w-5" />
-                  </div>
-                  <span className="text-xs font-bold">Log Fuel</span>
-              </Button>
-              <Button 
-                onClick={() => onAction('request_service')}
-                className="h-16 rounded-2xl bg-white border border-slate-100 shadow-sm text-slate-900 hover:bg-slate-50 flex flex-col items-center justify-center gap-1 group transition-all active:scale-[0.98]"
-              >
-                  <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
-                    <Wrench className="h-5 w-5" />
-                  </div>
-                  <span className="text-xs font-bold">Service</span>
-              </Button>
-          </div>
       </div>
 
       {/* Start Trip Button - REMOVED (Duplicate in TripTimer) */}

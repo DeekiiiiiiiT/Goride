@@ -279,6 +279,42 @@ export function SystemHardeningPanel() {
                     <ShieldCheck className="w-32 h-32" />
                 </div>
             </div>
+
+            <Card className="border-slate-200 shadow-sm">
+                <CardHeader>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        Forensic Report Finalization
+                    </CardTitle>
+                    <CardDescription>Generate a cryptographically signed system state report for regulatory compliance.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex justify-between items-center">
+                    <div className="space-y-1">
+                        <p className="text-xs text-slate-500">Includes SHA-256 hash of entire vehicle integrity matrix.</p>
+                        <p className="text-[10px] text-slate-400 font-mono">Last Signed: Never</p>
+                    </div>
+                    <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 h-8 font-bold"
+                        onClick={async () => {
+                            const loading = toast.loading("Generating forensic signature...");
+                            try {
+                                const stats = await api.getDashboardStats();
+                                const signature = await api.signAuditReport(stats);
+                                toast.success("Forensic Signature Generated", {
+                                    description: `Signature: ${signature.signature.substring(0, 16)}...`,
+                                    id: loading
+                                });
+                            } catch (e) {
+                                toast.error("Signing failed", { id: loading });
+                            }
+                        }}
+                    >
+                        Sign Master Audit Report
+                    </Button>
+                </CardContent>
+            </Card>
         </div>
     );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { 
   ShieldCheck, 
@@ -254,13 +254,20 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   };
 
   const handleViewSource = (item: OdometerReading) => {
+    // Priority for display: Odometer Proof > Receipt > General Photo
+    const bestImageUrl = item.imageUrl || 
+                        item.metaData?.odometerProofUrl || 
+                        item.metaData?.photoUrl || 
+                        item.metaData?.receiptUrl || 
+                        item.metaData?.invoiceUrl;
+
     setEvidenceData({
         id: item.id,
         type: item.source,
         source: item.source,
         date: item.date,
         value: item.value,
-        imageUrl: item.metaData?.receiptUrl || item.metaData?.odometerProofUrl,
+        imageUrl: bestImageUrl,
         notes: item.notes,
         metadata: item.metaData,
         isVerified: item.isVerified
@@ -442,64 +449,6 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-2" {...props}>
-      
-      {/* Live Fleet Status Card */}
-      <Card className="bg-slate-950 text-white border-slate-800 overflow-hidden relative">
-        <div className="absolute top-0 right-0 p-32 bg-indigo-500/10 blur-[100px] rounded-full"></div>
-        <CardContent className="p-8 relative z-10">
-           <div className="flex flex-col md:flex-row justify-between md:items-start gap-6">
-              <div>
-                  <div className="flex items-center gap-2 mb-4">
-                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                     <span className="text-xs font-bold text-emerald-400 tracking-wider uppercase">Last Verified Anchor</span>
-                  </div>
-                  <h2 className="text-2xl font-bold mb-6">Physical Odometer Status</h2>
-                  
-                  <div className="flex items-center gap-2 mb-6">
-                      {latestReading ? (
-                         latestReading.value.toString().split('').map((digit, idx) => (
-                             <div key={idx} className="w-10 h-14 bg-slate-900 border border-slate-800 rounded flex items-center justify-center">
-                                 <span className="text-3xl font-mono font-bold">{digit}</span>
-                             </div>
-                         ))
-                      ) : (
-                          <div className="text-slate-500">No data</div>
-                      )}
-                      <span className="text-slate-500 text-xl font-bold ml-2 mt-4">km</span>
-                  </div>
-
-                  {latestReading && (
-                      <div className="flex flex-wrap items-center gap-4 text-sm">
-                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
-                             <div className="w-2 h-2 rounded-full bg-emerald-400 mr-2"></div>
-                             Verified: {format(parseDateForDisplay(latestReading.date), 'MMM d, yyyy')}
-                          </Badge>
-                          <Badge variant="outline" className="bg-slate-800 text-slate-300 border-slate-700 px-3 py-1">
-                             <Info className="w-3 h-3 mr-2" />
-                             Source: {latestReading.source}
-                          </Badge>
-                      </div>
-                  )}
-              </div>
-
-              <div className="flex flex-col gap-3 min-w-[200px]">
-                  <Button className="bg-indigo-600 hover:bg-indigo-700 text-white w-full justify-start">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Manual Odometer Entry
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 w-full justify-start"
-                    onClick={fetchTimelineData}
-                  >
-                      <RotateCw className="w-4 h-4 mr-2" />
-                      Sync Latest Data
-                  </Button>
-              </div>
-           </div>
-        </CardContent>
-      </Card>
-
       {/* Filter Bar */}
       <Card className="bg-white border-slate-200 shadow-sm">
           <CardContent className="p-4">

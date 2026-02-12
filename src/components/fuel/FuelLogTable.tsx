@@ -220,8 +220,8 @@ export function FuelLogTable({
         return {
             manualCount: manualEntries.length,
             anchorCount: anchorEntries.length,
-            totalSpend: manualEntries.reduce((sum, e) => sum + e.amount, 0),
-            anchorTotalSpent: anchorEntries.reduce((sum, e) => sum + e.amount, 0),
+            totalSpend: auditScopeEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+            anchorTotalSpent: anchorEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
             imbalancedCount: manualEntries.filter(e => ledgerIntegrity.get(e.id) !== 'Complete' && ledgerIntegrity.get(e.id) !== 'Pending').length,
             completedCycles: cycleScope.filter(c => c.status === 'Complete').length,
             anomalyCycles: cycleScope.filter(c => c.status === 'Anomaly').length,

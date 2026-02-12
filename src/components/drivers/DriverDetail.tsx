@@ -361,7 +361,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   }, [dateFilteredTransactions, claims]);
 
   // Phase 4: Payment Transactions
-  const paymentTransactions = useMemo(() => (dateFilteredTransactions || []).filter(t => {
+  // FIX: Use full `transactions` array instead of `dateFilteredTransactions`.
+  // Manually-logged payments don't carry a tripId and fall outside the trip-date
+  // window heuristic, causing them to be incorrectly hidden. Financial records
+  // like cash collections / floats / adjustments should always be visible.
+  const paymentTransactions = useMemo(() => (transactions || []).filter(t => {
       if (!t) return false;
       // Strict Safety: Never show Tag Balance operations in Payment Log
       if (t.paymentMethod === 'Tag Balance') return false;
@@ -378,7 +382,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       // Strict Payment Logic: Focus on Cash Collections (Money from Driver)
       const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
       return isPayment && t.amount > 0;
-  }), [dateFilteredTransactions]);
+  }), [transactions]);
 
   const fuelTransactions = useMemo(() => (dateFilteredTransactions || []).filter(t => {
       if (!t) return false;
@@ -464,7 +468,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           ]);
 
           // Server-side filtering is now enabled for getTransactions(driverIds)
-          setTransactions(Array.isArray(driverTx) ? driverTx.filter(Boolean) : []);
+          const validTx = Array.isArray(driverTx) ? driverTx.filter(Boolean) : [];
+          
+          // Diagnostic: Log transaction breakdown to verify data completeness
+          const paymentCount = validTx.filter((t: any) => t.category === 'Cash Collection' || t.type === 'Payment_Received').length;
+          const tollCount = validTx.filter((t: any) => ['Toll Usage', 'Toll', 'Tolls'].includes(t.category)).length;
+          const fuelCount = validTx.filter((t: any) => (t.category || '').toLowerCase().includes('fuel')).length;
+          const floatCount = validTx.filter((t: any) => t.category === 'Float Issue').length;
+          console.log(`[DriverDetail] Transactions loaded: ${validTx.length} total | ${paymentCount} payments | ${tollCount} tolls | ${fuelCount} fuel | ${floatCount} floats`);
+          
+          setTransactions(validTx);
           
           // Filter claims locally if needed, or just use all for linking (safer)
           setClaims(Array.isArray(allClaims) ? allClaims : []);
@@ -682,10 +695,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           const updatedTx = { ...newTx, id: payment.id };
           await api.saveTransaction(updatedTx);
           setTransactions(prev => prev.map(t => t.id === payment.id ? { ...t, ...updatedTx } as FinancialTransaction : t));
-          toast.success("Transaction updated");
+          // toast.success removed here - LogCashPaymentModal handles it
       } else {
           const saved = await api.saveTransaction(newTx);
-          setTransactions(prev => [saved.data, ...prev]);
+          // api.saveTransaction already unwraps result.data, so `saved` IS the transaction object.
+          // Previously `saved.data` was used here which evaluates to undefined.
+          const savedTx = saved?.data || saved;
+          console.log('[DriverDetail] New payment saved:', savedTx?.id, savedTx?.category, savedTx?.type, savedTx?.amount);
+          setTransactions(prev => [savedTx, ...prev].filter(Boolean));
       }
   };
 
@@ -919,7 +936,68 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   // Calculate Metrics based on Date Range
   const metrics = useMemo(() => {
-     if (!dateRange?.from) return null;
+     const emptyMetrics = {
+        periodEarnings: 0,
+        prevPeriodEarnings: 0,
+        trendPercent: "0.0",
+        trendUp: true,
+        totalEarnings: 0,
+        lifetimeTrips: 0,
+        totalTrips: 0,
+        totalCashCollected: 0,
+        lifetimeTolls: 0,
+        periodCompletedTrips: 0,
+        periodCancelledTrips: 0,
+        cashCollected: 0,
+        totalDistance: 0,
+        totalDuration: 0,
+        netTollReimbursement: 0,
+        disputeCharges: 0,
+        fuelSpend: 0,
+        earningsPerKm: 0,
+        avgDuration: 0,
+        netOutstanding: 0,
+        floatHeld: 0,
+        pendingClearance: 0,
+        acceptanceRate: 0,
+        currentRating: 0,
+        completionRate: 0,
+        cancellationRate: 0,
+        totalTolls: 0,
+        platformStats: {
+            Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+            InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+            GoRide: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+            Bolt: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+            Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 }
+        },
+        tripRatio: {
+            available: 0,
+            toTrip: 0,
+            onTrip: 0,
+            unavailable: 0,
+            totalOnline: 0
+        },
+        distanceMetrics: {
+            open: 0,
+            enroute: 0,
+            onTrip: 0,
+            unavailable: 0,
+            riderCancelled: 0,
+            driverCancelled: 0,
+            deliveryFailed: 0,
+            total: 0
+        },
+        fuelMetrics: {
+            rideShare: 0,
+            companyOps: 0,
+            personal: 0,
+            misc: 0,
+            total: 0
+        }
+     };
+
+     if (!dateRange?.from) return emptyMetrics;
 
      const start = startOfDay(dateRange.from);
      const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
@@ -1641,7 +1719,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     }
   };
 
-  if (localLoading && !metrics) {
+  if (localLoading && (!metrics || metrics.totalTrips === 0)) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
@@ -1650,7 +1728,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     );
   }
 
-  if (!metrics) return <div className="flex h-[50vh] items-center justify-center text-muted-foreground">Please select a date range to view driver metrics.</div>;
+  if (!dateRange?.from) return <div className="flex h-[50vh] items-center justify-center text-muted-foreground">Please select a date range to view driver metrics.</div>;
 
   const isToday = dateRange?.to && format(dateRange.to, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') && metrics.daysDiff === 1;
 

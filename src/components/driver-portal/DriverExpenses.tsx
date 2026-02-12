@@ -1,3 +1,4 @@
+// cache-bust: force recompile — 2026-02-10
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "../ui/card";
 import { Button } from "../ui/button";
@@ -624,8 +625,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                         currentVolume={(() => {
                             const amt = parseFloat(amount || '0');
                             const price = parseFloat(fuelEntry.pricePerLiter || '0');
-                            if (amt > 0 && price > 0) return (amt / price).toFixed(2);
-                            return '0.00';
+                            if (amt > 0 && price > 0) return Number((amt / price).toFixed(2));
+                            return 0;
                         })()}
                       />
                   </div>
@@ -639,9 +640,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 )}
 
                 <ReceiptUploader 
-                  preview={receiptPreview}
+                  previewUrl={receiptPreview}
                   isScanning={isScanning}
-                  onFileChange={handleFileChange}
+                  onFileSelect={handleFileChange}
+                  onClear={() => { setReceiptFile(null); setReceiptPreview(null); }}
                 />
 
                 <div className="space-y-2">

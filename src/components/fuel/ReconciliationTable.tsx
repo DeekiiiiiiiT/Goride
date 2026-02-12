@@ -128,7 +128,7 @@ export function ReconciliationTable({
         return "text-slate-600";
     };
 
-    const handleExport = () => {
+    const handleExport = async () => {
         const data = reports.map(report => {
             const vehicle = vehicles.find(v => v.id === report.vehicleId);
             const driverSpend = fuelEntries
@@ -157,7 +157,7 @@ export function ReconciliationTable({
             };
         });
 
-        downloadCSV(data, `reconciliation-${format(weekStart, 'yyyy-MM-dd')}`);
+        await downloadCSV(data, `reconciliation-${format(weekStart, 'yyyy-MM-dd')}`, { checksum: true });
     };
 
     return (

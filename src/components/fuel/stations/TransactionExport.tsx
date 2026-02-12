@@ -2,6 +2,7 @@ import React from 'react';
 import { FuelEntry } from '../../../types/fuel';
 import { Button } from '../../ui/button';
 import { Download } from 'lucide-react';
+import { downloadCSV as globalDownloadCSV } from '../../../utils/export';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -16,57 +17,24 @@ interface TransactionExportProps {
 
 export function TransactionExport({ logs, filename = 'transactions-export' }: TransactionExportProps) {
   
-  const downloadCSV = () => {
-    // Define Headers
-    const headers = [
-      'Date',
-      'Time',
-      'Location',
-      'Station Address',
-      'Vehicle ID',
-      'Driver ID',
-      'Liters',
-      'Price Per Liter',
-      'Total Amount',
-      'Odometer',
-      'Payment Source',
-      'Entry Type'
-    ];
-
+  const downloadCSV = async () => {
     // Map Data
-    const rows = logs.map(log => [
-      new Date(log.date).toLocaleDateString(),
-      log.time || '',
-      log.location || '',
-      log.stationAddress || '',
-      log.vehicleId || '',
-      log.driverId || '',
-      log.liters || 0,
-      log.pricePerLiter || 0,
-      log.amount || 0,
-      log.odometer || '',
-      log.paymentSource || '',
-      log.type || ''
-    ]);
+    const rows = logs.map(log => ({
+      Date: new Date(log.date).toLocaleDateString(),
+      Time: log.time || '',
+      Location: log.location || '',
+      Station_Address: log.stationAddress || '',
+      Vehicle_ID: log.vehicleId || '',
+      Driver_ID: log.driverId || '',
+      Liters: log.liters || 0,
+      Price_Per_Liter: log.pricePerLiter || 0,
+      Total_Amount: log.amount || 0,
+      Odometer: log.odometer || '',
+      Payment_Source: log.paymentSource || '',
+      Entry_Type: log.type || ''
+    }));
 
-    // Build CSV String
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    // Trigger Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${filename}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+    await globalDownloadCSV(rows, filename, { checksum: true });
   };
 
   const downloadJSON = () => {

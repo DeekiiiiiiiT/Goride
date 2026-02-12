@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { 
   Wrench, 
@@ -50,13 +50,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../ui/alert-dialog";
-import { OdometerReading } from '../../../types/vehicle';
+import { OdometerReading, UnifiedOdometerEntry } from '../../../types/vehicle';
 import { odometerService } from '../../../services/odometerService';
 import { toast } from "sonner@2.0.3";
 
 import { formatMasterLogExport, formatCheckInExport } from '../../../utils/odometerUtils';
 import { downloadCSV } from '../../../utils/export';
 import { ImportOdometerModal } from './ImportOdometerModal';
+import { SourceEvidenceModal } from './SourceEvidenceModal';
 
 interface OdometerHistoryProps {
   vehicleId: string;
@@ -71,9 +72,10 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
   onCorrectReading, 
   refreshTrigger = 0 
 }) => {
-  const [history, setHistory] = useState<OdometerReading[]>([]);
+  const [history, setHistory] = useState<UnifiedOdometerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [readingToDelete, setReadingToDelete] = useState<string | null>(null);
+  const [evidenceToShow, setEvidenceToShow] = useState<any>(null);
   const [isExportingMaster, setIsExportingMaster] = useState(false);
   const [isExportingCheckins, setIsExportingCheckins] = useState(false);
   const [filters, setFilters] = useState({
@@ -118,7 +120,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
           
           // 3. Download
           const filename = `master_odometer_log_${vehicleId}_${new Date().toISOString().split('T')[0]}`;
-          downloadCSV(exportRows, filename);
+          await downloadCSV(exportRows, filename, { checksum: true });
           
           toast.success(`Exported ${exportRows.length} records successfully.`);
       } catch (error) {
@@ -147,7 +149,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
           
           // 3. Download
           const filename = `checkin_export_${vehicleId}_${new Date().toISOString().split('T')[0]}`;
-          downloadCSV(exportRows, filename);
+          await downloadCSV(exportRows, filename, { checksum: true });
           
           toast.success(`Exported ${exportRows.length} check-in records.`);
       } catch (error) {
@@ -180,12 +182,43 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
     }
   };
 
+  const handleViewEvidence = (reading: UnifiedOdometerEntry) => {
+    const sourceMap: Record<string, string> = {
+      'fuel': 'Fuel Receipt',
+      'service': 'Service Log',
+      'checkin': 'Weekly Check-in',
+      'manual': 'Manual Entry'
+    };
+
+    const bestImageUrl = reading.imageUrl || 
+                        reading.metaData?.odometerProofUrl || 
+                        reading.metaData?.photoUrl || 
+                        reading.metaData?.receiptUrl || 
+                        reading.metaData?.invoiceUrl;
+
+    setEvidenceToShow({
+      id: reading.referenceId || reading.id,
+      type: reading.source,
+      source: sourceMap[reading.source] || reading.source,
+      date: reading.date,
+      value: reading.value,
+      imageUrl: bestImageUrl,
+      notes: reading.notes,
+      metadata: { ...reading.metaData },
+      isVerified: reading.isVerified
+    });
+  };
+
   const getSourceIcon = (source: string) => {
     switch (source) {
+      case 'service':
       case 'Service Log': return <Wrench className="h-4 w-4 text-blue-500" />;
+      case 'manual':
       case 'Manual Update': return <User className="h-4 w-4 text-slate-500" />;
       case 'Trip Import': return <FileUp className="h-4 w-4 text-emerald-500" />;
+      case 'fuel':
       case 'Fuel Log': return <Fuel className="h-4 w-4 text-amber-500" />;
+      case 'checkin':
       case 'Weekly Check-in': return <CheckCircle2 className="h-4 w-4 text-indigo-500" />;
       case 'Baseline': return <Flag className="h-4 w-4 text-purple-500" />;
       default: return <Calendar className="h-4 w-4 text-slate-400" />;
@@ -194,6 +227,10 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
 
   const getSourceLabel = (source: string) => {
     switch (source) {
+      case 'manual': return 'Manual';
+      case 'fuel': return 'Fuel';
+      case 'service': return 'Service';
+      case 'checkin': return 'Check-in';
       case 'Trip Import': return 'Import';
       case 'Manual Update': return 'Manual';
       case 'Weekly Check-in': return 'Check-in';
@@ -201,7 +238,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
     }
   };
 
-  const filteredHistory = React.useMemo(() => {
+  const filteredHistory = useMemo(() => {
     return history.filter(item => {
       // Source filter
       if (filters.source !== 'all' && item.source !== filters.source) return false;
@@ -251,115 +288,6 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Odometer Dashboard */}
-      <div className="bg-slate-900 rounded-2xl p-8 text-white relative overflow-hidden shadow-2xl border border-slate-800">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] -mr-32 -mt-32 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-[80px] -ml-32 -mb-32 pointer-events-none"></div>
-        
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 relative z-10">
-          <div className="space-y-6">
-            <div className="flex items-center gap-3">
-               <div className="bg-indigo-500/20 p-2 rounded-lg">
-                  <RefreshCw className="h-5 w-5 text-indigo-300" />
-               </div>
-               <div>
-                  <h3 className="text-indigo-200 font-semibold tracking-wide uppercase text-xs">Verified Odometer Anchor</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl font-bold tracking-tight">Live Fleet Status</span>
-                  </div>
-               </div>
-            </div>
-            
-            <div className="flex items-end gap-4">
-               <div className="flex gap-1.5">
-                  {digits.map((digit, i) => (
-                      <div key={i} className="w-12 h-16 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-4xl font-mono font-bold text-white shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
-                          {digit}
-                      </div>
-                  ))}
-               </div>
-               <div className="pb-2">
-                   <span className="text-2xl text-slate-500 font-mono">km</span>
-               </div>
-            </div>
-            
-            <div className="flex flex-wrap gap-4 pt-2">
-              <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
-                <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
-                <span>Verified Anchor: {lastVerifiedDate ? formatDate(lastVerifiedDate) : 'N/A'}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
-                <Info className="h-4 w-4 text-indigo-400" />
-                <span>Source: {history[0]?.source || 'None'}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto">
-              <Button 
-                onClick={onCorrectReading} 
-                className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
-              >
-                  <Wrench className="w-4 h-4 mr-2" />
-                  Manual Odometer Entry
-              </Button>
-              <div className="flex gap-2">
-                <Button 
-                    variant="outline" 
-                    className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl"
-                    onClick={() => fetchHistory()}
-                    title="Refresh Data"
-                >
-                    <RefreshCw className="w-4 h-4" />
-                </Button>
-                <ImportOdometerModal 
-                    vehicleId={vehicleId} 
-                    onImportComplete={fetchHistory} 
-                    triggerClassName="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl"
-                />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button 
-                            variant="outline" 
-                            className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl px-4 min-w-[60px]"
-                            title="Export Data"
-                        >
-                            <FileUp className="w-4 h-4 mr-2" />
-                            <ChevronDown className="w-3 h-3 opacity-50" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuLabel>Export Options</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                            onClick={handleExportMasterLog}
-                            disabled={isExportingMaster}
-                        >
-                            {isExportingMaster ? (
-                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <FileUp className="w-4 h-4 mr-2 text-indigo-500" />
-                            )}
-                            <span>Export Master Log</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                            onClick={handleExportCheckins}
-                            disabled={isExportingCheckins}
-                        >
-                            {isExportingCheckins ? (
-                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <ListChecks className="w-4 h-4 mr-2 text-emerald-500" />
-                            )}
-                            <span>Export Check-ins</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-          </div>
-        </div>
-      </div>
-
       {/* Advanced Filter Bar */}
       <Card className="border-slate-200 bg-slate-50/50 shadow-sm overflow-visible">
         <CardContent className="p-4">
@@ -522,9 +450,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-48">
                                 <DropdownMenuLabel>Audit Options</DropdownMenuLabel>
-                                <DropdownMenuItem onClick={() => {
-                                    toast.info("Viewing linked transaction detail...");
-                                }}>
+                                <DropdownMenuItem onClick={() => handleViewEvidence(reading)}>
                                   <Search className="mr-2 h-4 w-4" />
                                   View Linked Source
                                 </DropdownMenuItem>
@@ -625,8 +551,14 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SourceEvidenceModal 
+        isOpen={!!evidenceToShow}
+        onClose={() => setEvidenceToShow(null)}
+        evidence={evidenceToShow}
+      />
     </div>
   );
 };
 
-export const OdometerHistory = React.memo(OdometerHistoryInternal);
+export const OdometerHistory = memo(OdometerHistoryInternal);

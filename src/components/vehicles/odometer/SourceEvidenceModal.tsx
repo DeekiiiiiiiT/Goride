@@ -23,6 +23,13 @@ import {
 import { format } from 'date-fns';
 import { cn } from "../../ui/utils";
 
+import { ImageWithFallback } from '../../figma/ImageWithFallback';
+import realOdometerScan from "figma:asset/d634a1f92df5341866fd1b5612457b3002467263.png";
+
+// Forensic Evidence System - No demo pictures permitted
+const fuelReceiptPlaceholder = null;
+const odometerPlaceholder = null;
+
 interface SourceEvidenceModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -43,18 +50,36 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
     if (!evidence) return null;
 
     const getSourceIcon = (source: string) => {
-        switch (source) {
-            case 'Fuel Receipt':
-            case 'Fuel Log':
-                return <Fuel className="h-5 w-5 text-amber-500" />;
-            case 'Service Log':
-            case 'Service Request':
-                return <Wrench className="h-5 w-5 text-blue-500" />;
-            case 'Weekly Check-in':
-                return <ClipboardCheck className="h-5 w-5 text-indigo-500" />;
-            default:
-                return <FileText className="h-5 w-5 text-slate-500" />;
-        }
+        const s = source.toLowerCase();
+        if (s.includes('fuel')) return <Fuel className="h-5 w-5 text-amber-500" />;
+        if (s.includes('service') || s.includes('maintenance')) return <Wrench className="h-5 w-5 text-blue-500" />;
+        if (s.includes('check')) return <ClipboardCheck className="h-5 w-5 text-indigo-500" />;
+        return <FileText className="h-5 w-5 text-slate-500" />;
+    };
+
+    // Forensic Evidence Selection: No demo fallbacks allowed.
+    // If no real evidence URL is provided by the system, we display an "Empty Evidence" state.
+    const displayImage = evidence.imageUrl || 
+                       evidence.metadata?.odometerProofUrl || 
+                       evidence.metadata?.photoUrl ||
+                       evidence.metadata?.receiptUrl || 
+                       evidence.metadata?.invoiceUrl;
+
+    const formatKey = (key: string) => {
+        const labels: Record<string, string> = {
+            'deltaKm': 'Distance Since Last',
+            'prevReadingId': 'Previous Anchor ID',
+            'liters': 'Fuel Volume',
+            'price': 'Price per Liter',
+            'totalCost': 'Total Cost',
+            'paymentSource': 'Payment Method',
+            'receiptUrl': 'Receipt Source',
+            'odometerProofUrl': 'Odometer Scan',
+            'odometerMethod': 'Capture Method',
+            'weekStart': 'Reporting Week',
+            'aiReading': 'AI Detected Value'
+        };
+        return labels[key] || key;
     };
 
     return (
@@ -116,18 +141,18 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                             <div className="space-y-1">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Capture Method</p>
                                 <Badge variant="secondary" className="bg-slate-100 text-slate-700 capitalize">
-                                    {evidence.metadata?.method || 'Direct Entry'}
+                                    {evidence.metadata?.odometerMethod || evidence.metadata?.method || 'Direct Entry'}
                                 </Badge>
                             </div>
                         </div>
                     </div>
 
-                    {evidence.imageUrl ? (
+                    {displayImage ? (
                         <div className="space-y-3">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Original Document Image</p>
                             <div className="relative group border rounded-xl overflow-hidden bg-slate-50 shadow-inner">
-                                <img 
-                                    src={evidence.imageUrl} 
+                                <ImageWithFallback 
+                                    src={displayImage} 
                                     alt="Source Evidence" 
                                     className="w-full h-auto max-h-[400px] object-contain transition-transform duration-500 group-hover:scale-[1.02]" 
                                 />
@@ -136,7 +161,7 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                                     size="sm" 
                                     variant="secondary" 
                                     className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md shadow-lg"
-                                    onClick={() => window.open(evidence.imageUrl, '_blank')}
+                                    onClick={() => window.open(displayImage, '_blank')}
                                 >
                                     <ExternalLink className="h-3 w-3 mr-2" />
                                     View Full Resolution
@@ -164,14 +189,28 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                         <div className="space-y-3">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System Metadata</p>
                             <div className="grid grid-cols-2 gap-2">
-                                {Object.entries(evidence.metadata).map(([key, val]) => (
-                                    typeof val !== 'object' && (
-                                        <div key={key} className="flex justify-between p-2 bg-slate-50 rounded border border-slate-100 text-[10px]">
-                                            <span className="text-slate-400 font-bold uppercase">{key}</span>
-                                            <span className="text-slate-700 font-mono">{String(val)}</span>
+                                {Object.entries(evidence.metadata).map(([key, val]) => {
+                                    // Filter out specific forensic fields requested by the user
+                                    const excludedKeys = [
+                                        'cycleId', 'backfilledAt', 'isFragmented', 'integrityStatus', 
+                                        'isHighFrequency', 'actualKmPerLiter', 'profileKmPerLiter', 
+                                        'volumeContributed', 'distanceSinceAnchor', 'cumulativeLitersAtEntry', 
+                                        'odometerMethod', 'method', 'prevReadingId', 'receiptUrl', 'odometerProofUrl'
+                                    ];
+                                    
+                                    if (excludedKeys.includes(key)) return null;
+
+                                    return val !== undefined && val !== null && val !== 'undefined' && typeof val !== 'object' && (
+                                        <div key={key} className="flex flex-col p-3 bg-slate-50 rounded border border-slate-100 text-[10px]">
+                                            <span className="text-slate-400 font-bold uppercase mb-1">{formatKey(key)}</span>
+                                            <span className="text-slate-700 font-mono text-xs overflow-hidden text-ellipsis">
+                                                {typeof val === 'number' && key.toLowerCase().includes('km') ? val.toLocaleString() + ' km' : 
+                                                 typeof val === 'number' && (key.toLowerCase().includes('price') || key.toLowerCase().includes('cost')) ? '$' + val.toFixed(2) :
+                                                 String(val)}
+                                            </span>
                                         </div>
-                                    )
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

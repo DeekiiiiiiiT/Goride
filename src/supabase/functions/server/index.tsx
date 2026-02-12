@@ -573,30 +573,94 @@ app.get("/make-server-37f42386/admin/monthly-report", async (c) => {
     }
 });
 
-// Phase 8.5: Unified Vehicle Logs (Batch Fetching)
-app.get("/make-server-37f42386/vehicles/:id/unified-logs", async (c) => {
-    try {
-        const vehicleId = c.req.param("id");
-        
-        // Fetch specific category lists using KV prefixes or direct keys
-        const [history, maintenance] = await kv.mget([
-            `odometer-history:${vehicleId}`,
-            `maintenance-logs:${vehicleId}`
-        ]);
-        
-        // For fuel entries which are stored as individual items
-        const { data: fuelData } = await supabase
-            .from("kv_store_37f42386")
-            .select("value")
-            .like("key", "fuel-entry:%")
-            .eq("value->>vehicleId", vehicleId);
-            
-        const fuelEntries = (fuelData || []).map((d: any) => d.value);
+      // Phase 8.5: Unified Vehicle Logs (Batch Fetching)
+      app.get("/make-server-37f42386/vehicles/:id/unified-logs", async (c) => {
+          try {
+              const vehicleId = c.req.param("id");
+              
+              // Fetch specific category lists using KV prefixes or direct keys
+              const [history, maintenance] = await kv.mget([
+                  `odometer-history:${vehicleId}`,
+                  `maintenance-logs:${vehicleId}`
+              ]);
+              
+              // For fuel entries which are stored as individual items
+              // Support both hyphen and underscore prefixes for maximum reliability during transition
+              const { data: fuelDataUnderscore } = await supabase
+                  .from("kv_store_37f42386")
+                  .select("value")
+                  .like("key", "fuel_entry:%")
+                  .eq("value->>vehicleId", vehicleId);
+                  
+              const { data: fuelDataHyphen } = await supabase
+                  .from("kv_store_37f42386")
+                  .select("value")
+                  .like("key", "fuel-entry:%")
+                  .eq("value->>vehicleId", vehicleId);
+                  
+              const fuelEntries = [
+                  ...(fuelDataUnderscore || []).map((d: any) => d.value),
+                  ...(fuelDataHyphen || []).map((d: any) => d.value)
+              ];
 
+              // Deduplicate if any exist in both formats
+              const uniqueFuelEntries = Array.from(new Map(fuelEntries.map(item => [item.id, item])).values());
+
+              return c.json({
+                  odometerHistory: history || [],
+                  maintenanceLogs: maintenance || [],
+                  fuelEntries: uniqueFuelEntries || []
+              });
+          } catch (e: any) {
+              return c.json({ error: e.message }, 500);
+          }
+      });
+
+// Phase 8.1 & 8.2: System Hardening - Error Logging
+app.post("/make-server-37f42386/system/log-error", async (c) => {
+    try {
+        const { error, info, userId, componentName } = await c.req.json();
+        const logId = crypto.randomUUID();
+        const logEntry = {
+            id: logId,
+            timestamp: new Date().toISOString(),
+            error: error?.message || error,
+            stack: error?.stack,
+            component: componentName,
+            info,
+            userId,
+            env: Deno.env.get("DENO_REGION") || "local"
+        };
+        
+        // Persist to KV for forensic review
+        await kv.set(`error-log:${logId}`, logEntry);
+        console.error(`[Frontend Error] ${componentName}: ${logEntry.error}`);
+        
+        return c.json({ success: true, logId });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Phase 8.3: Forensic Audit Export Hardening - Signing
+app.post("/make-server-37f42386/audit/sign-report", async (c) => {
+    try {
+        const { reportData, reportType } = await c.req.json();
+        
+        // Create a canonical string for signing
+        const canonical = JSON.stringify(reportData, Object.keys(reportData).sort());
+        
+        // In a real env we'd use a private key, here we use service role hash as a HMAC-like signature
+        const encoder = new TextEncoder();
+        const data = encoder.encode(canonical + Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        
         return c.json({
-            odometerHistory: history || [],
-            maintenanceLogs: maintenance || [],
-            fuelEntries: fuelEntries || []
+            signature,
+            signer: "Fleet Integrity Security Module",
+            timestamp: new Date().toISOString()
         });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
@@ -1242,13 +1306,7 @@ app.get("/make-server-37f42386/transactions", async (c) => {
     const driverIdParam = c.req.query("driverId");
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
-    const limit = limitParam ? parseInt(limitParam) : 100;
     const offset = offsetParam ? parseInt(offsetParam) : 0;
-
-    let query = supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "transaction:%");
 
     const idsToFilter = new Set<string>();
     if (driverIdParam) idsToFilter.add(driverIdParam);
@@ -1257,6 +1315,19 @@ app.get("/make-server-37f42386/transactions", async (c) => {
             if (id.trim()) idsToFilter.add(id.trim());
         });
     }
+
+    // When filtering by specific driver(s), use a much higher default limit
+    // to avoid truncating financial data (payments, floats, tolls).
+    // A driver with 905 trips can easily have 500+ transactions.
+    // Unscoped (global) queries keep the conservative default of 100.
+    const limit = limitParam
+        ? parseInt(limitParam)
+        : (idsToFilter.size > 0 ? 5000 : 100);
+
+    let query = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "transaction:%");
 
     if (idsToFilter.size > 0) {
         const orConditions = Array.from(idsToFilter)
@@ -1476,8 +1547,15 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             driverId: transaction.driverId,
             cardId: undefined,
             transactionId: transaction.id,
+            receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
+            odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
             isVerified: true, // Key Requirement: Anchor
-            source: 'Fuel Log'
+            source: 'Fuel Log',
+            metadata: {
+                receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
+                odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
+                originalTransactionId: transaction.id
+            }
         };
 
         if (fuelEntry.vehicleId) {
@@ -1705,11 +1783,16 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
             driverId: tx.driverId,
             cardId: undefined, // Not a card transaction
             transactionId: tx.id, // Link back to original transaction
+            receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
+            odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
             metadata: {
+                ...tx.metadata,
                 portal_type: tx.metadata?.portal_type || 'Manual_Entry',
                 isManual: tx.metadata?.isManual ?? (tx.paymentMethod === 'Cash' || tx.metadata?.portal_type === 'Manual_Entry'),
                 sourceId: tx.id,
-                source: tx.metadata?.source || 'Manual Approval'
+                source: tx.metadata?.source || 'Manual Approval',
+                receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
+                odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
             }
         };
 
@@ -1717,7 +1800,16 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
         if (fuelEntry.vehicleId) {
              await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
              
-             // Invalidate vehicle metrics cache if needed, or rely on next fetch
+             // Check if we need to link this to a transaction
+             if (tx.id) {
+                // Ensure the transaction also has the URLs updated if they were missing
+                tx.receiptUrl = tx.receiptUrl || tx.metadata?.receiptUrl;
+                tx.metadata = {
+                    ...tx.metadata,
+                    receiptUrl: tx.receiptUrl,
+                    odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl
+                };
+             }
         }
     }
 
@@ -1858,14 +1950,29 @@ app.post("/make-server-37f42386/upload", async (c) => {
       return c.json({ error: "No file uploaded" }, 400);
     }
 
+    // Server-side size check with clear error message
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_FILE_SIZE) {
+      console.log(`Upload rejected: file "${file.name}" is ${(file.size / 1024 / 1024).toFixed(2)}MB, exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+      return c.json({ 
+        error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum allowed size is 5MB. Please compress or resize the image before uploading.` 
+      }, 413);
+    }
+
     const bucketName = "make-37f42386-docs";
     
-    // Ensure bucket exists
+    // Ensure bucket exists and has adequate file size limit
     const { data: buckets } = await supabase.storage.listBuckets();
-    if (!buckets?.find(b => b.name === bucketName)) {
+    const existingBucket = buckets?.find(b => b.name === bucketName);
+    if (!existingBucket) {
         await supabase.storage.createBucket(bucketName, {
             public: false,
-            fileSizeLimit: 5242880, // 5MB
+            fileSizeLimit: 10485760, // 10MB
+        });
+    } else {
+        // Update existing bucket to increase file size limit if it was too low
+        await supabase.storage.updateBucket(bucketName, {
+            fileSizeLimit: 10485760, // 10MB
         });
     }
 
@@ -1889,7 +1996,11 @@ app.post("/make-server-37f42386/upload", async (c) => {
     return c.json({ url: signedData?.signedUrl });
   } catch (e: any) {
     console.error("Upload error:", e);
-    return c.json({ error: e.message }, 500);
+    const status = e.statusCode === '413' || e.status === 413 ? 413 : 500;
+    const message = status === 413 
+      ? 'File exceeds maximum allowed size. Please compress or resize the image.'
+      : e.message || 'Upload failed';
+    return c.json({ error: message }, status);
   }
 });
 
@@ -3400,21 +3511,26 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
 
     // 1. Driver Metrics
     if (Array.isArray(drivers) && drivers.length > 0) {
-        const driverKeys = drivers.map((d: any) => `driver_metric:${d.driverId}`);
-        operations.push(kv.mset(driverKeys, drivers));
+        // Deduplicate drivers by driverId to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        const uniqueDrivers = Array.from(new Map(drivers.map(d => [d.driverId, d])).values());
+        const driverKeys = uniqueDrivers.map((d: any) => `driver_metric:${d.driverId}`);
+        operations.push(kv.mset(driverKeys, uniqueDrivers));
     }
 
     // 2. Vehicle Metrics
     if (Array.isArray(vehicles) && vehicles.length > 0) {
-        // Use plateNumber as ID if vehicleId is missing or generated
-        const vehicleKeys = vehicles.map((v: any) => `vehicle_metric:${v.plateNumber || v.vehicleId}`);
-        operations.push(kv.mset(vehicleKeys, vehicles));
+        // Deduplicate vehicles by plateNumber or vehicleId
+        const uniqueVehicles = Array.from(new Map(vehicles.map(v => [v.plateNumber || v.vehicleId, v])).values());
+        const vehicleKeys = uniqueVehicles.map((v: any) => `vehicle_metric:${v.plateNumber || v.vehicleId}`);
+        operations.push(kv.mset(vehicleKeys, uniqueVehicles));
     }
 
     // 3. Trips
     if (Array.isArray(trips) && trips.length > 0) {
-        const tripKeys = trips.map((t: any) => `trip:${t.id}`);
-        operations.push(kv.mset(tripKeys, trips));
+        // Deduplicate trips by id
+        const uniqueTrips = Array.from(new Map(trips.map(t => [t.id, t])).values());
+        const tripKeys = uniqueTrips.map((t: any) => `trip:${t.id}`);
+        operations.push(kv.mset(tripKeys, uniqueTrips));
     }
 
     // 4. Financials (Singleton)

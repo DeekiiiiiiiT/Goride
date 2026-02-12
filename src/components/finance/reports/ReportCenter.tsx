@@ -91,7 +91,7 @@ export function ReportCenter({ transactions }: ReportCenterProps) {
     return Array.from(vehicles.values());
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (reportType === 'pnl') {
         const data = generatePnL();
         const csvData = [
@@ -100,11 +100,11 @@ export function ReportCenter({ transactions }: ReportCenterProps) {
             { Category: 'Net Income', Amount: data.netIncome },
             ...Object.entries(data.breakdown).map(([cat, amt]) => ({ Category: `Exp: ${cat}`, Amount: amt }))
         ];
-        downloadCSV(csvData, `PnL_${format(start, 'yyyyMMdd')}-${format(end, 'yyyyMMdd')}`);
+        await downloadCSV(csvData, `PnL_${format(start, 'yyyyMMdd')}-${format(end, 'yyyyMMdd')}`, { checksum: true });
     } else if (reportType === 'driver') {
-        downloadCSV(generateDriverReport(), `DriverReport_${format(start, 'yyyyMMdd')}`);
+        await downloadCSV(generateDriverReport(), `DriverReport_${format(start, 'yyyyMMdd')}`, { checksum: true });
     } else if (reportType === 'vehicle') {
-        downloadCSV(generateVehicleReport(), `VehicleReport_${format(start, 'yyyyMMdd')}`);
+        await downloadCSV(generateVehicleReport(), `VehicleReport_${format(start, 'yyyyMMdd')}`, { checksum: true });
     }
   };
 

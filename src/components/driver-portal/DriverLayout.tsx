@@ -1,3 +1,4 @@
+// cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { 
   Home,
@@ -223,4 +224,3 @@ function MenuCard({ icon, title, onClick, color, hasBadge = false }: { icon: Rea
     </SheetClose>
   );
 }
-

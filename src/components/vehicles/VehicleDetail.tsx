@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { 
   ArrowLeft, 
   Clock, 
@@ -32,7 +32,13 @@ import {
   Move,
   Info,
   Car,
-  Gauge
+  Gauge,
+  ShieldCheck,
+  ChevronDown,
+  ListChecks,
+  FileUp,
+  History,
+  RotateCw
 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { 
@@ -85,7 +91,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Vehicle, VehicleDocument } from '../../types/vehicle';
 import { FuelScenario } from '../../types/fuel';
 import { Trip } from '../../types/data';
@@ -102,6 +108,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
 import { MasterLogTimeline } from './odometer/MasterLogTimeline';
+import { ImportOdometerModal } from './odometer/ImportOdometerModal';
 import { calculateLiveMileage } from '../../utils/mileageProjection';
 import { FixedExpensesManager } from './expenses/FixedExpensesManager';
 import { EquipmentManager } from './EquipmentManager';
@@ -191,8 +198,69 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
 
   // Service Log State
   const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
-
   const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
+  const [odometerHistory, setOdometerHistory] = useState<any[]>([]);
+  const [isOdometerLoading, setIsOdometerLoading] = useState(false);
+
+  const fetchOdometerHistory = useCallback(async () => {
+    if (!vehicle.id && !vehicle.licensePlate) return;
+    setIsOdometerLoading(true);
+    try {
+      const data = await odometerService.getUnifiedHistory(vehicle.id || vehicle.licensePlate);
+      setOdometerHistory(data || []);
+    } catch (error) {
+      console.error("Failed to load odometer history", error);
+    } finally {
+      setIsOdometerLoading(false);
+    }
+  }, [vehicle.id, vehicle.licensePlate]);
+
+  useEffect(() => {
+    fetchOdometerHistory();
+  }, [fetchOdometerHistory, odometerRefreshTrigger]);
+
+  const latestReading = odometerHistory[0]?.value || vehicle.metrics.odometer || 0;
+  const digits = latestReading.toLocaleString('en-US', { minimumIntegerDigits: 6, useGrouping: false }).split('').slice(-6);
+  const lastVerifiedDate = odometerHistory.find(r => r.type === 'Hard')?.date || '';
+
+  const handleExportMasterLog = async () => {
+    try {
+        const vId = vehicle.id || vehicle.licensePlate;
+        const data = await odometerService.getUnifiedHistory(vId);
+        if (!data || data.length === 0) {
+            toast.error("No data to export");
+            return;
+        }
+        const { formatMasterLogExport } = await import('../../utils/odometerUtils');
+        const { downloadCSV } = await import('../../utils/export');
+        const exportRows = formatMasterLogExport(data as any[]);
+        const filename = `master_odometer_log_${vId}_${new Date().toISOString().split('T')[0]}`;
+        await downloadCSV(exportRows, filename, { checksum: true });
+        toast.success(`Exported ${exportRows.length} records successfully.`);
+    } catch (error) {
+        toast.error("Failed to export master log");
+    }
+  };
+
+  const handleExportCheckins = async () => {
+    try {
+        const vId = vehicle.id || vehicle.licensePlate;
+        const data = await odometerService.getUnifiedHistory(vId);
+        if (!data || data.length === 0) {
+            toast.error("No data to export");
+            return;
+        }
+        const { formatCheckInExport } = await import('../../utils/odometerUtils');
+        const { downloadCSV } = await import('../../utils/export');
+        const checkinsOnly = data.filter(d => d.source === 'checkin');
+        const exportRows = formatCheckInExport(checkinsOnly as any[]);
+        const filename = `checkin_export_${vId}_${new Date().toISOString().split('T')[0]}`;
+        await downloadCSV(exportRows, filename, { checksum: true });
+        toast.success(`Exported ${exportRows.length} check-in records.`);
+    } catch (error) {
+        toast.error("Failed to export check-ins");
+    }
+  };
 
   const getDriveTypeDescription = (type: string) => {
       const t = type.toLowerCase();
@@ -315,7 +383,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   });
 
   // Fetch Maintenance Logs & Projected Mileage
-  React.useEffect(() => {
+  useEffect(() => {
       if (vehicle.id || vehicle.licensePlate) {
           const vId = vehicle.id || vehicle.licensePlate;
           api.getMaintenanceLogs(vId).then(setMaintenanceLogs).catch(console.error);
@@ -1241,6 +1309,101 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
 
           <TabsContent value="odometer" className="space-y-6 mt-6">
               <ErrorBoundary name="OdometerView">
+                {/* Live Fleet Status - Unified Header */}
+                <div className="bg-slate-950 rounded-2xl p-8 text-white relative overflow-hidden shadow-2xl border border-slate-800">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] -mr-32 -mt-32 pointer-events-none"></div>
+                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-[80px] -ml-32 -mb-32 pointer-events-none"></div>
+                    
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 relative z-10">
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-500/20 p-2 rounded-lg">
+                                    <ShieldCheck className="h-5 w-5 text-indigo-300" />
+                                </div>
+                                <div>
+                                    <h3 className="text-indigo-200 font-semibold tracking-wide uppercase text-[10px]">Verified Odometer Anchor</h3>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-2xl font-bold tracking-tight">Live Fleet Status</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-end gap-3">
+                                <div className="flex gap-1">
+                                    {digits.map((digit, i) => (
+                                        <div key={i} className="w-11 h-16 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-4xl font-mono font-bold text-white shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
+                                            {digit}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="pb-2">
+                                    <span className="text-2xl text-slate-500 font-mono">km</span>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-4 pt-2">
+                                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
+                                    <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                                    <span>Verified Anchor: {lastVerifiedDate ? format(new Date(lastVerifiedDate), 'MMM d, yyyy') : 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
+                                    <Info className="h-4 w-4 text-indigo-400" />
+                                    <span>Source: {odometerHistory[0]?.source || 'None'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto">
+                            <Button 
+                                onClick={() => setIsUpdateOdometerOpen(true)} 
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 font-bold"
+                            >
+                                <Plus className="w-4 h-4 mr-2" />
+                                Manual Odometer Entry
+                            </Button>
+                            <div className="flex gap-2">
+                                <Button 
+                                    variant="outline" 
+                                    className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl"
+                                    onClick={fetchOdometerHistory}
+                                    title="Refresh Data"
+                                >
+                                    <RotateCw className="w-4 h-4" />
+                                </Button>
+                                <ImportOdometerModal 
+                                    vehicleId={vehicle.id || vehicle.licensePlate} 
+                                    onImportComplete={fetchOdometerHistory} 
+                                    triggerClassName="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl px-4"
+                                />
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button 
+                                            variant="outline" 
+                                            className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl px-4 min-w-[60px]"
+                                            title="Export Data"
+                                        >
+                                            <FileUp className="w-4 h-4 mr-2" />
+                                            <ChevronDown className="w-3 h-3 opacity-50" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        <DropdownMenuLabel>Export Options</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={handleExportMasterLog}>
+                                            <FileUp className="w-4 h-4 mr-2 text-indigo-500" />
+                                            <span>Export Master Log</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={handleExportCheckins}>
+                                            <ListChecks className="w-4 h-4 mr-2 text-emerald-500" />
+                                            <span>Export Check-ins</span>
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <Card>
                     <CardHeader>
                         <CardTitle>Odometer History</CardTitle>

@@ -2,6 +2,7 @@ import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
 import { API_ENDPOINTS } from './apiConfig';
+import { compressImage } from '../utils/compressImage';
 
 export interface TripFilterParams {
     driverId?: string;
@@ -647,8 +648,11 @@ export const api = {
   },
 
   async uploadFile(file: File) {
+    // Compress images client-side before upload to stay within Supabase Storage 5MB limit
+    const processedFile = await compressImage(file);
+
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', processedFile);
     
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
         method: 'POST',
@@ -657,7 +661,10 @@ export const api = {
         },
         body: formData
     });
-    if (!response.ok) throw new Error("Failed to upload file");
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to upload file");
+    }
     return response.json();
   },
 
@@ -1104,11 +1111,22 @@ export const api = {
   },
 
   async getFuelEntriesByVehicle(vehicleId: string): Promise<any[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&limit=1000`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-    });
-    if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    return response.json();
+    // Check both potential key formats in the database for backward compatibility
+    const [resUnderscore, resHyphen] = await Promise.all([
+      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&limit=1000`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      }),
+      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&prefix=fuel-entry&limit=1000`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      })
+    ]);
+
+    const dataUnderscore = resUnderscore.ok ? await resUnderscore.json() : [];
+    const dataHyphen = resHyphen.ok ? await resHyphen.json() : [];
+    
+    const combined = [...dataUnderscore, ...dataHyphen];
+    // Deduplicate by ID
+    return Array.from(new Map(combined.map(item => [item.id, item])).values());
   },
 
   async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {
@@ -1194,6 +1212,27 @@ export const api = {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
+    return response.json();
+  },
+
+  async getForensicErrorLogs() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/system/audit-trail`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch forensic logs");
+    return response.json();
+  },
+
+  async signAuditReport(reportData: any) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/audit/sign-report`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ reportData, reportType: 'forensic-audit' })
+    });
+    if (!response.ok) throw new Error("Failed to sign audit report");
     return response.json();
   }
 };

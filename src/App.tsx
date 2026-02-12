@@ -33,6 +33,7 @@ import { DriverEquipment } from './components/driver-portal/DriverEquipment';
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -111,70 +112,74 @@ function AppContent() {
 
   if (role === 'driver') {
     return (
-      <DriverLayout 
-        currentPage={driverPage} 
-        onNavigate={setDriverPage} 
-        onLogout={handleLogout}
-        isMenuOpen={isDriverMenuOpen}
-        onMenuOpenChange={setDriverMenuOpen}
-      >
-        {driverPage === 'dashboard' && <DriverDashboard />}
-        {driverPage === 'earnings' && <DriverEarnings />}
-        {driverPage === 'expenses' && <DriverExpenses defaultOpen={true} onBack={() => { setDriverPage('dashboard'); setDriverMenuOpen(true); }} />}
-        {driverPage === 'trips' && <DriverTrips />}
-        {driverPage === 'claims' && <DriverClaims />}
-        {driverPage === 'equipment' && <DriverEquipment onBack={() => setDriverPage('profile')} />}
-        {driverPage === 'profile' && <DriverProfile onLogout={handleLogout} onNavigate={setDriverPage} />}
-      </DriverLayout>
+      <ErrorBoundary name="DriverPortal" userId={user?.id}>
+        <DriverLayout 
+          currentPage={driverPage} 
+          onNavigate={setDriverPage} 
+          onLogout={handleLogout}
+          isMenuOpen={isDriverMenuOpen}
+          onMenuOpenChange={setDriverMenuOpen}
+        >
+          {driverPage === 'dashboard' && <DriverDashboard />}
+          {driverPage === 'earnings' && <DriverEarnings />}
+          {driverPage === 'expenses' && <DriverExpenses defaultOpen={true} onBack={() => { setDriverPage('dashboard'); setDriverMenuOpen(true); }} />}
+          {driverPage === 'trips' && <DriverTrips />}
+          {driverPage === 'claims' && <DriverClaims />}
+          {driverPage === 'equipment' && <DriverEquipment onBack={() => setDriverPage('profile')} />}
+          {driverPage === 'profile' && <DriverProfile onLogout={handleLogout} onNavigate={setDriverPage} />}
+        </DriverLayout>
+      </ErrorBoundary>
     );
   }
 
   // Admin View (Default)
   return (
     <AppLayout currentPage={currentPage} onNavigate={setCurrentPage} onLogout={handleLogout}>
-      {currentPage === 'dashboard' && <Dashboard />}
-      {currentPage === 'imports' && <ImportsPage />}
-      {currentPage === 'drivers' && <DriversPage initialDriverId={driverIdForDetail} />}
-      {currentPage === 'vehicles' && <VehiclesPage />}
-      {currentPage === 'fleet' && <FleetPage />}
-      {currentPage === 'trips' && <TripLogsPage />}
-      {currentPage === 'reports' && <ReportsPage />}
-      {currentPage === 'transactions' && <TransactionsPage mode="analytics" />}
-      {currentPage === 'transaction-list' && <TransactionsPage mode="list" />}
-      {currentPage === 'toll-tags' && <TollReconciliation />}
-      {currentPage === 'tag-inventory' && <TagInventory />}
-      {currentPage === 'claimable-loss' && <ClaimableLoss />}
-      {currentPage === 'tier-config' && <TierConfigPage />}
-      {currentPage === 'performance' && <PerformanceDashboard />}
-      
-      {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage) && (
-        <FuelManagement 
-            defaultTab={
-                currentPage === 'fuel-reconciliation' ? 'reconciliation' :
-                currentPage === 'fuel-reimbursements' ? 'reimbursements' :
-                currentPage === 'fuel-audit' ? 'audit' :
-                currentPage === 'fuel-cards' ? 'cards' :
-                currentPage === 'fuel-logs' ? 'logs' :
-                currentPage === 'fuel-reports' ? 'reports' :
-                currentPage === 'fuel-configuration' ? 'configuration' :
-                currentPage === 'fuel-maintenance' ? 'maintenance' :
-                currentPage === 'fuel-stations' ? 'stations' :
-                currentPage === 'fuel-database' ? 'database' :
-                'dashboard'
-            }
-            onTabChange={(t) => {
-                setCurrentPage(t === 'dashboard' ? 'fuel-overview' : `fuel-${t}`);
-                setDriverIdForDetail(null);
-            }}
-            onViewDriverLedger={(driverId) => {
-                setDriverIdForDetail(driverId);
-                setCurrentPage('drivers');
-            }}
-        />
-      )}
+      <ErrorBoundary name={`MainContent:${currentPage}`} userId={user?.id}>
+        {currentPage === 'dashboard' && <Dashboard />}
+        {currentPage === 'imports' && <ImportsPage />}
+        {currentPage === 'drivers' && <DriversPage initialDriverId={driverIdForDetail} />}
+        {currentPage === 'vehicles' && <VehiclesPage />}
+        {currentPage === 'fleet' && <FleetPage />}
+        {currentPage === 'trips' && <TripLogsPage />}
+        {currentPage === 'reports' && <ReportsPage />}
+        {currentPage === 'transactions' && <TransactionsPage mode="analytics" />}
+        {currentPage === 'transaction-list' && <TransactionsPage mode="list" />}
+        {currentPage === 'toll-tags' && <TollReconciliation />}
+        {currentPage === 'tag-inventory' && <TagInventory />}
+        {currentPage === 'claimable-loss' && <ClaimableLoss />}
+        {currentPage === 'tier-config' && <TierConfigPage />}
+        {currentPage === 'performance' && <PerformanceDashboard />}
+        
+        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage) && (
+          <FuelManagement 
+              defaultTab={
+                  currentPage === 'fuel-reconciliation' ? 'reconciliation' :
+                  currentPage === 'fuel-reimbursements' ? 'reimbursements' :
+                  currentPage === 'fuel-audit' ? 'audit' :
+                  currentPage === 'fuel-cards' ? 'cards' :
+                  currentPage === 'fuel-logs' ? 'logs' :
+                  currentPage === 'fuel-reports' ? 'reports' :
+                  currentPage === 'fuel-configuration' ? 'configuration' :
+                  currentPage === 'fuel-maintenance' ? 'maintenance' :
+                  currentPage === 'fuel-stations' ? 'stations' :
+                  currentPage === 'fuel-database' ? 'database' :
+                  'dashboard'
+              }
+              onTabChange={(t) => {
+                  setCurrentPage(t === 'dashboard' ? 'fuel-overview' : `fuel-${t}`);
+                  setDriverIdForDetail(null);
+              }}
+              onViewDriverLedger={(driverId) => {
+                  setDriverIdForDetail(driverId);
+                  setCurrentPage('drivers');
+              }}
+          />
+        )}
 
-      {currentPage === 'user-management' && <UserManagementPage />}
-      {currentPage === 'settings' && <SettingsPage />}
+        {currentPage === 'user-management' && <UserManagementPage />}
+        {currentPage === 'settings' && <SettingsPage />}
+      </ErrorBoundary>
     </AppLayout>
   );
 }

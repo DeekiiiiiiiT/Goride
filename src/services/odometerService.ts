@@ -49,6 +49,12 @@ export const odometerService = {
       if (fuelEntries) {
         fuelEntries.forEach((entry: any) => {
           if (entry.odometer && entry.odometer > 0) {
+            // Priority: top-level urls, then metadata urls (support both camelCase and snake_case)
+            const url = entry.imageUrl || entry.photoUrl || 
+                        entry.odometerProofUrl || entry.metadata?.odometerProofUrl || 
+                        entry.receiptUrl || entry.receipt_url || entry.metadata?.receiptUrl || entry.metadata?.receipt_url ||
+                        entry.metadata?.photoUrl;
+                        
             unified.push({
               id: `fuel_${entry.id}`,
               vehicleId: entry.vehicleId || vehicleId,
@@ -59,16 +65,20 @@ export const odometerService = {
               source: 'fuel',
               notes: entry.location ? `Fuel at ${entry.location}` : 'Fuel Entry',
               referenceId: entry.id,
-              isVerified: true, // Fuel logs are generally considered verified/hard readings
-              isAnchorPoint: true, // Fuel logs act as physical anchors
+              isVerified: true, 
+              isAnchorPoint: true,
+              imageUrl: url,
               createdAt: entry.date,
               metaData: {
+                ...entry.metadata, // Carry over all raw metadata
                 liters: entry.liters,
-                price: entry.price,
-                totalCost: entry.totalCost,
-                paymentSource: entry.paymentSource,
-                receiptUrl: entry.receiptUrl,
-                odometerMethod: entry.odometerMethod || entry.metadata?.odometerMethod
+                price: entry.pricePerLiter || entry.price,
+                totalCost: entry.amount || entry.totalCost,
+                paymentSource: entry.paymentSource || entry.payment_source,
+                receiptUrl: entry.receiptUrl || entry.receipt_url || entry.metadata?.receiptUrl || entry.metadata?.receipt_url,
+                odometerProofUrl: entry.odometerProofUrl || entry.metadata?.odometerProofUrl || entry.metadata?.odometer_proof_url,
+                photoUrl: url,
+                odometerMethod: entry.odometerMethod || entry.metadata?.odometerMethod || entry.entryMode || 'Floating'
               }
             });
           }
@@ -90,7 +100,7 @@ export const odometerService = {
               source: 'checkin',
               notes: `Weekly Check-in (Week: ${checkIn.weekStart})`,
               referenceId: checkIn.id,
-              imageUrl: checkIn.photoUrl,
+              imageUrl: checkIn.photoUrl || checkIn.imageUrl || checkIn.metadata?.photoUrl,
               isVerified: checkIn.verified || false,
               isAnchorPoint: checkIn.reviewStatus === 'approved' || checkIn.reviewStatus === 'auto_approved',
               isManagerVerified: checkIn.reviewStatus === 'approved' || checkIn.reviewStatus === 'auto_approved',
@@ -99,7 +109,8 @@ export const odometerService = {
                 weekStart: checkIn.weekStart,
                 status: checkIn.status,
                 method: checkIn.method,
-                aiReading: checkIn.aiReading
+                aiReading: checkIn.aiReading,
+                photoUrl: checkIn.photoUrl || checkIn.imageUrl || checkIn.metadata?.photoUrl
               }
             });
           }
@@ -120,12 +131,14 @@ export const odometerService = {
               source: 'service',
               notes: log.serviceType || 'Maintenance Service',
               referenceId: log.id,
+              imageUrl: log.invoiceUrl || log.receiptUrl || log.metadata?.receiptUrl || log.metadata?.invoiceUrl,
               isVerified: true,
               isAnchorPoint: true, // Service logs are trusted anchors
               createdAt: log.date,
               metaData: {
                 serviceType: log.serviceType,
-                garage: log.garage
+                garage: log.garage,
+                invoiceUrl: log.invoiceUrl || log.receiptUrl || log.metadata?.receiptUrl || log.metadata?.invoiceUrl
               }
             });
           }
@@ -206,6 +219,7 @@ export const odometerService = {
                       source: mappedSource as any,
                       referenceId: entry.referenceId,
                       notes: finalNotes,
+                      imageUrl: entry.imageUrl || entry.metaData?.odometerProofUrl || entry.metaData?.photoUrl || entry.metaData?.receiptUrl || entry.metaData?.invoiceUrl,
                       isVerified: true,
                       isAnchorPoint: entry.isAnchorPoint || true
                       // We do NOT send 'id', let DB generate a new UUID for this row
