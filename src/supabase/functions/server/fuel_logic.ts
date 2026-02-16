@@ -24,6 +24,15 @@ export interface FuelEntryMetadata {
   anomalyReason?: string;
   auditStatus: 'Clear' | 'Flagged' | 'Observing' | 'Auto-Resolved' | 'Resolved';
   cycleId: string;
+  
+  // Geofence Evidence
+  geofenceMetadata?: {
+    isInside: boolean;
+    distanceMeters: number;
+    timestamp: string;
+    radiusAtTrigger: number;
+    serverSideDistance?: number; // For anti-spoofing verification
+  };
   [key: string]: any;
 }
 
@@ -237,4 +246,158 @@ export function auditOdometerSequence(params: {
   }
 
   return { status: 'valid' as const, reason: null };
+}
+
+/**
+ * Phase 6: Weighted Audit Confidence Score
+ * Calculates a confidence score (0-100) based on GPS, Signatures, and Physical data.
+ */
+export function calculateConfidenceScore(entry: any, station?: any) {
+  let score = 0;
+  const breakdown: Record<string, number> = {};
+
+  // 1. Evidence Bridge: GPS Handshake (30 pts)
+  if (entry.matchedStationId) {
+    if (station?.status === 'verified') {
+      breakdown.gps = 30;
+      score += 30;
+    } else {
+      breakdown.gps = 15;
+      score += 15;
+    }
+    
+    // Proximity Bonus
+    const matchDist = entry.metadata?.matchDistance || 999;
+    if (matchDist < 50) {
+      breakdown.gps_bonus = 5;
+      score += 5;
+    }
+  } else {
+    breakdown.gps = 0;
+  }
+
+  // 2. Cryptographic Handshake (25 pts)
+  if (entry.signature) {
+    breakdown.crypto = 25;
+    score += 25;
+  } else {
+    breakdown.crypto = 0;
+  }
+
+  // 3. Physical Integrity (25 pts)
+  let physicalScore = 0;
+  if (entry.metadata?.integrityStatus === 'valid') {
+    physicalScore += 15; // Base consistency
+  } else if (entry.metadata?.integrityStatus === 'warning') {
+    physicalScore += 5;
+  }
+
+  // Efficiency Bonus (for anchors)
+  if (entry.metadata?.isAnchor && Math.abs(entry.metadata?.efficiencyVariance || 0) < 15) {
+    physicalScore += 10;
+  } else if (!entry.metadata?.isAnchor && entry.odometer > 0) {
+    physicalScore += 5; // Has odometer
+  }
+  
+  breakdown.physical = Math.min(25, physicalScore);
+  score += breakdown.physical;
+
+  // 4. Behavioral Integrity (20 pts)
+  let behavioralScore = 0;
+  if (!entry.metadata?.isHighFrequency) behavioralScore += 10;
+  if (!entry.metadata?.isFragmented) behavioralScore += 10;
+  
+  breakdown.behavioral = behavioralScore;
+  score += behavioralScore;
+
+  // Final normalization
+  const finalScore = Math.min(100, score);
+  
+  return {
+    score: finalScore,
+    breakdown,
+    isHighlyTrusted: finalScore >= 90,
+    requiresReview: finalScore < 70
+  };
+}
+
+/**
+ * Phase 7: Predictive Consumption Engine
+ * Calculates expected anchor date and identifies predictive leakage.
+ */
+export function calculatePredictiveMetrics(params: {
+    vehicleId: string,
+    currentCumulative: number,
+    tankCapacity: number,
+    profileEfficiency: number,
+    dailyAvgDistance?: number
+}) {
+    const { currentCumulative, tankCapacity, profileEfficiency, dailyAvgDistance = 150 } = params;
+    
+    if (tankCapacity <= 0 || profileEfficiency <= 0) return null;
+
+    const remainingCapacity = Math.max(0, tankCapacity - currentCumulative);
+    const predictedRemainingKm = remainingCapacity * profileEfficiency;
+    
+    // Calculate expected anchor date (when tank hits 100%)
+    const daysUntilAnchor = dailyAvgDistance > 0 ? predictedRemainingKm / dailyAvgDistance : 0;
+    const expectedAnchorDate = new Date();
+    expectedAnchorDate.setDate(expectedAnchorDate.getDate() + daysUntilAnchor);
+
+    return {
+        remainingCapacity,
+        predictedRemainingKm,
+        daysUntilAnchor: Math.round(daysUntilAnchor),
+        expectedAnchorDate: expectedAnchorDate.toISOString().split('T')[0],
+        utilizationPercentage: (currentCumulative / tankCapacity) * 100
+    };
+}
+
+/**
+ * Phase 7: Behavioral Leakage Alert Logic
+ * Detects hidden leakage by identifying efficiency gaps during "Floating" states.
+ */
+export function detectPredictiveLeakage(params: {
+    actualEfficiency: number,
+    profileEfficiency: number,
+    utilization: number,
+    isAnchor: boolean
+}) {
+    const { actualEfficiency, profileEfficiency, utilization, isAnchor } = params;
+    
+    if (profileEfficiency <= 0 || actualEfficiency <= 0) return null;
+
+    const variance = (profileEfficiency - actualEfficiency) / profileEfficiency;
+    
+    // Leakage Alert Thresholds:
+    // 1. If at an Anchor, we have high confidence in the variance.
+    // 2. If Floating, we only flag if the variance is extreme (>35%) OR utilization is high.
+    
+    let leakageRisk: 'low' | 'medium' | 'high' = 'low';
+    let alertReason = null;
+
+    if (isAnchor) {
+        if (variance > 0.25) {
+            leakageRisk = 'high';
+            alertReason = 'Confirmed Operational Leakage (Efficiency Gap)';
+        } else if (variance > 0.15) {
+            leakageRisk = 'medium';
+            alertReason = 'Elevated Consumption Variance';
+        }
+    } else {
+        if (variance > 0.40) {
+            leakageRisk = 'high';
+            alertReason = 'Predictive Leakage Alert: Extreme Mid-Cycle Drift';
+        } else if (variance > 0.20 && utilization > 70) {
+            leakageRisk = 'medium';
+            alertReason = 'Predictive Warning: Utilization/Efficiency Mismatch';
+        }
+    }
+
+    return {
+        variancePercentage: Math.round(variance * 100),
+        leakageRisk,
+        alertReason,
+        isAlertTriggered: leakageRisk !== 'low'
+    };
 }

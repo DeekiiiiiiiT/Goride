@@ -84,7 +84,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
 
 function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
   const isTollManagementOpen = ['toll-tags', 'tag-inventory', 'claimable-loss'].includes(currentPage);
-  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage);
+  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage);
 
   return (
     <Sidebar className="border-r border-slate-200 dark:border-slate-800">
@@ -170,9 +170,16 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-audit'} onClick={() => onNavigate?.('fuel-audit')}>
                       <button className="w-full text-left cursor-pointer">
+                        <span>Audit Trail</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-integrity-gap'} onClick={() => onNavigate?.('fuel-integrity-gap')}>
+                      <button className="w-full text-left cursor-pointer">
                         <span className="flex items-center gap-2">
-                            Audit Trail
-                            <Badge className="bg-orange-500 text-white border-none h-4 px-1 text-[8px]">New</Badge>
+                            Integrity Gap
+                            <Badge className="bg-emerald-500 text-white border-none h-4 px-1 text-[8px]">PRO</Badge>
                         </span>
                       </button>
                     </SidebarMenuSubButton>

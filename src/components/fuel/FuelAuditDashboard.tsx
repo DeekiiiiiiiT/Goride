@@ -50,12 +50,15 @@ export function FuelAuditDashboard() {
     const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'anomalies' | 'integrity' | 'orphans' | 'report'>('anomalies');
+    const [viewMode, setViewMode] = useState<'anomalies' | 'integrity' | 'orphans' | 'learnt' | 'report'>('anomalies');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [selectedAnomalies, setSelectedAnomalies] = useState<string[]>([]);
     const [resolutionNote, setResolutionNote] = useState("");
     const [verifyConfirmation, setVerifyConfirmation] = useState<{ isOpen: boolean; txId: string | null }>({ isOpen: false, txId: null });
     const [ledgerTxs, setLedgerTxs] = useState<any[]>([]);
+    const [integrityMetrics, setIntegrityMetrics] = useState<any>(null);
+    const [learntLocations, setLearntLocations] = useState<any[]>([]);
+    const [stations, setStations] = useState<any[]>([]);
 
     // Step 1.3: URL Persistence
     useEffect(() => {
@@ -79,7 +82,8 @@ export function FuelAuditDashboard() {
             efficiency: 0,
             fragmented: 0,
             frequency: 0,
-            anchor: 0
+            anchor: 0,
+            leakage: 0
         };
 
         const filtered = selectedVehicleId === "all" 
@@ -88,7 +92,10 @@ export function FuelAuditDashboard() {
 
         filtered.forEach(tx => {
             const reason = tx.metadata?.anomalyReason || "";
-            if (reason === "High Fuel Consumption") counts.efficiency++;
+            const isLeakage = tx.metadata?.leakageRisk === 'high' || tx.metadata?.isPredictiveAlert;
+            
+            if (isLeakage) counts.leakage++;
+            else if (reason === "High Fuel Consumption") counts.efficiency++;
             else if (reason === "Fragmented Purchase") counts.fragmented++;
             else if (reason === "High Transaction Frequency") counts.frequency++;
             else if (reason === "Tank Overfill Anomaly" || reason.includes("Soft Anchor") || reason.includes("Auto-reset")) counts.anchor++;
@@ -136,16 +143,22 @@ export function FuelAuditDashboard() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [statsResponse, flaggedData, vehicleData, fleetStatsResponse, financialData] = await Promise.all([
-                api.getFuelAuditSummary(selectedVehicleId === "all" ? undefined : selectedVehicleId), 
-                api.getFlaggedTransactions(),
-                api.getVehicles(),
-                api.getFuelAuditSummary(), // Always fetch fleet stats for comparison
-                api.getTransactions()
-            ]);
+            const [statsResponse, flaggedData, vehicleData, fleetStatsResponse, financialData, integrityData, stationsData, learntData] = await Promise.all([
+            api.getFuelAuditSummary(selectedVehicleId === "all" ? undefined : selectedVehicleId), 
+            api.getFlaggedTransactions(),
+            api.getVehicles(),
+            api.getFuelAuditSummary(), // Always fetch fleet stats for comparison
+            api.getTransactions(),
+            api.getIntegrityMetrics(),
+            api.getStations(),
+            api.getLearntLocations().catch(() => []) // Step 6.1: Graceful fail for learnt
+        ]);
             
             setVehicles(vehicleData || []);
             setLedgerTxs(financialData || []);
+            setIntegrityMetrics(integrityData);
+            setStations(stationsData || []);
+            setLearntLocations(learntData || []);
             
             // Map stats to the structure expected by the component
             const data = selectedVehicleId === "all" ? statsResponse.fleet : statsResponse;
@@ -315,6 +328,39 @@ export function FuelAuditDashboard() {
             fetchData();
         } catch (err) {
             toast.error("Failed to lock transaction");
+        }
+    };
+
+    const handlePromoteStation = async (learntId: string, action: 'merge' | 'create', targetStationId?: string) => {
+        try {
+            setLoading(true);
+            const learnt = learntLocations.find(l => l.id === learntId);
+            if (!learnt) return;
+
+            const payload: any = { 
+                learntId, 
+                action, 
+                targetStationId 
+            };
+
+            if (action === 'create') {
+                payload.stationData = {
+                    name: learnt.name,
+                    brand: learnt.name.split(' ')[0],
+                    address: "Awaiting Verification",
+                    location: learnt.location,
+                    status: 'verified'
+                };
+            }
+
+            await api.promoteLearntLocation(payload);
+            toast.success(action === 'create' ? "New station added to Master Ledger" : "Location merged into existing station");
+            fetchData();
+        } catch (err) {
+            console.error("Promotion failed:", err);
+            toast.error("Failed to promote location");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -508,6 +554,81 @@ export function FuelAuditDashboard() {
             {/* Summary Cards */}
             <TooltipProvider>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Phase 6: Integrity Gap Card */}
+                    <Card className="bg-white border-slate-200 shadow-sm overflow-hidden relative border-l-4 border-l-emerald-500">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-50 rounded-lg">
+                                    <Lock className="w-5 h-5 text-emerald-600" />
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Integrity Gap</p>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button className="cursor-help outline-none">
+                                                    <Info className="w-3 h-3 text-slate-400 hover:text-emerald-600 transition-colors" />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p className="max-w-xs text-xs">
+                                                    Percentage of total fuel spend not yet linked to the Verified Master Ledger.
+                                                </p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                    <div className="flex items-baseline gap-2">
+                                        <p className="text-2xl font-bold text-slate-900">
+                                            {integrityMetrics?.integrityGapPercentage?.toFixed(1) || '0.0'}%
+                                        </p>
+                                        <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
+                                            {integrityMetrics?.unverifiedSpend ? `$${Math.round(integrityMetrics.unverifiedSpend)} Risk` : 'Minimal Risk'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-3 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-emerald-500 rounded-full transition-all duration-1000"
+                                    style={{ width: `${100 - (integrityMetrics?.integrityGapPercentage || 0)}%` }}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="bg-white border-slate-200 shadow-sm overflow-hidden relative">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-rose-50 rounded-lg">
+                                    <AlertTriangle className="w-5 h-5 text-rose-600" />
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Leakage Alerts</p>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button className="cursor-help outline-none">
+                                                    <Info className="w-3 h-3 text-slate-400 hover:text-rose-600 transition-colors" />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p className="max-w-xs text-xs">
+                                                    Anomalies detected via behavioral variance analysis and efficiency-to-utilization mismatches.
+                                                </p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                    <div className="flex items-baseline gap-2">
+                                        <p className="text-2xl font-bold text-slate-900">{auditCategories.leakage}</p>
+                                        <span className={`text-[10px] font-bold uppercase tracking-tighter ${auditCategories.leakage > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                                            {auditCategories.leakage > 0 ? 'Action Required' : 'None Detected'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <Card className="bg-white border-slate-200 shadow-sm overflow-hidden relative">
                         {selectedVehicleId !== "all" && summary?.costPerKm === 0 && (
                             <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-[1px] flex items-center justify-center z-10">
@@ -956,6 +1077,19 @@ export function FuelAuditDashboard() {
                                 <Button 
                                     variant="ghost" 
                                     size="sm" 
+                                    className={`text-[10px] font-bold uppercase tracking-wider h-7 px-3 ${viewMode === 'learnt' ? 'bg-white shadow-sm' : ''}`}
+                                    onClick={() => setViewMode('learnt')}
+                                >
+                                    Learnt
+                                    {learntLocations.length > 0 && (
+                                        <Badge className="ml-1.5 h-4 w-4 p-0 flex items-center justify-center bg-indigo-500 text-[8px]">
+                                            {learntLocations.length}
+                                        </Badge>
+                                    )}
+                                </Button>
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
                                     className={`text-[10px] font-bold uppercase tracking-wider h-7 px-3 ${viewMode === 'orphans' ? 'bg-white shadow-sm' : ''}`}
                                     onClick={() => setViewMode('orphans')}
                                 >
@@ -1076,6 +1210,73 @@ export function FuelAuditDashboard() {
                                     Download Bill of Health
                                 </Button>
                             </div>
+                        </div>
+                    ) : viewMode === 'learnt' ? (
+                        <div className="divide-y divide-slate-200">
+                            {learntLocations.length === 0 ? (
+                                <div className="p-12 text-center">
+                                    <Search className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                    <h3 className="text-lg font-semibold text-slate-900">No New Locations Detected</h3>
+                                    <p className="text-slate-500">New station aliases will appear here as drivers scan at unmapped locations.</p>
+                                </div>
+                            ) : (
+                                <div className="p-4 space-y-4">
+                                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 flex gap-3">
+                                        <Info className="w-5 h-5 text-indigo-600 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-bold text-indigo-900">Master Ledger Intelligence</p>
+                                            <p className="text-xs text-indigo-700 mt-0.5">
+                                                Drivers are scanning at these locations which aren't in your Master Ledger. Promote them to "Verified" stations to bridge the integrity gap and enable automatic cryptographic signing.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {learntLocations.map((loc) => (
+                                            <Card key={loc.id} className="border-slate-200 hover:border-indigo-300 transition-all group">
+                                                <CardContent className="p-4 space-y-4">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-indigo-50 transition-colors">
+                                                                <Activity className="h-4 w-4 text-slate-600 group-hover:text-indigo-600" />
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="text-sm font-bold text-slate-900">{loc.name}</h4>
+                                                                <p className="text-[10px] text-slate-400 font-mono">{loc.location.lat.toFixed(4)}, {loc.location.lng.toFixed(4)}</p>
+                                                            </div>
+                                                        </div>
+                                                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 text-[9px] uppercase">Learnt</Badge>
+                                                    </div>
+                                                    
+                                                    <div className="space-y-2">
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Merge with existing:</p>
+                                                        <Select onValueChange={(val) => handlePromoteStation(loc.id, 'merge', val)}>
+                                                            <SelectTrigger className="h-8 text-xs">
+                                                                <SelectValue placeholder="Select target station..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {stations.filter(s => s.status === 'verified').map(s => (
+                                                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
+                                                    <div className="flex gap-2 pt-2 border-t border-slate-100">
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            className="flex-1 text-[10px] font-bold uppercase h-8"
+                                                            onClick={() => handlePromoteStation(loc.id, 'create')}
+                                                        >
+                                                            Create New
+                                                        </Button>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : viewMode === 'orphans' ? (
                         <div className="divide-y divide-slate-200">
@@ -1280,21 +1481,52 @@ export function FuelAuditDashboard() {
                                                                                 <div className="space-y-4">
                                                                                     <h4 className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest flex items-center gap-2">
                                                                                         <BarChart3 className="w-3 h-3" />
-                                                                                        Audit Log Evidence
+                                                                                        Forensic Evidence Bridge
                                                                                     </h4>
                                                                                     <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                                                                        <div className="flex justify-between text-sm py-1.5 border-b border-slate-50">
-                                                                                            <span className="text-slate-500">Distance Since Anchor</span>
-                                                                                            <span className="font-bold text-slate-900">{tx.metadata?.distanceSinceAnchor || 0} km</span>
+                                                                                        <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                                                                                            <span className="text-xs text-slate-500">Spatial Drift (Server-Side)</span>
+                                                                                            <Badge variant="outline" className={`text-[10px] font-bold ${tx.metadata?.serverSideDistance <= 100 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                                                                                                {tx.metadata?.serverSideDistance ? `${tx.metadata.serverSideDistance}m` : 'Unknown'}
+                                                                                            </Badge>
                                                                                         </div>
-                                                                                        <div className="flex justify-between text-sm py-1.5 border-b border-slate-50">
-                                                                                            <span className="text-slate-500">Actual Efficiency</span>
-                                                                                            <span className="font-bold text-slate-900">{tx.metadata?.actualKmPerLiter || '--'} km/L</span>
+                                                                                        <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                                                                                            <span className="text-xs text-slate-500">Efficiency Variance</span>
+                                                                                            <span className={`text-xs font-bold ${Math.abs(tx.metadata?.efficiencyVariance || 0) > 20 ? 'text-rose-600' : 'text-slate-900'}`}>
+                                                                                                {tx.metadata?.efficiencyVariance ? `${tx.metadata.efficiencyVariance}%` : '0%'}
+                                                                                            </span>
                                                                                         </div>
-                                                                                        <div className="flex justify-between text-sm py-1.5">
-                                                                                            <span className="text-slate-500">Variance</span>
-                                                                                            <span className="font-bold text-red-600">{tx.metadata?.efficiencyVariance ? `${tx.metadata.efficiencyVariance}%` : '0%'}</span>
+                                                                                        {tx.deviationReason && (
+                                                                                            <div className="pt-2">
+                                                                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mb-1">Driver Justification:</p>
+                                                                                                <p className="text-xs italic text-slate-700 bg-slate-50 p-2 rounded border border-slate-100 italic">
+                                                                                                    "{tx.deviationReason}"
+                                                                                                </p>
+                                                                                            </div>
+                                                                                        )}
+                                                                                        <div className="flex justify-between items-center py-1.5">
+                                                                                            <span className="text-xs text-slate-500">Expected Cycle Reset</span>
+                                                                                            <span className="text-xs font-bold text-slate-900">
+                                                                                                {tx.metadata?.expectedAnchorDate ? format(new Date(tx.metadata.expectedAnchorDate), 'MMM dd, yyyy') : '--'}
+                                                                                                {tx.metadata?.daysUntilAnchor && (
+                                                                                                    <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+                                                                                                        (in ~{tx.metadata.daysUntilAnchor} days)
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </span>
                                                                                         </div>
+                                                                                        {tx.metadata?.leakageRisk && tx.metadata.leakageRisk !== 'low' && (
+                                                                                            <div className={`mt-2 p-2 rounded text-[10px] font-bold flex items-center gap-2 ${tx.metadata.leakageRisk === 'high' ? 'bg-rose-600 text-white' : 'bg-orange-100 text-orange-700 border border-orange-200'}`}>
+                                                                                                <AlertTriangle className="h-3 w-3" />
+                                                                                                {tx.metadata.leakageAlertReason || 'PREDICTIVE LEAKAGE ALERT'}
+                                                                                            </div>
+                                                                                        )}
+                                                                                        {tx.metadata?.isSpoofingRisk && (
+                                                                                            <div className="mt-2 p-2 bg-rose-600 text-white rounded text-[10px] font-bold flex items-center gap-2">
+                                                                                                <AlertTriangle className="h-3 w-3" />
+                                                                                                HIGH SPOOFING RISK: SPATIAL IDENTITY MISMATCH
+                                                                                            </div>
+                                                                                        )}
                                                                                     </div>
                                                                                 </div>
                                                                                 <div className="space-y-4">

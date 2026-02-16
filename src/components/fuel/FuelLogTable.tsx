@@ -45,7 +45,7 @@ import {
 } from "../ui/accordion";
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
-import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2 } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2, Link2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { FuelEntry, FuelCard, FuelCycle } from '../../types/fuel';
@@ -167,7 +167,8 @@ export function FuelLogTable({
         return (
             getVehicleName(entry.vehicleId).toLowerCase().includes(searchTerm.toLowerCase()) ||
             getDriverName(entry.driverId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-            entry.location?.toLowerCase().includes(searchTerm.toLowerCase())
+            entry.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            entry.vendor?.toLowerCase().includes(searchTerm.toLowerCase())
         );
     });
 
@@ -404,37 +405,79 @@ export function FuelLogTable({
                             <TableRow>
                                 <TableHead>Date</TableHead>
                                 <TableHead>Type</TableHead>
+                                <TableHead>Station</TableHead>
                                 <TableHead>Vehicle</TableHead>
                                 <TableHead>Driver</TableHead>
                                 <TableHead>Volume (L)</TableHead>
                                 <TableHead>Cost ($)</TableHead>
-                                <TableHead>Odometer</TableHead>
+                                <TableHead className="text-center">Audit</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={8} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
-                            filteredEntries.map(entry => (
-                                <TableRow key={entry.id}>
+                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={9} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
+                            filteredEntries.map(entry => {
+                                const confidenceScore = entry.metadata?.auditConfidenceScore;
+                                const isHighlyTrusted = entry.metadata?.isHighlyTrusted || (confidenceScore !== undefined && confidenceScore >= 90);
+                                const isLocked = entry.isLocked || entry.status === 'Finalized';
+
+                                return (
+                                <TableRow key={entry.id} className={cn(isLocked && "bg-slate-50/50")}>
                                     <TableCell>{formatDate(entry.date)}</TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             {getTypeIcon(entry.type)}
                                             <span className="text-xs">{entry.type.replace('_', ' ')}</span>
-                                            {(validAnchorIds.has(entry.id) || entry.metadata?.isFullTank || entry.metadata?.isAnchor || entry.metadata?.isSoftAnchor || entry.metadata?.isVerified) && (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 cursor-help flex-shrink-0" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p className="text-xs font-bold">Verified Log</p>
-                                                        <p className="text-[10px]">Odometer and transaction sequence verified against fleet history.</p>
-                                                        {(entry.metadata?.isFullTank || entry.metadata?.isSoftAnchor) && (
-                                                            <p className="text-[10px] text-emerald-600 font-bold mt-1 italic">Cycle Reset Point</p>
-                                                        )}
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            )}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col gap-0.5">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-semibold text-slate-700 truncate max-w-[140px]">
+                                                    {entry.vendor || entry.metadata?.stationName || "Unknown Vendor"}
+                                                </span>
+                                                {entry.metadata?.locationStatus === 'verified' && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="bg-blue-50 text-blue-600 p-0.5 rounded-full border border-blue-100 flex-shrink-0 animate-in zoom-in-95 duration-300">
+                                                                <ShieldCheck className="h-2.5 w-2.5" />
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <div className="space-y-1">
+                                                                <p className="text-[10px] font-bold">Verified Station</p>
+                                                                <p className="text-[10px]">Mapped to Master Ledger via {entry.metadata?.verificationMethod?.replace('_', ' ') || 'GPS'}.</p>
+                                                                {entry.metadata?.matchDistance !== undefined && (
+                                                                    <p className="text-[10px] text-blue-500 font-medium">Accuracy: {entry.metadata.matchDistance}m</p>
+                                                                )}
+                                                                {entry.signature && (
+                                                                    <div className="mt-1 pt-1 border-t border-blue-100 flex items-center gap-1">
+                                                                        <CheckCircle2 className="h-2.5 w-2.5 text-blue-600" />
+                                                                        <p className="text-[8px] font-mono text-blue-400">Signed: {entry.signature.substring(0, 8)}...</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )}
+                                                {(entry.metadata?.locationStatus === 'unknown' || !entry.metadata?.locationStatus) && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="flex items-center gap-1.5 bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded border border-amber-100 animate-pulse">
+                                                                <AlertCircle className="h-2.5 w-2.5" />
+                                                                <span className="text-[8px] font-bold uppercase tracking-tighter">Review Required</span>
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p className="text-[10px] font-bold">Unverified Location</p>
+                                                            <p className="text-[10px]">Transaction funneled to review queue. Promoting the station will secure this log.</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )}
+                                            </div>
+                                            <span title={entry.location} className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                                                {entry.location || "No GPS metadata"}
+                                            </span>
                                         </div>
                                     </TableCell>
                                     <TableCell className="font-medium text-xs">{getVehicleName(entry.vehicleId)}</TableCell>
@@ -442,136 +485,87 @@ export function FuelLogTable({
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <span className="text-xs font-medium">{entry.liters?.toFixed(1)} L</span>
-                                            {(() => {
-                                                const vehicle = vehicles.find(v => v.id === entry.vehicleId);
-                                                const tankCapacity = vehicle?.fuelSettings?.tankCapacity || Number(vehicle?.specifications?.tankCapacity) || 0;
-                                                const cumulative = entry.metadata?.cumulativeLitersAtEntry;
-                                                
-                                                if (!tankCapacity || cumulative === undefined) return null;
-                                                
-                                                const percent = (cumulative / tankCapacity) * 100;
-                                                const isApproachingAnchor = percent > 85;
-                                                const isSoftAnchorReset = percent >= 100;
-                                                const isOverflow = percent > 105;
-
-                                                return (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <div className="flex items-center gap-1 cursor-help">
-                                                                <div className="w-8 h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                                                                    <div 
-                                                                        className={cn(
-                                                                            "h-full transition-all",
-                                                                            isOverflow ? "bg-rose-500" :
-                                                                            isSoftAnchorReset ? "bg-emerald-500" :
-                                                                            isApproachingAnchor ? "bg-amber-500" : "bg-blue-500"
-                                                                        )}
-                                                                        style={{ width: `${Math.min(percent, 100)}%` }}
-                                                                    />
-                                                                </div>
-                                                                <span className={cn(
-                                                                    "text-[8px] font-bold",
-                                                                    isOverflow ? "text-rose-600" :
-                                                                    isSoftAnchorReset ? "text-emerald-600" :
-                                                                    isApproachingAnchor ? "text-amber-600" : "text-slate-400"
-                                                                )}>
-                                                                    {percent.toFixed(0)}%
-                                                                </span>
-                                                            </div>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <div className="space-y-1">
-                                                                <p className="font-bold text-xs">Virtual Tank Level: {percent.toFixed(1)}%</p>
-                                                                <p className="text-[10px] text-slate-500">Cumulative: {cumulative.toFixed(1)}L / {tankCapacity}L</p>
-                                                                {isOverflow && <p className="text-[10px] text-rose-600 font-bold">ANOMALY: Tank Overflow Detected (&gt;105%)</p>}
-                                                                {isSoftAnchorReset && !isOverflow && <p className="text-[10px] text-emerald-600 font-bold">SOFT ANCHOR: Cycle Reset (100%+)</p>}
-                                                                {isApproachingAnchor && !isSoftAnchorReset && <p className="text-[10px] text-amber-600 font-bold">WARNING: Approaching Capacity (85%+)</p>}
-                                                            </div>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                );
-                                            })()}
                                         </div>
                                     </TableCell>
-                                    <TableCell className="font-semibold text-xs">${entry.amount.toFixed(2)}</TableCell>
-                                    <TableCell className="text-xs font-mono">{entry.odometer?.toLocaleString() || '-'}</TableCell>
+                                    <TableCell className="font-bold text-xs">${entry.amount.toFixed(2)}</TableCell>
+                                    <TableCell>
+                                        <div className="flex justify-center">
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className={cn(
+                                                        "flex flex-col items-center justify-center w-10 h-10 rounded-lg border transition-all cursor-help",
+                                                        confidenceScore === undefined ? "bg-slate-50 border-slate-100 text-slate-300" :
+                                                        confidenceScore >= 90 ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
+                                                        confidenceScore >= 70 ? "bg-blue-50 border-blue-100 text-blue-600" :
+                                                        "bg-amber-50 border-amber-100 text-amber-600"
+                                                    )}>
+                                                        {isLocked ? (
+                                                            <ShieldCheck className="h-4 w-4" />
+                                                        ) : (
+                                                            <span className="text-[10px] font-bold">{confidenceScore ?? '??'}</span>
+                                                        )}
+                                                        <div className="flex gap-0.5 mt-0.5">
+                                                            <div className={cn("h-1 w-1 rounded-full", (entry.matchedStationId) ? "bg-current" : "bg-slate-200")}></div>
+                                                            <div className={cn("h-1 w-1 rounded-full", (entry.signature) ? "bg-current" : "bg-slate-200")}></div>
+                                                            <div className={cn("h-1 w-1 rounded-full", (entry.odometer > 0) ? "bg-current" : "bg-slate-200")}></div>
+                                                        </div>
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="w-64 p-0" side="left">
+                                                    <div className="p-3 space-y-3">
+                                                        <div className="flex justify-between items-center">
+                                                            <p className="text-xs font-bold uppercase tracking-wider">Audit Confidence</p>
+                                                            <Badge className={cn(
+                                                                "h-5 text-[9px] border-none",
+                                                                isHighlyTrusted ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
+                                                            )}>
+                                                                {confidenceScore ?? 'PENDING'}%
+                                                            </Badge>
+                                                        </div>
+                                                        
+                                                        <div className="space-y-1.5">
+                                                            <AuditBreakdownItem label="GPS Handshake" value={entry.metadata?.auditConfidenceBreakdown?.gps} max={30} />
+                                                            <AuditBreakdownItem label="Proximity Bonus" value={entry.metadata?.auditConfidenceBreakdown?.gps_bonus} max={5} />
+                                                            <AuditBreakdownItem label="SHA-256 Sign" value={entry.metadata?.auditConfidenceBreakdown?.crypto} max={25} />
+                                                            <AuditBreakdownItem label="Physical Data" value={entry.metadata?.auditConfidenceBreakdown?.physical} max={25} />
+                                                            <AuditBreakdownItem label="Behavioral" value={entry.metadata?.auditConfidenceBreakdown?.behavioral} max={20} />
+                                                        </div>
+
+                                                        {isLocked && (
+                                                            <div className="pt-2 border-t border-slate-100 flex items-center gap-2 text-emerald-600">
+                                                                <CheckCircle2 className="h-3 w-3" />
+                                                                <p className="text-[10px] font-bold">LOCKED & IMMUTABLE</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </div>
+                                    </TableCell>
                                     <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                                    <span className="sr-only">Open menu</span>
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                <DropdownMenuItem 
-                                                    onClick={() => onEdit(entry)}
-                                                    disabled={entry.metadata?.isVerified}
-                                                    className={cn(entry.metadata?.isVerified && "opacity-50 cursor-not-allowed")}
-                                                >
-                                                    <Pencil className="mr-2 h-4 w-4" /> 
-                                                    {entry.metadata?.isVerified ? "Edit (Locked)" : "Edit"}
-                                                </DropdownMenuItem>
-                                                {onVerifyLog && !validAnchorIds.has(entry.id) && !entry.metadata?.isFullTank && (
-                                                    <DropdownMenuItem 
-                                                        className="cursor-pointer text-emerald-600 focus:text-emerald-700"
-                                                        onClick={() => onVerifyLog(entry.id)}
-                                                    >
-                                                        <ShieldCheck className="mr-2 h-4 w-4" /> Verify Log
-                                                    </DropdownMenuItem>
-                                                )}
-                                                <DropdownMenuItem 
-                                                    className="cursor-pointer"
-                                                    onClick={async () => {
-                                                        try {
-                                                            const isNowFull = !entry.metadata?.isFullTank;
-                                                            // Since we don't have direct access to a partial update method that handles metadata merge,
-                                                            // we'll use the existing onEdit or a direct API call if available.
-                                                            // Assuming api.updateFuelEntry exists based on standard patterns.
-                                                            const updatedEntry = {
-                                                                ...entry,
-                                                                metadata: {
-                                                                    ...entry.metadata,
-                                                                    isFullTank: isNowFull,
-                                                                    manualAnchorSetAt: isNowFull ? new Date().toISOString() : undefined
-                                                                }
-                                                            };
-                                                            
-                                                            await api.updateFuelEntry(entry.id, updatedEntry);
-                                                            
-                                                            toast.success(isNowFull ? "Marked as Full Tank" : "Removed Full Tank flag");
-                                                            
-                                                            // Refresh cycles logic
-                                                            const promise = api.runFuelBackfill();
-                                                            toast.promise(promise, {
-                                                                loading: 'Recalculating cycles...',
-                                                                success: 'Cycles updated successfully',
-                                                                error: 'Failed to sync cycles'
-                                                            });
-                                                        } catch (e) {
-                                                            console.error(e);
-                                                            toast.error("Failed to update entry status");
-                                                        }
-                                                    }}
-                                                >
-                                                    <Gauge className={cn("mr-2 h-4 w-4", entry.metadata?.isFullTank ? "text-slate-400" : "text-emerald-500")} /> 
-                                                    {entry.metadata?.isFullTank ? "Unmark Full Tank" : "Mark as Full Tank"}
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem 
-                                                    onClick={() => onDelete(entry.id)} 
-                                                    disabled={entry.metadata?.isVerified}
-                                                    className={cn(entry.metadata?.isVerified ? "opacity-50 cursor-not-allowed" : "text-red-600")}
-                                                >
-                                                    <Trash2 className="mr-2 h-4 w-4" /> 
-                                                    {entry.metadata?.isVerified ? "Delete (Locked)" : "Delete"}
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                        <div className="flex justify-end gap-1">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-8 w-8 text-slate-400 hover:text-slate-600"
+                                                onClick={() => onEdit(entry)}
+                                                disabled={isLocked}
+                                            >
+                                                <Pencil className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-8 w-8 text-slate-400 hover:text-red-600"
+                                                onClick={() => onDelete(entry.id)}
+                                                disabled={isLocked}
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            )})}
                         </TableBody>
                     </Table>
                 ) : (
@@ -710,6 +704,28 @@ export function FuelLogTable({
                         </Accordion>}
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+function AuditBreakdownItem({ label, value, max }: { label: string, value?: number, max: number }) {
+    const percentage = ((value || 0) / max) * 100;
+    return (
+        <div className="space-y-1">
+            <div className="flex justify-between text-[9px] font-medium">
+                <span className="text-slate-500">{label}</span>
+                <span className={cn(value ? "text-slate-900" : "text-slate-300")}>{value ?? 0} / {max}</span>
+            </div>
+            <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                    className={cn(
+                        "h-full rounded-full transition-all duration-500",
+                        percentage >= 100 ? "bg-emerald-500" : 
+                        percentage > 0 ? "bg-blue-500" : "bg-slate-200"
+                    )} 
+                    style={{ width: `${percentage}%` }}
+                />
             </div>
         </div>
     );

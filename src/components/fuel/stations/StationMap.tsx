@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { StationAnalyticsContextType, StationProfile } from '../../../types/station';
-import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 
 // Brand Color Mapping
@@ -63,9 +62,19 @@ export function StationMap({ context, onSelectStation }: StationMapProps) {
 
     return () => {
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.off();
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
+        const map = mapInstanceRef.current;
+        mapInstanceRef.current = null; // Null ref first to prevent callbacks during teardown
+        try {
+          // CRITICAL: Prevent _leaflet_pos crash from async transitionend events.
+          // Leaflet's _onZoomTransitionEnd checks this flag first and returns early if false,
+          // so setting it prevents the handler from accessing the already-destroyed _mapPane.
+          (map as any)._animatingZoom = false;
+          map.stop();
+          map.off();
+          map.remove();
+        } catch (e) {
+          // Swallow errors from Leaflet teardown during zoom transitions
+        }
       }
     };
   }, [isMounted]);

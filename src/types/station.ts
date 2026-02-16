@@ -1,3 +1,14 @@
+export type LocationStatus = 'verified' | 'unverified' | 'learnt' | 'anomaly';
+
+export interface StationAlias {
+  id: string;
+  lat: number;
+  lng: number;
+  radius?: number; // Optional radius override for this specific alias
+  label: string;
+  addedAt: string;
+}
+
 export interface StationProfile {
   id: string; // Hash of normalized Name + Address
   name: string;
@@ -9,10 +20,22 @@ export interface StationProfile {
   location: {
     lat: number;
     lng: number;
+    radius?: number; // Adaptive spatial boundary in meters
+    accuracy?: number;
   };
+  plusCode?: string; // Open Location Code (Google Plus Code) for high-precision location
+  geofenceRadius?: number; // Configurable geofence radius in meters
   isPreferred: boolean;
   stats: StationStats;
   
+  // Phase 6: GPS Aliasing & Integrity
+  aliases?: StationAlias[];
+  masterPinEvidence?: {
+    lastSyncedAt: string;
+    sourceTransactionId: string;
+    coordinates: { lat: number; lng: number };
+  };
+
   // Phase 10: Enriched Metadata
   amenities: string[];
   dataSource: 'log' | 'manual' | 'import';
@@ -21,7 +44,8 @@ export interface StationProfile {
     phone?: string;
     website?: string;
   };
-  status: 'active' | 'inactive' | 'review';
+  status: LocationStatus;
+  operationalStatus?: 'active' | 'inactive' | 'review';
 }
 
 export interface StationStats {
@@ -52,9 +76,12 @@ export interface StationOverride {
   city?: string;
   parish?: string;
   country?: string;
+  plusCode?: string; // Open Location Code (Google Plus Code)
+  geofenceRadius?: number; // Configurable geofence radius in meters
   location?: {
     lat: number;
     lng: number;
+    accuracy?: number;
   };
   
   // Phase 10: Enriched Metadata Overrides
@@ -65,7 +92,8 @@ export interface StationOverride {
     phone?: string;
     website?: string;
   };
-  status?: 'active' | 'inactive' | 'review';
+  status?: LocationStatus;
+  operationalStatus?: 'active' | 'inactive' | 'review';
   
   // Optional: Initial Stats from Import
   initialStats?: {

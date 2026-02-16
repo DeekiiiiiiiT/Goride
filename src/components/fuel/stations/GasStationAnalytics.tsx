@@ -1,7 +1,9 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FuelEntry } from '../../../types/fuel';
 import { StationProfile, StationOverride } from '../../../types/station';
-import { aggregateStations, calculateRegionalStats } from '../../../utils/stationUtils';
+import { aggregateStations, calculateRegionalStats, calculateDistance } from '../../../utils/stationUtils';
+import { fuelService } from '../../../services/fuelService';
+import { toast } from 'sonner@2.0.3';
 import { StationDashboard } from './StationDashboard';
 import { StationMap } from './StationMap';
 import { StationList } from './StationList';
@@ -21,40 +23,96 @@ interface GasStationAnalyticsProps {
 
 export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyticsProps) {
   const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
-  const [stationOverrides, setStationOverrides] = useState<Record<string, StationOverride>>({});
+  const [masterStations, setMasterStations] = useState<StationProfile[]>([]);
+  const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [purchaseDateRange, setPurchaseDateRange] = useState<DateRange | undefined>();
   
-  // Load overrides to ensure analytics reflect custom names/brands
+  // Phase 11: Master Ledger Sync
+  // Load verified stations from the cloud to power the Evidence Bridge
   useEffect(() => {
-    try {
-      const storedOverrides = localStorage.getItem('station_overrides');
-      if (storedOverrides) {
-        setStationOverrides(JSON.parse(storedOverrides));
+    const syncMasterLedger = async () => {
+      setIsDataSyncing(true);
+      try {
+        const cloudStations = await fuelService.getStations();
+        setMasterStations(cloudStations);
+      } catch (e) {
+        console.error('Failed to sync Master Ledger for analytics', e);
+        toast.error("Analytics sync warning: Master Ledger unavailable.");
+      } finally {
+        setIsDataSyncing(false);
       }
-    } catch (e) {
-      console.error('Failed to load local storage data', e);
-    }
+    };
+    syncMasterLedger();
   }, []);
 
-  // Helper to generate context from logs
+  // Helper to generate context from logs with Evidence Bridge resolution
   const buildContext = useCallback((inputLogs: FuelEntry[]) => {
-    // 1. Start with stations derived from Logs
-    const rawStations = aggregateStations(inputLogs);
+    // 1. Evidence Bridge: Resolve "Unknown" logs to Verified Stations
+    const resolvedLogs = inputLogs.map(log => {
+      // If the log already has a verified status or matched ID in metadata, respect it
+      // Otherwise, attempt a GPS-based bridge resolution
+      if (log.location && log.location !== 'Unknown' && log.location !== 'Manual Entry' && !log.location.includes('Unknown')) {
+        return log;
+      }
+
+      // Try to find a verified station within 600m
+      const lat = log.locationMetadata?.lat || log.metadata?.location?.lat;
+      const lng = log.locationMetadata?.lng || log.metadata?.location?.lng;
+
+      if (lat && lng) {
+        // Find closest verified station
+        let closestStation: StationProfile | null = null;
+        let minDistance = Infinity;
+
+        masterStations.filter(s => s.status === 'verified').forEach(station => {
+          const dist = calculateDistance(
+            lat, lng,
+            station.location.lat, station.location.lng
+          );
+          
+          if (dist < minDistance && dist <= 600) { // Using the dynamic 600m threshold
+            minDistance = dist;
+            closestStation = station;
+          }
+        });
+
+        if (closestStation) {
+          // BRIDGE MATCH: Return a decorated log that points to the verified station
+          return {
+            ...log,
+            location: closestStation.name,
+            stationAddress: closestStation.address,
+            brand: closestStation.brand,
+            // Tag with metadata so we know it was bridged
+            metadata: {
+              ...log.metadata,
+              bridgedStationId: closestStation.id,
+              bridgeDistance: minDistance
+            }
+          };
+        }
+      }
+      return log;
+    });
+
+    // 2. Aggregate resolved logs
+    const rawStations = aggregateStations(resolvedLogs);
     const stationMap = new Map(rawStations.map(s => [s.id, s]));
 
-    // 2. Apply Overrides (Read-Only for Analytics)
-    Object.entries(stationOverrides).forEach(([id, override]) => {
-      if (stationMap.has(id)) {
-        // Update existing station data with overrides
-        const existing = stationMap.get(id)!;
-        stationMap.set(id, {
+    // 3. Apply Master Metadata Overrides
+    masterStations.forEach(master => {
+      if (stationMap.has(master.id)) {
+        const existing = stationMap.get(master.id)!;
+        stationMap.set(master.id, {
            ...existing,
-           ...override,
-           amenities: override.amenities || existing.amenities || [],
+           ...master,
+           // Merge stats: favor the calculated aggregate for visits/prices
+           stats: {
+             ...existing.stats,
+             rating: master.stats?.rating || 0,
+           }
         });
-      } 
-      // Note: We do NOT add "Ghost Stations" (manual entries without logs) to Analytics view.
-      // Analytics should strictly show where money was spent.
+      }
     });
 
     const stations = Array.from(stationMap.values());
@@ -63,23 +121,25 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
     return {
       stations,
       regionalStats,
-      loading,
-      togglePreferred: () => {}, // No-op in Analytics
-      updateStationDetails: () => {} // No-op in Analytics
+      resolvedLogs, // Include the matched logs for drill-down views
+      loading: loading || isDataSyncing,
+      togglePreferred: () => {},
+      updateStationDetails: () => {}
     };
-  }, [loading, stationOverrides]);
+  }, [loading, isDataSyncing, masterStations]);
 
   const context = useMemo(() => buildContext(logs), [buildContext, logs]);
 
   const purchaseDataLogs = useMemo(() => {
-    if (!purchaseDateRange?.from) return logs;
-    return logs.filter(log => {
+    const rLogs = context.resolvedLogs || [];
+    if (!purchaseDateRange?.from) return rLogs;
+    return rLogs.filter(log => {
       const logDate = new Date(log.date);
       const from = startOfDay(purchaseDateRange.from!);
       const to = purchaseDateRange.to ? endOfDay(purchaseDateRange.to) : endOfDay(purchaseDateRange.from!);
       return isWithinInterval(logDate, { start: from, end: to });
     });
-  }, [logs, purchaseDateRange]);
+  }, [context.resolvedLogs, purchaseDateRange]);
 
   const purchaseContext = useMemo(() => buildContext(purchaseDataLogs), [buildContext, purchaseDataLogs]);
 
@@ -170,7 +230,7 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
       <StationDetailView 
         station={activeStation} 
         onClose={() => setSelectedStation(null)} 
-        logs={logs}
+        logs={context.resolvedLogs || logs}
       />
     </div>
   );

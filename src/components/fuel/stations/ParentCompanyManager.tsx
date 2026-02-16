@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { fuelService } from '../../../services/fuelService';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
@@ -21,15 +21,8 @@ export function ParentCompanyManager() {
   const fetchCompanies = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/parent-companies`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` }
-        }
-      );
-      if (!response.ok) throw new Error('Failed to fetch parent companies');
-      const data = await response.json();
-      setCompanies(data);
+      const data = await fuelService.getParentCompanies();
+      setCompanies(data || []);
     } catch (error) {
       console.error('Error fetching companies:', error);
       toast.error('Failed to load parent companies');
@@ -56,20 +49,7 @@ export function ParentCompanyManager() {
     
     try {
       setSaving(true);
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/parent-companies`,
-        {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}` 
-          },
-          body: JSON.stringify(updatedCompanies)
-        }
-      );
-
-      if (!response.ok) throw new Error('Failed to save company');
-      
+      await fuelService.saveParentCompanies(updatedCompanies);
       setCompanies(updatedCompanies);
       setNewName('');
       toast.success('Parent company added successfully');
@@ -86,20 +66,7 @@ export function ParentCompanyManager() {
     
     try {
       setSaving(true);
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/parent-companies`,
-        {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}` 
-          },
-          body: JSON.stringify(updatedCompanies)
-        }
-      );
-
-      if (!response.ok) throw new Error('Failed to delete company');
-      
+      await fuelService.saveParentCompanies(updatedCompanies);
       setCompanies(updatedCompanies);
       toast.success('Parent company removed');
     } catch (error) {

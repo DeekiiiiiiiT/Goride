@@ -373,7 +373,9 @@ export function DriverDashboard() {
               type: method === 'card' ? 'Card_Transaction' : 'Manual_Entry',
               entryMode: entryMode,
               paymentSource: paymentSource,
-              source: 'Driver Portal'
+              source: 'Driver Portal',
+              geofenceMetadata: (data as any).geofenceMetadata,
+              deviationReason: (data as any).deviationReason
           } as any;
 
           const savedEntry = await fuelService.saveFuelEntry(fuelEntry as FuelEntry);

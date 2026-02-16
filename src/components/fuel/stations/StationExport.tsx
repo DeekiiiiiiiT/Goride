@@ -3,6 +3,7 @@ import { StationProfile } from '../../../types/station';
 import { Button } from '../../ui/button';
 import { Download } from 'lucide-react';
 import { downloadCSV as globalDownloadCSV } from '../../../utils/export';
+import { encodePlusCode } from '../../../utils/plusCode';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -23,6 +24,9 @@ export function StationExport({ stations, filename = 'stations-export' }: Statio
       Name: s.name,
       Brand: s.brand,
       Address: s.address,
+      City: s.city || '',
+      Parish: s.parish || '',
+      Country: s.country || 'Jamaica',
       Status: s.status || 'active',
       Amenities: (s.amenities || []).join('|'),
       Avg_Price: s.stats.avgPrice.toFixed(2),
@@ -31,7 +35,8 @@ export function StationExport({ stations, filename = 'stations-export' }: Statio
       Last_Updated: new Date(s.stats.lastUpdated).toISOString(),
       Data_Source: s.dataSource || 'manual',
       Lat: s.location?.lat || '',
-      Lng: s.location?.lng || ''
+      Lng: s.location?.lng || '',
+      Plus_Code: s.plusCode || (s.location ? encodePlusCode(s.location.lat, s.location.lng, 11) : '')
     }));
 
     await globalDownloadCSV(rows, filename, { checksum: true });

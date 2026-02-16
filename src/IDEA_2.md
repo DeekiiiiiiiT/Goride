@@ -1,39 +1,130 @@
-Time Metrics
-These columns track the duration (formatted as HH:MM:SS) spent in different operational states:
+# Fleet Integrity: Full Geofencing Implementation Blueprint
 
-Open Time: The amount of time the driver was online and available to accept new trip requests (waiting for a "ping").
-
-Enroute Time: The time spent traveling to a pickup location after accepting a request.
-
-On Trip Time: The time spent with a passenger or delivery in the vehicle, from pickup to drop-off.
-
-Unavailable Time: The time the driver was logged into the system but marked as "Unavailable" (e.g., taking a break or paused).
-
-Distance Metrics
-These columns track the distance covered during each of the states mentioned above:
-
-Open Distance: Distance traveled while the driver was online and waiting for a request.
-
-Enroute Distance: Distance traveled while the driver was heading to the pickup location.
-
-On Trip Distance: Distance traveled during the actual trip (from pickup to destination).
-
-Unavailable Distance: Distance traveled while the driver was in an unavailable or offline-equivalent state.
-
+This document outlines the transition from static coordinate matching to an **Event-Driven Circular Geofencing** architecture, triggered by the Odometer Scan.
 
 ---
 
+## 1. Data Schema Enhancements
 
+### Station Profile (`/types/station.ts`)
+Add a `radius` field to the Master Ledger to allow for adaptive spatial boundaries.
+```typescript
+export interface StationProfile {
+  // ... existing fields
+  location: {
+    lat: number;
+    lng: number;
+    radius: number; // Default: 75m. Urban: 30-50m. Enterprise: 100-150m.
+    accuracy?: number;
+  };
+}
+```
 
-
-driver_time_and_distance
-
-Driver UUID	Driver First Name	Driver Last Name	Open Time	Enroute Time	On Trip Time	Unavailable Time	Open Distance	Enroute Distance	On Trip Distance	Unavailable Distance
-52ff47da-ef48-41b8-93d5-80a09b85ce5b	KENNY GREGORY	RATTRAYCAS	0:10:11	0:15:47	1:14:04	0:00:07	269.58	279.52	799.41	0.03
+### Fuel Entry Metadata (`/types/fuel.ts`)
+Capture the spatial proof-of-work during the Odometer trigger.
+```typescript
+export interface FuelEntry {
+  // ... existing fields
+  geofenceMetadata?: {
+    isInside: boolean;
+    distanceMeters: number;
+    timestamp: string;
+    radiusAtTrigger: number;
+  };
+}
+```
 
 ---
 
-vehicle_time_and_distance
+## 2. Driver Portal Implementation (Frontend)
 
-Vehicle UUID	Vehicle License Plate	Open Time	Enroute Time	On Trip Time	Unavailable Time	Open Distance	Enroute Distance	On Trip Distance	Unavailable Distance
-a6d3799c-df61-46c4-8f1d-84d3cc0768f4	5179KZ	0:10:11	0:15:47	1:14:04	0:00:07	269.58	279.52	799.41	0.03
+The **Odometer Scan** acts as the primary arming trigger for the Evidence Bridge.
+
+### Step A: The Scan Trigger
+When `onScanSuccess` is called, the app immediately captures a high-accuracy location snapshot.
+```typescript
+// Location Trigger Logic
+const handleOdometerScan = async (scannedValue: number) => {
+  const position = await getCurrentHighAccuracyPosition(); // Captures lat/lng
+  
+  // Find nearest station from Master Ledger
+  const nearestStation = findNearestStation(position.lat, position.lng, stations);
+  const distance = calculateDistance(
+    position.lat, 
+    position.lng, 
+    nearestStation.location.lat, 
+    nearestStation.location.lng
+  );
+
+  const isVerified = distance <= (nearestStation.location.radius || 75);
+
+  setFormState({
+    odometer: scannedValue,
+    matchedStationId: isVerified ? nearestStation.id : null,
+    geofenceMetadata: {
+      isInside: isVerified,
+      distanceMeters: distance,
+      timestamp: new Date().toISOString(),
+      radiusAtTrigger: nearestStation.location.radius || 75
+    }
+  });
+};
+```
+
+### Step B: UI Feedback
+- **Verified**: Show a green "Evidence Bridge Connected" badge with the station name.
+- **Unverified**: Show a warning "Out of Range: Odometer scan detected outside known station perimeter."
+
+---
+
+## 3. Server Implementation (Backend)
+
+The server verifies the spatial proof provided by the frontend and incorporates it into the **Audit Confidence Score**.
+
+### Step A: Forensic Verification (`/supabase/functions/server/fuel_logic.ts`)
+The server re-calculates the distance using its own copy of the Master Ledger to prevent frontend spoofing.
+
+```typescript
+export function calculateConfidenceScore(entry: any, station?: any) {
+  let score = 0;
+  
+  // 1. Evidence Bridge: Spatial Verification (35 pts)
+  const distance = entry.geofenceMetadata?.distanceMeters || 999;
+  const radius = station?.location?.radius || 75;
+
+  if (distance <= radius) {
+    if (distance < 20) {
+      score += 35; // Perfect "At-the-Pump" match
+    } else if (distance < 50) {
+      score += 25; // Standard station match
+    } else {
+      score += 15; // Perimeter match (likely truck stop)
+    }
+  }
+
+  // ... 2. Cryptographic Handshake (25 pts)
+  // ... 3. Physical Integrity (20 pts)
+  // ... 4. Behavioral Integrity (20 pts)
+  
+  return {
+    score: Math.min(100, score),
+    isHighlyTrusted: score >= 90,
+    requiresReview: score < 70
+  };
+}
+```
+
+### Step B: Immutable Ledger Locking
+If `geofenceMetadata.isInside` is true and `score >= 90`, the server triggers the **Locked** state. The transaction is immediately promoted to the Master Ledger as "Verified" with the distance proof saved in the metadata for forensic audits.
+
+---
+
+## 4. Integration Logic: The "Evidence Bridge" Flow
+
+1.  **Driver** opens the Fuel Log Form.
+2.  **Driver** scans the Odometer (Event Start).
+3.  **App** captures GPS + Performs distance check against local Master Ledger cache.
+4.  **App** locks the Station ID and shows "Verified" status.
+5.  **Driver** enters fuel volume and submits.
+6.  **Server** re-verifies the Distance + Odometer Sequence.
+7.  **Server** signs the record with SHA-256 and promotes to the Master Ledger if Confidence ≥ 90.

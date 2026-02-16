@@ -1,3 +1,5 @@
+import { LocationStatus } from './station';
+
 export type FuelType = 'Gasoline_87' | 'Gasoline_91' | 'Gasoline_93' | 'Diesel' | 'Electric' | 'Hybrid';
 
 export interface FuelCard {
@@ -35,6 +37,23 @@ export interface FuelEntry {
   
   // Link to financial transaction
   transactionId?: string;
+
+  // Geolocation & Matching (Phase 1)
+  locationMetadata?: {
+    lat: number;
+    lng: number;
+    accuracy: number;
+    timestamp?: string;
+  };
+  geofenceMetadata?: {
+    isInside: boolean;
+    distanceMeters: number;
+    timestamp: string;
+    radiusAtTrigger: number;
+  };
+  locationStatus?: LocationStatus;
+  matchedStationId?: string;
+  deviationReason?: string;
 
   // Phase 1: Ledger Accounting & Threshold Cap
   volumeContributed?: number; // How much of this receipt went into the specific cycle
@@ -117,6 +136,10 @@ export interface WeeklyFuelReport {
   
   // Phase 3: Staged Reconciliation
   pendingCount?: number; // Number of logs waiting to be finalized
+  
+  // Phase 6: Cryptographic Integrity
+  signature?: string;
+  signedAt?: string;
 }
 
 export interface OdometerBucket {

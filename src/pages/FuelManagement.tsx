@@ -24,10 +24,11 @@ import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModa
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { FuelAuditDashboard } from '../components/fuel/FuelAuditDashboard';
+import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard';
 import { FuelIntegrityAuditTool } from '../components/fuel/FuelIntegrityAuditTool';
 import { GasStationAnalytics } from '../components/fuel/stations/GasStationAnalytics';
 import { StationDatabaseView } from '../components/fuel/stations/StationDatabaseView';
-import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute, FuelScenario } from '../types/fuel';
+import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute, FuelScenario, WeeklyFuelReport } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { Trip, FinancialTransaction } from '../types/data';
 import { api } from '../services/api';
@@ -995,6 +996,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   if (activeTab === 'dashboard') {
       pageTitle = "Fleet Integrity Overview";
       pageDescription = "Track consumption, reconcile expenses, and manage gas cards.";
+  } else if (activeTab === 'integrity-gap') {
+      pageTitle = "Evidence Bridge Analytics";
+      pageDescription = "Forensic analysis of spatial accuracy, cryptographic binding, and systemic drift.";
   } else if (activeTab === 'reconciliation') {
       pageTitle = "Consumption Reconciliation";
       pageDescription = "Compare actual gas card charges against estimated operating costs.";
@@ -1125,6 +1129,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
       {activeTab === 'audit' && (
           <FuelAuditDashboard />
+      )}
+
+      {activeTab === 'integrity-gap' && (
+          <IntegrityGapDashboard />
       )}
 
       {activeTab === 'reconciliation' && (

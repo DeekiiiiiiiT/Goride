@@ -780,12 +780,50 @@ export const api = {
     return response.json();
   },
 
-  async runFuelBackfill() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-integrity`, {
-        method: 'POST',
+  // Station Management (Phase 3)
+  async addStationAlias(id: string, alias: { lat: number, lng: number, label: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}/alias`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(alias)
+    });
+    if (!response.ok) throw new Error("Failed to add alias");
+    return response.json();
+  },
+
+  async syncMasterPin(id: string, payload: { lat: number, lng: number, transactionId: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}/sync-master-pin`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error("Failed to sync master pin");
+    return response.json();
+  },
+
+  async getIntegrityMetrics() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/analytics/integrity-metrics`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
-    if (!response.ok) throw new Error("Failed to run fuel backfill");
+    if (!response.ok) throw new Error("Failed to fetch integrity metrics");
+    return response.json();
+  },
+
+  async promoteLearntLocationToMaster(payload: { learntId: string, action: 'merge' | 'create', targetStationId?: string, stationData?: any }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/promote-learnt`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error("Promotion failed");
+    return response.json();
+  },
+
+  async getStations() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch stations");
     return response.json();
   },
 
@@ -794,7 +832,126 @@ export const api = {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
-    if (!response.ok) throw new Error("Failed to run integrity repair");
+    if (!response.ok) throw new Error("Failed to reconcile orphans");
+    return response.json();
+  },
+
+  async saveStation(station: any) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(station)
+    });
+    if (!response.ok) throw new Error("Failed to save station");
+    return response.json();
+  },
+
+  async deleteStation(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete station");
+    return response.json();
+  },
+
+  async getStationProofOfWork(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}/proof-of-work`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch proof of work");
+    return response.json();
+  },
+
+  async getLearntLocations() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch learnt locations");
+    return response.json();
+  },
+
+  async rescanLearntLocations(radius: number = 75) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/rescan`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ radius })
+    });
+    if (!response.ok) throw new Error("Bulk re-scan failed");
+    return response.json();
+  },
+
+  async promoteLearntLocation(id: string, stationDetails: any) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/promote`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ id, stationDetails })
+    });
+    if (!response.ok) throw new Error("Failed to promote location");
+    return response.json();
+  },
+
+  async rejectLearntLocation(id: string, reason: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/${id}/reject`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ reason })
+    });
+    if (!response.ok) throw new Error("Failed to reject location");
+    return response.json();
+  },
+
+  async mergeLearntLocation(id: string, targetStationId: string, updateMasterPin: boolean = false) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/merge`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ id, targetStationId, updateMasterPin })
+    });
+    if (!response.ok) throw new Error("Failed to merge location");
+    return response.json();
+  },
+
+  async runFuelBackfill() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-integrity`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Backfill job failed");
+    return response.json();
+  },
+
+  async runEvidenceBridgeStressTest(vehicleId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/stress-test-evidence-bridge`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId })
+    });
+    if (!response.ok) throw new Error("Stress test failed");
+    return response.json();
+  },
+
+  async verifyRecordForensics(recordId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/verify-record-forensics`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId })
+    });
+    if (!response.ok) throw new Error("Forensic verification failed");
     return response.json();
   },
 

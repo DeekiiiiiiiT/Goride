@@ -10,6 +10,7 @@ import * as cache from "./cache.ts";
 import * as gemini from "./gemini_service.ts";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { pMap } from "./concurrency.ts";
+import { findMatchingStation } from "./geo_matcher.ts";
 import { Buffer } from "node:buffer";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
@@ -478,7 +479,7 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 const hasChanged = 
                     tx.metadata?.cycleId !== currentCycleId ||
                     tx.metadata?.cumulativeLitersAtEntry !== newMetadata.cumulativeLitersAtEntry ||
-                    tx.metadata?.isAnomaly !== isAnomaly ||
+                    tx.metadata?.integrityStatus !== newMetadata.integrityStatus ||
                     tx.metadata?.excessVolume !== newMetadata.excessVolume;
 
                 if (hasChanged) {
@@ -1373,6 +1374,81 @@ app.post("/make-server-37f42386/transactions", async (c) => {
     const isAiVerified = transaction.metadata?.odometerMethod === 'ai_verified';
 
     if (isFuel) {
+        // --- GEOLOCATION MATCHING (Phase 3 + Phase 4.2: Unverified Promotion) ---
+        const locationMetadata = transaction.metadata?.locationMetadata;
+        if (locationMetadata?.lat && locationMetadata?.lng) {
+            try {
+                // Fetch all stations from KV
+                const stationsRaw = await kv.getByPrefix("station:");
+                const allStations = stationsRaw || [];
+                const verifiedStations = allStations.filter((s: any) => s.status === 'verified');
+                const unverifiedStations = allStations.filter((s: any) => s.status === 'unverified');
+                
+                // Step 4.1: First try matching against Verified stations
+                const matchedVerified = findMatchingStation(
+                    locationMetadata.lat, 
+                    locationMetadata.lng, 
+                    verifiedStations, 
+                    150 // 150m matching radius
+                );
+
+                if (matchedVerified) {
+                    transaction.metadata.matchedStationId = matchedVerified.id;
+                    transaction.metadata.locationStatus = 'verified';
+                    transaction.metadata.verificationMethod = 'gps_matching';
+                    console.log(`[GeoMatch] Transaction matched Verified station: ${matchedVerified.name} (${matchedVerified.id})`);
+                } else {
+                    // Step 4.2: No verified match — check Unverified (MGMT) stations
+                    const matchedUnverified = findMatchingStation(
+                        locationMetadata.lat,
+                        locationMetadata.lng,
+                        unverifiedStations,
+                        150 // 150m matching radius
+                    );
+
+                    if (matchedUnverified) {
+                        // AUTO-PROMOTE: Unverified → Verified
+                        matchedUnverified.status = 'verified';
+                        matchedUnverified.promotedAt = new Date().toISOString();
+                        matchedUnverified.promotionMethod = 'auto_gps_match';
+                        matchedUnverified.stats = {
+                            ...(matchedUnverified.stats || {}),
+                            totalVisits: ((matchedUnverified.stats?.totalVisits) || 0) + 1,
+                            lastUpdated: new Date().toISOString()
+                        };
+                        await kv.set(`station:${matchedUnverified.id}`, matchedUnverified);
+
+                        transaction.metadata.matchedStationId = matchedUnverified.id;
+                        transaction.metadata.locationStatus = 'verified';
+                        transaction.metadata.verificationMethod = 'gps_auto_promoted';
+                        console.log(`[GeoMatch] Transaction matched Unverified station — AUTO-PROMOTED to Verified: ${matchedUnverified.name} (${matchedUnverified.id})`);
+                    } else {
+                        // Step 4.3: No match at all — create Learnt Location
+                        transaction.metadata.locationStatus = 'unverified';
+                    
+                        const learntId = crypto.randomUUID();
+                        const learntLocation = {
+                            id: learntId,
+                            name: transaction.vendor || transaction.description || 'Unknown Station',
+                            parentCompany: transaction.metadata?.parentCompany,
+                            location: {
+                                lat: locationMetadata.lat,
+                                lng: locationMetadata.lng,
+                                accuracy: locationMetadata.accuracy
+                            },
+                            timestamp: new Date().toISOString(),
+                            transactionId: transaction.id,
+                            status: 'learnt'
+                        };
+                        await kv.set(`learnt_location:${learntId}`, learntLocation);
+                        console.log(`[GeoMatch] No station match — created Learnt Location: ${learntId}`);
+                    }
+                }
+            } catch (err) {
+                console.error("Geolocation Matching Error:", err);
+            }
+        }
+
         // --- CUMULATIVE LITERS & INTEGRITY LOGIC (Phase 1 & 2) ---
         const vehicleId = transaction.vehicleId;
         const volume = Number(transaction.quantity) || Number(transaction.metadata?.fuelVolume) || 0;
@@ -1551,10 +1627,14 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
             isVerified: true, // Key Requirement: Anchor
             source: 'Fuel Log',
+            locationStatus: transaction.metadata?.locationStatus,
+            matchedStationId: transaction.metadata?.matchedStationId,
             metadata: {
                 receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
                 odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
-                originalTransactionId: transaction.id
+                originalTransactionId: transaction.id,
+                locationMetadata: transaction.metadata?.locationMetadata,
+                parentCompany: transaction.metadata?.parentCompany
             }
         };
 

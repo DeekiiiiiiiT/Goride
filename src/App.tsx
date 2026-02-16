@@ -151,12 +151,13 @@ function AppContent() {
         {currentPage === 'tier-config' && <TierConfigPage />}
         {currentPage === 'performance' && <PerformanceDashboard />}
         
-        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage) && (
+        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage) && (
           <FuelManagement 
               defaultTab={
                   currentPage === 'fuel-reconciliation' ? 'reconciliation' :
                   currentPage === 'fuel-reimbursements' ? 'reimbursements' :
                   currentPage === 'fuel-audit' ? 'audit' :
+                  currentPage === 'fuel-integrity-gap' ? 'integrity-gap' :
                   currentPage === 'fuel-cards' ? 'cards' :
                   currentPage === 'fuel-logs' ? 'logs' :
                   currentPage === 'fuel-reports' ? 'reports' :

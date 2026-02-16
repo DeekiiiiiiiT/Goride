@@ -1,372 +1,378 @@
-# Fleet Integrity — DriverPortal Bug Fix Implementation Plan
+# Plus Code-Anchored Geofence Radius Implementation
 
-## Summary of Issues
+## Problem Statement
 
-The primary symptom is a recurring console error:
+The geofence radius is currently hardcoded to 150m everywhere:
+- `spatialNormalization.ts` line 39: `station.location?.radius || 150`
+- `SpatialIntegrityMap.tsx` line 150: `feature.properties.radius || 150`
+- `VerifiedStationsTab.tsx` lines 316-317: static text `"High Accuracy"` / `"±150m Match Radius"`
+- `StationOverride` type has no `radius` or `geofenceRadius` field
+- `AddStationModal.tsx` builds `location: { lat, lng }` with no radius
+- `buildContext()` in `StationDatabaseView.tsx` constructs stations without radius
+- Plus Code is never used to derive geofence center or radius
+
+150m (300m diameter) covers ~3 city blocks, far too large for a gas station forecourt.
+
+## Goal
+
+Replace the hardcoded 150m with a **per-station configurable `geofenceRadius`** that:
+1. Defaults intelligently based on Plus Code precision (11-digit ~3m code = 50m radius)
+2. Is editable in the Add/Edit Station modal via a slider
+3. Is persisted to KV and flows through all save/load paths
+4. Is displayed in the Verified Stations table "Regional Efficiency" column
+5. Is used by the Spatial Integrity Map to draw correctly-sized circles
+6. Centers the geofence on Plus Code-decoded coordinates when available
+
+---
+
+## Phase 1: Data Model + Utility Functions
+
+**Goal:** Establish the `geofenceRadius` field in the type system and create the smart-default utility function that maps Plus Code precision to a sensible radius.
+
+### Step 1.1 — Add `geofenceRadius` to `StationProfile`
+
+**File:** `/types/station.ts`
+**Change:** Add `geofenceRadius?: number;` to the `StationProfile` interface, directly below the `plusCode` field.
+**Why below `plusCode`:** These are conceptually linked — the Plus Code determines the anchor point, and `geofenceRadius` determines the fence around it.
+
+```ts
+plusCode?: string;
+geofenceRadius?: number; // Configurable geofence radius in meters, derived from Plus Code precision
 ```
-❌ [Supabase] [Frontend Error] DriverPortal: Button is not defined
+
+### Step 1.2 — Add `geofenceRadius` to `StationOverride`
+
+**File:** `/types/station.ts`
+**Change:** Add `geofenceRadius?: number;` to the `StationOverride` interface, directly below the `plusCode` field.
+**Why:** Without this, the override (which is what gets saved to KV) can never persist a custom radius.
+
+```ts
+plusCode?: string;
+geofenceRadius?: number; // Configurable geofence radius in meters
 ```
 
-Exhaustive static analysis confirmed all Button imports are correct across the DriverPortal ErrorBoundary tree. The root cause is most likely a **stale bundler cache** rather than a source code issue.
+### Step 1.3 — Create `getDefaultGeofenceRadius()` utility
 
-During the investigation, **5 secondary bugs** were uncovered:
+**File:** `/utils/plusCode.ts`
+**Change:** Add a new exported function `getDefaultGeofenceRadius(plusCode?: string): number`
 
-| # | File | Bug Description |
-|---|------|-----------------|
-| 1 | `DriverExpenses.tsx` | Passes wrong prop names to `ReceiptUploader` (`preview`/`onFileChange` instead of `previewUrl`/`onFileSelect`, plus missing `onClear`) |
-| 2 | `DriverExpenses.tsx` | Passes a string via `.toFixed(2)` to `FuelCashInputs` where `currentVolume` expects `number` |
-| 3 | `FuelLogForm.tsx` | State reset on lines 95–101 omits `isFullTank`, leaving stale `true` state across form reuses |
-| 4 | `DriverOverview.tsx` | Unused `DriverFuelDisputes` import (dead code / tree-shaking hazard) |
-| 5 | `DriverDashboard.tsx` | Unused `Button` import (dead code — ironic given the "Button is not defined" error) |
+**Logic:**
+- If no Plus Code is provided or it's invalid → return `150` (legacy default, keeps backward compatibility)
+- Strip the Plus Code to just digits (remove `+` and any trailing `0`s)
+- Count the digit length to determine precision tier:
+  - `<= 8` digits (~275m cell) → `150`m (cell is already large, wide fence appropriate)
+  - `10` digits (~14m cell) → `75`m (medium precision, tighter fence)
+  - `11` digits (~3m cell) → `50`m (high precision, covers forecourt + parking)
+  - `>= 12` digits (~0.6m cell) → `30`m (ultra-high precision, tight around pumps)
 
----
+**Rationale for defaults:**
+- A typical gas station forecourt is ~30-60m across
+- Phone GPS drift under open sky is ~5-15m
+- 50m for an 11-digit code gives ~3m anchor precision + 50m buffer = catches real transactions while rejecting ones across the street
 
-## Phase 1: Reconnaissance & Contract Verification
+### Step 1.4 — Create `getPlusCodeCellSizeMeters()` utility
 
-**Objective:** Confirm the exact prop contracts, current usage, and file states before making any changes. This eliminates assumptions and ensures surgical edits.
+**File:** `/utils/plusCode.ts`
+**Change:** Add a new exported function that returns the approximate cell dimensions in meters for a given Plus Code. This is useful for contextual display ("Your Plus Code cell is ~3m x 3.5m") and for Phase 5 if we want to draw the cell rectangle.
 
-### Step 1.1 — Verify `ReceiptUploader` prop interface
-- **File:** `/components/driver-portal/expenses/ReceiptUploader.tsx`
-- **Action:** Read the `ReceiptUploaderProps` interface (lines 6–12)
-- **Expected contract:**
-  - `onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void`
-  - `onClear: () => void`
-  - `previewUrl: string | null`
-  - `isScanning: boolean`
-  - `fileName?: string`
-- **Verification:** Confirm these are the ONLY props the component destructures and uses internally
+**Logic:**
+- Use the existing `PAIR_CELL_SIZES` array and `GRID_ROWS`/`GRID_COLUMNS` constants
+- Convert degree-based cell sizes to approximate meters using `1 degree lat ≈ 111,000m` and `1 degree lng ≈ 111,000m * cos(lat)`
+- For Jamaica (~18°N latitude), `cos(18°) ≈ 0.951`, so `1 degree lng ≈ 105,561m`
+- Return `{ latMeters: number, lngMeters: number }` for the cell at the code's precision
 
-### Step 1.2 — Verify `FuelCashInputs` prop interface
-- **File:** `/components/driver-portal/expenses/FuelCashInputs.tsx`
-- **Action:** Read the `FuelCashInputsProps` interface (lines 7–18)
-- **Expected contract:**
-  - `currentVolume?: number` (NOT string)
-- **Verification:** Confirm `currentVolume` is used in arithmetic (line 29: `+ currentVolume`) which will produce `NaN` if a string is passed
+### Step 1.5 — Verification checklist
 
-### Step 1.3 — Verify `FuelLogForm` initial state shape
-- **File:** `/components/driver-portal/FuelLogForm.tsx`
-- **Action:** Read the `useState` initializer (lines 25–32) and the reset block (lines 95–101)
-- **Expected initial state:**
-  - `{ date, odometer, pricePerLiter, totalCost, notes, isFullTank: false }`
-- **Verification:** Confirm the reset block is missing `isFullTank: false`
-
-### Step 1.4 — Verify `DriverOverview.tsx` import usage
-- **File:** `/components/driver-portal/DriverOverview.tsx`
-- **Action:** Read line 16 (`import { DriverFuelDisputes }`) and search the entire file for any usage of `DriverFuelDisputes`
-- **Expected:** Zero references beyond the import statement
-
-### Step 1.5 — Verify `DriverDashboard.tsx` Button usage
-- **File:** `/components/driver-portal/DriverDashboard.tsx`
-- **Action:** Read line 3 (`import { Button }`) and search the entire file for any JSX usage of `<Button`
-- **Expected:** Zero `<Button` usages — the component delegates all UI to child components
+- [ ] `StationProfile.geofenceRadius` exists and is optional `number`
+- [ ] `StationOverride.geofenceRadius` exists and is optional `number`
+- [ ] `getDefaultGeofenceRadius()` returns correct values for each precision tier
+- [ ] `getPlusCodeCellSizeMeters()` returns reasonable meter values
+- [ ] No existing code is broken (both fields are optional, all existing paths unaffected)
 
 ---
 
-## Phase 2: Fix Bug #1 — ReceiptUploader Prop Name Mismatch
+## Phase 2: Persistence Pipeline
 
-**Objective:** Correct the 3 prop errors in `DriverExpenses.tsx` where `ReceiptUploader` is invoked with wrong prop names and a missing required prop.
+**Goal:** Wire `geofenceRadius` through every save/load/rebuild path so the field is never silently dropped (the same class of bug that previously affected `plusCode`).
 
-### Step 2.1 — Identify the exact call site
-- **File:** `/components/driver-portal/DriverExpenses.tsx`
-- **Location:** Lines 641–645
-- **Current (BROKEN):**
-  ```tsx
-  <ReceiptUploader 
-    preview={receiptPreview}
-    isScanning={isScanning}
-    onFileChange={handleFileChange}
-  />
-  ```
+### Step 2.1 — `buildContext()` else branch in `StationDatabaseView.tsx`
 
-### Step 2.2 — Map the correct prop names
-| Current (wrong) | Correct (per interface) | Notes |
-|-----------------|------------------------|-------|
-| `preview={receiptPreview}` | `previewUrl={receiptPreview}` | Renamed to match `previewUrl` |
-| `onFileChange={handleFileChange}` | `onFileSelect={handleFileChange}` | Renamed to match `onFileSelect` |
-| *(missing)* | `onClear={...}` | Required prop — needs a handler |
+**File:** `/components/fuel/stations/StationDatabaseView.tsx`
+**Location:** Inside `buildContext()`, the `else` branch (lines ~276-302) where station profiles are explicitly constructed from overrides.
+**Change:** Add `geofenceRadius: override.geofenceRadius,` to the object literal.
+**Why:** This is the exact same pattern that caused the Plus Code disappearing bug. If `geofenceRadius` is not listed here, it will be silently dropped every time the context rebuilds.
 
-### Step 2.3 — Implement the `onClear` handler logic
-- **Action:** The `onClear` callback should reset both `receiptFile` and `receiptPreview` states
-- **Implementation:**
-  ```tsx
-  onClear={() => { setReceiptFile(null); setReceiptPreview(null); }}
-  ```
-- **Rationale:** These are the two state variables set during `handleFileChange` (lines 139–142), so clearing both restores the "no receipt" state
+### Step 2.2 — `updateStationDetails()` in `StationDatabaseView.tsx`
 
-### Step 2.4 — Apply the edit
-- **Target:** Lines 641–645 of `/components/driver-portal/DriverExpenses.tsx`
-- **New code:**
-  ```tsx
-  <ReceiptUploader 
-    previewUrl={receiptPreview}
-    isScanning={isScanning}
-    onFileSelect={handleFileChange}
-    onClear={() => { setReceiptFile(null); setReceiptPreview(null); }}
-  />
-  ```
+**File:** `/components/fuel/stations/StationDatabaseView.tsx`
+**Location:** Inside `updateStationDetails()` (lines ~131-148), the explicit field mapping.
+**Change:** Add `geofenceRadius: details.geofenceRadius ?? current.geofenceRadius,` (use nullish coalescing `??` not `||` so that `0` is not treated as falsy — even though 0m radius is unlikely, correctness matters).
+**Why:** The inline profile edit path and any future edit path that calls `updateStationDetails` must not silently drop the field.
 
-### Step 2.5 — Verify no other `ReceiptUploader` call sites exist
-- **Action:** Search all files for `<ReceiptUploader` to confirm this is the only usage
-- **Expected:** Only one call site in `DriverExpenses.tsx`
+### Step 2.3 — `onUpdate` handler (modal edit) in `StationDatabaseView.tsx`
 
----
+**File:** `/components/fuel/stations/StationDatabaseView.tsx`
+**Location:** The `onUpdate` prop passed to `<AddStationModal>` (around line ~490+).
+**Current code:** `const updated = { ...current, ...stationData, id, status: ..., dataSource: ... }`
+**Analysis:** The `...stationData` spread WILL include `geofenceRadius` if the modal sends it. But if the modal does NOT send it (e.g., user didn't touch the slider), `geofenceRadius` from `...current` would be overwritten to `undefined`. We need to be explicit:
+**Change:** Add `geofenceRadius: stationData.geofenceRadius ?? current.geofenceRadius,` after the `dataSource` line.
 
-## Phase 3: Fix Bug #2 — String-to-Number Type Coercion for `currentVolume`
+### Step 2.4 — `handleSubmit()` in `AddStationModal.tsx`
 
-**Objective:** Fix the type mismatch where `DriverExpenses.tsx` passes a string (from `.toFixed(2)`) to `FuelCashInputs`'s `currentVolume` prop which expects `number`.
+**File:** `/components/fuel/stations/AddStationModal.tsx`
+**Location:** Inside `handleSubmit()`, the `newStation` object construction (lines ~345-360).
+**Change:** Add `geofenceRadius` to the `newStation` object. The value comes from the form state (to be added in Phase 3). For now, use `getDefaultGeofenceRadius(finalPlusCode)` as the value so that even before the UI slider exists, new stations get a smart radius.
+**Import:** Add `getDefaultGeofenceRadius` to the import from `plusCode.ts`.
 
-### Step 3.1 — Identify the exact problem expression
-- **File:** `/components/driver-portal/DriverExpenses.tsx`
-- **Location:** Lines 624–629
-- **Current (BROKEN):**
-  ```tsx
-  currentVolume={(() => {
-      const amt = parseFloat(amount || '0');
-      const price = parseFloat(fuelEntry.pricePerLiter || '0');
-      if (amt > 0 && price > 0) return (amt / price).toFixed(2);  // returns STRING
-      return '0.00';  // also STRING
-  })()}
-  ```
-- **Root cause:** `.toFixed(2)` returns `string`, not `number`. The fallback `'0.00'` is also a string.
+### Step 2.5 — `handleImportStations()` in `StationDatabaseView.tsx`
 
-### Step 3.2 — Understand the downstream impact
-- **File:** `FuelCashInputs.tsx`, line 29:
-  ```tsx
-  const totalLitersAfter = (tankStatus?.currentCumulative || 0) + currentVolume;
-  ```
-- **Impact:** If `currentVolume` is the string `"12.50"`, this becomes `0 + "12.50"` = `"012.50"` (string concatenation), causing the tank progress bar and overflow detection to break silently
+**File:** `/components/fuel/stations/StationDatabaseView.tsx`
+**Location:** Inside `handleImportStations()`, where imported stations are constructed.
+**Change:** If the imported CSV item has a `plusCode`, set `geofenceRadius: getDefaultGeofenceRadius(item.plusCode)`. If not, omit it (will fall back to 150 at render time).
+**Import:** Add `getDefaultGeofenceRadius` to the import from `plusCode.ts`.
 
-### Step 3.3 — Apply the fix
-- **Target:** Lines 624–629 of `/components/driver-portal/DriverExpenses.tsx`
-- **Strategy:** Wrap the `.toFixed(2)` result in `Number()` or `parseFloat()`, and change the fallback from `'0.00'` to `0`
-- **New code:**
-  ```tsx
-  currentVolume={(() => {
-      const amt = parseFloat(amount || '0');
-      const price = parseFloat(fuelEntry.pricePerLiter || '0');
-      if (amt > 0 && price > 0) return Number((amt / price).toFixed(2));
-      return 0;
-  })()}
-  ```
+### Step 2.6 — Verification checklist
 
-### Step 3.4 — Verify type safety
-- **Check:** Confirm `FuelCashInputs` prop interface declares `currentVolume?: number` (default `0`)
-- **Check:** Confirm all arithmetic downstream (`+`, `*`, `/`, comparisons) will now operate on `number` types
+- [ ] Create a station via modal with a Plus Code → `geofenceRadius` is saved to KV
+- [ ] Close and reopen the edit modal → `geofenceRadius` is pre-filled correctly
+- [ ] `buildContext()` includes `geofenceRadius` for override-only stations
+- [ ] `updateStationDetails()` preserves `geofenceRadius` through inline edits
+- [ ] `onUpdate` handler preserves `geofenceRadius` through modal edits
+- [ ] CSV imports with Plus Codes get a smart default radius
+- [ ] Stations without a Plus Code still work (no regressions)
 
 ---
 
-## Phase 4: Fix Bug #3 — FuelLogForm State Reset Missing `isFullTank`
+## Phase 3: Edit Modal UI — Geofence Radius Control
 
-**Objective:** Add the missing `isFullTank: false` to the form state reset block in `FuelLogForm.tsx` to prevent stale state across consecutive form submissions.
+**Goal:** Add a visible, intuitive control to `AddStationModal.tsx` that lets users set and adjust the geofence radius, with smart defaults driven by Plus Code precision.
 
-### Step 4.1 — Identify the state shape and reset gap
-- **File:** `/components/driver-portal/FuelLogForm.tsx`
-- **Initial state (line 25–32):**
-  ```tsx
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    odometer: '',
-    pricePerLiter: '',
-    totalCost: '',
-    notes: '',
-    isFullTank: false   // ← EXISTS in initial state
-  });
-  ```
-- **Reset block (lines 95–101):**
-  ```tsx
-  setFormData({
-      date: new Date().toISOString().split('T')[0],
-      odometer: '',
-      pricePerLiter: '',
-      totalCost: '',
-      notes: ''
-      // ← isFullTank MISSING
-  });
-  ```
+### Step 3.1 — Add `geofenceRadius` to form state
 
-### Step 4.2 — Understand the impact of the missing reset
-- **Scenario:** Driver fills a fuel log and checks "Full Tank" (sets `isFullTank: true`)
-- **Submits the form** → reset runs → `isFullTank` stays `true` in state
-- **Opens a new fuel log** → "Filled to capacity (Full Tank)" checkbox appears pre-checked
-- **Impact:** If driver submits without noticing, the cumulative tank counter incorrectly resets, corrupting fuel reconciliation data
-- **Severity:** HIGH — affects SHA-256 signed fuel integrity calculations
+**File:** `/components/fuel/stations/AddStationModal.tsx`
+**Change:** Add a new state variable `const [geofenceRadius, setGeofenceRadius] = useState<number | null>(null);`
+**Why `null` default:** `null` means "user hasn't explicitly set a value yet, use the smart default." This lets us distinguish between "user chose 50m" vs "system defaulted to 50m."
 
-### Step 4.3 — Apply the fix
-- **Target:** Lines 95–101 of `/components/driver-portal/FuelLogForm.tsx`
-- **New code:**
-  ```tsx
-  setFormData({
-      date: new Date().toISOString().split('T')[0],
-      odometer: '',
-      pricePerLiter: '',
-      totalCost: '',
-      notes: '',
-      isFullTank: false
-  });
-  ```
+### Step 3.2 — Pre-fill `geofenceRadius` in edit mode
 
-### Step 4.4 — Verify no other state reset paths exist
-- **Action:** Search `FuelLogForm.tsx` for other places where `setFormData` is called with an object literal
-- **Expected:** Only the one reset block after `onOpenChange(false)` on line 92
+**File:** `/components/fuel/stations/AddStationModal.tsx`
+**Location:** Inside the `useEffect` that runs when `isOpen` changes (lines ~63-101).
+**Change:** In the `if (editStation)` branch, add:
+```ts
+setGeofenceRadius(editStation.geofenceRadius ?? null);
+```
+**In the `else` (reset) branch, add:**
+```ts
+setGeofenceRadius(null);
+```
 
----
+### Step 3.3 — Auto-set radius when "Verify GPS" completes
 
-## Phase 5: Fix Bug #4 — Remove Unused `DriverFuelDisputes` Import from DriverOverview
+**File:** `/components/fuel/stations/AddStationModal.tsx`
+**Location:** At the END of `handleVerifyFromPlusCode()`, after coordinates and address are populated.
+**Change:** If `geofenceRadius` is still `null` (user hasn't manually set it), auto-calculate:
+```ts
+if (geofenceRadius === null) {
+  setGeofenceRadius(getDefaultGeofenceRadius(fullCode));
+}
+```
+**Why only when null:** If the user previously set a custom radius (e.g., 75m for a truck stop), we don't overwrite it just because they re-verified the GPS.
 
-**Objective:** Remove the dead `DriverFuelDisputes` import from `DriverOverview.tsx` to eliminate potential tree-shaking issues and dead module initialization.
+### Step 3.4 — Add the Geofence Radius UI control
 
-### Step 5.1 — Confirm the import is unused
-- **File:** `/components/driver-portal/DriverOverview.tsx`
-- **Line 16:** `import { DriverFuelDisputes } from './DriverFuelDisputes';`
-- **Action:** Search the entire file for `DriverFuelDisputes` — expected only the import line
+**File:** `/components/fuel/stations/AddStationModal.tsx`
+**Location:** Below the Plus Code / GPS section, before the submit button.
+**UI Design:**
+```
+[Geofence Radius]
+[===========O--------] 50m
+Recommended: 50m (11-digit Plus Code, ~3m precision)
+```
 
-### Step 5.2 — Assess side-effect risk
-- **Check:** Does `DriverFuelDisputes.tsx` have module-level side effects (e.g., global event listeners, API calls at import time)?
-- **Expected:** No — it's a standard React component export
-- **Risk:** NONE — safe to remove
+**Components needed:**
+- A `<Label>` with text "Geofence Radius (meters)" and a tooltip explaining what it is
+- A range `<input type="range">` (HTML native slider) with `min={10}` `max={500}` `step={5}`
+- A numeric `<Input>` beside the slider showing the exact value (editable)
+- A contextual hint line showing the smart default and Plus Code precision
+- The hint text changes dynamically based on the Plus Code input:
+  - No Plus Code: "Default: 150m (no Plus Code anchor)"
+  - 11-digit: "Recommended: 50m (11-digit code, ~3m precision)"
+  - 10-digit: "Recommended: 75m (10-digit code, ~14m precision)"
 
-### Step 5.3 — Apply the fix
-- **Target:** Line 16 of `/components/driver-portal/DriverOverview.tsx`
-- **Action:** Delete the entire import line
-- **Verify:** No other imports are affected (line 15 ends the lucide-react import, line 17 starts the Card import — removing line 16 won't break adjacent imports)
+### Step 3.5 — Include `geofenceRadius` in submit
 
----
+**File:** `/components/fuel/stations/AddStationModal.tsx`
+**Location:** Inside `handleSubmit()`, the `newStation` object.
+**Change:** Add:
+```ts
+geofenceRadius: geofenceRadius ?? getDefaultGeofenceRadius(finalPlusCode),
+```
+This ensures that even if the user never touched the slider, the station still gets a smart default.
 
-## Phase 6: Fix Bug #5 — Remove Unused `Button` Import from DriverDashboard
+### Step 3.6 — Reset on form clear
 
-**Objective:** Remove the unused `Button` import from `DriverDashboard.tsx`. This is particularly notable because the "Button is not defined" error originates from the DriverPortal tree, and having an unused Button import in the parent component may confuse the bundler's dependency graph.
+**File:** `/components/fuel/stations/AddStationModal.tsx`
+**Location:** The form reset logic in the `useEffect` (the `else` branch for non-edit mode).
+**Change:** `setGeofenceRadius(null);` — already covered in Step 3.2 but verify it's in both branches.
 
-### Step 6.1 — Confirm Button is not used in DriverDashboard JSX
-- **File:** `/components/driver-portal/DriverDashboard.tsx`
-- **Line 3:** `import { Button } from "../ui/button";`
-- **Action:** Search the entire file for `<Button` or `Button` usage beyond the import
-- **Expected:** Zero JSX usages — all button rendering is delegated to child components (`DriverOverview`, `FuelLogForm`, `ServiceRequestForm`, etc.)
+### Step 3.7 — Verification checklist
 
-### Step 6.2 — Assess bundler cache implications
-- **Rationale:** The unused import forces the bundler to include `Button` in the DriverDashboard module scope. If the bundler cache becomes stale, it may fail to resolve this import correctly, potentially contributing to the "Button is not defined" error
-- **Removing it** eliminates one unnecessary dependency edge in the module graph
-
-### Step 6.3 — Apply the fix
-- **Target:** Line 3 of `/components/driver-portal/DriverDashboard.tsx`
-- **Action:** Delete the entire import line
-- **Verify:** The adjacent imports (line 2: `Card, CardContent` and line 4: `Badge`) remain intact
+- [ ] Open "Add Station" modal → slider is hidden/shows default until Plus Code is entered
+- [ ] Enter an 11-digit Plus Code → hit Verify GPS → slider auto-sets to 50m
+- [ ] Enter a 10-digit Plus Code → hit Verify GPS → slider auto-sets to 75m
+- [ ] Manually drag slider to 100m → re-verify GPS → slider stays at 100m (no overwrite)
+- [ ] Edit existing station with saved radius → slider pre-fills correctly
+- [ ] Submit → station saves with correct `geofenceRadius` value
+- [ ] Clear/reset form → slider resets to null/default
 
 ---
 
-## Phase 7: Force-Touch Bundler Cache Bust
+## Phase 4: Verified Stations Table — Dynamic Radius Display
 
-**Objective:** Add a cache-busting comment to all files in the DriverPortal ErrorBoundary tree that import `Button` from `@/components/ui/button`. This forces the bundler to recompile these modules and eliminates stale cached versions.
+**Goal:** Replace the hardcoded "High Accuracy / ±150m Match Radius" in the Regional Efficiency column with real data from the station's `geofenceRadius` and Plus Code precision.
 
-### Step 7.1 — Identify all affected files
-- **Action:** Search all files under `/components/driver-portal/` for `import.*Button.*from.*button`
-- **Expected files (Button importers):**
-  1. `DriverExpenses.tsx` (line 3)
-  2. `FuelLogForm.tsx` (line 4)
-  3. `DriverOverview.tsx` (line 12)
-  4. `DriverLayout.tsx` (Button import)
-  5. `DriverClaims.tsx` (Button import)
-  6. `DriverProfile.tsx` (Button import)
-  7. `DriverHistory.tsx` (Button import)
-  8. `DriverEarnings.tsx` (Button import)
-  9. `DriverEquipment.tsx` (Button import)
-  10. `DriverTrips.tsx` (Button import)
-  11. `WeeklyCheckInModal.tsx` (Button import)
-  12. `ServiceRequestForm.tsx` (Button import)
-  13. `expenses/ReceiptUploader.tsx` (line 2)
-  14. `expenses/PaymentMethodSelector.tsx` (Button import)
-  15. `expenses/GasCardSummary.tsx` (Button import)
-  16. `views/PortalHome.tsx` (Button import)
-  17. `views/ReimbursementMenu.tsx` (Button import)
-  18. `ui/DriverHeader.tsx` (Button import)
-  19. `DriverFuelStats.tsx` (Button import)
-  20. `DriverFuelDisputes.tsx` (Button import)
+### Step 4.1 — Import `getPlusCodePrecision` and `getDefaultGeofenceRadius`
 
-### Step 7.2 — Design the cache-bust comment
-- **Format:** `// cache-bust: force recompile — 2026-02-10`
-- **Placement:** Insert as the FIRST line of each file (before all imports)
-- **Rationale:** Adding content to line 1 shifts all line numbers, forcing a complete reparse
+**File:** `/components/fuel/stations/VerifiedStationsTab.tsx`
+**Change:** Add to the import from `plusCode.ts`:
+```ts
+import { encodePlusCode, getPlusCodePrecision, getDefaultGeofenceRadius } from '../../../utils/plusCode';
+```
 
-### Step 7.3 — Apply cache-bust to files already edited in Phases 2–6
-- The files edited in Phases 2–6 (`DriverExpenses.tsx`, `FuelLogForm.tsx`, `DriverOverview.tsx`, `DriverDashboard.tsx`) will already be recompiled due to content changes
-- **Action:** Still add the cache-bust comment for consistency and documentation
+### Step 4.2 — Replace the hardcoded table cell
 
-### Step 7.4 — Apply cache-bust to remaining unedited Button-importing files
-- **Action:** For each file in the list from Step 7.1 that was NOT edited in Phases 2–6, add the cache-bust comment as line 1
-- **Priority files** (most likely to hold stale cache):
-  1. `DriverLayout.tsx` — the layout wrapper, often cached aggressively
-  2. `views/PortalHome.tsx` — entry point view
-  3. `ui/DriverHeader.tsx` — shared header component
+**File:** `/components/fuel/stations/VerifiedStationsTab.tsx`
+**Location:** Lines 314-318, the `<TableCell>` for Regional Efficiency.
+**Current code:**
+```tsx
+<TableCell>
+  <div className="flex flex-col text-xs">
+    <span className="text-slate-900 font-medium">High Accuracy</span>
+    <span className="text-slate-500 text-[10px]">±150m Match Radius</span>
+  </div>
+</TableCell>
+```
 
-### Step 7.5 — Apply cache-bust to the shared UI Button itself
-- **File:** `/components/ui/button.tsx`
-- **Action:** Add the cache-bust comment as line 1
-- **Rationale:** If the source-of-truth `button.tsx` file is re-touched, the bundler will invalidate ALL downstream dependents
+**New code logic:**
+```tsx
+const radius = s.geofenceRadius || getDefaultGeofenceRadius(s.plusCode);
+const precision = s.plusCode ? getPlusCodePrecision(s.plusCode) : null;
+const isCustom = !!s.geofenceRadius;
+const tierColor = radius <= 50 ? 'text-emerald-600' : radius <= 100 ? 'text-amber-600' : 'text-red-600';
+const tierLabel = radius <= 50 ? 'Tight' : radius <= 100 ? 'Standard' : 'Wide';
+const tierBg = radius <= 50 ? 'bg-emerald-50' : radius <= 100 ? 'bg-amber-50' : 'bg-red-50';
+```
 
----
+**Display:**
+- Line 1: Tier label (e.g., "Tight Guardrail") with color coding
+- Line 2: `±{radius}m` with font-mono, color-coded
+- Line 3 (optional): Plus Code precision if available (e.g., "~3m anchor precision")
+- If the radius is the legacy 150m default and there's no explicit `geofenceRadius`, show a subtle "Legacy Default" indicator
 
-## Phase 8: Final Verification & Regression Check
+### Step 4.3 — Update the table header label
 
-**Objective:** Verify all 5 bugs are fixed, confirm the cache-bust resolved the primary error, and ensure no regressions were introduced.
+**File:** `/components/fuel/stations/VerifiedStationsTab.tsx`
+**Location:** The `<TableHead>` for "Regional Efficiency" (line ~250).
+**Change:** Rename to "Geofence Radius" to be clearer about what the column shows.
 
-### Step 8.1 — Static analysis: ReceiptUploader props
-- **Check:** Read `DriverExpenses.tsx` and confirm:
-  - `previewUrl={receiptPreview}` (not `preview`)
-  - `onFileSelect={handleFileChange}` (not `onFileChange`)
-  - `onClear={() => { ... }}` is present
-- **Cross-reference:** Read `ReceiptUploader.tsx` interface and confirm 1:1 match
+### Step 4.4 — Verification checklist
 
-### Step 8.2 — Static analysis: FuelCashInputs currentVolume type
-- **Check:** Read `DriverExpenses.tsx` and confirm:
-  - `currentVolume` expression returns `Number(...)` or a plain `number`
-  - No `.toFixed()` in the return path (or wrapped in `Number()`)
-  - Fallback is `0` (not `'0.00'`)
-
-### Step 8.3 — Static analysis: FuelLogForm isFullTank reset
-- **Check:** Read `FuelLogForm.tsx` reset block and confirm:
-  - `isFullTank: false` is present in the `setFormData({...})` call
-
-### Step 8.4 — Static analysis: Dead imports removed
-- **Check:** Read `DriverOverview.tsx` — confirm no `DriverFuelDisputes` import
-- **Check:** Read `DriverDashboard.tsx` — confirm no `Button` import
-
-### Step 8.5 — Static analysis: Cache-bust comments
-- **Check:** Spot-check 3–5 files from the Phase 7 list to confirm cache-bust comments are present
-
-### Step 8.6 — Runtime verification checklist
-- [ ] Open the Driver Portal — no "Button is not defined" console error
-- [ ] Navigate to Expenses → Log Expense → Fuel → reach entry_details
-- [ ] Upload a receipt → verify receipt preview appears (ReceiptUploader props working)
-- [ ] Clear the receipt → verify it resets (onClear working)
-- [ ] Enter $50 amount, $1.25/L price → verify "40 Liters" appears (not "NaN" or broken tank bar)
-- [ ] Submit a fuel log with "Full Tank" checked → open a new log → verify checkbox is unchecked
-- [ ] Check console for any new errors or warnings
+- [ ] Station with `geofenceRadius: 50` shows "Tight Guardrail / ±50m" in green
+- [ ] Station with `geofenceRadius: 150` shows "Wide Guardrail / ±150m" in red
+- [ ] Station without `geofenceRadius` (legacy) shows default based on Plus Code
+- [ ] Station without Plus Code or radius shows "±150m / Legacy Default"
+- [ ] Plus Code precision is shown when available
+- [ ] Column header says "Geofence Radius"
 
 ---
 
-## File Change Matrix
+## Phase 5: Spatial Integrity Map — Render Real Geofences
 
-| Phase | File | Change Type | Lines Affected |
-|-------|------|-------------|----------------|
-| 2 | `DriverExpenses.tsx` | Edit props | 641–645 |
-| 3 | `DriverExpenses.tsx` | Fix type coercion | 624–629 |
-| 4 | `FuelLogForm.tsx` | Add missing state key | 95–101 |
-| 5 | `DriverOverview.tsx` | Remove import | 16 |
-| 6 | `DriverDashboard.tsx` | Remove import | 3 |
-| 7 | 20+ files | Add cache-bust comment | Line 1 |
+**Goal:** Make the Spatial Audit map draw geofence circles using the station's actual `geofenceRadius` and, when a Plus Code exists, center the circle on the Plus Code-decoded coordinates (the true source of truth).
+
+### Step 5.1 — Update `normalizeStationFeature()` in `spatialNormalization.ts`
+
+**File:** `/utils/spatialNormalization.ts`
+**Location:** `normalizeStationFeature()` function (lines 24-45).
+**Changes:**
+1. Import `decodePlusCode` and `getDefaultGeofenceRadius` from `./plusCode`
+2. **Radius:** Change `radius: station.location?.radius || 150` to:
+   ```ts
+   radius: station.geofenceRadius ?? getDefaultGeofenceRadius(station.plusCode),
+   ```
+3. **Coordinates (geofence center):** If the station has a Plus Code, decode it and use those coordinates as the geofence center. The `station.location` coordinates may have been manually entered or drifted, but the Plus Code is the canonical anchor:
+   ```ts
+   // Prefer Plus Code-decoded coordinates for geofence center (source of truth)
+   let geofenceLat = lat;
+   let geofenceLng = lng;
+   if (station.plusCode) {
+     const decoded = decodePlusCode(station.plusCode);
+     if (decoded) {
+       geofenceLat = decoded.lat;
+       geofenceLng = decoded.lng;
+     }
+   }
+   ```
+4. Add `geofenceCenter: [geofenceLat, geofenceLng]` and `hasPlusCodeAnchor: !!station.plusCode` to `properties`
+
+### Step 5.2 — Update `normalizeGeofenceFeature()` in `spatialNormalization.ts`
+
+**File:** `/utils/spatialNormalization.ts`
+**Location:** `normalizeGeofenceFeature()` function (lines 99-115).
+**Change:** Same radius and coordinate logic as Step 5.1 for consistency.
+
+### Step 5.3 — Update geofence drawing in `SpatialIntegrityMap.tsx`
+
+**File:** `/components/fuel/stations/SpatialIntegrityMap.tsx`
+**Location:** The station geofence block (lines 147-162).
+**Changes:**
+1. Use `feature.properties.geofenceCenter` as the circle center instead of `[lat, lng]` (the station pin location). This means the pin and the geofence may be in slightly different positions — that's correct, because the pin shows where the station was registered and the geofence shows the Plus Code anchor.
+2. Remove the `|| 150` fallback from `const radius = feature.properties.radius || 150;` — the normalization layer now handles defaults.
+3. Differentiate visual style:
+   - Plus Code-anchored geofence: solid border, slightly thicker weight
+   - Non-Plus Code geofence: dashed border (less trustworthy anchor)
+
+### Step 5.4 — Update station popup in `SpatialIntegrityMap.tsx`
+
+**File:** `/components/fuel/stations/SpatialIntegrityMap.tsx`
+**Location:** The station popup HTML (lines 182-208).
+**Changes:**
+1. Show "Guardrail Radius: {radius}m" with the actual value (already works, but now shows real data)
+2. Add a line for Plus Code precision if available: "Anchor Precision: ~3m (11-digit)"
+3. Add an indicator: "Plus Code Anchored" badge (green) or "Coordinate Only" badge (amber)
+4. Show whether the radius was explicitly set or auto-defaulted
+
+### Step 5.5 — Verification checklist
+
+- [ ] Station with Plus Code + `geofenceRadius: 50` → 50m circle centered on Plus Code coordinates
+- [ ] Station without Plus Code → circle centered on `station.location`, radius from `geofenceRadius` or 150m default
+- [ ] Station with Plus Code but no explicit radius → auto-defaults based on Plus Code precision
+- [ ] Geofence visually covers just the gas station area (not 3 city blocks)
+- [ ] Popup shows correct radius, Plus Code precision, and anchor type
+- [ ] Drift lines still connect fueling snapshots to station pin (not to geofence center)
+- [ ] No Leaflet rendering errors or crashes
+- [ ] Dead Zones and Heatmap layers unaffected
+- [ ] Legend still accurate
 
 ---
 
-## Risk Assessment
+## File Change Summary
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| `onClear` handler has wrong reset logic | Low | Medium | Reset same state vars as `handleFileChange` sets |
-| `Number()` wrapping changes computed volume slightly | None | None | `Number("12.50")` === `12.5` — identical float value |
-| Removing dead imports breaks something | None | None | Confirmed zero usages via static analysis |
-| Cache-bust comments cause lint warnings | Low | Low | Standard JS comment — no linter conflicts |
-| Editing 20+ files introduces typos | Low | High | Each edit is mechanical (insert 1 line) — use automation |
+| File | Phase | Changes |
+|------|-------|---------|
+| `/types/station.ts` | 1 | Add `geofenceRadius` to both interfaces |
+| `/utils/plusCode.ts` | 1 | Add `getDefaultGeofenceRadius()` and `getPlusCodeCellSizeMeters()` |
+| `/components/fuel/stations/StationDatabaseView.tsx` | 2 | Wire `geofenceRadius` through `buildContext`, `updateStationDetails`, `onUpdate`, `handleImportStations` |
+| `/components/fuel/stations/AddStationModal.tsx` | 2, 3 | Include `geofenceRadius` in submit; add slider UI + form state |
+| `/components/fuel/stations/VerifiedStationsTab.tsx` | 4 | Replace hardcoded "±150m" with dynamic radius display |
+| `/utils/spatialNormalization.ts` | 5 | Use `geofenceRadius` and Plus Code center in feature normalization |
+| `/components/fuel/stations/SpatialIntegrityMap.tsx` | 5 | Draw geofences with real radius and Plus Code center; update popup |
 
 ---
 
-*Plan created: 2026-02-10*
-*Status: AWAITING PHASE 1 APPROVAL*
+## Risk Mitigation
+
+- **Backward compatibility:** All fields are optional with sensible fallbacks. Existing stations without `geofenceRadius` get auto-defaults via `getDefaultGeofenceRadius()`.
+- **No data loss:** We use `??` (nullish coalescing) not `||` for radius to avoid treating `0` as falsy.
+- **Same bug class as Plus Code:** Every explicit object construction (`buildContext` else branch, `updateStationDetails`, `onUpdate`) must include `geofenceRadius` — we check all paths in Phase 2.
+- **Map stability:** Leaflet cleanup fixes from previous work remain intact. No changes to map initialization or teardown.

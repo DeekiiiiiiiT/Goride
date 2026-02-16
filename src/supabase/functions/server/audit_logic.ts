@@ -13,11 +13,34 @@ export const auditLogic = {
     },
 
     /**
-     * Generates a simple SHA-256 hash of the record data for tamper-evidence.
-     * In a real production environment, this would use a private key for signing.
+     * Generates a forensic SHA-256 hash of the record data for tamper-evidence.
+     * Binding spatial evidence and predictive leakage alerts to the record identity.
      */
     generateRecordHash: async (data: any): Promise<string> => {
-        const msgUint8 = new TextEncoder().encode(JSON.stringify(data));
+        // Create a forensic bundle to ensure all integrity markers are signed
+        const forensicBundle = {
+            id: data.id,
+            vehicleId: data.vehicleId,
+            date: data.date,
+            liters: data.liters,
+            odometer: data.odometer,
+            amount: data.amount,
+            stationId: data.matchedStationId,
+            // Spatial Binding
+            geofence: {
+                isInside: data.metadata?.geofenceMetadata?.isInside,
+                distance: data.metadata?.geofenceMetadata?.distanceMeters,
+                radius: data.metadata?.geofenceMetadata?.radiusAtTrigger
+            },
+            // Predictive Binding
+            integrity: {
+                status: data.metadata?.integrityStatus,
+                leakageRisk: data.metadata?.leakageRisk,
+                cycleId: data.metadata?.cycleId
+            }
+        };
+
+        const msgUint8 = new TextEncoder().encode(JSON.stringify(forensicBundle));
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');

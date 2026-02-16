@@ -1,6 +1,7 @@
 import { FuelEntry } from '../types/fuel';
 import { StationProfile, StationStats } from '../types/station';
 import { subDays, isAfter } from 'date-fns';
+import { encodePlusCode } from './plusCode';
 
 // Helper to generate a simple hash for ID
 export const generateStationId = (name: string, address: string): string => {
@@ -50,13 +51,17 @@ export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
 
   // 1. Group logs by normalized location
   logs.forEach(log => {
-    if (!log.location) return;
-    
-    // Skip logs with no meaningful location data
-    if (log.location === 'Unknown' || log.location === 'Manual Entry') return;
+    // Skip manual entries with no data
+    if (log.location === 'Manual Entry' && !log.amount) return;
 
-    const name = normalizeStationName(log.location);
-    const address = log.stationAddress || 'Unknown Address';
+    let name = normalizeStationName(log.location || 'Unidentified Station');
+    let address = log.stationAddress || 'Unknown Address';
+    
+    // Handle persistent "Unknown" entries
+    if (name === 'Unknown' || !name) {
+      name = 'Unidentified Station';
+    }
+
     const id = generateStationId(name, address);
 
     if (!stationMap.has(id)) {
@@ -110,6 +115,7 @@ export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
       address: data.address,
       brand: data.brand,
       location: { lat, lng },
+      plusCode: encodePlusCode(lat, lng, 11),
       isPreferred: false, // Default
       stats: {
         avgPrice,
@@ -131,7 +137,7 @@ export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
 };
 
 export const calculateRegionalStats = (stations: StationProfile[]) => {
-  const activeStations = stations.filter(s => s.stats.lastPrice > 0);
+  const activeStations = stations.filter(s => s?.stats?.lastPrice && s.stats.lastPrice > 0);
   if (activeStations.length === 0) return { minPrice: 0, maxPrice: 0, avgPrice: 0 };
 
   const prices = activeStations.map(s => s.stats.lastPrice);
@@ -194,4 +200,22 @@ export const calculateDashboardKPIs = (logs: FuelEntry[], regionalMinPrice: numb
     potentialSavings: Math.max(0, potentialSavings), // Can't be negative
     totalSpendThisWeek: totalCostThisWeek
   };
+};
+
+/**
+ * Haversine formula to calculate distance between two coordinates in meters
+ */
+export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
 };

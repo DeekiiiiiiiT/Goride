@@ -3,6 +3,7 @@ import { FuelEntry } from '../../../types/fuel';
 import { Button } from '../../ui/button';
 import { Download } from 'lucide-react';
 import { downloadCSV as globalDownloadCSV } from '../../../utils/export';
+import { encodePlusCode } from '../../../utils/plusCode';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -19,20 +20,31 @@ export function TransactionExport({ logs, filename = 'transactions-export' }: Tr
   
   const downloadCSV = async () => {
     // Map Data
-    const rows = logs.map(log => ({
-      Date: new Date(log.date).toLocaleDateString(),
-      Time: log.time || '',
-      Location: log.location || '',
-      Station_Address: log.stationAddress || '',
-      Vehicle_ID: log.vehicleId || '',
-      Driver_ID: log.driverId || '',
-      Liters: log.liters || 0,
-      Price_Per_Liter: log.pricePerLiter || 0,
-      Total_Amount: log.amount || 0,
-      Odometer: log.odometer || '',
-      Payment_Source: log.paymentSource || '',
-      Entry_Type: log.type || ''
-    }));
+    const rows = logs.map(log => {
+      const geo = log.metadata?.locationMetadata || log.locationMetadata;
+      const lat = geo?.lat;
+      const lng = geo?.lng;
+      return {
+        Date: new Date(log.date).toLocaleDateString(),
+        Time: log.time || '',
+        Location: log.location || '',
+        Station_Address: log.stationAddress || '',
+        Vehicle_ID: log.vehicleId || '',
+        Driver_ID: log.driverId || '',
+        Liters: log.liters || 0,
+        Price_Per_Liter: log.pricePerLiter || 0,
+        Total_Amount: log.amount || 0,
+        Odometer: log.odometer || '',
+        Payment_Source: log.paymentSource || '',
+        Entry_Type: log.type || '',
+        GPS_Latitude: lat || 'N/A',
+        GPS_Longitude: lng || 'N/A',
+        GPS_Accuracy: geo?.accuracy || 'N/A',
+        Plus_Code: (lat && lng) ? encodePlusCode(lat, lng, 11) : 'N/A',
+        Spatial_Verified: log.matchedStationId ? 'YES' : 'NO',
+        Audit_Check: log.metadata?.integrityStatus || 'unverified'
+      };
+    });
 
     await globalDownloadCSV(rows, filename, { checksum: true });
   };

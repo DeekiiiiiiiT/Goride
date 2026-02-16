@@ -1,18 +1,28 @@
+// cache-bust: v1.0.3 - Explicitly standardizing Badge import
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FuelEntry } from '../../../types/fuel';
-import { StationAnalyticsContextType, StationProfile, StationOverride } from '../../../types/station';
-import { aggregateStations, calculateRegionalStats, generateStationId } from '../../../utils/stationUtils';
+import { StationProfile, StationOverride } from '../../../types/station';
+import { aggregateStations, calculateRegionalStats, generateStationId, normalizeStationName } from '../../../utils/stationUtils';
+import { getDefaultGeofenceRadius } from '../../../utils/plusCode';
 import { StationList } from './StationList';
 import { StationDetailView } from './StationDetailView';
 import { StationImportWizard } from './StationImportWizard';
 import { StationExport } from './StationExport';
 import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
 import { ParentCompanyManager } from './ParentCompanyManager';
+import { VerifiedStationsTab } from './VerifiedStationsTab';
+import { LearntLocationsTab } from './LearntLocationsTab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Switch } from '../../ui/switch';
 import { Label } from '../../ui/label';
 import { Button } from '../../ui/button';
-import { Star, Loader2, Upload, Trash2 } from 'lucide-react';
+import { Badge } from '../../ui/badge';
+import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, Map as MapIcon } from 'lucide-react';
+import { SpatialIntegrityMap } from './SpatialIntegrityMap';
+import { fuelService } from '../../../services/fuelService';
+import { api } from '../../../services/api';
+import { toast } from 'sonner@2.0.3';
+import { AddStationModal } from './AddStationModal';
 
 interface StationDatabaseViewProps {
   logs: FuelEntry[];
@@ -23,27 +33,88 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
   const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
   const [preferredStationIds, setPreferredStationIds] = useState<Set<string>>(new Set());
   const [stationOverrides, setStationOverrides] = useState<Record<string, StationOverride>>({});
+  const [isBackendLoading, setIsBackendLoading] = useState(false);
   const [showPreferredOnly, setShowPreferredOnly] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isNonFuelImportOpen, setIsNonFuelImportOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isAddStationOpen, setIsAddStationOpen] = useState(false);
+  const [editingStation, setEditingStation] = useState<StationProfile | null>(null);
+  const [verifyingLearntId, setVerifyingLearntId] = useState<string | null>(null);
 
-  // Load settings from localStorage on mount
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
+    setIsBackendLoading(true);
     try {
+      // 0. Run one-time migration to patch any stations with missing/incorrect status
+      const migrationKey = 'station_status_migration_v1';
+      if (!localStorage.getItem(migrationKey)) {
+        try {
+          const result = await fuelService.migrateStationStatuses();
+          if (result.patchedCount > 0) {
+            console.log(`[Migration] Patched ${result.patchedCount}/${result.totalStations} stations to 'unverified' status.`);
+            toast.success(`Station Migration: ${result.patchedCount} stations patched to 'unverified'.`);
+          }
+          localStorage.setItem(migrationKey, new Date().toISOString());
+        } catch (migErr) {
+          console.error('[Migration] Station status migration failed:', migErr);
+        }
+      }
+
+      // 1. Fetch from backend
+      const backendStations = await fuelService.getStations();
+      const overrides: Record<string, StationOverride> = {};
+      backendStations.forEach(s => {
+        overrides[s.id] = s;
+      });
+
+      // 2. Check for legacy localStorage data
+      const storedOverrides = localStorage.getItem('station_overrides');
+      if (storedOverrides) {
+        try {
+          const legacyData = JSON.parse(storedOverrides);
+          const legacyKeys = Object.keys(legacyData);
+          
+          if (legacyKeys.length > 0) {
+            console.log(`[Migration] Found ${legacyKeys.length} legacy stations. Migrating to Cloud...`);
+            
+            // Only migrate if not already in backend
+            for (const key of legacyKeys) {
+              if (!overrides[key]) {
+                const station = legacyData[key];
+                if (!station.id) station.id = key;
+                await fuelService.saveStation(station);
+                overrides[key] = station;
+              }
+            }
+            
+            // Clear legacy data once migrated
+            localStorage.removeItem('station_overrides');
+            toast.success("Station database migrated to Cloud successfully.");
+          }
+        } catch (e) {
+          console.error("Migration failed", e);
+        }
+      }
+
+      setStationOverrides(overrides);
+
+      // Load preferred stations
       const storedPreferred = localStorage.getItem('preferred_stations');
       if (storedPreferred) {
         setPreferredStationIds(new Set(JSON.parse(storedPreferred)));
       }
-
-      const storedOverrides = localStorage.getItem('station_overrides');
-      if (storedOverrides) {
-        setStationOverrides(JSON.parse(storedOverrides));
-      }
     } catch (e) {
-      console.error('Failed to load local storage data', e);
+      console.error('Failed to load station data from cloud', e);
+      toast.error("Could not sync with cloud station database.");
+    } finally {
+      setIsBackendLoading(false);
     }
   }, []);
+
+  // Phase 9: Persistent Storage Migration
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Save Preferred Stations
   const togglePreferred = (id: string) => {
@@ -59,69 +130,137 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
     });
   };
 
-  // Save Station Overrides
-  const updateStationDetails = (id: string, details: Partial<StationProfile>) => {
-    setStationOverrides(prev => {
-      const current = prev[id] || {};
-      const updated = {
-        ...current,
-        name: details.name,
-        address: details.address,
-        brand: details.brand,
-        city: details.city,
-        parish: details.parish,
-        country: details.country,
-        location: details.location,
-        amenities: details.amenities,
-        contactInfo: details.contactInfo,
-        status: details.status,
-        dataSource: details.dataSource || current.dataSource || 'manual' 
-      };
-      
-      // Clean up undefined values
-      Object.keys(updated).forEach(key => 
-        (updated as any)[key] === undefined && delete (updated as any)[key]
-      );
+  // Save Station Overrides (Cloud Persisted)
+  const updateStationDetails = async (id: string, details: Partial<StationProfile>) => {
+    const current = stationOverrides[id] || {};
+    const updated: StationOverride = {
+      ...current,
+      id, // Ensure ID is present
+      name: details.name || current.name,
+      address: details.address || current.address,
+      brand: details.brand || current.brand,
+      city: details.city || current.city,
+      parish: details.parish || current.parish,
+      country: details.country || current.country,
+      plusCode: details.plusCode || current.plusCode,
+      geofenceRadius: details.geofenceRadius ?? current.geofenceRadius,
+      location: details.location || current.location,
+      amenities: details.amenities || current.amenities,
+      contactInfo: details.contactInfo || current.contactInfo,
+      status: details.status || current.status,
+      operationalStatus: details.operationalStatus || current.operationalStatus,
+      dataSource: details.dataSource || current.dataSource || 'manual' 
+    };
+    
+    // Clean up undefined values
+    Object.keys(updated).forEach(key => 
+      (updated as any)[key] === undefined && delete (updated as any)[key]
+    );
 
-      const next = { ...prev, [id]: updated };
-      localStorage.setItem('station_overrides', JSON.stringify(next));
-      return next;
-    });
+    try {
+      await fuelService.saveStation(updated);
+      setStationOverrides(prev => ({ ...prev, [id]: updated }));
+      
+      if (details.status === 'verified' && current.status !== 'verified') {
+        toast.success(`${updated.name} promoted to Master Verified Ledger`, {
+          description: "Location successfully moved to Source of Truth.",
+          icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />
+        });
+      } else {
+        toast.success("Station updated in cloud.");
+      }
+    } catch (e) {
+      console.error("Failed to save station to cloud", e);
+      toast.error("Cloud sync failed. Changes may not persist.");
+    }
   };
 
-  const handleImportStations = (imported: StationOverride[]) => {
-    setStationOverrides(prev => {
-      const next = { ...prev };
-      let count = 0;
-      
-      imported.forEach(item => {
+  const handleManualAdd = async (station: StationOverride) => {
+    setIsBackendLoading(true);
+    try {
+      await fuelService.saveStation(station);
+      setStationOverrides(prev => ({ ...prev, [station.id!]: station }));
+      // No toast here as the modal handles it
+    } catch (e) {
+      console.error("Manual add failed", e);
+      throw e; // Let the modal handle the error toast
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  const handleImportStations = async (imported: StationOverride[]) => {
+    setIsBackendLoading(true);
+    let count = 0;
+    const newOverrides = { ...stationOverrides };
+    
+    try {
+      for (const item of imported) {
         if (item.name && item.address) {
-          const id = generateStationId(item.name, item.address);
-          next[id] = {
-            ...(next[id] || {}),
+          // Fix 2: Normalize name before generating ID to match the wizard's duplicate-check logic
+          const id = generateStationId(normalizeStationName(item.name), item.address);
+          const updatedItem = {
             ...item,
+            id,
+            status: 'unverified', // CSV imports are always unverified
             dataSource: 'import',
-            category: item.category || 'fuel'
+            category: item.category || 'fuel',
+            // Smart default geofence radius based on Plus Code precision (if available)
+            geofenceRadius: item.geofenceRadius ?? (item.plusCode ? getDefaultGeofenceRadius(item.plusCode) : undefined),
           };
+          
+          await fuelService.saveStation(updatedItem);
+          newOverrides[id] = updatedItem;
           count++;
         }
-      });
+      }
 
-      localStorage.setItem('station_overrides', JSON.stringify(next));
-      console.log(`Imported ${count} stations`);
-      return next;
-    });
+      setStationOverrides(newOverrides);
+      toast.success(`Cloud Sync: Successfully imported ${count} locations.`);
+    } catch (e) {
+      console.error("Import failed", e);
+      toast.error("Import interrupted. Some stations might not have been saved.");
+    } finally {
+      setIsBackendLoading(false);
+    }
   };
 
-  const handleConfirmDelete = (idsToDelete: string[]) => {
-    setStationOverrides(prev => {
-      const next = { ...prev };
-      idsToDelete.forEach(id => {
-        delete next[id];
+  const handleConfirmDelete = async (idsToDelete: string[]) => {
+    setIsBackendLoading(true);
+    try {
+      // Delete from backend first
+      for (const id of idsToDelete) {
+        await fuelService.deleteStation(id);
+      }
+      
+      // Immediately update local state to remove deleted stations
+      setStationOverrides(prev => {
+        const next = { ...prev };
+        idsToDelete.forEach(id => {
+          delete next[id];
+        });
+        return next;
       });
-      localStorage.setItem('station_overrides', JSON.stringify(next));
-      return next;
-    });
+      
+      toast.success(`Deleted ${idsToDelete.length} stations from cloud.`);
+      
+      // Re-fetch from backend to ensure local state is in sync with KV
+      try {
+        const freshStations = await fuelService.getStations();
+        const freshOverrides: Record<string, StationOverride> = {};
+        freshStations.forEach(s => {
+          freshOverrides[s.id] = s;
+        });
+        setStationOverrides(freshOverrides);
+      } catch (syncErr) {
+        console.error('[Delete] Post-delete sync failed, using local state:', syncErr);
+      }
+    } catch (e) {
+      console.error("Delete failed", e);
+      toast.error("Cloud deletion failed.");
+    } finally {
+      setIsBackendLoading(false);
+    }
   };
 
   // Helper to generate context
@@ -149,6 +288,8 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
              city: override.city || 'Unknown City',
              parish: override.parish || 'Unknown Parish',
              country: override.country || 'Jamaica',
+             plusCode: override.plusCode,
+             geofenceRadius: override.geofenceRadius,
              location: override.location || { lat: 18.0179, lng: -76.8099 },
              isPreferred: false,
              stats: {
@@ -162,7 +303,8 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
              amenities: override.amenities || [],
              dataSource: override.dataSource || 'manual',
              contactInfo: override.contactInfo || {},
-             status: override.status || 'active',
+             status: override.status || 'unverified',
+             operationalStatus: override.operationalStatus || 'active',
              category: override.category || 'fuel'
            });
         }
@@ -213,79 +355,58 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <Tabs defaultValue="all-stations" className="w-full">
+        <Tabs defaultValue="spatial-audit" className="w-full">
           <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <h3 className="font-semibold text-slate-900">Station Database</h3>
             </div>
             
-            <TabsList>
-              <TabsTrigger value="all-stations">All Gas Stations</TabsTrigger>
+            <TabsList className="bg-slate-200/50 p-1">
+              <TabsTrigger value="spatial-audit" className="flex items-center gap-1.5 text-indigo-700 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                <MapIcon className="h-3.5 w-3.5" />
+                Spatial Audit
+              </TabsTrigger>
               <TabsTrigger value="verified-stations">Verified Gas Station</TabsTrigger>
               <TabsTrigger value="parent-company">Parent Company</TabsTrigger>
-              <TabsTrigger value="unverified-stations">Unverified Gas Stations</TabsTrigger>
+              <TabsTrigger value="unverified-stations" className="flex items-center gap-1.5">
+                Unverified
+                <Badge variant="outline" className="h-4 px-1 text-[8px] border-slate-300 text-slate-400">MGMT</Badge>
+              </TabsTrigger>
               <TabsTrigger value="accepted-stations">Accepted Gas Stations</TabsTrigger>
               <TabsTrigger value="non-fuel">Non-Fuel Locations</TabsTrigger>
-              <TabsTrigger value="learnt-locations">Learnt Location</TabsTrigger>
+              <TabsTrigger value="learnt-locations" className="flex items-center gap-1.5">
+                Learnt
+                <Badge variant="outline" className="h-4 px-1 text-[8px] border-amber-200 text-amber-500">STAGING</Badge>
+              </TabsTrigger>
             </TabsList>
           </div>
 
-          {/* --- All Gas Stations Tab --- */}
-          <TabsContent value="all-stations" className="m-0 p-0 border-0">
-             <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
-               {/* Preferred Toggle */}
-                <div className="flex items-center space-x-2 mr-2">
-                  <Switch 
-                    id="preferred-mode-all" 
-                    checked={showPreferredOnly}
-                    onCheckedChange={setShowPreferredOnly}
-                  />
-                  <Label htmlFor="preferred-mode-all" className="text-sm text-slate-600 flex items-center cursor-pointer">
-                    <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
-                    Preferred Only
-                  </Label>
-                </div>
-                
-                {/* Actions */}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-white text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => setIsDeleteModalOpen(true)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />
-                  Bulk Delete
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                  onClick={() => setIsImportOpen(true)}
-                >
-                  <Upload className="h-3.5 w-3.5 mr-2" />
-                  Import CSV
-                </Button>
-                <StationExport stations={context.stations.filter(s => s.dataSource === 'manual' || s.dataSource === 'import')} />
-             </div>
-
-             <div className="p-4">
-               <StationList 
-                  context={{
-                      ...context,
-                      stations: context.stations.filter(s => s.dataSource === 'manual' || s.dataSource === 'import')
-                  }} 
-                  onSelectStation={handleStationSelect} 
-                  variant="manager"
-               />
+          {/* --- Spatial Audit Tab --- */}
+          <TabsContent value="spatial-audit" className="m-0 p-0 border-0">
+             <div className="h-[700px] bg-slate-50">
+               <SpatialIntegrityMap />
              </div>
           </TabsContent>
 
           {/* --- Verified Gas Station Tab --- */}
           <TabsContent value="verified-stations" className="m-0 p-0 border-0">
-             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-               <p className="text-lg font-medium">Verified Gas Station</p>
-               <p className="text-sm">Information for this section will be added soon.</p>
-             </div>
+             <VerifiedStationsTab 
+               stations={context.stations.filter(s => s.status === 'verified')} 
+               onRefresh={fetchData}
+               onSelectStation={(station) => setSelectedStation(station)}
+               onSaveGeofenceRadius={async (stationId, radius) => {
+                 const current = stationOverrides[stationId] || {};
+                 const updated = {
+                   ...current,
+                   id: stationId,
+                   geofenceRadius: radius,
+                 };
+                 await fuelService.saveStation(updated);
+                 setStationOverrides(prev => ({ ...prev, [stationId]: updated as any }));
+                 // Refresh to reflect the change in the table
+                 await fetchData();
+               }}
+             />
           </TabsContent>
 
           {/* --- Parent Company Tab --- */}
@@ -313,6 +434,15 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                 <Button 
                   variant="outline" 
                   size="sm" 
+                  className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  onClick={() => setIsAddStationOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  Add Station
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
                   className="bg-white text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
                   onClick={() => setIsDeleteModalOpen(true)}
                 >
@@ -335,10 +465,14 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                <StationList 
                   context={{
                       ...context,
-                      stations: context.stations.filter(s => (s.dataSource === 'manual' || s.dataSource === 'import') && s.category !== 'non_fuel')
+                      stations: context.stations.filter(s => s.status === 'unverified' && s.category !== 'non_fuel')
                   }} 
                   onSelectStation={handleStationSelect} 
                   variant="manager"
+                  selectable
+                  onDeleteSelected={async (ids) => {
+                    await handleConfirmDelete(ids);
+                  }}
                />
              </div>
           </TabsContent>
@@ -364,7 +498,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                   Import CSV
                 </Button>
                 <StationExport 
-                  stations={context.stations.filter(s => s.category === 'non_fuel')} 
+                  stations={context.stations.filter(s => s.category === 'non_fuel' && s.status === 'unverified')} 
                   filename="non-fuel-locations"
                 />
              </div>
@@ -373,7 +507,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                <StationList 
                   context={{
                       ...context,
-                      stations: context.stations.filter(s => s.category === 'non_fuel')
+                      stations: context.stations.filter(s => s.category === 'non_fuel' && s.status === 'unverified')
                   }} 
                   onSelectStation={handleStationSelect} 
                   variant="manager"
@@ -383,10 +517,49 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
 
           {/* --- Learnt Location Tab --- */}
           <TabsContent value="learnt-locations" className="m-0 p-0 border-0">
-             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-               <p className="text-lg font-medium">No data available</p>
-               <p className="text-sm">Information for this section will be added soon.</p>
-             </div>
+             <LearntLocationsTab 
+               onPromoted={() => fetchData()}
+               onVerifyLocation={(learntLoc) => {
+                 // Convert the learnt location into a pseudo-StationProfile
+                 // so the AddStationModal can pre-fill the form with existing data
+                 const pseudoStation: StationProfile = {
+                   id: generateStationId(
+                     normalizeStationName(learntLoc.name || 'Unknown Station'),
+                     learntLoc.address || `${learntLoc.location.lat},${learntLoc.location.lng}`
+                   ),
+                   name: learntLoc.name || 'Unknown Station',
+                   brand: learntLoc.brand || 'Independent',
+                   address: learntLoc.address || '',
+                   city: learntLoc.city || '',
+                   parish: learntLoc.parish || '',
+                   country: learntLoc.country || 'Jamaica',
+                   plusCode: learntLoc.plusCode || '',
+                   location: {
+                     lat: learntLoc.location?.lat ?? 0,
+                     lng: learntLoc.location?.lng ?? 0,
+                   },
+                   isPreferred: false,
+                   stats: {
+                     avgPrice: 0,
+                     lastPrice: 0,
+                     priceTrend: 'Stable',
+                     totalVisits: 1,
+                     rating: 0,
+                     lastUpdated: learntLoc.timestamp || new Date().toISOString(),
+                   },
+                   amenities: [],
+                   dataSource: 'manual',
+                   contactInfo: {},
+                   status: 'unverified',
+                   operationalStatus: 'active',
+                   category: 'fuel',
+                 } as StationProfile;
+
+                 setEditingStation(pseudoStation);
+                 setVerifyingLearntId(learntLoc.id);
+                 setIsAddStationOpen(true);
+               }}
+             />
           </TabsContent>
         </Tabs>
       </div>
@@ -397,6 +570,10 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
         logs={logs}
         onTogglePreferred={togglePreferred}
         onUpdateStation={updateStationDetails}
+        onEditInModal={(station) => {
+          setEditingStation(station);
+          setIsAddStationOpen(true);
+        }}
       />
 
       <StationImportWizard 
@@ -420,6 +597,66 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
         onClose={() => setIsDeleteModalOpen(false)}
         stations={stationOverrides}
         onDelete={handleConfirmDelete}
+      />
+
+      <AddStationModal 
+        isOpen={isAddStationOpen || !!editingStation}
+        onClose={() => {
+          setIsAddStationOpen(false);
+          setEditingStation(null);
+          setVerifyingLearntId(null);
+        }}
+        onAdd={handleManualAdd}
+        editStation={editingStation}
+        onUpdate={async (id, stationData) => {
+          // Merge the updated fields while preserving existing metadata
+          const current = stationOverrides[id] || {};
+          const updated: StationOverride = {
+            ...current,
+            ...stationData,
+            id,
+            // Preserve the existing status (unverified) and dataSource
+            status: current.status || stationData.status,
+            dataSource: current.dataSource || stationData.dataSource,
+            // Preserve geofenceRadius: use modal value if set, otherwise keep existing
+            geofenceRadius: stationData.geofenceRadius ?? current.geofenceRadius,
+          };
+          
+          try {
+            await fuelService.saveStation(updated);
+            setStationOverrides(prev => ({ ...prev, [id]: updated }));
+            // Close the detail sheet to reflect changes when it re-opens
+            setSelectedStation(null);
+
+            // If this was triggered from the Learnt tab's "Verify" button,
+            // also promote/remove the learnt location from the staging area
+            if (verifyingLearntId) {
+              try {
+                const promoteResult = await api.promoteLearntLocationToMaster({
+                  learntId: verifyingLearntId,
+                  action: 'create',
+                  stationData: updated,
+                });
+                const linked = promoteResult?.linkedEntries || 0;
+                toast.success('Learnt location verified and promoted to station database.', {
+                  description: linked > 0 
+                    ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked to this station. Anomaly resolved.`
+                    : 'The anomaly has been resolved and removed from the Evidence Bridge.',
+                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+                });
+              } catch (promoteErr) {
+                console.error('[Verify Learnt] Failed to promote learnt location:', promoteErr);
+                toast.warning('Station saved, but failed to clear the learnt location from Evidence Bridge.');
+              }
+              setVerifyingLearntId(null);
+              // Refresh both station data and trigger learnt tab refresh
+              await fetchData();
+            }
+          } catch (e) {
+            console.error("Failed to update station via modal", e);
+            throw e;
+          }
+        }}
       />
     </div>
   );

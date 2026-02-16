@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+// cache-bust: v1.0.3 - Explicitly standardizing Badge import
 import { StationProfile } from '../../../types/station';
 import { FuelEntry } from '../../../types/fuel';
 import { Vehicle } from '../../../types/vehicle';
@@ -29,12 +30,18 @@ import {
   Car,
   Phone,
   Globe,
-  Info
+  Info,
+  ChevronRight,
+  ShieldCheck,
+  Fuel,
+  Grid3X3,
 } from 'lucide-react';
 import { cn } from '../../ui/utils';
 import { PriceHistoryChart } from './charts/PriceHistoryChart';
 import { VisitFrequencyChart } from './charts/VisitFrequencyChart';
-import { generateStationId, normalizeStationName } from '../../../utils/stationUtils';
+import { EvidenceBridgeView } from './EvidenceBridgeView';
+import { generateStationId, normalizeStationName, calculateDistance } from '../../../utils/stationUtils';
+import { encodePlusCode, getPlusCodePrecision } from '../../../utils/plusCode';
 import { AmenitiesSelector } from './ui/AmenitiesSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 
@@ -44,9 +51,10 @@ interface StationDetailViewProps {
   logs: FuelEntry[];
   onTogglePreferred?: (id: string) => void;
   onUpdateStation?: (id: string, details: Partial<StationProfile>) => void;
+  onEditInModal?: (station: StationProfile) => void;
 }
 
-export function StationDetailView({ station, onClose, logs, onTogglePreferred, onUpdateStation }: StationDetailViewProps) {
+export function StationDetailView({ station, onClose, logs, onTogglePreferred, onUpdateStation, onEditInModal }: StationDetailViewProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -59,7 +67,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
     country: string;
     contactInfo: { phone?: string; website?: string };
     amenities: string[];
-    status: 'active' | 'inactive' | 'review';
+    operationalStatus: 'active' | 'inactive' | 'review';
   }>({ 
     name: '', 
     brand: '', 
@@ -69,7 +77,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
     country: '',
     contactInfo: {},
     amenities: [],
-    status: 'active'
+    operationalStatus: 'active'
   });
 
   // Reset state when station changes
@@ -84,7 +92,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
         country: station.country || 'Jamaica',
         contactInfo: station.contactInfo || {},
         amenities: station.amenities || [],
-        status: station.status || 'active'
+        operationalStatus: station.operationalStatus || 'active'
       });
       setIsEditing(false);
       setActiveTab('overview');
@@ -95,18 +103,34 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
   }, [station]);
 
   // Robust log filtering (Moved up to be available for fuelTypeBreakdown)
+  const [proofOfWork, setProofOfWork] = useState<FuelEntry[]>([]);
+  const [loadingProof, setLoadingProof] = useState(false);
+
+  useEffect(() => {
+    if (station?.id) {
+      setLoadingProof(true);
+      api.getStationProofOfWork(station.id)
+        .then(setProofOfWork)
+        .catch(err => console.error("Failed to fetch proof of work", err))
+        .finally(() => setLoadingProof(false));
+    }
+  }, [station]);
+
   const stationLogs = useMemo(() => {
     if (!station) return [];
-    return logs
-      .filter(log => {
-        if (!log.location) return false;
-        const logName = normalizeStationName(log.location);
-        const logAddress = log.stationAddress || 'Unknown Address';
-        const logId = generateStationId(logName, logAddress);
-        return logId === station.id;
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [logs, station]);
+    
+    // Combine logs passed as props with proof of work from backend for maximum coverage
+    const combined = [...proofOfWork];
+    
+    // Also include logs from props that match the ID but might not be in the backend response yet
+    logs.forEach(log => {
+      if (log.matchedStationId === station.id && !combined.find(c => c.id === log.id)) {
+        combined.push(log);
+      }
+    });
+
+    return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [logs, proofOfWork, station]);
 
   // Generate Chart Data (Price History)
   const priceChartData = useMemo(() => {
@@ -165,7 +189,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
         country: editForm.country,
         amenities: editForm.amenities,
         contactInfo: editForm.contactInfo,
-        status: editForm.status
+        operationalStatus: editForm.operationalStatus
       });
       setIsEditing(false);
     }
@@ -182,7 +206,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
       country: station.country || 'Jamaica',
       contactInfo: station.contactInfo || {},
       amenities: station.amenities || [],
-      status: station.status || 'active'
+      operationalStatus: station.operationalStatus || 'active'
     });
     setIsEditing(false);
   };
@@ -202,17 +226,35 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
              <div className="flex-1 pr-4">
                 <div className="flex items-center gap-2 mb-2">
                    <Badge variant="outline">{station.brand}</Badge>
-                   {station.status === 'inactive' && <Badge variant="destructive">Inactive</Badge>}
-                   {station.status === 'review' && <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200">Review Needed</Badge>}
+                   {station.status === 'verified' && (
+                     <Badge className="bg-blue-50 text-blue-700 border-blue-100 flex items-center gap-1">
+                       <ShieldCheck className="h-3 w-3" />
+                       Verified
+                     </Badge>
+                   )}
+                   {station.operationalStatus === 'inactive' && <Badge variant="destructive">Inactive</Badge>}
+                   {station.operationalStatus === 'review' && <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200">Review Needed</Badge>}
                 </div>
                 <SheetTitle className="text-2xl font-bold text-slate-900 break-words leading-tight">
                   {station.name}
                 </SheetTitle>
                 <div className="flex items-center gap-1.5 text-slate-500 text-sm mt-2">
-                  <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span className="truncate max-w-[280px]">{station.address}</span>
-                </div>
-                {/* Show City/Parish in Header if available */}
+                   <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                   <span className="truncate max-w-[280px]">{station.address}</span>
+                 </div>
+                 {/* Plus Code Badge in Header */}
+                 {(station.plusCode || station.location) && (
+                   <div className="flex items-center gap-1.5 mt-1.5 ml-5">
+                     <Grid3X3 className="h-3 w-3 text-violet-500" />
+                     <span className="text-xs font-mono tracking-wider text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100">
+                       {station.plusCode || encodePlusCode(station.location.lat, station.location.lng, 11)}
+                     </span>
+                     <span className="text-[8px] font-bold uppercase text-violet-400">
+                       {getPlusCodePrecision(station.plusCode || encodePlusCode(station.location?.lat || 0, station.location?.lng || 0, 11))}
+                     </span>
+                   </div>
+                 )}
+                 {/* Show City/Parish in Header if available */}
                 {(station.city || station.parish) && (
                    <div className="text-xs text-slate-400 mt-1 ml-5">
                       {[station.city, station.parish, station.country].filter(Boolean).join(', ')}
@@ -271,6 +313,12 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                   variant={isEditing ? "secondary" : "outline"}
                   size="icon"
                   onClick={() => {
+                    // Open the full modal with GPS verification for any station that has the handler
+                    if (onEditInModal) {
+                      onEditInModal(station);
+                      return;
+                    }
+                    // Fallback to inline editing if no modal handler
                     setIsEditing(true);
                     setActiveTab('profile'); // Switch to profile tab on edit
                   }}
@@ -383,8 +431,8 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                            <Label>Status</Label>
                            {isEditing ? (
                               <Select 
-                                value={editForm.status} 
-                                onValueChange={(val: any) => setEditForm(prev => ({ ...prev, status: val }))}
+                                value={editForm.operationalStatus} 
+                                onValueChange={(val: any) => setEditForm(prev => ({ ...prev, operationalStatus: val }))}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
@@ -397,7 +445,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                               </Select>
                            ) : (
                               <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm flex items-center capitalize">
-                                {station.status}
+                                {station.operationalStatus || 'active'}
                               </div>
                            )}
                         </div>
@@ -445,6 +493,56 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                          />
                       </div>
                    </div>
+                </div>
+
+                {/* GPS Location & Plus Code */}
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                   <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-slate-500" /> GPS Location & Plus Code
+                   </h3>
+                   {station.location && (
+                     <div className="grid grid-cols-2 gap-4">
+                       <div>
+                         <Label className="text-[10px] uppercase text-slate-500 font-bold">Latitude</Label>
+                         <div className="h-9 px-3 py-2 bg-slate-50 rounded-md text-xs font-mono flex items-center text-slate-700">
+                           {station.location.lat.toFixed(7)}
+                         </div>
+                       </div>
+                       <div>
+                         <Label className="text-[10px] uppercase text-slate-500 font-bold">Longitude</Label>
+                         <div className="h-9 px-3 py-2 bg-slate-50 rounded-md text-xs font-mono flex items-center text-slate-700">
+                           {station.location.lng.toFixed(7)}
+                         </div>
+                       </div>
+                     </div>
+                   )}
+                   <div>
+                     <Label className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1">
+                       <Grid3X3 className="h-3 w-3 text-violet-500" />
+                       Plus Code (Open Location Code)
+                     </Label>
+                     <div className="mt-1 flex items-center gap-2">
+                       <div className="flex-1 h-9 px-3 py-2 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-100 rounded-md text-sm font-mono tracking-wider flex items-center text-violet-800">
+                         {station.plusCode || (station.location ? encodePlusCode(station.location.lat, station.location.lng, 11) : 'N/A')}
+                       </div>
+                       {(station.plusCode || station.location) && (
+                         <Badge className="bg-violet-50 text-violet-600 border-violet-100 text-[8px] font-bold uppercase shrink-0">
+                           {getPlusCodePrecision(station.plusCode || encodePlusCode(station.location?.lat || 0, station.location?.lng || 0, 11))}
+                         </Badge>
+                       )}
+                     </div>
+                     <p className="text-[9px] text-violet-400 mt-1 italic">
+                       High-precision location code. Use this code to look up the exact station position on Google Maps.
+                     </p>
+                   </div>
+                   {station.location?.radius && (
+                     <div>
+                       <Label className="text-[10px] uppercase text-slate-500 font-bold">Geofence Radius</Label>
+                       <div className="h-9 px-3 py-2 bg-slate-50 rounded-md text-xs font-mono flex items-center text-slate-700">
+                         {station.location.radius}m
+                       </div>
+                     </div>
+                   )}
                 </div>
 
                 {/* Contact Info */}
@@ -525,24 +623,84 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                  <div className="divide-y divide-slate-100">
                      {stationLogs.length > 0 ? (
-                         stationLogs.map((log) => (
-                             <div key={log.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                                 <div>
-                                     <div className="text-sm font-medium text-slate-900">
-                                         {new Date(log.date).toLocaleDateString()}
+                         stationLogs.map((log) => {
+                             const locationMetadata = log.metadata?.locationMetadata || log.locationMetadata;
+                             const hasGPS = !!locationMetadata;
+                             const distance = hasGPS && station.location ? calculateDistance(
+                               station.location.lat, 
+                               station.location.lng, 
+                               locationMetadata.lat, 
+                               locationMetadata.lng
+                             ) : null;
+
+                             return (
+                               <div key={log.id} className="group">
+                                 <div className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => {
+                                   if (hasGPS) {
+                                     // Toggle forensic view
+                                     const el = document.getElementById(`forensic-${log.id}`);
+                                     if (el) el.classList.toggle('hidden');
+                                   }
+                                 }}>
+                                     <div>
+                                         <div className="flex items-center gap-2">
+                                           <div className="text-sm font-medium text-slate-900">
+                                               {new Date(log.date).toLocaleDateString()}
+                                           </div>
+                                           {log.metadata?.verificationMethod && (
+                                             <Badge variant="outline" className="text-[8px] h-3.5 px-1 bg-blue-50 text-blue-600 border-blue-100 uppercase font-bold">
+                                               {log.metadata.verificationMethod.replace('_', ' ')}
+                                             </Badge>
+                                           )}
+                                           {hasGPS && (
+                                             <Badge variant="outline" className={cn(
+                                               "text-[9px] h-4 px-1 flex items-center gap-1",
+                                               distance !== null && distance <= 75 ? "text-emerald-600 border-emerald-100 bg-emerald-50" : "text-amber-600 border-amber-100 bg-amber-50"
+                                             )}>
+                                               <MapPin className="h-2.5 w-2.5" />
+                                               {distance !== null ? `${distance.toFixed(0)}m` : 'GPS'}
+                                             </Badge>
+                                           )}
+                                         </div>
+                                         <div className="text-xs text-slate-500">
+                                             {log.liters ? `${log.liters.toFixed(1)} L` : 'N/A'} • {log.vehicleId || 'Unknown Vehicle'}
+                                         </div>
                                      </div>
-                                     <div className="text-xs text-slate-500">
-                                         {log.liters ? `${log.liters.toFixed(1)} L` : 'N/A'} • {log.vehicleId || 'Unknown Vehicle'}
+                                     <div className="text-right flex items-center gap-3">
+                                         <div className="flex flex-col">
+                                           <div className="text-sm font-bold text-slate-900">${log.amount.toFixed(2)}</div>
+                                           <div className="text-xs text-slate-500">
+                                             ${(log.pricePerLiter || 0).toFixed(2)}/L
+                                           </div>
+                                         </div>
+                                         {hasGPS && (
+                                           <div className="text-slate-300 group-hover:text-slate-500">
+                                             <ChevronRight className="h-4 w-4" />
+                                           </div>
+                                         )}
                                      </div>
                                  </div>
-                                 <div className="text-right">
-                                     <div className="text-sm font-bold text-slate-900">${log.amount.toFixed(2)}</div>
-                                     <div className="text-xs text-slate-500">
-                                       ${(log.pricePerLiter || 0).toFixed(2)}/L
-                                     </div>
-                                 </div>
-                             </div>
-                         ))
+                                 {hasGPS && (
+                                   <div id={`forensic-${log.id}`} className="hidden bg-slate-50 border-t border-slate-100 p-4 animate-in slide-in-from-top-2 duration-300">
+                                      <EvidenceBridgeView 
+                                        transactionId={log.id}
+                                        stationLocation={station.location}
+                                        capturedLocation={locationMetadata}
+                                        stationName={station.name}
+                                        address={station.address}
+                                        liters={log.liters || 0}
+                                        vehicleId={log.vehicleId || 'Unknown'}
+                                        capturedName={log.metadata?.parentCompany || log.location}
+                                        distance={distance || 0}
+                                        signature={log.signature}
+                                        signedAt={log.signedAt || log.date}
+                                        variance={log.metadata?.predictedVariance || 0}
+                                      />
+                                   </div>
+                                 )}
+                               </div>
+                             );
+                         })
                      ) : (
                          <div className="p-8 text-center text-slate-500 text-sm">
                              No recorded transactions.

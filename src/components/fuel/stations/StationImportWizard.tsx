@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+// cache-bust: v1.0.3 - Explicitly standardizing Badge import
 import { 
   Dialog, 
   DialogContent, 
@@ -38,6 +39,7 @@ import { toast } from "sonner@2.0.3";
 import { StationOverride, StationProfile } from '../../../types/station';
 import { processBatchWithRateLimit, geocodeAddress, searchPlace, GeocodedResult } from '../../../utils/geocoding';
 import { generateStationId, normalizeStationName } from '../../../utils/stationUtils';
+import { encodePlusCode } from '../../../utils/plusCode';
 
 interface StationImportWizardProps {
   isOpen: boolean;
@@ -419,8 +421,9 @@ Parts Store,Car Parts Plus,45 Main St,Mandeville,Manchester,Jamaica,8769876543,a
         country: s.country,
         contactInfo: { phone: s.phone },
         location: s.coordinates ? { lat: s.coordinates.lat, lng: s.coordinates.lng } : undefined,
+        plusCode: s.coordinates ? encodePlusCode(s.coordinates.lat, s.coordinates.lng, 11) : undefined,
         dataSource: 'import',
-        status: s.status as any,
+        status: 'unverified',
         category: mode,
         amenities: s.amenities ? s.amenities.split(',').map(a => a.trim()) : [],
         initialStats: {

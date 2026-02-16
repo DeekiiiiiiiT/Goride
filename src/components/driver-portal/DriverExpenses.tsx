@@ -7,6 +7,7 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Badge } from "../ui/badge";
 import { 
   Calendar as CalendarIcon, 
@@ -21,7 +22,10 @@ import {
   Ticket,
   Camera,
   X,
-  ChevronLeft
+  ChevronLeft,
+  Search,
+  MapPin,
+  ShieldCheck
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import { cn } from "../ui/utils";
@@ -31,6 +35,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
+import { StationProfile } from '../../types/station';
 import { DriverClaims } from './DriverClaims';
 import { DriverFuelStats } from './DriverFuelStats';
 import { PortalHome } from './views/PortalHome';
@@ -49,6 +54,8 @@ interface ExpenseLoggerProps {
 
 type ViewState = 'list' | 'category_select' | 'odometer_scan' | 'method_select' | 'entry_details';
 
+import { useGeolocation } from '../../hooks/useGeolocation';
+
 interface FuelEntryState {
   odometerReading?: number;
   odometerProof?: File;
@@ -58,11 +65,19 @@ interface FuelEntryState {
   isFullTank?: boolean;
   manualReason?: string;
   volume?: string; 
+  locationMetadata?: {
+    lat: number;
+    lng: number;
+    accuracy: number;
+    timestamp?: string;
+  };
+  parentCompany?: string;
 }
 
 export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
+  const { getLocation, loading: locationLoading, lat, lng, accuracy } = useGeolocation();
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,8 +106,16 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
+
   useEffect(() => {
-    if (user) fetchTransactions();
+    if (user) {
+      fetchTransactions();
+      // Fetch verified stations for selection
+      api.getStations().then(data => {
+        setVerifiedStations(data.filter((s: any) => s.status === 'verified'));
+      }).catch(console.error);
+    }
   }, [user]);
 
   const resetForm = () => {
@@ -249,6 +272,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         odometerMethod: (isFuel) ? fuelEntry.odometerMethod : undefined,
         odometerProofUrl: (isFuel) ? odometerProofUrl : undefined,
         odometerManualReason: (isFuel) ? fuelEntry.manualReason : undefined,
+        locationMetadata: fuelEntry.locationMetadata,
+        parentCompany: fuelEntry.parentCompany,
     };
 
     return {
@@ -384,13 +409,31 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
   };
 
-  const handleOdometerScanComplete = (result: any) => {
+  const handleOdometerScanComplete = async (result: any) => {
+    // Phase 2: Start GPS acquisition immediately after scan
+    let locationData = undefined;
+    try {
+        const loc = await getLocation();
+        if (loc.lat && loc.lng) {
+            locationData = {
+                lat: loc.lat,
+                lng: loc.lng,
+                accuracy: loc.accuracy || 0,
+                timestamp: new Date().toISOString()
+            };
+            toast.success("Location locked for verification 📍");
+        }
+    } catch (e) {
+        console.error("GPS Acquisition failed", e);
+    }
+
     setFuelEntry(prev => ({
       ...prev,
       odometerReading: result.reading,
       odometerProof: result.photo,
       odometerMethod: result.method,
-      manualReason: result.manualReason
+      manualReason: result.manualReason,
+      locationMetadata: locationData
     }));
     setViewState('method_select');
   };
@@ -503,13 +546,21 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
          <Button variant="ghost" size="icon" onClick={goBack}>
             <ChevronLeft className="h-5 w-5" />
          </Button>
-         <div>
-            <h2 className="text-xl font-bold">
-              {viewState === 'category_select' && "Log New Expense"}
-              {viewState === 'odometer_scan' && "Scan Odometer"}
-              {viewState === 'method_select' && "Payment Method"}
-              {viewState === 'entry_details' && (category === 'Fuel' ? "Fuel Details" : "Expense Details")}
-            </h2>
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold">
+                {viewState === 'category_select' && "Log New Expense"}
+                {viewState === 'odometer_scan' && "Scan Odometer"}
+                {viewState === 'method_select' && "Payment Method"}
+                {viewState === 'entry_details' && (category === 'Fuel' ? "Fuel Details" : "Expense Details")}
+              </h2>
+              {fuelEntry.locationMetadata && (
+                <div className="flex items-center gap-2 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span className="text-[10px] font-bold text-emerald-700 uppercase">Location Locked</span>
+                </div>
+              )}
+            </div>
             <p className="text-xs text-slate-500">
               {category === 'Fuel' ? (
                 <>Step {
@@ -523,7 +574,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 } of 2</>
               )}
             </p>
-         </div>
+          </div>
       </div>
 
       <Card className="overflow-hidden">
@@ -555,7 +606,13 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           )}
 
           {viewState === 'odometer_scan' && (
-            <div className="p-0 min-h-[400px]">
+            <div className="p-0 min-h-[400px] relative">
+              {locationLoading && (
+                <div className="absolute top-4 right-4 z-50 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm border border-indigo-100 flex items-center gap-2 animate-pulse">
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                  <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-tight">Acquiring GPS...</span>
+                </div>
+              )}
               <OdometerScanner 
                 lastOdometer={tankStatus?.lastOdometer}
                 onScanComplete={handleOdometerScanComplete}
@@ -581,12 +638,63 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                    <Label>{category === 'Fuel' ? 'Gas Station name' : 'Merchant / Vendor'}</Label>
-                    <Input 
-                        placeholder={category === 'Fuel' ? 'e.g. Shell, Caltex, etc.' : 'e.g. Shell, mechanic, etc.'} 
-                        value={merchant} 
-                        onChange={e => setMerchant(e.target.value)} 
-                    />
+                    <Label>{category === 'Fuel' ? 'Gas Station' : 'Merchant / Vendor'}</Label>
+                    {category === 'Fuel' ? (
+                      <div className="space-y-3">
+                        <Select 
+                          value={merchant} 
+                          onValueChange={(val) => {
+                            setMerchant(val);
+                            setFuelEntry(prev => ({ ...prev, parentCompany: val }));
+                          }}
+                        >
+                          <SelectTrigger className="w-full bg-white">
+                            <SelectValue placeholder="Select Verified Station" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <div className="p-2 border-b border-slate-100 mb-1">
+                              <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase rounded-md">
+                                <ShieldCheck className="w-3 h-3" />
+                                Master Audit Ledger
+                              </div>
+                            </div>
+                            {verifiedStations.map(s => (
+                              <SelectItem key={s.id} value={s.name}>
+                                <div className="flex flex-col items-start py-0.5">
+                                  <span className="font-medium">{s.name}</span>
+                                  <span className="text-[10px] text-slate-500">{s.brand} • {s.address}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="Other">
+                              <span className="italic text-slate-500">Other / Not Listed</span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {merchant === 'Other' && (
+                          <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                             <Input 
+                               placeholder="Enter station name manually" 
+                               className="bg-slate-50 border-orange-100 focus:border-orange-200"
+                               onChange={e => {
+                                 setFuelEntry(prev => ({ ...prev, parentCompany: e.target.value }));
+                               }} 
+                             />
+                             <p className="text-[10px] text-orange-600 mt-1 flex items-center gap-1">
+                               <MapPin className="w-2 h-2" />
+                               New locations will be learnt and verified by the Evidence Bridge.
+                             </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Input 
+                          placeholder="e.g. Mechanic name, Parts store, etc." 
+                          value={merchant} 
+                          onChange={e => setMerchant(e.target.value)} 
+                      />
+                    )}
                 </div>
 
                 {category !== 'Fuel' && (

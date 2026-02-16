@@ -187,6 +187,102 @@ export const fuelService = {
     }
   },
 
+  // --- Gas Stations ---
+  async getStations(): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch stations");
+    return response.json();
+  },
+
+  async saveStation(station: any): Promise<any> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(station)
+    });
+    if (!response.ok) throw new Error("Failed to save station");
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  async deleteStation(id: string): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete station");
+  },
+
+  // --- One-Time Migration: Patch station statuses ---
+  async migrateStationStatuses(): Promise<{ patchedCount: number; totalStations: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/migrate-status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      }
+    });
+    if (!response.ok) throw new Error("Failed to run station status migration");
+    return response.json();
+  },
+
+  async getParentCompanies(): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/parent-companies`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch parent companies");
+    return response.json();
+  },
+
+  async geocodeAddress(address: string): Promise<{ lat: number; lng: number; formattedAddress?: string; city?: string; parish?: string }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/geo/geocode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ address })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Geocoding failed");
+    }
+    return response.json();
+  },
+
+  async reverseGeocode(lat: number, lng: number): Promise<{ formattedAddress: string; streetAddress: string; city: string; parish: string; country: string; lat: number; lng: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/geo/reverse-geocode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ lat, lng })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Reverse geocoding failed");
+    }
+    return response.json();
+  },
+
+  async saveParentCompanies(companies: any[]): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/parent-companies`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(companies)
+    });
+    if (!response.ok) throw new Error("Failed to save parent companies");
+  },
+
   /**
    * Generates a cleanup map for a fuel entry, identifying all linked ledger records
    * that must be removed to maintain system integrity.

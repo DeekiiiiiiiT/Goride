@@ -247,6 +247,24 @@ export function FuelIntegrityAuditTool({
                         action: 'delete'
                     });
                 }
+
+                // Phase 7: Step 7.1/7.2/7.3 - Operational Filtering Verification
+                if (current.matchedStationId || current.metadata?.matchedStationId) {
+                    const stationId = current.matchedStationId || current.metadata?.matchedStationId;
+                    // Note: In a real environment, we'd have the station object here.
+                    // For the UI audit, we can flag entries that aren't properly linked to the master ledger
+                    // if they are finalized.
+                    if (current.reconciliationStatus === 'Finalized' && !current.matchedStationId) {
+                        issues.push({
+                            id: `unverified-ledger-${current.id}`,
+                            type: 'Ledger Integrity Failure',
+                            severity: 'medium',
+                            description: `Finalized record #${current.id.slice(0, 5)} is not linked to a Verified Station ID. This violates the Master Ledger protocol.`,
+                            data: { log: current },
+                            action: 'flag'
+                        });
+                    }
+                }
             }
         });
 

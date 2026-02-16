@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+// cache-bust: v1.0.3 - Explicitly standardizing Badge import
 import { 
   Dialog, 
   DialogContent, 

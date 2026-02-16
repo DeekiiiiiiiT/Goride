@@ -1,3 +1,4 @@
+// cache-bust: v1.0.3 - Explicitly standardizing Badge import
 import React, { useState, useMemo, useEffect } from 'react';
 import { StationAnalyticsContextType } from '../../../types/station';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
@@ -13,14 +14,17 @@ import {
   MapPin, 
   ChevronRight, 
   Star, 
-  Filter, 
   ChevronLeft, 
   ChevronLast, 
   ChevronFirst,
   X,
-  History
+  History,
+  ShieldCheck,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Checkbox } from '../../ui/checkbox';
 import { cn } from '../../ui/utils';
 
 type SortKey = 'name' | 'price' | 'visits' | 'date' | 'city' | 'parish' | 'country' | 'brand' | 'address';
@@ -30,13 +34,17 @@ interface StationListProps {
   context: StationAnalyticsContextType;
   onSelectStation?: (id: string) => void;
   variant?: 'manager' | 'simple';
+  selectable?: boolean;
+  onDeleteSelected?: (ids: string[]) => Promise<void>;
 }
 
-export function StationList({ context, onSelectStation, variant = 'manager' }: StationListProps) {
-  const { stations, regionalStats } = context;
+export function StationList({ context, onSelectStation, variant = 'manager', selectable = false, onDeleteSelected }: StationListProps) {
+  const { stations, regionalStats, updateStationDetails } = context;
   
   // -- State --
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Filters
   const [brandFilter, setBrandFilter] = useState<string>('all');
@@ -59,23 +67,24 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
     return Array.from(unique).sort();
   }, [stations]);
 
-  // Reset pagination when filters change
+  // Reset pagination when filters change OR when station data changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, brandFilter, statusFilter, sourceFilter]);
+  }, [searchTerm, brandFilter, statusFilter, sourceFilter, stations.length]);
 
   // Filter and Sort
   const processedStations = useMemo(() => {
     let result = [...stations];
 
-    // 1. Search (Name, Address, City, Parish)
+    // 1. Search (Name, Address, City, Parish, Plus Code)
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       result = result.filter(s => 
         s.name.toLowerCase().includes(lower) || 
         s.address.toLowerCase().includes(lower) ||
         (s.city || '').toLowerCase().includes(lower) ||
-        (s.parish || '').toLowerCase().includes(lower)
+        (s.parish || '').toLowerCase().includes(lower) ||
+        (s.plusCode || '').toLowerCase().includes(lower)
       );
     }
 
@@ -181,6 +190,37 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
 
   const hasActiveFilters = searchTerm || brandFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all';
 
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(stations.map(s => s.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectStation = (id: string, checked: boolean) => {
+    const newSet = new Set(selectedIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const deleteSelectedStations = async () => {
+    if (!onDeleteSelected) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteSelected(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error("Error deleting stations:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* --- Filter Bar (Manager Mode Only) --- */}
@@ -218,8 +258,10 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="unverified">Unverified</SelectItem>
+                  <SelectItem value="verified">Verified</SelectItem>
+                  <SelectItem value="learnt">Learnt</SelectItem>
                   <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="review">Review</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -273,11 +315,51 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
 
       {/* --- Table --- */}
       <div className="rounded-md border border-slate-200 overflow-hidden bg-white shadow-sm">
+        {/* --- Selection Action Bar --- */}
+        {selectable && selectedIds.size > 0 && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-red-50 border-b border-red-200">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-red-800">
+                {selectedIds.size} station{selectedIds.size !== 1 ? 's' : ''} selected
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] text-slate-500 hover:text-slate-700"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Clear
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1.5"
+              onClick={deleteSelectedStations}
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete {selectedIds.size} Station{selectedIds.size !== 1 ? 's' : ''}
+            </Button>
+          </div>
+        )}
+
         <Table>
           <TableHeader className="bg-slate-50/75">
             <TableRow>
               {variant === 'manager' ? (
                 <>
+                  {/* Checkbox column header */}
+                  {selectable && (
+                    <TableHead className="w-[40px] px-3">
+                      <Checkbox
+                        checked={stations.length > 0 && selectedIds.size === stations.length}
+                        onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                        aria-label="Select all stations"
+                        className="border-slate-300"
+                      />
+                    </TableHead>
+                  )}
                   {/* Manager Columns: Main Brand, Vendor Name, Address, City, Parish, Telephone */}
                   <TableHead className="w-[150px] cursor-pointer hover:text-slate-900 transition-colors" onClick={() => toggleSort('brand')}>
                     <div className="flex items-center gap-2">
@@ -316,6 +398,7 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
                     </div>
                   </TableHead>
                   <TableHead>Telephone</TableHead>
+                  <TableHead className="w-[100px] text-right">Audit</TableHead>
                 </>
               ) : (
                 <>
@@ -354,7 +437,7 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
           <TableBody>
             {currentItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={variant === 'manager' ? 7 : 7} className="text-center py-16 text-slate-500">
+                <TableCell colSpan={variant === 'manager' ? (selectable ? 10 : 9) : 7} className="text-center py-16 text-slate-500">
                   <div className="flex flex-col items-center gap-3">
                     <div className="bg-slate-50 p-3 rounded-full">
                        {variant === 'simple' && !hasActiveFilters ? (
@@ -387,19 +470,37 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
               currentItems.map((station) => (
                 <TableRow 
                   key={station.id} 
-                  className="group hover:bg-slate-50/80 transition-colors cursor-pointer"
+                  className={cn(
+                    "group hover:bg-slate-50/80 transition-colors cursor-pointer",
+                    selectable && selectedIds.has(station.id) && "bg-red-50/50 hover:bg-red-50/70"
+                  )}
                   onClick={() => onSelectStation?.(station.id)}
                 >
                   {variant === 'manager' ? (
                     <>
+                      {/* Checkbox cell */}
+                      {selectable && (
+                        <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(station.id)}
+                            onCheckedChange={(checked) => handleSelectStation(station.id, !!checked)}
+                            aria-label={`Select ${station.name}`}
+                            className="border-slate-300"
+                          />
+                        </TableCell>
+                      )}
                       {/* Manager Mode Cells */}
                       <TableCell>
                          <span className="font-semibold text-slate-900">{station.brand}</span>
                       </TableCell>
                       <TableCell>
                          <div className="flex flex-col">
-                           <span className="text-sm font-medium text-slate-900">{station.name}</span>
+                           <div className="flex items-center gap-2">
+                             <span className="text-sm font-medium text-slate-900">{station.name}</span>
+                             {station.status === 'verified' && <ShieldCheck className="h-3 w-3 text-blue-500" />}
+                           </div>
                            {station.status === 'inactive' && <Badge variant="destructive" className="w-fit mt-1 h-4 px-1 text-[9px]">Inactive</Badge>}
+                           {station.status === 'learnt' && <Badge variant="outline" className="w-fit mt-1 h-4 px-1 text-[9px] text-amber-600 border-amber-200 bg-amber-50">Learnt</Badge>}
                          </div>
                       </TableCell>
                       <TableCell>
@@ -420,6 +521,30 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
                       <TableCell>
                          <span className="text-sm text-slate-500">{station.contactInfo?.phone || '-'}</span>
                       </TableCell>
+                      <TableCell className="text-right">
+                         {station.status === 'unverified' && updateStationDetails && (
+                           <Button 
+                             size="sm" 
+                             variant="outline" 
+                             className="h-7 py-0 px-2 text-[10px] bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 hover:border-emerald-300 transition-all font-semibold"
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               updateStationDetails(station.id, { 
+                                 status: 'verified',
+                                 dataSource: 'manual' // Mark as manually verified
+                               });
+                             }}
+                           >
+                             <ShieldCheck className="h-3 w-3 mr-1" />
+                             Promote
+                           </Button>
+                         )}
+                         {station.status === 'verified' && (
+                           <Badge variant="outline" className="h-5 px-1.5 text-[9px] border-blue-200 text-blue-600 bg-blue-50">
+                             Verified
+                           </Badge>
+                         )}
+                      </TableCell>
                     </>
                   ) : (
                     <>
@@ -429,6 +554,22 @@ export function StationList({ context, onSelectStation, variant = 'manager' }: S
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-slate-900">{station.name}</span>
                             {station.isPreferred && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />}
+                            {station.status === 'verified' && (
+                              <Badge className="bg-blue-50 text-blue-700 border-blue-100 text-[9px] h-4 px-1.5 flex items-center gap-1">
+                                <ShieldCheck className="h-2.5 w-2.5" />
+                                Verified
+                              </Badge>
+                            )}
+                            {station.status === 'learnt' && (
+                              <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 text-[9px] h-4 px-1.5">
+                                Learnt
+                              </Badge>
+                            )}
+                            {station.status === 'anomaly' && (
+                              <Badge variant="destructive" className="text-[9px] h-4 px-1.5">
+                                Anomaly
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
                             <MapPin className="h-3 w-3" />
