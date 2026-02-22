@@ -569,7 +569,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         <div className="flex justify-between items-center">
            <div>
                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Drivers</h2>
-               <p className="text-slate-500">Manage fleet drivers, track performance, and monitor earnings.</p>
+               <p className="text-slate-500 dark:text-slate-400">Manage fleet drivers, track performance, and monitor earnings.</p>
            </div>
            <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                <Plus className="h-4 w-4 mr-2" />
@@ -641,7 +641,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input 
                   placeholder="Search Drivers" 
-                  className="pl-9 bg-slate-50 border-slate-200"
+                  className="pl-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -650,35 +650,35 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
       </div>
 
       {/* --- TABLE --- */}
-      <Card className="border-none shadow-sm ring-1 ring-slate-200">
+      <Card className="border-none shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
           <CardContent className="p-0">
             <Table>
-                <TableHeader className="bg-slate-50">
+                <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                     <TableRow>
-                        <TableHead className="w-[250px] font-semibold text-slate-700">Driver</TableHead>
-                        <TableHead className="w-[100px] font-semibold text-slate-700">Status</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Earnings (Today)</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Trips (Today)</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Acceptance</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Tier</TableHead>
+                        <TableHead className="w-[250px] font-semibold text-slate-700 dark:text-slate-300">Driver</TableHead>
+                        <TableHead className="w-[100px] font-semibold text-slate-700 dark:text-slate-300">Status</TableHead>
+                        <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Earnings (Today)</TableHead>
+                        <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Trips (Today)</TableHead>
+                        <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Acceptance</TableHead>
+                        <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Tier</TableHead>
                         <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {paginatedDrivers.length > 0 ? (
                         paginatedDrivers.map((driver) => (
-                            <TableRow key={driver.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => setSelectedDriverId(driver.id)}>
+                            <TableRow key={driver.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => setSelectedDriverId(driver.id)}>
                                 <TableCell>
                                     <div className="flex items-center gap-3">
-                                        <Avatar className="h-10 w-10 border border-slate-200">
+                                        <Avatar className="h-10 w-10 border border-slate-200 dark:border-slate-700">
                                             <AvatarImage src={driver.avatarUrl} />
-                                            <AvatarFallback className="bg-indigo-50 text-indigo-700 font-medium">
+                                            <AvatarFallback className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium">
                                                 {driver.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                             </AvatarFallback>
                                         </Avatar>
                                         <div>
-                                            <p className="font-medium text-slate-900 group-hover:text-indigo-600 transition-colors">{driver.name}</p>
-                                            <p className="text-xs text-slate-500 truncate max-w-[120px] font-mono">
+                                            <p className="font-medium text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 transition-colors">{driver.name}</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[120px] font-mono">
                                                 {driver.phone}
                                             </p>
                                         </div>
@@ -688,10 +688,10 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                     <StatusBadge status={driver.status} />
                                 </TableCell>
                                 <TableCell>
-                                    <div className="font-medium text-slate-900">${driver.todaysEarnings.toFixed(2)}</div>
+                                    <div className="font-medium text-slate-900 dark:text-slate-100">${driver.todaysEarnings.toFixed(2)}</div>
                                 </TableCell>
                                 <TableCell>
-                                    <div className="text-slate-600">{driver.todaysTrips}</div>
+                                    <div className="text-slate-600 dark:text-slate-300">{driver.todaysTrips}</div>
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-2">
@@ -709,7 +709,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                         <Button 
                                            variant="ghost" 
                                            size="icon" 
-                                           className="h-8 w-8 text-slate-400 hover:text-indigo-600"
+                                           className="h-8 w-8 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                                            onClick={(e) => {
                                              e.stopPropagation();
                                              setSelectedDriverId(driver.id);
@@ -717,12 +717,12 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                         >
                                             <Eye className="h-4 w-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                                             <MessageSquare className="h-4 w-4" />
                                         </Button>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
                                                     <MoreVertical className="h-4 w-4" />
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -731,7 +731,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                                 <DropdownMenuItem>View History</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem 
-                                                    className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 cursor-pointer"
+                                                    className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:focus:bg-rose-900/20 cursor-pointer"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         setDriverToDelete(driver.id);
@@ -747,7 +747,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                         ))
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                            <TableCell colSpan={7} className="h-24 text-center text-slate-500 dark:text-slate-400">
                                 No drivers found matching your criteria.
                             </TableCell>
                         </TableRow>
@@ -759,9 +759,9 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
       {/* --- FOOTER --- */}
       <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
              <Select defaultValue="10">
-                <SelectTrigger className="h-8 w-[100px] border-none shadow-none bg-transparent hover:bg-slate-100">
+                <SelectTrigger className="h-8 w-[100px] border-none shadow-none bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800">
                     <SelectValue placeholder="10 rows" />
                 </SelectTrigger>
                 <SelectContent>
@@ -778,11 +778,11 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                 size="sm" 
                 onClick={handlePrevPage} 
                 disabled={currentPage === 1}
-                className="bg-slate-50 border-none shadow-none text-slate-500 hover:text-slate-900"
+                className="bg-slate-50 dark:bg-slate-800 border-none shadow-none text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
               >
                   <ChevronLeft className="h-4 w-4 mr-1" /> Prev
               </Button>
-              <div className="text-sm font-medium text-slate-900 bg-slate-100 px-3 py-1 rounded-md">
+              <div className="text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-md">
                  {currentPage} / {totalPages || 1}
               </div>
               <Button 
@@ -790,7 +790,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                 size="sm" 
                 onClick={handleNextPage} 
                 disabled={currentPage >= totalPages}
-                className="bg-slate-50 border-none shadow-none text-slate-500 hover:text-slate-900"
+                className="bg-slate-50 dark:bg-slate-800 border-none shadow-none text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
               >
                   Next <ChevronRight className="h-4 w-4 ml-1" />
               </Button>

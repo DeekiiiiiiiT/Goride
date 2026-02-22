@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
-import { findMatchingStation, calculateDistance } from "./geo_matcher.ts";
+import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
 
 const app = new Hono();
 
@@ -205,9 +205,12 @@ async function signRecord(record: any): Promise<string> {
  * Driver Portal entries store GPS in `geofenceMetadata.lat/lng`.
  * Seeder/import entries store GPS in `entry.lat/lng`.
  * Some entries may have coords in `entry.metadata.lat` or `entry.location.lat`.
+ * Top-level `entry.locationMetadata.lat` comes from Driver Portal submissions.
+ * `entry.metadata.location.lat` comes from entries with nested location objects.
  * 
  * This helper checks ALL known coordinate locations to ensure no entry is
  * invisible to the Evidence Bridge, reconciler, or spatial matching logic.
+ * Must stay in parity with frontend coordinate extraction in GasStationAnalytics.tsx.
  */
 function extractEntryCoords(entry: any): { lat: number; lng: number } | null {
     const lat = Number(
@@ -215,17 +218,164 @@ function extractEntryCoords(entry: any): { lat: number; lng: number } | null {
         entry.location?.lat || 
         entry.metadata?.lat || 
         entry.geofenceMetadata?.lat || 
-        entry.metadata?.locationMetadata?.lat
+        entry.metadata?.locationMetadata?.lat ||
+        entry.locationMetadata?.lat ||
+        entry.metadata?.location?.lat
     );
     const lng = Number(
         entry.lng || 
         entry.location?.lng || 
         entry.metadata?.lng || 
         entry.geofenceMetadata?.lng || 
-        entry.metadata?.locationMetadata?.lng
+        entry.metadata?.locationMetadata?.lng ||
+        entry.locationMetadata?.lng ||
+        entry.metadata?.location?.lng
     );
     if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
     return { lat, lng };
+}
+
+/**
+ * Normalize a Plus Code for comparison.
+ * Strips whitespace, uppercases, and removes compound locality (e.g., "X36X+5W Portmore" → "X36X+5W").
+ * Returns only the code portion.
+ */
+function normalizePlusCode(code: string | null | undefined): string {
+    if (!code || typeof code !== 'string') return '';
+    const trimmed = code.trim().toUpperCase();
+    // Extract just the code part (before any space — compound codes have "CODE LOCALITY")
+    const parts = trimmed.split(/\s+/);
+    return parts[0] || '';
+}
+
+/**
+ * Check if two Plus Codes refer to the same location.
+ * 
+ * Uses EXACT match only (after normalization).
+ * 
+ * Previously included parent-child prefix matching (e.g., 10-digit parent
+ * containing an 11-digit child), but this caused false duplicates: a ~14m
+ * parent cell can contain up to 20 distinct ~3m child cells, so two different
+ * stations on the same block would incorrectly match. Physical proximity
+ * detection is handled separately by Pass 2 (geofence overlap).
+ * 
+ * Returns true only if codes are identical after normalization.
+ */
+function plusCodesMatch(codeA: string, codeB: string): boolean {
+    const a = normalizePlusCode(codeA).replace('+', '');
+    const b = normalizePlusCode(codeB).replace('+', '');
+    if (!a || !b) return false;
+    // Exact match only — no parent-child prefix matching
+    return a === b;
+}
+
+/**
+ * Duplicate Station Detection
+ * 
+ * Two-pass detection:
+ *   Pass 1 — Plus Code exact match only (definitive spatial identity)
+ *   Pass 2 — Geofence overlap check (GPS proximity using station's configured radius)
+ * 
+ * Used by:
+ *   - GET /stations/check-duplicate (real-time frontend check)
+ *   - POST /stations (server-side guard on creation)
+ *   - POST /stations/promote-learnt (guard on promote-as-create)
+ * 
+ * @param plusCode   The Plus Code being checked (can be null)
+ * @param lat        Latitude of the new station
+ * @param lng        Longitude of the new station
+ * @param excludeStationId  Station ID to exclude (for edit mode)
+ * @param category   Optional category filter ('fuel' | 'non_fuel')
+ * @returns The matching station with match type and distance, or null
+ */
+async function findDuplicateStation(
+    plusCode: string | null,
+    lat: number,
+    lng: number,
+    excludeStationId?: string,
+    category?: string
+): Promise<{ station: any; matchType: 'pluscode' | 'geofence'; distance: number } | null> {
+    // Fetch with keys for robust exclusion — value.id may be stale/missing,
+    // so we self-heal .id from the KV key to guarantee the exclude check works.
+    const { data: rawStations } = await supabase
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .like("key", "station:%");
+    const allStations: any[] = (rawStations || []).map(row => {
+        const station = row.value;
+        const keyId = row.key.replace('station:', '');
+        if (!station.id || station.id !== keyId) {
+            station.id = keyId;
+        }
+        return station;
+    });
+    
+    const normalizedInput = normalizePlusCode(plusCode);
+    
+    if (excludeStationId) {
+        console.log(`[Duplicate Check] Excluding station ID: "${excludeStationId}" from search (${allStations.length} total stations)`);
+    }
+    
+    // --- Pass 1: Plus Code match (highest confidence, exact match only) ---
+    if (normalizedInput && normalizedInput.includes('+')) {
+        console.log(`[Duplicate Check] Pass 1: checking Plus Code "${normalizedInput}" against ${allStations.length} stations (exact match only)`);
+        for (const station of allStations) {
+            if (excludeStationId && station.id === excludeStationId) continue;
+            if (category && station.category && station.category !== category) continue;
+            
+            const stationCode = normalizePlusCode(station.plusCode);
+            if (stationCode && plusCodesMatch(normalizedInput, stationCode)) {
+                const dist = (station.location?.lat && station.location?.lng)
+                    ? calculateDistance(lat, lng, station.location.lat, station.location.lng)
+                    : 0;
+                console.log(`[Duplicate Check] Plus Code EXACT match: "${normalizedInput}" === "${stationCode}" → station "${station.name}", distance: ${Math.round(dist)}m`);
+                return { station, matchType: 'pluscode', distance: Math.round(dist) };
+            }
+        }
+        console.log(`[Duplicate Check] Pass 1: no exact Plus Code match found for "${normalizedInput}"`);
+    }
+    
+    // --- Pass 2: Geofence overlap (spatial proximity) ---
+    let closestMatch: { station: any; distance: number } | null = null;
+    
+    for (const station of allStations) {
+        if (excludeStationId && station.id === excludeStationId) continue;
+        if (category && station.category && station.category !== category) continue;
+        
+        // Use the station's configured geofence radius, or default
+        const stationRadius = station.geofenceRadius || 150;
+        
+        // Check primary location
+        if (station.location?.lat && station.location?.lng) {
+            const dist = calculateDistance(lat, lng, station.location.lat, station.location.lng);
+            if (dist <= stationRadius) {
+                if (!closestMatch || dist < closestMatch.distance) {
+                    closestMatch = { station, distance: Math.round(dist) };
+                }
+            }
+        }
+        
+        // Check GPS aliases (merged learnt locations)
+        if (station.gpsAliases && Array.isArray(station.gpsAliases)) {
+            for (const alias of station.gpsAliases) {
+                if (alias.lat && alias.lng) {
+                    const aliasDist = calculateDistance(lat, lng, alias.lat, alias.lng);
+                    if (aliasDist <= stationRadius) {
+                        if (!closestMatch || aliasDist < closestMatch.distance) {
+                            closestMatch = { station, distance: Math.round(aliasDist) };
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (closestMatch) {
+        console.log(`[Duplicate Check] Geofence overlap: coordinates (${lat}, ${lng}) within ${closestMatch.distance}m of station "${closestMatch.station.name}" (radius: ${closestMatch.station.geofenceRadius || 150}m)`);
+        return { station: closestMatch.station, matchType: 'geofence', distance: closestMatch.distance };
+    }
+    
+    return null;
 }
 
 // --- PHASE 6: MASTER LEDGER & INTEGRITY GAP ---
@@ -331,7 +481,49 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
             
             return c.json({ success: true, message: "Merged successfully", data: station, linkedEntries: linkedCount });
         } else if (action === 'create') {
-            // Create new verified station
+            // --- Duplicate Guard: check before creating ---
+            const checkLat = stationData?.location?.lat || learnt.location?.lat || 0;
+            const checkLng = stationData?.location?.lng || learnt.location?.lng || 0;
+            const checkPlusCode = stationData?.plusCode || learnt.plusCode || null;
+
+            if (checkPlusCode || (checkLat && checkLng)) {
+                const dupeResult = await findDuplicateStation(checkPlusCode, checkLat, checkLng, undefined, stationData?.category);
+
+                if (dupeResult) {
+                    // Auto-merge into the existing station instead of creating a duplicate
+                    const existingStation = dupeResult.station;
+                    console.log(`[Promote-Learnt] Duplicate detected — auto-merging learnt ${learntId} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
+
+                    const autoAlias = {
+                        id: crypto.randomUUID(),
+                        lat: learnt.location.lat,
+                        lng: learnt.location.lng,
+                        label: `Auto-merged from Learnt: ${learnt.name} (duplicate ${dupeResult.matchType} match)`,
+                        addedAt: new Date().toISOString()
+                    };
+
+                    existingStation.aliases = [...(existingStation.aliases || []), autoAlias];
+                    existingStation.gpsAliases = [...(existingStation.gpsAliases || []), { lat: learnt.location.lat, lng: learnt.location.lng, mergedAt: new Date().toISOString() }];
+
+                    await kv.set(`station:${existingStation.id}`, existingStation);
+
+                    const linkedCount = await linkOrphanEntriesToStation(learnt, existingStation.id, existingStation.name);
+                    await kv.del(`learnt_location:${learntId}`);
+                    console.log(`[Promote-Learnt] Auto-merge complete: learnt ${learntId} → station ${existingStation.id}, linked ${linkedCount} fuel entries.`);
+
+                    return c.json({
+                        success: true,
+                        autoMerged: true,
+                        message: `Duplicate detected (${dupeResult.matchType}, ${dupeResult.distance}m). Auto-merged into existing station: ${existingStation.name}`,
+                        data: existingStation,
+                        linkedEntries: linkedCount,
+                        matchType: dupeResult.matchType,
+                        distance: dupeResult.distance,
+                    });
+                }
+            }
+
+            // No duplicate — proceed with normal station creation
             const newStationId = stationData.id || crypto.randomUUID();
             const newStation = {
                 ...stationData,
@@ -442,15 +634,129 @@ async function linkOrphanEntriesToStation(
     return linkedCount;
 }
 
-// 4. Integrity Gap Metrics
+/**
+ * Auto-cleanup resolved learnt locations.
+ * 
+ * A learnt location is considered "resolved" when:
+ *   1) Its source fuel entry already has a matchedStationId (the transaction was
+ *      retroactively matched after a station was added), OR
+ *   2) Its GPS coordinates fall within a verified/accepted station's geofence
+ *      (the station was added after the fueling event)
+ * 
+ * For case (2), also links the source fuel entry if it hasn't been linked yet.
+ * 
+ * Returns the number of learnt locations cleaned up.
+ */
+async function cleanupResolvedLearntLocations(
+    targetStation?: any
+): Promise<{ cleaned: number; details: Array<{ learntId: string; learntName: string; resolvedBy: string; stationName: string }> }> {
+    const learntLocations: any[] = (await kv.getByPrefix("learnt_location:")) || [];
+    if (learntLocations.length === 0) return { cleaned: 0, details: [] };
+
+    const allStations: any[] = (await kv.getByPrefix("station:")) || [];
+    const details: Array<{ learntId: string; learntName: string; resolvedBy: string; stationName: string }> = [];
+
+    for (const loc of learntLocations) {
+        let resolved = false;
+        let resolvedBy = '';
+        let resolvedStationName = '';
+
+        // Check 1: Source fuel entry already matched to a station
+        if (loc.sourceEntryId) {
+            const entry = await kv.get(`fuel_entry:${loc.sourceEntryId}`);
+            if (entry?.matchedStationId) {
+                resolved = true;
+                resolvedBy = 'source_entry_matched';
+                const matchedStation = allStations.find((s: any) => s.id === entry.matchedStationId);
+                resolvedStationName = matchedStation?.name || entry.matchedStationId;
+            }
+        }
+
+        // Check 2: GPS falls within a station's geofence
+        if (!resolved && loc.location?.lat && loc.location?.lng) {
+            const stationsToCheck = targetStation ? [targetStation] : allStations;
+            for (const station of stationsToCheck) {
+                if (!station.location?.lat || !station.location?.lng) continue;
+                const dist = calculateDistance(loc.location.lat, loc.location.lng, station.location.lat, station.location.lng);
+                const stationRadius = station.geofenceRadius || 150;
+                if (dist <= stationRadius) {
+                    resolved = true;
+                    resolvedBy = 'geofence_match';
+                    resolvedStationName = station.name;
+
+                    // Also link the source fuel entry if it's orphaned
+                    if (loc.sourceEntryId) {
+                        const entry = await kv.get(`fuel_entry:${loc.sourceEntryId}`);
+                        if (entry && !entry.matchedStationId) {
+                            entry.matchedStationId = station.id;
+                            entry.vendor = station.name || entry.vendor;
+                            entry.metadata = {
+                                ...entry.metadata,
+                                locationStatus: 'verified',
+                                verificationMethod: 'auto_cleanup_geofence',
+                                matchedStationId: station.id,
+                            };
+                            entry.signature = await signRecord(entry);
+                            entry.signedAt = new Date().toISOString();
+                            await kv.set(`fuel_entry:${entry.id}`, entry);
+                            console.log(`[Auto-Cleanup] Linked orphan entry ${entry.id} → station ${station.id} (${station.name})`);
+                        }
+                    }
+                    break;
+                }
+
+                // Also check GPS aliases
+                if (station.gpsAliases && Array.isArray(station.gpsAliases)) {
+                    for (const alias of station.gpsAliases) {
+                        if (alias.lat && alias.lng) {
+                            const aliasDist = calculateDistance(loc.location.lat, loc.location.lng, alias.lat, alias.lng);
+                            if (aliasDist <= stationRadius) {
+                                resolved = true;
+                                resolvedBy = 'gps_alias_match';
+                                resolvedStationName = station.name;
+                                break;
+                            }
+                        }
+                    }
+                    if (resolved) break;
+                }
+            }
+        }
+
+        if (resolved) {
+            await kv.del(`learnt_location:${loc.id}`);
+            details.push({
+                learntId: loc.id,
+                learntName: loc.name || 'Unknown',
+                resolvedBy,
+                stationName: resolvedStationName
+            });
+            console.log(`[Auto-Cleanup] Removed resolved learnt location "${loc.name || loc.id}" — ${resolvedBy} → "${resolvedStationName}"`);
+        }
+    }
+
+    if (details.length > 0) {
+        console.log(`[Auto-Cleanup] Cleaned up ${details.length} resolved learnt location(s)`);
+    }
+
+    return { cleaned: details.length, details };
+}
+
+// 4. Integrity Gap Metrics (Optimized: parallel Supabase queries instead of getByPrefix)
 app.get(`${BASE_PATH}/analytics/integrity-metrics`, async (c) => {
     try {
-        const entries = await kv.getByPrefix("fuel_entry:");
-        const stations = await kv.getByPrefix("station:");
+        // Run queries in parallel for speed
+        const [entriesResult, verifiedResult, stationsResult] = await Promise.all([
+            supabase.from("kv_store_37f42386").select("value->amount").like("key", "fuel_entry:%"),
+            supabase.from("kv_store_37f42386").select("value->amount").like("key", "fuel_entry:%").eq("value->metadata->>locationStatus", "verified"),
+            supabase.from("kv_store_37f42386").select("*", { count: 'exact', head: true }).like("key", "station:%").eq("value->>status", "verified")
+        ]);
         
-        const totalSpend = entries.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
-        const verifiedSpend = entries.filter((e: any) => e.metadata?.locationStatus === 'verified')
-                                     .reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+        const allAmounts = (entriesResult.data || []);
+        const verifiedAmounts = (verifiedResult.data || []);
+        
+        const totalSpend = allAmounts.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+        const verifiedSpend = verifiedAmounts.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
         
         const unverifiedSpend = totalSpend - verifiedSpend;
         const integrityGapPercentage = totalSpend > 0 ? (unverifiedSpend / totalSpend) * 100 : 0;
@@ -460,9 +766,9 @@ app.get(`${BASE_PATH}/analytics/integrity-metrics`, async (c) => {
             verifiedSpend,
             unverifiedSpend,
             integrityGapPercentage,
-            verifiedCount: entries.filter((e: any) => e.metadata?.locationStatus === 'verified').length,
-            unverifiedCount: entries.filter((e: any) => e.metadata?.locationStatus !== 'verified').length,
-            masterStationCount: stations.filter((s: any) => s.status === 'verified').length
+            verifiedCount: verifiedAmounts.length,
+            unverifiedCount: allAmounts.length - verifiedAmounts.length,
+            masterStationCount: stationsResult.count || 0
         });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
@@ -519,6 +825,10 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
             const { tankCapacity, baselineEfficiency, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
             const profileKmPerLiter = baselineEfficiency;
 
+            // Phase 23: compute rolling average efficiency for this vehicle as of this entry's date
+            const rollingAvg = await fuelLogic.calculateRollingEfficiency(entry.vehicleId, entry.date);
+            const effectiveBaseline = rollingAvg?.avgKmPerLiter || 0;
+
             // 2. Fetch recent entries to calculate cycle state using Step 1.3 Helper
             const lastAnchor = await fuelLogic.getLastAnchor(entry.vehicleId);
             const lastAnchorOdo = Number(lastAnchor?.odometer) || 0;
@@ -558,26 +868,39 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
             }
 
             // Efficiency Math
+            // Phase 23: use rolling average baseline instead of manufacturer spec
             let actualKmPerLiter = 0;
             let efficiencyVariance = 0;
             if (distanceSinceAnchor > 0 && totalVolumeInCycle > 0) {
                 actualKmPerLiter = distanceSinceAnchor / totalVolumeInCycle;
-                if (profileKmPerLiter > 0) {
-                    efficiencyVariance = (profileKmPerLiter - actualKmPerLiter) / profileKmPerLiter;
+                if (effectiveBaseline > 0) {
+                    efficiencyVariance = (effectiveBaseline - actualKmPerLiter) / effectiveBaseline;
                 }
             }
 
             // Step 3.2: Behavioral Integrity - Frequency Check
+            // Optimized: use targeted Supabase queries instead of loading ALL entries
             const recentTimeWindow = new Date(new Date(entry.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
-            const allEntriesRaw = await kv.getByPrefix("fuel_entry:");
-            const vehicleEntries = allEntriesRaw
-                .filter((e: any) => e.vehicleId === entry.vehicleId && e.id !== entry.id)
-                .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                
-            const recentTxCount = vehicleEntries.filter(e => e.date >= recentTimeWindow).length;
+            
+            const { count: recentTxCountRaw } = await supabase
+                .from("kv_store_37f42386")
+                .select("*", { count: 'exact', head: true })
+                .like("key", "fuel_entry:%")
+                .eq("value->>vehicleId", entry.vehicleId)
+                .gte("value->>date", recentTimeWindow)
+                .neq("value->>id", entry.id);
+            const recentTxCount = recentTxCountRaw || 0;
 
-            // Step 5.1: Odometer Sequence Audit
-            const prevEntry = vehicleEntries[0]; // Most recent past entry
+            // Step 5.1: Odometer Sequence Audit - fetch only the most recent entry for this vehicle
+            const { data: prevEntryData } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "fuel_entry:%")
+                .eq("value->>vehicleId", entry.vehicleId)
+                .neq("value->>id", entry.id)
+                .order("value->>date", { ascending: false })
+                .limit(1);
+            const prevEntry = prevEntryData?.[0]?.value || null;
             const odoAudit = fuelLogic.auditOdometerSequence({
                 currentOdo: Number(entry.odometer),
                 prevOdo: Number(prevEntry?.odometer || 0),
@@ -585,6 +908,13 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
             });
 
             // Step 3.3: Integrated Integrity Engine
+            // Card-only frequency check: only flag card transactions, cash/reimbursement exempt
+            const isCardTransaction = entry.type === 'Card_Transaction' || entry.paymentSource === 'Gas_Card';
+            const auditConfig = await kv.get("config:audit_settings");
+            const frequencyThreshold = Number(auditConfig?.frequencyThreshold) || 3;
+            // Phase 23: configurable efficiency variance threshold
+            const efficiencyThreshold = Number(auditConfig?.efficiencyThreshold) || 0.30;
+            
             const integrity = fuelLogic.calculateIntegrity({
                 volume: volumeAtEntry,
                 tankCapacity,
@@ -594,7 +924,12 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 recentTxCount,
                 isTopUp: entry.metadata?.isTopUp,
                 isAnchor: isHardAnchor || isSoftAnchor,
-                rangeMin
+                rangeMin,
+                isCardTransaction,
+                frequencyThreshold,
+                // Phase 23: pass rolling average and configurable threshold
+                rollingAvgEfficiency: effectiveBaseline,
+                efficiencyThreshold
             });
 
             // Override if Odo Audit is more severe
@@ -608,7 +943,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 auditStatus = odoAudit.auditStatus || auditStatus;
             }
 
-            const isHighFrequency = recentTxCount >= 1; 
+            const isHighFrequency = isCardTransaction && recentTxCount >= (frequencyThreshold - 1); 
             const isFragmented = tankCapacity > 0 && (volumeAtEntry / tankCapacity) < 0.15 && !entry.metadata?.isTopUp;
 
             // Phase 7: Predictive Intelligence Integration
@@ -624,7 +959,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 actualEfficiency: actualKmPerLiter,
                 profileEfficiency: profileKmPerLiter,
                 utilization: (totalVolumeInCycle / tankCapacity) * 100,
-                isAnchor: isHardAnchor || isSoftAnchor
+                isAnchor: isHardAnchor || isSoftAnchor,
+                // Phase 23: pass rolling average for more accurate leakage detection
+                rollingAvgEfficiency: effectiveBaseline
             });
 
             // Update Entry Metadata (Step 1.1 Schema)
@@ -637,6 +974,11 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 distanceSinceAnchor,
                 actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
                 profileKmPerLiter,
+                // Phase 23: rolling average metadata
+                rollingAvgKmPerLiter: rollingAvg?.avgKmPerLiter ?? null,
+                rollingAvgWindow: rollingAvg?.window ?? null,
+                rollingAvgEntryCount: rollingAvg?.entryCount ?? 0,
+                efficiencyBaseline: rollingAvg ? 'rolling' : 'skipped',
                 efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
                 isSoftAnchor,
                 integrityStatus,
@@ -700,12 +1042,16 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     const entryLat = entryCoords?.lat || 0;
     const entryLng = entryCoords?.lng || 0;
 
-    if (entryCoords) {
-        // Phase 8 Optimization: Get all stations once
-        const allStations = await kv.getByPrefix("station:") || [];
-        const matchedStation = findMatchingStation(entryLat, entryLng, allStations, 600); 
+    // Phase 8 Optimization: Load all stations ONCE and reuse across handshake + geofence verification
+    const allStationsForEntry = entryCoords ? (await kv.getByPrefix("station:") || []) : [];
 
-        if (matchedStation) {
+    if (entryCoords) {
+        const smartResult = findMatchingStationSmart(entryLat, entryLng, allStationsForEntry, 600, 0);
+
+        if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
+            // --- Confident match: proceed with full handshake (same as before) ---
+            const matchedStation = smartResult.station as any;
+
             if (!matchedStation.stats) matchedStation.stats = { totalVisits: 0 };
             matchedStation.stats.totalVisits = (Number(matchedStation.stats.totalVisits) || 0) + 1;
             matchedStation.stats.lastVisited = entry.date || new Date().toISOString();
@@ -720,7 +1066,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 locationStatus: isVerified ? 'verified' : 'review_required',
                 verificationMethod: 'gps_handshake',
                 matchedStationId: matchedStation.id,
-                matchDistance: Math.round(calculateDistance(entryLat, entryLng, matchedStation.location.lat, matchedStation.location.lng))
+                matchDistance: smartResult.distance,
+                matchConfidence: smartResult.confidence
             };
 
             if (isVerified) {
@@ -747,8 +1094,39 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 entry.signature = await auditLogic.generateRecordHash(entry);
                 console.log(`[Auto-Lock] Entry ${entry.id} locked and signed with score ${confidence.score}`);
             }
+
+            console.log(`[SmartGeoMatch] POST entry ${entry.id} matched "${matchedStation.name}" (${matchedStation.id}) at ${smartResult.distance}m [${smartResult.confidence}]`);
+
+        } else if (smartResult.confidence === 'ambiguous') {
+            // --- Ambiguous: create entry but flag for review, do NOT sign/lock ---
+            const closestStation = smartResult.station as any;
+            if (closestStation) {
+                entry.matchedStationId = closestStation.id;
+                entry.vendor = closestStation.name;
+                entry.metadata = {
+                    ...entry.metadata,
+                    locationStatus: 'review_required',
+                    verificationMethod: 'gps_ambiguous',
+                    matchedStationId: closestStation.id,
+                    matchDistance: smartResult.distance,
+                    matchConfidence: 'ambiguous',
+                    ambiguityReason: smartResult.ambiguityReason
+                };
+                entry.auditStatus = 'Review Required';
+
+                // Still calculate confidence (will naturally be lower without a firm GPS match)
+                const confidence = fuelLogic.calculateConfidenceScore(entry, closestStation);
+                entry.metadata = {
+                    ...entry.metadata,
+                    auditConfidenceScore: confidence.score,
+                    auditConfidenceBreakdown: confidence.breakdown,
+                    isHighlyTrusted: confidence.isHighlyTrusted
+                };
+            }
+            console.log(`[SmartGeoMatch] Ambiguous match for entry ${entry.id}. ${smartResult.ambiguityReason}`);
+
         } else {
-            // Step 1.4: "Learnt" Funnel - funnel into the review queue
+            // --- No match: Learnt Location funnel (preserved from original) ---
             const learntId = crypto.randomUUID();
             const learntLocation = {
                 id: learntId,
@@ -767,6 +1145,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 locationStatus: 'unknown',
                 verificationMethod: 'none'
             };
+            console.log(`[SmartGeoMatch] No match for entry ${entry.id} — created Learnt Location: ${learntId}`);
         }
     }
 
@@ -779,10 +1158,10 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
         let matchedStationForVerification = null;
 
         if (entry.matchedStationId) {
-            matchedStationForVerification = await kv.get(`station:${entry.matchedStationId}`);
+            // Reuse pre-loaded stations list to find by ID instead of a separate kv.get
+            matchedStationForVerification = allStationsForEntry.find((s: any) => s.id === entry.matchedStationId) || null;
         } else {
-            const allStations = await kv.getByPrefix("station:") || [];
-            matchedStationForVerification = findMatchingStation(geofence.lat, geofence.lng, allStations, 1000);
+            matchedStationForVerification = findMatchingStation(geofence.lat, geofence.lng, allStationsForEntry, 1000);
         }
 
         if (matchedStationForVerification) {
@@ -917,42 +1296,75 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
             return c.json({ success: true, message: "No fuel entries found to reconcile." });
         }
 
-        // 1. Identify Orphans (Unknown vendor or missing link)
-        const orphans = allEntries.filter(e => 
-            !e.matchedStationId || 
-            e.metadata?.locationStatus === 'unknown' || 
-            (e.vendor && e.vendor.toLowerCase().includes('unknown'))
-        );
+        // 1. Identify Orphans — widened filter to catch ALL unresolved entries
+        // An entry needs reconciliation if ANY of these are true:
+        const validStationIds = new Set((allStations || []).map((s: any) => s.id));
+        const orphans = allEntries.filter(e => {
+            // a) No station link at all
+            if (!e.matchedStationId) return true;
+            // b) Location status is unknown or missing entirely
+            if (e.metadata?.locationStatus === 'unknown' || !e.metadata?.locationStatus) return true;
+            // c) Vendor is unknown or missing
+            if (!e.vendor || e.vendor.toLowerCase().includes('unknown')) return true;
+            // d) Location string contains "unknown" (catches "Fuel Expense - Unknown" etc.)
+            if (e.location && typeof e.location === 'string' && e.location.toLowerCase().includes('unknown')) return true;
+            // e) Linked to a deleted station
+            if (e.matchedStationId && !validStationIds.has(e.matchedStationId)) return true;
+            // f) Has review_required status — station may have been verified since save
+            if (e.metadata?.locationStatus === 'review_required') return true;
+            return false;
+        });
 
         console.log(`[Reconcile] Found ${orphans.length} potential orphans out of ${allEntries.length} entries.`);
 
         let matchCount = 0;
-        const stationUpdateMap = new Map(); // stationId -> { visits: number, lastVisited: string }
+        let skippedNoCoords = 0;
+        let skippedNoMatch = 0;
+        let skippedAmbiguous = 0;
+        const stationUpdateMap = new Map();
 
-        // 2. Map Orphans to Master Ledger
+        // 2. Map Orphans to Master Ledger (Smart Ambiguity-Aware Matching)
         for (const entry of orphans) {
             const coords = extractEntryCoords(entry);
-            if (!coords) continue;
+            if (!coords) {
+                skippedNoCoords++;
+                continue;
+            }
             const entryLat = coords.lat;
             const entryLng = coords.lng;
 
-            const matchedStation = findMatchingStation(entryLat, entryLng, allStations, 600);
+            const smartResult = findMatchingStationSmart(entryLat, entryLng, allStations, 600, 0);
 
-            if (matchedStation) {
+            if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
+                const matchedStation = smartResult.station as any;
                 matchCount++;
                 
                 // Normalize: ensure top-level lat/lng exist for future lookups
                 if (!entry.lat) { entry.lat = entryLat; entry.lng = entryLng; }
                 
-                // Update Entry
+                // Update Entry — fix vendor, location display, and all metadata
                 entry.matchedStationId = matchedStation.id;
                 entry.vendor = matchedStation.name;
+                // Also update the location field if it contains "Unknown"
+                if (!entry.location || (typeof entry.location === 'string' && entry.location.toLowerCase().includes('unknown'))) {
+                    entry.location = matchedStation.name;
+                }
                 entry.metadata = {
                     ...entry.metadata,
-                    locationStatus: 'verified',
-                    verificationMethod: 'historical_backfill',
+                    locationStatus: matchedStation.status === 'verified' ? 'verified' : 'review_required',
+                    verificationMethod: 'historical_backfill_smart',
                     matchedStationId: matchedStation.id,
-                    matchDistance: Math.round(calculateDistance(entryLat, entryLng, matchedStation.location.lat, matchedStation.location.lng))
+                    matchDistance: smartResult.distance,
+                    matchConfidence: smartResult.confidence
+                };
+
+                // Calculate confidence score for backfilled entries
+                const confidence = fuelLogic.calculateConfidenceScore(entry, matchedStation);
+                entry.metadata = {
+                    ...entry.metadata,
+                    auditConfidenceScore: confidence.score,
+                    auditConfidenceBreakdown: confidence.breakdown,
+                    isHighlyTrusted: confidence.isHighlyTrusted
                 };
 
                 // Phase 5: Cryptographic Guardrail - Sign historical reconciliation
@@ -972,6 +1384,11 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
                     stats.lastVisited = entry.date;
                 }
                 stationUpdateMap.set(matchedStation.id, stats);
+            } else if (smartResult.confidence === 'ambiguous') {
+                skippedAmbiguous++;
+                console.log(`[Reconcile] Skipped ambiguous entry ${entry.id}. ${smartResult.ambiguityReason}`);
+            } else {
+                skippedNoMatch++;
             }
         }
 
@@ -986,11 +1403,8 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
                     lastReconciledAt: new Date().toISOString()
                 };
                 
-                // If matched historically, ensure it's marked as verified
-                if (station.status !== 'verified') {
-                    station.status = 'verified';
-                    station.verificationMethod = 'historical_reconciliation';
-                }
+                // Do NOT auto-promote — station status must be changed by admin only.
+                // Unverified stations stay unverified regardless of how many entries match.
 
                 await kv.set(`station:${stationId}`, station);
             }
@@ -1000,12 +1414,159 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
             success: true, 
             orphansProcessed: orphans.length,
             matchesFound: matchCount,
+            skippedNoCoords,
+            skippedNoMatch,
+            skippedAmbiguous,
             stationsUpdated: stationUpdateMap.size,
-            message: `Reconciliation complete. ${matchCount} transactions successfully bridged to the Master Ledger.`
+            message: `Reconciliation complete. ${matchCount} matched, ${skippedAmbiguous} ambiguous (skipped), ${skippedNoMatch} no match, ${skippedNoCoords} no GPS.`
         });
     } catch (e: any) {
         console.error("[Reconcile Error]", e);
         return c.json({ error: e.message }, 500);
+    }
+});
+
+// --- BULK ASSIGN STATION (Manual Orphan Resolution) ---
+app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
+    try {
+        // Step 1: Parse request body
+        let body: any;
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ error: "Invalid JSON in request body" }, 400);
+        }
+
+        const { entryIds, stationId } = body;
+
+        // Step 2: Validate stationId
+        if (!stationId || typeof stationId !== 'string' || stationId.trim().length === 0) {
+            return c.json({ error: "Missing required field: stationId" }, 400);
+        }
+
+        // Step 3: Validate entryIds
+        if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
+            return c.json({ error: "Missing or empty required field: entryIds" }, 400);
+        }
+
+        // Validate every element is a string
+        const invalidEntry = entryIds.find((id: any) => typeof id !== 'string' || id.trim().length === 0);
+        if (invalidEntry !== undefined) {
+            return c.json({ error: "All entryIds must be non-empty strings" }, 400);
+        }
+
+        // Cap batch size to prevent timeout
+        if (entryIds.length > 200) {
+            return c.json({ error: "Batch too large. Maximum 200 entries per request." }, 400);
+        }
+
+        // Step 4: Validate target station exists in Master Ledger
+        const station = await kv.get(`station:${stationId}`);
+        if (!station) {
+            return c.json({ error: "Target station not found in Master Ledger" }, 404);
+        }
+
+        console.log(`[BulkAssign] Target station: ${station.name} (${stationId}), assigning ${entryIds.length} entries`);
+
+        // Step 5: Process entries — fetch, stamp, re-sign, persist
+        let updatedCount = 0;
+        let skippedNotFound = 0;
+        let skippedAlreadyAssigned = 0;
+        const errors: { entryId: string; reason: string }[] = [];
+        let latestDate: string | null = null;
+
+        for (const entryId of entryIds) {
+            // 5a. Fetch entry from KV
+            const entry = await kv.get(`fuel_entry:${entryId}`);
+            if (!entry) {
+                skippedNotFound++;
+                errors.push({ entryId, reason: "Entry not found" });
+                continue;
+            }
+
+            // 5b. Idempotency — skip if already assigned to this exact station
+            if (entry.matchedStationId === stationId) {
+                skippedAlreadyAssigned++;
+                continue;
+            }
+
+            // 5c. Stamp station metadata (mirrors reconciler pattern lines ~1265-1277)
+            entry.matchedStationId = stationId;
+            entry.vendor = station.name;
+
+            // Only overwrite location if it's falsy, contains "Unknown", or is "Manual Entry"
+            if (!entry.location || 
+                (typeof entry.location === 'string' && entry.location.toLowerCase().includes('unknown')) ||
+                entry.location === 'Manual Entry') {
+                entry.location = station.name;
+            }
+
+            entry.metadata = {
+                ...entry.metadata,
+                locationStatus: 'verified',
+                verificationMethod: 'manual_bulk_assign',
+                matchedStationId: stationId,
+                bulkAssignedAt: new Date().toISOString()
+            };
+
+            // 5d. Re-sign with SHA-256 (cryptographic chain-of-custody)
+            entry.signature = await signRecord(entry);
+            entry.signedAt = new Date().toISOString();
+
+            // 5e. Persist to KV
+            await kv.set(`fuel_entry:${entryId}`, entry);
+            updatedCount++;
+
+            // Track latest date for station stats (Phase 3)
+            if (entry.date) {
+                if (!latestDate || new Date(entry.date) > new Date(latestDate)) {
+                    latestDate = entry.date;
+                }
+            }
+        }
+
+        console.log(`[BulkAssign] Complete: ${updatedCount} updated, ${skippedNotFound} not found, ${skippedAlreadyAssigned} already assigned`);
+
+        // Step 6: Update station visit stats
+        const currentVisits = Number(station.stats?.totalVisits) || 0;
+        const newTotalVisits = currentVisits + updatedCount;
+
+        if (updatedCount > 0) {
+            station.stats = {
+                ...station.stats,
+                totalVisits: newTotalVisits,
+                ...(latestDate && (!station.stats?.lastVisited || new Date(latestDate) > new Date(station.stats.lastVisited))
+                    ? { lastVisited: latestDate }
+                    : {}),
+                lastBulkAssignAt: new Date().toISOString()
+            };
+            await kv.set(`station:${stationId}`, station);
+        }
+
+        // Step 7: Build response
+        const message = updatedCount > 0
+            ? `${updatedCount} entries successfully assigned to ${station.name}.`
+            : "No entries were updated. All were either not found or already assigned to this station.";
+
+        return c.json({
+            success: true,
+            summary: {
+                requested: entryIds.length,
+                updated: updatedCount,
+                skippedNotFound,
+                skippedAlreadyAssigned,
+                errors: errors.length
+            },
+            station: {
+                id: stationId,
+                name: station.name,
+                newTotalVisits
+            },
+            message
+        });
+    } catch (e: any) {
+        console.error("[BulkAssign Error]", e);
+        return c.json({ error: `Bulk assign failed: ${e.message}` }, 500);
     }
 });
 
@@ -1014,18 +1575,21 @@ app.get(`${BASE_PATH}/stations/:id/proof-of-work`, async (c) => {
     try {
         const stationId = c.req.param("id");
         const station = await kv.get(`station:${stationId}`);
-        const allEntries = await kv.getByPrefix("fuel_entry:") || [];
+
+        // Primary: fetch entries explicitly linked via matchedStationId (targeted query)
+        const { data: linkedData } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "fuel_entry:%")
+            .eq("value->>matchedStationId", stationId);
         
-        // Primary: entries explicitly linked via matchedStationId
-        const linked = allEntries.filter(e => e.matchedStationId === stationId);
+        const linked = (linkedData || []).map((d: any) => d.value);
         const linkedIds = new Set(linked.map((e: any) => e.id));
 
         // Spatial fallback: find unlinked entries within the station's geofence.
-        // This catches transactions that haven't been reconciled yet so they
-        // show in Transaction History immediately — no manual Sync needed.
+        // Only load unlinked entries (those without a matchedStationId) to save memory.
         if (station?.location?.lat && station?.location?.lng) {
             const radius = station.geofenceRadius || station.location?.radius || 150;
-            // Build list of all GPS points for this station (primary + aliases)
             const stationPoints = [{ lat: station.location.lat, lng: station.location.lng }];
             if (station.gpsAliases && Array.isArray(station.gpsAliases)) {
                 for (const alias of station.gpsAliases) {
@@ -1033,14 +1597,21 @@ app.get(`${BASE_PATH}/stations/:id/proof-of-work`, async (c) => {
                 }
             }
 
-            for (const entry of allEntries) {
+            // Only fetch entries that are NOT already linked to any station
+            const { data: unlinkedData } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "fuel_entry:%")
+                .is("value->>matchedStationId", null);
+            
+            const unlinkedEntries = (unlinkedData || []).map((d: any) => d.value);
+
+            for (const entry of unlinkedEntries) {
                 if (linkedIds.has(entry.id)) continue;
-                if (entry.matchedStationId) continue; // Linked to another station
                 
                 const coords = extractEntryCoords(entry);
                 if (!coords) continue;
                 
-                // Check against primary location and all GPS aliases
                 let isNearby = false;
                 for (const pt of stationPoints) {
                     const dist = calculateDistance(coords.lat, coords.lng, pt.lat, pt.lng);
@@ -1063,8 +1634,25 @@ app.get(`${BASE_PATH}/stations/:id/proof-of-work`, async (c) => {
 app.get(`${BASE_PATH}/fuel-audit/summary`, async (c) => {
     try {
         const vehicleId = c.req.query("vehicleId");
-        const allEntries = await kv.getByPrefix("fuel_entry:");
-        const summary = fuelLogic.generateAuditSummary(allEntries, vehicleId);
+        
+        // Optimized: use targeted Supabase query when filtering by vehicle
+        let entries;
+        if (vehicleId) {
+            const { data } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "fuel_entry:%")
+                .eq("value->>vehicleId", vehicleId);
+            entries = (data || []).map((d: any) => d.value);
+        } else {
+            const { data } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "fuel_entry:%");
+            entries = (data || []).map((d: any) => d.value);
+        }
+        
+        const summary = fuelLogic.generateAuditSummary(entries, vehicleId);
         return c.json(summary);
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
@@ -1073,8 +1661,14 @@ app.get(`${BASE_PATH}/fuel-audit/summary`, async (c) => {
 
 app.get(`${BASE_PATH}/fuel-audit/fleet-stats`, async (c) => {
     try {
-        const allEntries = await kv.getByPrefix("fuel_entry:");
-        const vehicles = await kv.getByPrefix("vehicle:");
+        // Load entries and vehicles in parallel via Supabase for better performance
+        const [entriesResult, vehiclesResult] = await Promise.all([
+            supabase.from("kv_store_37f42386").select("value").like("key", "fuel_entry:%"),
+            supabase.from("kv_store_37f42386").select("value").like("key", "vehicle:%")
+        ]);
+        
+        const allEntries = (entriesResult.data || []).map((d: any) => d.value);
+        const vehicles = (vehiclesResult.data || []).map((d: any) => d.value);
         
         const vehicleSummaries = vehicles.map((v: any) => {
             return fuelLogic.generateAuditSummary(allEntries, v.id);
@@ -1135,13 +1729,465 @@ app.get(`${BASE_PATH}/stations`, async (c) => {
     }
 });
 
+// Check for duplicate station before creation (real-time frontend check)
+app.get(`${BASE_PATH}/stations/check-duplicate`, async (c) => {
+    try {
+        const plusCode = c.req.query('plusCode') || '';
+        const lat = parseFloat(c.req.query('lat') || '0');
+        const lng = parseFloat(c.req.query('lng') || '0');
+        const excludeId = c.req.query('excludeId') || undefined;
+        const category = c.req.query('category') || undefined;
+
+        if (!lat && !lng && !plusCode) {
+            return c.json({ isDuplicate: false, message: 'No coordinates or Plus Code provided' });
+        }
+
+        const result = await findDuplicateStation(plusCode || null, lat, lng, excludeId, category);
+
+        if (result) {
+            return c.json({
+                isDuplicate: true,
+                existingStation: {
+                    id: result.station.id,
+                    name: result.station.name,
+                    plusCode: result.station.plusCode || '',
+                    address: result.station.address || '',
+                    brand: result.station.brand || '',
+                    status: result.station.status || 'unknown',
+                    distance: result.distance,
+                    matchType: result.matchType,
+                    geofenceRadius: result.station.geofenceRadius || 150,
+                },
+            });
+        }
+
+        return c.json({ isDuplicate: false });
+    } catch (e: any) {
+        console.error('[Check Duplicate] Error:', e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// --- DEMOTE STATION & CASCADE ---
+// Admin-only: Demotes a verified station back to unverified, unlinks all fuel entries
+// that referenced it, and creates a learnt location so the entries flow back into the
+// admin's normal Learnt → Verify workflow.
+app.post(`${BASE_PATH}/stations/demote`, async (c) => {
+    try {
+        const { stationId } = await c.req.json();
+        if (!stationId) return c.json({ error: 'stationId is required' }, 400);
+
+        // 1. Load & validate station
+        const station = await kv.get(`station:${stationId}`);
+        if (!station) return c.json({ error: `Station not found: ${stationId}` }, 404);
+        if (station.status !== 'verified') {
+            return c.json({ error: `Station "${station.name}" is already ${station.status}, not verified` }, 400);
+        }
+
+        console.log(`[Demote] Starting demotion cascade for station "${station.name}" (${stationId})`);
+
+        // 2. Demote the station
+        station.status = 'unverified';
+        station.demotedAt = new Date().toISOString();
+        station.demotionMethod = 'admin_manual';
+        await kv.set(`station:${stationId}`, station);
+        console.log(`[Demote] Station status set to 'unverified'`);
+
+        // 3. Find all fuel entries linked to this station
+        const allEntries = await kv.getByPrefix("fuel_entry:") || [];
+        const linkedEntries = allEntries.filter((e: any) => e.matchedStationId === stationId);
+        console.log(`[Demote] Found ${linkedEntries.length} fuel entries linked to this station`);
+
+        // 4. Unlink each entry — clear the station link but preserve history in metadata
+        let unlinkedCount = 0;
+        const entryIds: string[] = [];
+        for (const entry of linkedEntries) {
+            // Store previous link info for audit trail
+            entry.metadata = {
+                ...entry.metadata,
+                previousStationId: stationId,
+                previousStationName: station.name,
+                previousVendor: entry.vendor,
+                previousLocationStatus: entry.metadata?.locationStatus,
+                locationStatus: 'unverified',
+                verificationMethod: 'demoted_cascade',
+                demotedAt: new Date().toISOString(),
+            };
+            // Clear the link so Sync Orphans and the Learnt → Verify flow can re-process
+            entry.matchedStationId = null;
+            entry.vendor = null;
+
+            await kv.set(`fuel_entry:${entry.id}`, entry);
+            entryIds.push(entry.id);
+            unlinkedCount++;
+        }
+        console.log(`[Demote] Unlinked ${unlinkedCount} fuel entries`);
+
+        // 5. Create a learnt location at the station's GPS coords so it appears in the Learnt tab
+        let learntLocationId: string | null = null;
+        if (station.location?.lat && station.location?.lng && unlinkedCount > 0) {
+            learntLocationId = crypto.randomUUID();
+            const learntLocation = {
+                id: learntLocationId,
+                name: station.name || 'Demoted Station',
+                parentCompany: station.parentCompany || station.brand,
+                location: {
+                    lat: station.location.lat,
+                    lng: station.location.lng,
+                },
+                plusCode: station.plusCode || null,
+                timestamp: new Date().toISOString(),
+                status: 'learnt',
+                sourceEntryId: entryIds[0], // First entry for the direct-link pass during promote
+                metadata: {
+                    createdBy: 'station_demotion',
+                    demotedStationId: stationId,
+                    affectedEntryCount: unlinkedCount,
+                    affectedEntryIds: entryIds,
+                }
+            };
+            await kv.set(`learnt_location:${learntLocationId}`, learntLocation);
+            console.log(`[Demote] Created learnt location ${learntLocationId} with ${unlinkedCount} affected entries`);
+        }
+
+        return c.json({
+            success: true,
+            stationName: station.name,
+            unlinkedEntries: unlinkedCount,
+            learntLocationId,
+            message: `"${station.name}" demoted to unverified. ${unlinkedCount} fuel entr${unlinkedCount === 1 ? 'y' : 'ies'} unlinked and sent to Learnt tab for re-matching.`
+        });
+    } catch (e: any) {
+        console.error(`[Demote] Error:`, e);
+        return c.json({ error: `Demotion failed: ${e.message}` }, 500);
+    }
+});
+
 app.post(`${BASE_PATH}/stations`, async (c) => {
     try {
         const station = await c.req.json();
         if (!station.id) station.id = crypto.randomUUID();
+
+        // --- Duplicate Guard ---
+        // Skip if the frontend explicitly overrode the duplicate check (Phase 5: "Create Anyway")
+        const wasOverridden = !!station._overrideDuplicate;
+        if (!wasOverridden) {
+            // Always exclude own ID from the duplicate search.
+            // For UPDATES: prevents the station from matching itself.
+            // For CREATES: no existing record has this ID yet, so the exclusion is a harmless no-op.
+            // (Previous approach used kv.get to check existence first, but that lookup could fail
+            //  if the stored value's .id didn't match the key suffix — causing self-match 409s.)
+            const excludeId = station.id;
+
+            const stationLat = station.location?.lat ?? 0;
+            const stationLng = station.location?.lng ?? 0;
+
+            if (station.plusCode || (stationLat && stationLng)) {
+                const dupeResult = await findDuplicateStation(
+                    station.plusCode || null,
+                    stationLat,
+                    stationLng,
+                    excludeId,
+                    station.category
+                );
+
+                if (dupeResult) {
+                    // --- Secondary self-match guard (Layers 2a–2d) ---
+                    // Defense-in-depth: if the matched station is actually the station being
+                    // updated but has a stale/missing .id in its KV value, the ID-based
+                    // exclusion in findDuplicateStation wouldn't have caught it.
+                    // Multiple comparison strategies ensure self-matches are never blocked.
+                    let isSelfMatch = false;
+                    const ownRecord = await kv.get(`station:${station.id}`);
+                    if (ownRecord) {
+                        const incomingPlusCode = normalizePlusCode(station.plusCode);
+                        const storedPlusCode = normalizePlusCode(ownRecord.plusCode);
+                        const dupePlusCode = normalizePlusCode(dupeResult.station.plusCode);
+                        const incomingLat = station.location?.lat;
+                        const incomingLng = station.location?.lng;
+                        const storedLat = ownRecord.location?.lat;
+                        const storedLng = ownRecord.location?.lng;
+
+                        // Layer 2a: Station's spatial identity UNCHANGED from stored record.
+                        // If the user didn't move the station, any dupe is itself by definition.
+                        const plusCodeUnchanged = incomingPlusCode === storedPlusCode;
+                        let coordsUnchanged = false;
+                        if (incomingLat && incomingLng && storedLat && storedLng) {
+                            coordsUnchanged = calculateDistance(incomingLat, incomingLng, storedLat, storedLng) < 1;
+                        } else if (!incomingLat && !storedLat) {
+                            coordsUnchanged = true;
+                        }
+                        if (plusCodeUnchanged || coordsUnchanged) {
+                            isSelfMatch = true;
+                            console.log(`[POST /stations] Self-match Layer 2a (unchanged location): plusCode=${plusCodeUnchanged}, coords=${coordsUnchanged}`);
+                        }
+
+                        // Layer 2b: Plus Code match between stored record and dupe result
+                        if (!isSelfMatch && storedPlusCode && dupePlusCode && plusCodesMatch(storedPlusCode, dupePlusCode)) {
+                            isSelfMatch = true;
+                            console.log(`[POST /stations] Self-match Layer 2b (Plus Code): own="${storedPlusCode}" === dupe="${dupePlusCode}"`);
+                        }
+
+                        // Layer 2c: Coordinate proximity between stored record and dupe (within geofence)
+                        if (!isSelfMatch && storedLat && storedLng && dupeResult.station.location?.lat) {
+                            const selfDist = calculateDistance(
+                                storedLat, storedLng,
+                                dupeResult.station.location.lat, dupeResult.station.location.lng
+                            );
+                            const selfRadius = ownRecord.geofenceRadius || 150;
+                            if (selfDist < selfRadius) {
+                                isSelfMatch = true;
+                                console.log(`[POST /stations] Self-match Layer 2c (geofence): ${Math.round(selfDist)}m < ${selfRadius}m`);
+                            }
+                        }
+
+                        // Layer 2d: Name + address identity (catches stale data variants)
+                        if (!isSelfMatch && ownRecord.name && dupeResult.station.name) {
+                            const ownName = (ownRecord.name || '').toLowerCase().trim();
+                            const dupeName = (dupeResult.station.name || '').toLowerCase().trim();
+                            const ownAddr = (ownRecord.address || '').toLowerCase().trim();
+                            const dupeAddr = (dupeResult.station.address || '').toLowerCase().trim();
+                            if (ownName === dupeName && ownAddr === dupeAddr) {
+                                isSelfMatch = true;
+                                console.log(`[POST /stations] Self-match Layer 2d (name+address): "${ownRecord.name}"`);
+                            }
+                        }
+
+                        // --- Layer 2e: INCOMING data directly matches dupe (catch-all) ---
+                        // When the stored ownRecord is stale (old name, old plusCode, moved coords),
+                        // Layers 2a-2d all compare against stale data and miss.
+                        // This layer compares the INCOMING request directly against the dupe result,
+                        // catching the case where the user is saving a station that IS the dupe
+                        // (e.g. two KV entries for the same real-world station).
+                        if (!isSelfMatch) {
+                            const inName = (station.name || '').toLowerCase().trim();
+                            const duName = (dupeResult.station.name || '').toLowerCase().trim();
+                            if (inName && duName && inName === duName) {
+                                isSelfMatch = true;
+                                console.log(`[POST /stations] Self-match Layer 2e (incoming name === dupe name): "${station.name}"`);
+                            }
+                        }
+                        if (!isSelfMatch) {
+                            const inPC = normalizePlusCode(station.plusCode);
+                            const duPC = normalizePlusCode(dupeResult.station.plusCode);
+                            if (inPC && duPC && plusCodesMatch(inPC, duPC)) {
+                                isSelfMatch = true;
+                                console.log(`[POST /stations] Self-match Layer 2e (incoming plusCode === dupe plusCode): "${inPC}"`);
+                            }
+                        }
+                        if (!isSelfMatch && station.location?.lat && dupeResult.station.location?.lat) {
+                            const directDist = calculateDistance(
+                                station.location.lat, station.location.lng,
+                                dupeResult.station.location.lat, dupeResult.station.location.lng
+                            );
+                            if (directDist < 1) {
+                                isSelfMatch = true;
+                                console.log(`[POST /stations] Self-match Layer 2e (incoming coords ~= dupe coords): ${directDist.toFixed(2)}m`);
+                            }
+                        }
+                    } else {
+                        // --- Layer 3: ownRecord is null (KV key mismatch) ---
+                        // The station's KV key may use a different ID than the value's .id.
+                        // Compare the INCOMING station directly with the dupe result.
+                        console.log(`[POST /stations] Layer 3: ownRecord null for key "station:${station.id}" — comparing incoming data with dupe result`);
+                        
+                        // 3a: Same name (case-insensitive) — strong identity signal when combined with spatial match
+                        const inName = (station.name || '').toLowerCase().trim();
+                        const duName = (dupeResult.station.name || '').toLowerCase().trim();
+                        if (inName && duName && inName === duName) {
+                            isSelfMatch = true;
+                            console.log(`[POST /stations] Self-match Layer 3a (name identity): "${station.name}"`);
+                        }
+                        
+                        // 3b: Incoming Plus Code matches dupe Plus Code AND same address
+                        if (!isSelfMatch) {
+                            const inPC = normalizePlusCode(station.plusCode);
+                            const duPC = normalizePlusCode(dupeResult.station.plusCode);
+                            const inAddr = (station.address || '').toLowerCase().trim();
+                            const duAddr = (dupeResult.station.address || '').toLowerCase().trim();
+                            if (inPC && duPC && plusCodesMatch(inPC, duPC) && inAddr === duAddr) {
+                                isSelfMatch = true;
+                                console.log(`[POST /stations] Self-match Layer 3b (plusCode+address): "${inPC}"`);
+                            }
+                        }
+                        
+                        // 3c: Coordinates within 1m (effectively same point)
+                        if (!isSelfMatch && station.location?.lat && dupeResult.station.location?.lat) {
+                            const directDist = calculateDistance(
+                                station.location.lat, station.location.lng,
+                                dupeResult.station.location.lat, dupeResult.station.location.lng
+                            );
+                            if (directDist < 1) {
+                                isSelfMatch = true;
+                                console.log(`[POST /stations] Self-match Layer 3c (coord proximity): ${directDist.toFixed(2)}m`);
+                            }
+                        }
+                    }
+
+                    if (isSelfMatch) {
+                        // This is the station being updated matching itself — not a real duplicate.
+                        // Fix the stale .id on the KV value so this doesn't recur.
+                        if (ownRecord && ownRecord.id !== station.id) {
+                            console.warn(`[POST /stations] Patching stale .id on station KV value: "${ownRecord.id}" → "${station.id}"`);
+                            ownRecord.id = station.id;
+                            await kv.set(`station:${station.id}`, ownRecord);
+                        }
+                        // Layer 3 cleanup: if ownRecord was null, the dupe result IS the orphaned entry.
+                        // Delete the orphaned KV key (stored under the dupe's stale .id) so it doesn't
+                        // keep causing false duplicates. The current save will create the canonical entry.
+                        if (!ownRecord && dupeResult.station.id && dupeResult.station.id !== station.id) {
+                            console.warn(`[POST /stations] Cleaning orphaned KV entry: "station:${dupeResult.station.id}" (stale ID for "${station.name}")`);
+                            await kv.del(`station:${dupeResult.station.id}`);
+                        }
+                        // Layer 2e cleanup: ownRecord exists but dupe is a DIFFERENT KV entry
+                        // for the same real-world station (orphaned duplicate). Delete the orphan
+                        // so future updates don't hit the same false positive.
+                        if (ownRecord && dupeResult.station.id && dupeResult.station.id !== station.id) {
+                            console.warn(`[POST /stations] Cleaning orphaned duplicate KV entry: "station:${dupeResult.station.id}" ("${dupeResult.station.name}") — same station as "${station.name}" (${station.id})`);
+                            await kv.del(`station:${dupeResult.station.id}`);
+                        }
+                        console.log(`[POST /stations] Self-match escaped ID exclusion for "${station.name}" (${station.id}). Proceeding with update.`);
+                    } else {
+                        console.log(`[POST /stations] Duplicate blocked: "${station.name}" conflicts with "${dupeResult.station.name}" (${dupeResult.matchType}, ${dupeResult.distance}m)`);
+                        return c.json({
+                            duplicate: true,
+                            existingStation: {
+                                id: dupeResult.station.id,
+                                name: dupeResult.station.name,
+                                plusCode: dupeResult.station.plusCode || '',
+                                address: dupeResult.station.address || '',
+                                brand: dupeResult.station.brand || '',
+                                status: dupeResult.station.status || 'unknown',
+                                distance: dupeResult.distance,
+                                matchType: dupeResult.matchType,
+                                geofenceRadius: dupeResult.station.geofenceRadius || 150,
+                            },
+                            message: dupeResult.matchType === 'pluscode'
+                                ? `A station already exists at Plus Code ${dupeResult.station.plusCode}: ${dupeResult.station.name}. Consider merging instead.`
+                                : `Coordinates fall within ${dupeResult.distance}m of existing station "${dupeResult.station.name}" (geofence: ${dupeResult.station.geofenceRadius || 150}m). Consider merging instead.`,
+                        }, 409);
+                    }
+                }
+            }
+        } else {
+            // Clean the override flag before persisting — it's a control flag, not station data
+            // Phase 9.5: Enhanced audit logging for override decisions
+            console.log(`[POST /stations] OVERRIDE AUDIT — Duplicate check bypassed. Station: "${station.name}", Plus Code: ${station.plusCode || 'none'}, coords: (${station.location?.lat?.toFixed(6)}, ${station.location?.lng?.toFixed(6)}), category: ${station.category || 'unset'}, timestamp: ${new Date().toISOString()}`);
+            delete station._overrideDuplicate;
+            delete station._overrideReason;
+        }
+
+        // Final cleanup: ensure control flags never leak into persisted data
+        delete station._overrideDuplicate;
+        delete station._overrideReason;
+
         await kv.set(`station:${station.id}`, station);
-        return c.json({ success: true, data: station });
+
+        // Phase 8.4: Optimistic locking — post-save re-check for race conditions.
+        // Skip if the user explicitly overrode the duplicate check.
+        // Another request may have created a station at the same Plus Code between
+        // our pre-save check and the kv.set above.
+        const stationLatPost = station.location?.lat ?? 0;
+        const stationLngPost = station.location?.lng ?? 0;
+        if (!wasOverridden && (station.plusCode || (stationLatPost && stationLngPost))) {
+            const postSaveDupe = await findDuplicateStation(
+                station.plusCode || null,
+                stationLatPost,
+                stationLngPost,
+                station.id, // exclude self
+                station.category
+            );
+            if (postSaveDupe) {
+                // Race condition detected — roll back the just-saved station
+                await kv.del(`station:${station.id}`);
+                console.log(`[POST /stations] Race condition: "${station.name}" conflicts with "${postSaveDupe.station.name}" (saved concurrently). Rolled back.`);
+                return c.json({
+                    duplicate: true,
+                    existingStation: {
+                        id: postSaveDupe.station.id,
+                        name: postSaveDupe.station.name,
+                        plusCode: postSaveDupe.station.plusCode || '',
+                        address: postSaveDupe.station.address || '',
+                        brand: postSaveDupe.station.brand || '',
+                        status: postSaveDupe.station.status || 'unknown',
+                        distance: postSaveDupe.distance,
+                        matchType: postSaveDupe.matchType,
+                        geofenceRadius: postSaveDupe.station.geofenceRadius || 150,
+                    },
+                    message: `Race condition: Another station was created at this location moments ago — "${postSaveDupe.station.name}". Your station was not saved.`,
+                }, 409);
+            }
+        }
+
+        // Phase 11: Auto-cleanup resolved learnt locations after station save.
+        // When a station is added/updated, any learnt locations whose source fuel entry
+        // is now matched (or whose GPS falls within this station's geofence) are stale
+        // and should be removed from the Evidence Bridge.
+        const cleanupResult = await cleanupResolvedLearntLocations(station);
+        if (cleanupResult.cleaned > 0) {
+            console.log(`[POST /stations] Auto-cleaned ${cleanupResult.cleaned} resolved learnt location(s) after saving "${station.name}"`);
+        }
+
+        return c.json({ success: true, data: station, autoCleanedLearnt: cleanupResult.cleaned, cleanupDetails: cleanupResult.details });
     } catch (e: any) {
+        console.error('[POST /stations] Error:', e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Phase 9.6: Duplicate audit report — scan all stations for Plus Code / geofence collisions
+app.get(`${BASE_PATH}/stations/duplicate-audit`, async (c) => {
+    try {
+        const allStations: any[] = (await kv.getByPrefix("station:")) || [];
+        const duplicatePairs: { stationA: any; stationB: any; matchType: string; distance: number }[] = [];
+
+        for (let i = 0; i < allStations.length; i++) {
+            const a = allStations[i];
+            if (!a.location?.lat || !a.location?.lng) continue;
+
+            for (let j = i + 1; j < allStations.length; j++) {
+                const b = allStations[j];
+                if (!b.location?.lat || !b.location?.lng) continue;
+                // Only compare within same category
+                if (a.category && b.category && a.category !== b.category) continue;
+
+                // Plus Code match
+                const codeA = normalizePlusCode(a.plusCode);
+                const codeB = normalizePlusCode(b.plusCode);
+                if (codeA && codeB && plusCodesMatch(codeA, codeB)) {
+                    const dist = Math.round(calculateDistance(a.location.lat, a.location.lng, b.location.lat, b.location.lng));
+                    duplicatePairs.push({
+                        stationA: { id: a.id, name: a.name, plusCode: a.plusCode, status: a.status },
+                        stationB: { id: b.id, name: b.name, plusCode: b.plusCode, status: b.status },
+                        matchType: 'pluscode',
+                        distance: dist,
+                    });
+                    continue;
+                }
+
+                // Geofence overlap
+                const radiusA = a.geofenceRadius || 150;
+                const radiusB = b.geofenceRadius || 150;
+                const dist = calculateDistance(a.location.lat, a.location.lng, b.location.lat, b.location.lng);
+                if (dist <= Math.max(radiusA, radiusB)) {
+                    duplicatePairs.push({
+                        stationA: { id: a.id, name: a.name, plusCode: a.plusCode, status: a.status, geofenceRadius: radiusA },
+                        stationB: { id: b.id, name: b.name, plusCode: b.plusCode, status: b.status, geofenceRadius: radiusB },
+                        matchType: 'geofence',
+                        distance: Math.round(dist),
+                    });
+                }
+            }
+        }
+
+        console.log(`[Duplicate Audit] Scanned ${allStations.length} stations, found ${duplicatePairs.length} potential duplicate pairs.`);
+        return c.json({
+            totalStations: allStations.length,
+            duplicatePairs,
+            scannedAt: new Date().toISOString(),
+        });
+    } catch (e: any) {
+        console.error('[Duplicate Audit] Error:', e);
         return c.json({ error: e.message }, 500);
     }
 });
@@ -1429,12 +2475,78 @@ app.post(`${BASE_PATH}/stations/migrate-status`, async (c) => {
     }
 });
 
-// --- LEARNT LOCATIONS (Phase 3) ---
+// --- LEARNT LOCATIONS (Phase 3 + Phase 7 nearby enrichment) ---
 app.get(`${BASE_PATH}/learnt-locations`, async (c) => {
     try {
-        const locations = await kv.getByPrefix("learnt_location:");
-        return c.json(locations || []);
+        const locations: any[] = (await kv.getByPrefix("learnt_location:")) || [];
+
+        // Phase 7: Enrich each learnt location with the nearest station within 500m
+        const allStations: any[] = (await kv.getByPrefix("station:")) || [];
+        const NEARBY_RADIUS = 500; // metres
+
+        for (const loc of locations) {
+            const locLat = loc.location?.lat;
+            const locLng = loc.location?.lng;
+            if (locLat == null || locLng == null) continue;
+
+            const locPlusCode = normalizePlusCode(loc.plusCode);
+            let bestMatch: { station: any; distance: number; matchType: 'pluscode' | 'geofence' } | null = null;
+
+            for (const station of allStations) {
+                // Plus Code match (highest confidence)
+                const stationCode = normalizePlusCode(station.plusCode);
+                if (locPlusCode && stationCode && plusCodesMatch(locPlusCode, stationCode)) {
+                    const dist = (station.location?.lat && station.location?.lng)
+                        ? calculateDistance(locLat, locLng, station.location.lat, station.location.lng)
+                        : 0;
+                    if (!bestMatch || dist < bestMatch.distance) {
+                        bestMatch = { station, distance: Math.round(dist), matchType: 'pluscode' };
+                    }
+                    continue; // Plus Code match is definitive
+                }
+
+                // Distance-based proximity (generous 500m sweep for suggestions)
+                if (station.location?.lat && station.location?.lng) {
+                    const dist = calculateDistance(locLat, locLng, station.location.lat, station.location.lng);
+                    if (dist <= NEARBY_RADIUS) {
+                        if (!bestMatch || dist < bestMatch.distance) {
+                            bestMatch = { station, distance: Math.round(dist), matchType: 'geofence' };
+                        }
+                    }
+                }
+
+                // Also check GPS aliases
+                if (station.gpsAliases && Array.isArray(station.gpsAliases)) {
+                    for (const alias of station.gpsAliases) {
+                        if (alias.lat && alias.lng) {
+                            const aliasDist = calculateDistance(locLat, locLng, alias.lat, alias.lng);
+                            if (aliasDist <= NEARBY_RADIUS) {
+                                if (!bestMatch || aliasDist < bestMatch.distance) {
+                                    bestMatch = { station, distance: Math.round(aliasDist), matchType: 'geofence' };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (bestMatch) {
+                loc.nearbyStation = {
+                    id: bestMatch.station.id,
+                    name: bestMatch.station.name,
+                    plusCode: bestMatch.station.plusCode || '',
+                    address: bestMatch.station.address || '',
+                    brand: bestMatch.station.brand || '',
+                    status: bestMatch.station.status || 'unknown',
+                    distance: bestMatch.distance,
+                    matchType: bestMatch.matchType,
+                };
+            }
+        }
+
+        return c.json(locations);
     } catch (e: any) {
+        console.error(`[GET /learnt-locations] Error enriching with nearby stations: ${e.message}`);
         return c.json({ error: e.message }, 500);
     }
 });
@@ -1443,6 +2555,14 @@ app.post(`${BASE_PATH}/learnt-locations/rescan`, async (c) => {
     try {
         const { radius = 150 } = await c.req.json().catch(() => ({}));
         console.log(`[Rescan] Analyzing matches with base radius ${radius}m...`);
+
+        // Phase 11: Auto-cleanup resolved learnt locations first.
+        // This removes any learnt locations whose source fuel entry has already been
+        // matched to a station (e.g., because the station was added after the fueling).
+        const cleanupResult = await cleanupResolvedLearntLocations();
+        if (cleanupResult.cleaned > 0) {
+            console.log(`[Rescan] Auto-cleaned ${cleanupResult.cleaned} already-resolved learnt location(s) before scan`);
+        }
         
         const [learntLocations, allStations] = await Promise.all([
             kv.getByPrefix("learnt_location:"),
@@ -1450,7 +2570,14 @@ app.post(`${BASE_PATH}/learnt-locations/rescan`, async (c) => {
         ]);
         
         if (!learntLocations || learntLocations.length === 0) {
-            return c.json({ success: true, matches: [], message: "No learnt locations to scan." });
+            return c.json({ 
+                success: true, matches: [], 
+                autoCleanedLearnt: cleanupResult.cleaned,
+                cleanupDetails: cleanupResult.details,
+                message: cleanupResult.cleaned > 0
+                    ? `Auto-resolved ${cleanupResult.cleaned} learnt location(s) that were already matched to stations. No remaining anomalies.`
+                    : "No learnt locations to scan."
+            });
         }
 
         const matchesFound: any[] = [];
@@ -1491,7 +2618,11 @@ app.post(`${BASE_PATH}/learnt-locations/rescan`, async (c) => {
             success: true, 
             matches: matchesFound,
             totalScanned: learntLocations.length,
-            message: `Analysis complete. Found ${matchesFound.length} potential matches for review.`
+            autoCleanedLearnt: cleanupResult.cleaned,
+            cleanupDetails: cleanupResult.details,
+            message: cleanupResult.cleaned > 0
+                ? `Auto-resolved ${cleanupResult.cleaned} learnt location(s). ${matchesFound.length} remaining match(es) found for review.`
+                : `Analysis complete. Found ${matchesFound.length} potential matches for review.`
         });
     } catch (e: any) {
         console.error("[Rescan Error]", e);
@@ -1540,7 +2671,46 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
             promotedStation = matchedUnverified;
             console.log(`[Promote] Learnt location ${id} matched Unverified station ${matchedUnverified.id} — promoted existing station to Verified.`);
         } else {
-            // No unverified match — create a brand new verified station
+            // Phase 8.1: Before creating a new station, check ALL stations for duplicates
+            // (the findMatchingStation above only checked unverified stations)
+            const locLat = learnt.location?.lat ?? 0;
+            const locLng = learnt.location?.lng ?? 0;
+            const locPlusCode = stationDetails?.plusCode || learnt.plusCode || null;
+
+            const dupeResult = await findDuplicateStation(locPlusCode, locLat, locLng, undefined, stationDetails?.category);
+
+            if (dupeResult) {
+                // Auto-merge into the existing station instead of creating a duplicate
+                const existingStation = dupeResult.station;
+                console.log(`[Promote] Phase 8 duplicate guard — auto-merging learnt ${id} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
+
+                const autoAlias = {
+                    id: crypto.randomUUID(),
+                    lat: locLat,
+                    lng: locLng,
+                    label: `Auto-merged from Promote: ${learnt.name || 'Unknown'} (duplicate ${dupeResult.matchType} match)`,
+                    addedAt: new Date().toISOString()
+                };
+                existingStation.aliases = [...(existingStation.aliases || []), autoAlias];
+                existingStation.gpsAliases = [...(existingStation.gpsAliases || []), { lat: locLat, lng: locLng, mergedAt: new Date().toISOString() }];
+
+                await kv.set(`station:${existingStation.id}`, existingStation);
+                await kv.del(`learnt_location:${id}`);
+
+                const linkedCount = await linkOrphanEntriesToStation(learnt, existingStation.id, existingStation.name);
+                console.log(`[Promote] Phase 8 auto-merge complete: learnt ${id} → station ${existingStation.id}, linked ${linkedCount} fuel entries.`);
+
+                return c.json({
+                    success: true,
+                    autoMerged: true,
+                    message: `Duplicate detected. Auto-merged into existing station: ${existingStation.name} (${dupeResult.matchType} match, ${dupeResult.distance}m)`,
+                    data: existingStation,
+                    matchedExisting: true,
+                    linkedEntries: linkedCount,
+                });
+            }
+
+            // No duplicate — create a brand new verified station
             promotedStation = {
                 ...stationDetails,
                 id: crypto.randomUUID(),
@@ -1600,11 +2770,14 @@ app.post(`${BASE_PATH}/learnt-locations/:id/reject`, async (c) => {
 app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
     try {
         const { id, targetStationId, updateMasterPin = false } = await c.req.json();
+        console.log(`[Merge] Phase 8.2 audit — Merge request: learnt ${id} → station ${targetStationId}, updateMasterPin: ${updateMasterPin}`);
         const learnt = await kv.get(`learnt_location:${id}`);
         if (!learnt) return c.json({ error: "Learnt location not found" }, 404);
 
         const station = await kv.get(`station:${targetStationId}`);
         if (!station) return c.json({ error: "Target station not found" }, 404);
+
+        console.log(`[Merge] Phase 8.2 audit — Merging "${learnt.name || 'Unknown'}" (${learnt.location?.lat?.toFixed(6)}, ${learnt.location?.lng?.toFixed(6)}) into "${station.name}" (status: ${station.status}, plusCode: ${station.plusCode || 'none'})`);
 
         // Phase 4.2: If target station is unverified, auto-promote it to verified on merge
         const wasUnverified = station.status === 'unverified';

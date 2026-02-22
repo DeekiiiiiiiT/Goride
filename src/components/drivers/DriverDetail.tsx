@@ -90,8 +90,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
-import { FuelLedgerView } from './FuelLedgerView';
-import { FuelEntry, OdometerBucket } from '../../types/fuel';
+import { FuelWalletView } from './FuelWalletView';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
@@ -246,8 +245,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [ledgerView, setLedgerView] = useState<'tolls' | 'payments' | 'fuel'>('tolls');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [claims, setClaims] = useState<any[]>([]);
-  const [fuelEntries, setFuelEntries] = useState<FuelEntry[]>([]);
-  const [odometerBuckets, setOdometerBuckets] = useState<OdometerBucket[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['All']));
   
@@ -391,8 +388,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const type = (t.type || '').toLowerCase();
       const isAutomated = t.metadata?.automated === true;
       
-      // Phase 7 Update: Include ALL fuel-related transactions for the Ledger
-      // The FuelLedgerView handles the grouping and display logic.
+      // Include ALL fuel-related transactions for the Fuel Activity wallet view
       const isFuel = cat.includes('fuel') || desc.includes('fuel') || type.includes('fuel');
       
       return isFuel || isAutomated;
@@ -460,11 +456,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
               driver?.inDriveDriverId
           ].filter(Boolean) as string[];
 
-          const [driverTx, allClaims, allFuelEntries, allBuckets] = await Promise.all([
+          const [driverTx, allClaims] = await Promise.all([
               api.getTransactions(driverIds),
               api.getClaims(), // Fetch ALL claims to ensure we find links even if driverId filter is tricky
-              api.getFuelEntries ? api.getFuelEntries(driverIds) : Promise.resolve([]),
-              api.getOdometerBuckets ? api.getOdometerBuckets(driverIds) : Promise.resolve([])
           ]);
 
           // Server-side filtering is now enabled for getTransactions(driverIds)
@@ -481,9 +475,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           
           // Filter claims locally if needed, or just use all for linking (safer)
           setClaims(Array.isArray(allClaims) ? allClaims : []);
-
-          setFuelEntries(Array.isArray(allFuelEntries) ? allFuelEntries : []);
-          setOdometerBuckets(Array.isArray(allBuckets) ? allBuckets : []);
       } catch (e) {
           console.error("Failed to load data", e);
           // Ensure we don't crash if API fails
@@ -957,6 +948,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         earningsPerKm: 0,
         avgDuration: 0,
         netOutstanding: 0,
+        approvedFuelCredits: 0,
         floatHeld: 0,
         pendingClearance: 0,
         acceptanceRate: 0,
@@ -1536,17 +1528,25 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
      // 3. Calculate Approved Cash Toll Expenses (Valid expenses paid by driver)
-     // These must be CASH payments (receipts) that are RESOLVED (Reimbursed/Written Off).
+     // These must be CASH payments (receipts) that are RESOLVED or APPROVED (Reimbursed/Written Off).
      // These reduce the liability.
      const approvedCashTollExpenses = (transactions || [])
         .filter(t => {
             if (!t) return false;
             const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
             const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl; // Assumption: Receipts imply cash/personal payment
-            const isResolved = t.status === 'Resolved'; // Only count if approved
+            const isResolved = t.status === 'Resolved' || t.status === 'Approved'; // Accept both statuses
             return isToll && isCash && isResolved;
         })
         .reduce((sum, t) => sum + Math.abs(t?.amount || 0), 0);
+
+     // 3b. Calculate Approved Fuel Reimbursement Credits
+     const approvedFuelCredits = (transactions || [])
+        .filter(t => {
+            if (!t) return false;
+            return t.category === 'Fuel Reimbursement Credit' && t.amount > 0;
+        })
+        .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
      // 4. Final Net Outstanding Calculation
      // (Cash They Took) - (Cash They Gave Back) - (Valid Expenses They Paid)
@@ -1682,6 +1682,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         totalCashCollected,
         cashReceived, 
         netOutstanding,
+        approvedFuelCredits, // Phase 5: Fuel reimbursement credits
         periodCashReceived, // New
         periodNetChange,    // New
         floatHeld,          // Phase 5
@@ -2598,19 +2599,24 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      </CardContent>
                  </Card>
 
-                 {/* Card 2: Net Toll Reimbursement (New) */}
+                 {/* Card 2: Net Reimbursements (Tolls + Fuel Credits) */}
                  <Card className="bg-white">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Net Toll Reimbursement</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Net Reimbursements</CardTitle>
                          <TrendingUp className="h-4 w-4 text-emerald-500" />
                      </CardHeader>
                      <CardContent>
                          <div className="text-2xl font-bold text-emerald-600">
-                             ${netTollReimbursement.toFixed(2)}
+                             ${(netTollReimbursement + metrics.approvedFuelCredits).toFixed(2)}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                             Includes <span className="text-red-600 font-medium">-${disputeCharges.toFixed(2)}</span> in disputes
+                             Tolls: <span className="font-medium">${netTollReimbursement.toFixed(2)}</span> | Fuel: <span className="font-medium text-emerald-600">${metrics.approvedFuelCredits.toFixed(2)}</span>
                          </p>
+                         {disputeCharges > 0 && (
+                             <p className="text-xs text-slate-500 mt-0.5">
+                                 Includes <span className="text-red-600 font-medium">-${disputeCharges.toFixed(2)}</span> in disputes
+                             </p>
+                         )}
                      </CardContent>
                  </Card>
 
@@ -3261,14 +3267,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm text-slate-500">History of fuel settlements and automated credits.</p>
-                                        </div>
-                                        <FuelLedgerView 
-                                            transactions={fuelTransactions}
-                                            fuelEntries={fuelEntries}
-                                            buckets={odometerBuckets}
-                                            onRefresh={refreshData}
+                                        <p className="text-sm text-slate-500">Fuel-related credits and debits affecting this driver's cash balance.</p>
+                                        <FuelWalletView 
+                                            transactions={dateFilteredTransactions}
+                                            onBackfill={async () => {
+                                                const result = await api.backfillWalletCredits();
+                                                if (result.created > 0) {
+                                                    refreshData();
+                                                }
+                                                return result;
+                                            }}
                                         />
                                     </div>
                                 )}

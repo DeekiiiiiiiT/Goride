@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -25,7 +25,7 @@ import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTabl
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { FuelAuditDashboard } from '../components/fuel/FuelAuditDashboard';
 import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard';
-import { FuelIntegrityAuditTool } from '../components/fuel/FuelIntegrityAuditTool';
+
 import { GasStationAnalytics } from '../components/fuel/stations/GasStationAnalytics';
 import { StationDatabaseView } from '../components/fuel/stations/StationDatabaseView';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute, FuelScenario, WeeklyFuelReport } from '../types/fuel';
@@ -181,6 +181,16 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
   useEffect(() => {
     loadData(true);
+  }, []);
+
+  // Lightweight refresh for fuel entries only (used after Bulk Assign)
+  const refreshLogs = useCallback(async () => {
+    try {
+      const logsData = await fuelService.getFuelEntries();
+      setLogs(logsData);
+    } catch (e) {
+      console.error("[FuelManagement] Failed to refresh fuel entries after bulk assign", e);
+    }
   }, []);
 
   // Card Handlers
@@ -594,286 +604,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       }
   };
 
-  const handleSyncRecords = async (log: FuelEntry, tx: FinancialTransaction, source: 'log' | 'tx') => {
-      setIsSyncing(true);
-      try {
-          if (source === 'log') {
-              // Update TX to match Log
-              await api.saveTransaction({
-                  ...tx,
-                  amount: -log.amount, // Transactions are negative for expenses
-                  date: log.date.split('T')[0],
-                  metadata: {
-                      ...tx.metadata,
-                      isEdited: true,
-                      syncSource: 'maintenance_repair'
-                  }
-              });
-              toast.success("Financial ledger updated to match fuel log");
-          } else {
-              // Update Log to match TX
-              const updatedLog = {
-                  ...log,
-                  amount: Math.abs(tx.amount),
-                  date: tx.date.includes('T') ? tx.date : `${tx.date}T${tx.time || '12:00:00'}`,
-                  metadata: {
-                      ...log.metadata,
-                      isEdited: true,
-                      syncSource: 'maintenance_repair'
-                  }
-              };
-              
-              if (updatedLog.liters > 0) {
-                  updatedLog.pricePerLiter = Number((updatedLog.amount / updatedLog.liters).toFixed(3));
-              }
-              
-              await fuelService.saveFuelEntry(updatedLog);
-              toast.success("Fuel log updated to match financial ledger");
-          }
-          await loadData(true);
-      } catch (e) {
-          console.error(e);
-          toast.error("Failed to synchronize records");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const handleHealLogToTx = async (log: FuelEntry) => {
-      setIsSyncing(true);
-      try {
-          // Create the missing transaction
-          const txData = {
-              date: log.date.split('T')[0],
-              time: log.date.includes('T') ? log.date.split('T')[1]?.split('.')[0] : "12:00:00",
-              amount: -log.amount,
-              category: "Fuel Reimbursement",
-              description: `Fuel at ${log.location || 'Unknown'} (Healed Record)`,
-              driverId: log.driverId,
-              driverName: getDriverName(log.driverId), // Step 9.1: Fix Driver Name in "Heal" Logic
-              vehicleId: log.vehicleId,
-              status: "Approved",
-              type: "Reimbursement",
-              metadata: {
-                  sourceId: log.id,
-                  source: "Manual",
-                  automated: false,
-                  // Phase 3: Preservation of Manual Origin
-                  portal_type: "Manual_Entry",
-                  isManual: true,
-                  healedAt: new Date().toISOString(),
-                  isHealed: true // Step 11.2: Add isHealed flag for UI distinction
-              }
-          };
-          
-          const savedTx = await api.saveTransaction(txData);
-          
-          // Update the log with the new transactionId and heal metadata
-          await fuelService.saveFuelEntry({
-              ...log,
-              transactionId: savedTx.id,
-              metadata: {
-                  ...log.metadata,
-                  isHealed: true,
-                  healedAt: new Date().toISOString()
-              }
-          });
-
-          toast.success("Missing financial record created and linked");
-          await loadData(true);
-      } catch (e) {
-          console.error(e);
-          toast.error("Failed to heal record");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const handleHealTxToLog = async (tx: FinancialTransaction) => {
-      setIsSyncing(true);
-      try {
-          // Create a fuel log based on the transaction
-          const logData: any = {
-              date: tx.date.includes('T') ? tx.date : `${tx.date}T${tx.time || '12:00:00'}`,
-              amount: Math.abs(tx.amount),
-              driverId: tx.driverId || drivers[0]?.id,
-              driverName: tx.driverName || getDriverName(tx.driverId), // Ensure metadata preservation
-              vehicleId: tx.vehicleId || vehicles[0]?.id,
-              location: tx.merchant || tx.description || "Unknown Station",
-              type: "Reimbursement",
-              liters: tx.quantity || 0,
-              odometer: tx.odometer || 0,
-              transactionId: tx.id,
-              metadata: {
-                  isEdited: true,
-                  editReason: "Historical Repair",
-                  syncSource: "maintenance_repair",
-                  source: "Manual",
-                  // Phase 3: Preservation of Manual Origin
-                  portal_type: "Manual_Entry",
-                  isManual: true,
-                  healedAt: new Date().toISOString()
-              }
-          };
-
-          if (logData.liters > 0) {
-              logData.pricePerLiter = Number((logData.amount / logData.liters).toFixed(3));
-          }
-
-          await fuelService.saveFuelEntry(logData);
-          toast.success("Missing fuel log entry created and linked");
-          await loadData(true);
-      } catch (e) {
-          console.error(e);
-          toast.error("Failed to repair fuel log");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const handleStandardizeTypes = async (logsToUpdate: FuelEntry[]) => {
-      setIsSyncing(true);
-      try {
-          const promises = logsToUpdate.map(log => 
-              fuelService.saveFuelEntry({
-                  ...log,
-                  type: 'Fuel_Manual_Entry' as any,
-                  metadata: {
-                      ...log.metadata,
-                      isEdited: true,
-                      editReason: 'Phase 5 Standardization',
-                      source: 'Manual',
-                      portal_type: 'Manual_Entry',
-                      isManual: true
-                  }
-              })
-          );
-          await Promise.all(promises);
-          toast.success(`Successfully standardized ${logsToUpdate.length} legacy records.`);
-          await loadData(true);
-      } catch (e) {
-          console.error("Standardization failed", e);
-          toast.error("Failed to standardize legacy records");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const handleBackfillMetadata = async (records: FinancialTransaction[]) => {
-      setIsSyncing(true);
-      try {
-          const promises = records.map(tx => {
-              const driverName = getDriverName(tx.driverId);
-              
-              // Find the linked fuel log entry to pull missing physical data
-              const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
-              
-              return api.saveTransaction({
-                  ...tx,
-                  driverName,
-                  // Backfill physical data from the log if missing in the ledger
-                  odometer: tx.odometer || linkedLog?.odometer || 0,
-                  quantity: tx.quantity || linkedLog?.liters || undefined,
-                  metadata: {
-                      ...tx.metadata,
-                      pricePerLiter: tx.metadata?.pricePerLiter || linkedLog?.pricePerLiter || undefined,
-                      isEdited: true,
-                      lastEditedAt: new Date().toISOString(),
-                      editReason: 'Phase 14 Metadata Backfill',
-                      syncSource: 'maintenance_repair'
-                  }
-              });
-          });
-          await Promise.all(promises);
-          toast.success(`Successfully backfilled metadata for ${records.length} records.`);
-          await loadData(true);
-      } catch (e) {
-          console.error("Backfill failed", e);
-          toast.error("Failed to backfill metadata");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const handleRepairNaming = async (records: FinancialTransaction[]) => {
-      setIsSyncing(true);
-      try {
-          const promises = records.map(tx => {
-              return api.saveTransaction({
-                  ...tx,
-                  metadata: {
-                      ...tx.metadata,
-                      source: 'Manual',
-                      isManual: true,
-                      portal_type: 'Manual_Entry',
-                      lastEditedAt: new Date().toISOString(),
-                      editReason: 'Phase 4 Naming Convention Alignment'
-                  }
-              });
-          });
-          await Promise.all(promises);
-          toast.success(`Successfully repaired ${records.length} record naming conventions.`);
-          await loadData(true);
-      } catch (e) {
-          console.error("Naming repair failed", e);
-          toast.error("Failed to repair naming conventions");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const handleRunFuelIntegrityJob = async () => {
-      setIsSyncing(true);
-      try {
-          const promise = api.runFuelBackfill();
-          toast.promise(promise, {
-              loading: 'Running global fuel integrity audit...',
-              success: 'Fuel integrity recalculated. Virtual tank levels updated.',
-              error: 'Audit job failed. Check server logs.'
-          });
-          await promise;
-          await loadData(true);
-      } catch (e) {
-          console.error("Integrity job failed", e);
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const handleRepairAssetIdentity = async (duplicates: any[]) => {
-      setIsSyncing(true);
-      try {
-          for (const group of duplicates) {
-              const master = group.list[0];
-              const ghosts = group.list.slice(1);
-              
-              for (const ghost of ghosts) {
-                  // 1. Re-map logs
-                  const ghostLogs = logs.filter(l => l.vehicleId === ghost.id);
-                  for (const log of ghostLogs) {
-                      await fuelService.saveFuelEntry({ ...log, vehicleId: master.id });
-                  }
-                  
-                  // 2. Re-map transactions
-                  const ghostTxs = transactions.filter(t => t.vehicleId === ghost.id);
-                  for (const tx of ghostTxs) {
-                      await api.saveTransaction({ ...tx, vehicleId: master.id });
-                  }
-                  
-                  // 3. Delete ghost vehicle
-                  await api.deleteVehicle(ghost.id);
-              }
-          }
-          toast.success("Asset identities repaired. Ghost records collapsed into Master profiles.");
-          await loadData(true);
-      } catch (e) {
-          console.error("Identity repair failed", e);
-          toast.error("Failed to repair asset identities");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
   const handleDisputeUpdated = (updated: FuelDispute) => {
       setDisputes(prev => prev.map(d => d.id === updated.id ? updated : d));
   };
@@ -1014,9 +744,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   } else if (activeTab === 'reports') {
       pageTitle = "Consumption Reports";
       pageDescription = "View and export detailed fuel consumption reports.";
-  } else if (activeTab === 'maintenance') {
-      pageTitle = "Ledger Integrity Repair";
-      pageDescription = "Repair historical data drift and orphaned records.";
   } else if (activeTab === 'configuration') {
       pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
@@ -1200,27 +927,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
         </div>
       )}
 
-      {activeTab === 'maintenance' && (
-          <FuelIntegrityAuditTool 
-              logs={logs}
-              transactions={transactions}
-              vehicles={vehicles}
-              drivers={drivers}
-              onHealLogToTx={handleHealLogToTx}
-              onHealTxToLog={handleHealTxToLog}
-              onSyncRecords={handleSyncRecords}
-              onStandardizeTypes={handleStandardizeTypes}
-              onBackfillMetadata={handleBackfillMetadata}
-              onRunFuelIntegrityJob={handleRunFuelIntegrityJob}
-              onRepairAssetIdentity={handleRepairAssetIdentity}
-              onRepairNaming={handleRepairNaming}
-              onDeleteLog={handleDeleteLog}
-              onDeleteTx={handleDeleteExpense}
-          />
-      )}
+
 
       {activeTab === 'reports' && (
-          <ReportsPage />
+          <ReportsPage entries={logs} vehicles={vehicles} drivers={drivers} isRefreshing={isRefreshing} />
       )}
 
       {activeTab === 'configuration' && (
@@ -1228,7 +938,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       )}
 
       {activeTab === 'stations' && (
-          <GasStationAnalytics logs={logs} loading={isRefreshing} />
+          <GasStationAnalytics logs={logs} loading={isRefreshing} onRequestRefresh={refreshLogs} />
       )}
 
       {activeTab === 'database' && (

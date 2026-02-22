@@ -9,6 +9,7 @@ import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Download, FileText, FileSpreadsheet, Calendar, Loader2 } from 'lucide-react';
 import { Trip } from '../../types/data';
+import { formatDateJM } from '../../utils/csv-helper';
 
 interface ReportGeneratorProps {
   trips: Trip[];
@@ -34,7 +35,7 @@ export function ReportGenerator({ trips }: ReportGeneratorProps) {
             headers.join(','),
             ...trips.map(t => [
                 t.id,
-                t.date,
+                formatDateJM(t.date),
                 t.requestTime || '',
                 `"${t.driverName || t.driverId}"`,
                 t.vehicleId || '',

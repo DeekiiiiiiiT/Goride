@@ -307,6 +307,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
 
     if (category === 'Fuel' && !isGasCard) {
+        // Require station selection for Fuel
+        if (!merchant || merchant.trim() === '') {
+            toast.error("Please select a gas station");
+            return;
+        }
+
         const price = parseFloat(fuelEntry.pricePerLiter || '0');
         if (!fuelEntry.pricePerLiter || isNaN(price) || price <= 0) {
              toast.error("Please enter a valid fuel price");
@@ -343,10 +349,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         time: time ? `${time}:00` : undefined,
         type: 'Expense',
         category: category as TransactionCategory,
-        description: notes || `${category} Expense - ${merchant || 'Unknown'}`,
+        description: notes || `${category} Expense - ${merchant && merchant !== 'Other' ? merchant : (fuelEntry.parentCompany || 'Unspecified Vendor')}`,
         status: 'Pending',
         notes: notes,
-        vendor: merchant,
+        vendor: merchant && merchant !== 'Other' ? merchant : (fuelEntry.parentCompany || ''),
         referenceNumber: referenceNumber,
       };
 

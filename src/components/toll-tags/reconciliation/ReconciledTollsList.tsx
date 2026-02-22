@@ -136,10 +136,14 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                                     const localDate = new Date(`${tx.date}T${cleanTime}`);
                                                     const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
                                                     
+                                                    const isFutureDate = validDate > new Date();
                                                     return (
                                                         <>
-                                                            <span className="font-medium">{format(validDate, 'MMM d, yyyy')}</span>
+                                                            <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{format(validDate, 'MMM d, yyyy')}</span>
                                                             <span className="text-xs text-slate-500">{format(validDate, 'h:mm a')}</span>
+                                                            {isFutureDate && (
+                                                                <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>
+                                                            )}
                                                         </>
                                                     );
                                                 } catch (e) {

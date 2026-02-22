@@ -196,6 +196,20 @@ export const fuelService = {
     return response.json();
   },
 
+  async checkStationDuplicate(plusCode: string, lat: number, lng: number, excludeId?: string, category?: string): Promise<any> {
+    const params = new URLSearchParams();
+    if (plusCode) params.append('plusCode', plusCode);
+    if (lat) params.append('lat', String(lat));
+    if (lng) params.append('lng', String(lng));
+    if (excludeId) params.append('excludeId', excludeId);
+    if (category) params.append('category', category);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/check-duplicate?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to check for station duplicates");
+    return response.json();
+  },
+
   async saveStation(station: any): Promise<any> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
       method: 'POST',
@@ -205,8 +219,20 @@ export const fuelService = {
       },
       body: JSON.stringify(station)
     });
+    // Handle 409 Conflict (duplicate station detected) — surface the structured response
+    if (response.status === 409) {
+      const dupeData = await response.json();
+      const error: any = new Error(dupeData.message || 'Duplicate station detected');
+      error.duplicate = true;
+      error.existingStation = dupeData.existingStation;
+      throw error;
+    }
     if (!response.ok) throw new Error("Failed to save station");
     const result = await response.json();
+    // Return full result when it includes cleanup metadata, otherwise just station data
+    if (result.autoCleanedLearnt !== undefined) {
+      return result;
+    }
     return result.data || result;
   },
 
@@ -216,6 +242,31 @@ export const fuelService = {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to delete station");
+  },
+
+  // --- Demote Station & Cascade ---
+  // Demotes a verified station to unverified, unlinks all fuel entries, and creates
+  // a learnt location for re-matching via the admin's normal workflow.
+  async demoteStation(stationId: string): Promise<{
+    success: boolean;
+    stationName: string;
+    unlinkedEntries: number;
+    learntLocationId: string | null;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/demote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ stationId })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to demote station');
+    }
+    return response.json();
   },
 
   // --- One-Time Migration: Patch station statuses ---

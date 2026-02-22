@@ -27,8 +27,8 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
     // 2. Process each vehicle group
     vehicleGroups.forEach((vehicleEntries, vehicleId) => {
         const vehicle = vehicleMap.get(vehicleId);
-        const tankCapacity = vehicle?.fuelSettings?.tankCapacity || 40; // Default to 40L if unknown
-
+        const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
+        
         // Sort entries by date/time and then odometer
         const sorted = [...vehicleEntries].sort((a, b) => {
             const dateStrA = a.date.includes('-') ? a.date : a.date.replace(/\//g, '-');

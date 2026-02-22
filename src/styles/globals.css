@@ -60,6 +60,8 @@
   --destructive-foreground: oklch(0.637 0.237 25.331);
   --border: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
+  --input-background: #1e293b;
+  --switch-background: #475569;
   --ring: oklch(0.439 0 0);
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -182,4 +184,41 @@
 
 html {
   font-size: var(--font-size);
+}
+
+/**
+ * Global Dark Mode Compatibility Layer
+ * 
+ * Many page-level components use hardcoded Tailwind slate colors (e.g. text-slate-900,
+ * bg-slate-50) without dark: variants. These overrides provide a baseline dark mode
+ * experience across ALL pages, preventing invisible text on dark backgrounds.
+ * 
+ * Per-component dark: classes take precedence over these when present.
+ */
+.dark {
+  /* --- Text Colors --- */
+  .text-slate-900 { color: #f1f5f9; }   /* → slate-100 */
+  .text-slate-800 { color: #e2e8f0; }   /* → slate-200 */
+  .text-slate-700 { color: #cbd5e1; }   /* → slate-300 */
+  .text-slate-600 { color: #cbd5e1; }   /* → slate-300 */
+
+  /* --- Background Colors --- */
+  .bg-white { background-color: #0f172a; }           /* → slate-900 */
+  .bg-slate-50 { background-color: rgb(30 41 59 / 0.5); } /* → slate-800/50 */
+  .bg-slate-100 { background-color: #1e293b; }        /* → slate-800 */
+  .bg-slate-50\/50 { background-color: rgb(30 41 59 / 0.3); }
+
+  /* --- Border / Ring Colors --- */
+  .border-slate-200 { border-color: #334155; }       /* → slate-700 */
+  .border-slate-100 { border-color: #334155; }       /* → slate-700 */
+  .ring-slate-200 { --tw-ring-color: #334155; }      /* → slate-700 */
+
+  /* --- Hover States --- */
+  .hover\:bg-slate-50:hover { background-color: rgb(30 41 59 / 0.5); }
+  .hover\:bg-slate-100:hover { background-color: #1e293b; }
+  .hover\:bg-slate-50\/50:hover { background-color: rgb(30 41 59 / 0.5); }
+  .hover\:text-slate-900:hover { color: #f1f5f9; }
+
+  /* --- Input / Form Background --- */
+  .bg-slate-50\/50 { background-color: rgb(30 41 59 / 0.3); }
 }

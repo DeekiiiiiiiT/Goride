@@ -26,6 +26,7 @@ import {
   PopoverTrigger
 } from "../../ui/popover";
 import { Label } from '../../ui/label';
+import { Tooltip, TooltipTrigger, TooltipContent } from '../../ui/tooltip';
 
 // ─── Inline Geofence Radius Popover ────────────────────────────────────────
 function GeofenceRadiusPopover({ 
@@ -303,6 +304,7 @@ export function VerifiedStationsTab({ stations: propsStations, onRefresh, onSele
       }
       await fetchStations();
     } catch (error) {
+      console.error('[SyncOrphans] Error:', error);
       toast.error('Failed to sync ledger');
     } finally {
       setIsSyncing(false);
@@ -599,15 +601,24 @@ export function VerifiedStationsTab({ stations: propsStations, onRefresh, onSele
                         </PopoverContent>
                       </Popover>
 
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-slate-400 hover:text-green-600"
-                        title="Sync Master Pin"
-                        onClick={() => setSelectedStation(s)}
-                      >
-                        <ArrowUpCircle className="h-4 w-4" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-slate-400 hover:text-green-600"
+                            onClick={() => setSelectedStation(s)}
+                          >
+                            <ArrowUpCircle className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="center" className="max-w-[260px] bg-slate-900 text-slate-100 p-3 space-y-1.5">
+                          <p className="font-semibold text-[11px] text-white">Sync Master Pin</p>
+                          <p className="text-[10px] leading-relaxed text-slate-300">
+                            Swap this station's primary GPS coordinate with a higher-accuracy alias. Use when a GPS alias has better precision than the current pin — improves geofence matching and fraud detection accuracy.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
 
                       <Button 
                         variant="ghost" 

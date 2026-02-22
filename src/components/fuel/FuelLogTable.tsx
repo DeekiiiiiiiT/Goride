@@ -10,7 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { 
     DropdownMenu, 
     DropdownMenuContent, 
@@ -45,7 +45,7 @@ import {
 } from "../ui/accordion";
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
-import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2, Link2 } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, AlertTriangle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2, Link2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { FuelEntry, FuelCard, FuelCycle } from '../../types/fuel';
@@ -93,6 +93,7 @@ export function FuelLogTable({
     const [filterAnchor, setFilterAnchor] = useState<string>('all');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [activeView, setActiveView] = useState<'transactions' | 'cycles'>('transactions');
+    const [isRecalculating, setIsRecalculating] = useState(false);
 
     // Phase 2: Cycle Mapping
     const allCycles = useFuelCycles(entries, vehicles);
@@ -319,29 +320,7 @@ export function FuelLogTable({
                         {stats.imbalancedCount > 0 ? <AlertCircle className="h-5 w-5 text-red-500" /> : <ShieldCheck className="h-5 w-5 text-emerald-500" />}
                     </div>
                     <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ledger Health</p>
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-5 w-5 text-slate-400 hover:text-indigo-600 transition-colors"
-                                onClick={async () => {
-                                    const promise = api.runFuelBackfill();
-                                    toast.promise(promise, {
-                                        loading: 'Syncing tank capacities and fuel cycles...',
-                                        success: 'Fleet-wide recalculation complete',
-                                        error: 'Failed to update integrity'
-                                    });
-                                }}
-                            >
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <RotateCcw className="h-3 w-3" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>Recalculate all cycles based on latest tank capacities and full-tank flags.</TooltipContent>
-                                </Tooltip>
-                            </Button>
-                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ledger Health</p>
                         <p className={cn("text-xl font-bold", stats.imbalancedCount > 0 ? "text-red-600" : "text-emerald-600")}>
                             {stats.imbalancedCount > 0 ? `${stats.imbalancedCount} Imbalanced` : 'Healthy'}
                         </p>
@@ -396,6 +375,42 @@ export function FuelLogTable({
                     {onDateRangeChange && <DatePickerWithRange date={dateRange} setDate={onDateRangeChange} />}
                 </div>
                 <div className="text-xs text-slate-500">Showing {activeView === 'transactions' ? filteredEntries.length : filteredCycles.length} records</div>
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="gap-2 h-9 text-slate-600 border-slate-200 hover:text-indigo-600 hover:border-indigo-300 transition-colors shrink-0"
+                                disabled={isRecalculating}
+                                onClick={async () => {
+                                    setIsRecalculating(true);
+                                    try {
+                                        const result = await api.runFuelBackfill();
+                                        console.log('[Recalculate] Backfill result:', result);
+                                        toast.success('Fleet-wide recalculation complete', {
+                                            description: `Processed ${result?.processed ?? '?'} entries. Click Refresh Data to see updated results.`
+                                        });
+                                    } catch (err) {
+                                        console.error('[Recalculate] Backfill failed:', err);
+                                        toast.error('Failed to update integrity', {
+                                            description: String(err)
+                                        });
+                                    } finally {
+                                        setIsRecalculating(false);
+                                    }
+                                }}
+                            >
+                                <RotateCcw className={cn("h-3.5 w-3.5", isRecalculating && "animate-spin")} />
+                                <span className="text-xs font-semibold">{isRecalculating ? 'Recalculating...' : 'Recalculate'}</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[240px]">
+                            <p className="text-xs font-semibold">Recalculate Fleet Integrity</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Re-syncs all tank capacities, full-tank flags, and fuel cycles across the fleet. Updates the Ledger Health and Fuel Integrity cards above.</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
 
             <div className="rounded-md border bg-white overflow-hidden">
@@ -417,6 +432,7 @@ export function FuelLogTable({
                         <TableBody>
                             {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={9} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
                             filteredEntries.map(entry => {
+                                const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
                                 const confidenceScore = entry.metadata?.auditConfidenceScore;
                                 const isHighlyTrusted = entry.metadata?.isHighlyTrusted || (confidenceScore !== undefined && confidenceScore >= 90);
                                 const isLocked = entry.isLocked || entry.status === 'Finalized';
@@ -436,7 +452,7 @@ export function FuelLogTable({
                                                 <span className="text-xs font-semibold text-slate-700 truncate max-w-[140px]">
                                                     {entry.vendor || entry.metadata?.stationName || "Unknown Vendor"}
                                                 </span>
-                                                {entry.metadata?.locationStatus === 'verified' && (
+                                                {locationStatus === 'verified' && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <div className="bg-blue-50 text-blue-600 p-0.5 rounded-full border border-blue-100 flex-shrink-0 animate-in zoom-in-95 duration-300">
@@ -450,6 +466,9 @@ export function FuelLogTable({
                                                                 {entry.metadata?.matchDistance !== undefined && (
                                                                     <p className="text-[10px] text-blue-500 font-medium">Accuracy: {entry.metadata.matchDistance}m</p>
                                                                 )}
+                                                                {entry.metadata?.matchConfidence && (
+                                                                    <p className="text-[10px] text-blue-400">Confidence: {entry.metadata.matchConfidence}</p>
+                                                                )}
                                                                 {entry.signature && (
                                                                     <div className="mt-1 pt-1 border-t border-blue-100 flex items-center gap-1">
                                                                         <CheckCircle2 className="h-2.5 w-2.5 text-blue-600" />
@@ -460,7 +479,25 @@ export function FuelLogTable({
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 )}
-                                                {(entry.metadata?.locationStatus === 'unknown' || !entry.metadata?.locationStatus) && (
+                                                {locationStatus === 'review_required' && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="bg-amber-50 text-amber-600 p-0.5 rounded-full border border-amber-100 flex-shrink-0">
+                                                                <AlertTriangle className="h-2.5 w-2.5" />
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <div className="space-y-1">
+                                                                <p className="text-[10px] font-bold">Review Required</p>
+                                                                <p className="text-[10px]">GPS match requires admin review — {entry.metadata?.ambiguityReason || 'multiple nearby stations detected'}.</p>
+                                                                {entry.metadata?.matchDistance !== undefined && (
+                                                                    <p className="text-[10px] text-amber-500 font-medium">Closest match: {entry.metadata.matchDistance}m</p>
+                                                                )}
+                                                            </div>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )}
+                                                {(locationStatus === 'unknown' || !locationStatus) && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <div className="flex items-center gap-1.5 bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded border border-amber-100 animate-pulse">
@@ -483,9 +520,35 @@ export function FuelLogTable({
                                     <TableCell className="font-medium text-xs">{getVehicleName(entry.vehicleId)}</TableCell>
                                     <TableCell className="text-xs">{getDriverName(entry.driverId)}</TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-medium">{entry.liters?.toFixed(1)} L</span>
-                                        </div>
+                                        {(() => {
+                                            const vehicle = vehicles.find(v => v.id === entry.vehicleId);
+                                            const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
+                                            const fillPct = Math.min(100, ((entry.liters || 0) / tankCap) * 100);
+                                            return (
+                                                <div className="flex flex-col gap-1 min-w-[70px]">
+                                                    <span className="text-xs font-medium">{entry.liters?.toFixed(1)} L</span>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 cursor-help">
+                                                                <div 
+                                                                    className={cn(
+                                                                        "h-full rounded-full transition-all duration-300",
+                                                                        fillPct >= 90 ? "bg-emerald-500" :
+                                                                        fillPct >= 50 ? "bg-blue-500" :
+                                                                        fillPct >= 25 ? "bg-amber-500" :
+                                                                        "bg-slate-300"
+                                                                    )}
+                                                                    style={{ width: `${fillPct}%` }}
+                                                                />
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p className="text-[10px]">{fillPct.toFixed(0)}% of {tankCap}L tank capacity</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                            );
+                                        })()}
                                     </TableCell>
                                     <TableCell className="font-bold text-xs">${entry.amount.toFixed(2)}</TableCell>
                                     <TableCell>
@@ -574,7 +637,7 @@ export function FuelLogTable({
                         <Accordion type="multiple" className="space-y-3">
                             {filteredCycles.map(cycle => {
                                 const vehicle = vehicles.find(v => v.id === cycle.vehicleId);
-                                const tankCap = vehicle?.fuelSettings?.tankCapacity || 40;
+                                const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
                                 const calculatedEndPct = Math.min(100, (cycle.startingPercentage || 0) + (cycle.totalLiters / tankCap) * 100);
                                 
                                 return (

@@ -6,7 +6,7 @@ import { MapPin, ShieldCheck, AlertTriangle, Navigation, Zap, FileCheck, Grid3X3
 import { cn } from '../../ui/utils';
 import { Button } from '../../ui/button';
 import { ForensicCertificate } from './ForensicCertificate';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../ui/dialog';
 import { encodePlusCode, getPlusCodePrecision } from '../../../utils/plusCode';
 
 interface EvidenceBridgeViewProps {
@@ -60,6 +60,9 @@ export function EvidenceBridgeView({
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Forensic Integrity Certificate</DialogTitle>
+            <DialogDescription>
+              Chain-of-custody audit record for this fuel transaction.
+            </DialogDescription>
           </DialogHeader>
           <ForensicCertificate 
             transactionId={transactionId}

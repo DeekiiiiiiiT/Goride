@@ -1,6 +1,7 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
+import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
 import { compressImage } from '../utils/compressImage';
 
@@ -310,10 +311,14 @@ export const api = {
     if (userId) url.searchParams.append('userId', userId);
     if (vehicleId) url.searchParams.append('vehicleId', vehicleId);
     
-    const response = await fetchWithRetry(url.toString(), {
+    // Single attempt (no retries) — this is a background poll that retries every 30s anyway
+    const response = await fetch(url.toString(), {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
-    if (!response.ok) throw new Error("Failed to fetch persistent alerts");
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'unknown');
+      throw new Error(`Persistent alerts fetch failed: ${response.status} ${errorText}`);
+    }
     return response.json();
   },
 
@@ -748,6 +753,28 @@ export const api = {
     return response.json();
   },
 
+  // ── Toll Info ──────────────────────────────────────────────────────────
+  async getTollInfo() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll info");
+    return response.json();
+  },
+
+  async saveTollInfo(schedule: any) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(schedule)
+    });
+    if (!response.ok) throw new Error("Failed to save toll info");
+    return response.json();
+  },
+
   async saveFleetState(state: { 
       drivers: DriverMetrics[], 
       vehicles: VehicleMetrics[], 
@@ -827,12 +854,43 @@ export const api = {
     return response.json();
   },
 
+  async checkStationDuplicate(plusCode: string, lat: number, lng: number, excludeId?: string, category?: string) {
+    const params = new URLSearchParams();
+    if (plusCode) params.append('plusCode', plusCode);
+    if (lat) params.append('lat', String(lat));
+    if (lng) params.append('lng', String(lng));
+    if (excludeId) params.append('excludeId', excludeId);
+    if (category) params.append('category', category);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/check-duplicate?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to check for station duplicates");
+    return response.json();
+  },
+
   async reconcileLedgerOrphans() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/reconcile-ledger-orphans`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to reconcile orphans");
+    return response.json();
+  },
+
+  async bulkAssignStation(entryIds: string[], stationId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/bulk-assign-station`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ entryIds, stationId })
+    });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("[BulkAssign API Error]", errorData);
+        throw new Error(errorData.error || "Failed to bulk assign station");
+    }
     return response.json();
   },
 
@@ -845,6 +903,14 @@ export const api = {
         },
         body: JSON.stringify(station)
     });
+    // Handle 409 Conflict (duplicate station detected) — surface the structured response
+    if (response.status === 409) {
+      const dupeData = await response.json();
+      const error: any = new Error(dupeData.message || 'Duplicate station detected');
+      error.duplicate = true;
+      error.existingStation = dupeData.existingStation;
+      throw error;
+    }
     if (!response.ok) throw new Error("Failed to save station");
     return response.json();
   },
@@ -1049,6 +1115,47 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to delete toll tag");
     return response.json();
+  },
+
+  // -----------------------------------------------------------------------
+  // Toll Plaza CRUD (Phase 3 — Toll Database)
+  // -----------------------------------------------------------------------
+
+  async getTollPlazas(): Promise<TollPlaza[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll plazas");
+    return response.json();
+  },
+
+  async getTollPlaza(id: string): Promise<TollPlaza> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas/${id}`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll plaza");
+    return response.json();
+  },
+
+  async saveTollPlaza(plaza: Partial<TollPlaza>): Promise<{ success: boolean; data: TollPlaza }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(plaza)
+    });
+    if (!response.ok) throw new Error("Failed to save toll plaza");
+    return response.json();
+  },
+
+  async deleteTollPlaza(id: string): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to delete toll plaza");
   },
 
   async getUsers() {
@@ -1328,6 +1435,18 @@ export const api = {
     return response.json();
   },
 
+  async backfillWalletCredits(): Promise<{ success: boolean; created: number; skipped: number; total: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/backfill-wallet-credits`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(err.error || "Wallet credit backfill failed");
+    }
+    return response.json();
+  },
+
   async lockTransaction(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/transactions/${id}/lock`, {
         method: 'PATCH',
@@ -1390,6 +1509,36 @@ export const api = {
         body: JSON.stringify({ reportData, reportType: 'forensic-audit' })
     });
     if (!response.ok) throw new Error("Failed to sign audit report");
+    return response.json();
+  },
+
+  async getAuditConfig() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/audit-config`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch audit config");
+    return response.json();
+  },
+
+  async saveAuditConfig(config: Record<string, any>) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/audit-config`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(config)
+    });
+    if (!response.ok) throw new Error("Failed to save audit config");
+    return response.json();
+  },
+
+  async recalculateAllIntegrity() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/fuel-audit/recalculate-all`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Recalculate failed");
     return response.json();
   }
 };

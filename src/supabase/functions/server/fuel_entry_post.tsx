@@ -26,6 +26,10 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
             const { tankCapacity, baselineEfficiency, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
             const profileKmPerLiter = baselineEfficiency;
 
+            // Phase 22: compute rolling average efficiency for this vehicle as of this entry's date
+            const rollingAvg = await fuelLogic.calculateRollingEfficiency(entry.vehicleId, entry.date);
+            const effectiveBaseline = rollingAvg?.avgKmPerLiter || 0;
+
             // 2. Fetch recent entries to calculate cycle state using Step 1.3 Helper
             const lastAnchor = await fuelLogic.getLastAnchor(entry.vehicleId);
             const lastAnchorOdo = Number(lastAnchor?.odometer) || 0;
@@ -69,8 +73,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
             let efficiencyVariance = 0;
             if (distanceSinceAnchor > 0 && totalVolumeInCycle > 0) {
                 actualKmPerLiter = distanceSinceAnchor / totalVolumeInCycle;
-                if (profileKmPerLiter > 0) {
-                    efficiencyVariance = (profileKmPerLiter - actualKmPerLiter) / profileKmPerLiter;
+                if (effectiveBaseline > 0) {
+                    efficiencyVariance = (effectiveBaseline - actualKmPerLiter) / effectiveBaseline;
                 }
             }
 
@@ -86,7 +90,14 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 .filter((e: any) => e.vehicleId === entry.vehicleId && e.id !== entry.id);
                 
             const recentTxCount = allVehicleEntries.filter((e: any) => e.date >= recentTimeWindow).length;
-            const isHighFrequency = recentTxCount >= 1; 
+            
+            // Card-only frequency check: only flag card transactions, cash/reimbursement exempt
+            const isCardTransaction = entry.type === 'Card_Transaction' || entry.paymentSource === 'Gas_Card';
+            const auditConfig = await kv.get("config:audit_settings");
+            const frequencyThreshold = Number(auditConfig?.frequencyThreshold) || 3;
+            // Phase 22: configurable efficiency variance threshold
+            const efficiencyThreshold = Number(auditConfig?.efficiencyThreshold) || 0.30;
+            const isHighFrequency = isCardTransaction && recentTxCount >= (frequencyThreshold - 1);
             const isFragmented = tankCapacity > 0 && (volumeAtEntry / tankCapacity) < 0.15 && !entry.metadata?.isTopUp;
 
             // Check 1: Tank Overfill
@@ -96,9 +107,10 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 auditStatus = 'Flagged';
             } 
             // Check 2: Efficiency Flag
-            else if (isHardAnchor || isSoftAnchor) {
-                const isHighConsumption = efficiencyVariance > 0.25; 
-                const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (totalVolumeInCycle / tankCapacity) > 0.8;
+            // Phase 19/22: only check when distance data exists; use rolling baseline & configurable threshold
+            else if ((isHardAnchor || isSoftAnchor) && distanceSinceAnchor > 0) {
+                const isHighConsumption = effectiveBaseline > 0 && efficiencyVariance > efficiencyThreshold;
+                const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (totalVolumeInCycle / tankCapacity) > 0.8;
 
                 if (isHighConsumption || isRangeSuspicious) {
                     integrityStatus = 'critical';
@@ -135,6 +147,11 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 distanceSinceAnchor,
                 actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
                 profileKmPerLiter,
+                // Phase 22: rolling average metadata
+                rollingAvgKmPerLiter: rollingAvg?.avgKmPerLiter ?? null,
+                rollingAvgWindow: rollingAvg?.window ?? null,
+                rollingAvgEntryCount: rollingAvg?.entryCount ?? 0,
+                efficiencyBaseline: rollingAvg ? 'rolling' : 'skipped',
                 efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
                 isSoftAnchor,
                 integrityStatus,

@@ -29,6 +29,7 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { api } from '../../services/api';
 import { WeeklySettlementView } from '../drivers/WeeklySettlementView';
 import { TransactionLedgerView } from '../drivers/TransactionLedgerView';
+import { FuelWalletView } from '../drivers/FuelWalletView';
 import {
   Sheet,
   SheetContent,
@@ -45,7 +46,7 @@ export function DriverEarnings() {
   const { user } = useAuth();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   const [loading, setLoading] = useState(true);
-  const [cashWalletView, setCashWalletView] = useState<'settlements' | 'ledger'>('settlements');
+  const [cashWalletView, setCashWalletView] = useState<'settlements' | 'ledger' | 'fuel'>('settlements');
   const [trips, setTrips] = useState<Trip[]>([]);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [metrics, setMetrics] = useState<DriverMetrics[]>([]);
@@ -466,6 +467,15 @@ export function DriverEarnings() {
                             >
                                 Your Payments
                             </button>
+                            <button 
+                                onClick={() => setCashWalletView('fuel')} 
+                                className={cn(
+                                    "px-4 py-1.5 text-sm font-medium rounded-md transition-all", 
+                                    cashWalletView === 'fuel' ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900"
+                                )}
+                            >
+                                Fuel Wallet
+                            </button>
                         </div>
                     </SheetHeader>
                     <div className="flex-1 overflow-y-auto p-6">
@@ -476,9 +486,13 @@ export function DriverEarnings() {
                                 csvMetrics={metrics}
                                 readOnly={true}
                             />
-                        ) : (
+                        ) : cashWalletView === 'ledger' ? (
                             <TransactionLedgerView 
                                 transactions={paymentTransactions}
+                            />
+                        ) : (
+                            <FuelWalletView 
+                                transactions={transactions}
                             />
                         )}
                     </div>

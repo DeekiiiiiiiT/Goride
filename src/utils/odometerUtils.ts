@@ -1,4 +1,5 @@
 import { UnifiedOdometerEntry } from '../types/vehicle';
+import { formatDateJM } from './csv-helper';
 
 /**
  * Sorts odometer entries by date descending (newest first).
@@ -144,7 +145,7 @@ const formatSource = (source: string): string => {
 export const formatMasterLogExport = (entries: UnifiedOdometerEntry[]): MasterLogExportRow[] => {
     return entries.map(entry => {
         const d = new Date(entry.date);
-        const dateStr = d.toLocaleDateString('en-CA'); 
+        const dateStr = formatDateJM(d); // DD/MM/YYYY — Jamaica standard
         const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 
         return {
@@ -165,10 +166,9 @@ export const formatMasterLogExport = (entries: UnifiedOdometerEntry[]): MasterLo
  */
 export const formatCheckInExport = (rawEntries: any[]): CheckInExportRow[] => {
     return rawEntries.map(entry => ({
-        date: entry.created_at || entry.date, // Handle both raw DB field and normalized field
+        date: formatDateJM(entry.created_at || entry.date), // DD/MM/YYYY — Jamaica standard
         vehicleId: entry.vehicle_id || entry.vehicleId,
         value: entry.value || entry.odometer,
         source: entry.source || 'checkin'
     }));
 };
-

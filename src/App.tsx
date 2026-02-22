@@ -19,6 +19,10 @@ import { UserManagementPage } from './components/users/UserManagementPage';
 import { TierConfigPage } from './components/tiers/TierConfigPage';
 import { PerformanceDashboard } from './components/performance/PerformanceDashboard';
 import { FuelManagement } from './pages/FuelManagement';
+import { TollDatabaseView } from './components/toll/TollDatabaseView';
+import { TollLogsPage } from './pages/TollLogs';
+import { TollInfoPage } from './components/toll/TollInfoPage';
+import { TollAnalytics } from './components/toll/TollAnalytics';
 
 // Driver Portal Components
 import { DriverLayout } from './components/driver-portal/DriverLayout';
@@ -148,10 +152,14 @@ function AppContent() {
         {currentPage === 'toll-tags' && <TollReconciliation />}
         {currentPage === 'tag-inventory' && <TagInventory />}
         {currentPage === 'claimable-loss' && <ClaimableLoss />}
+        {currentPage === 'toll-database' && <TollDatabaseView />}
+        {currentPage === 'toll-logs' && <TollLogsPage />}
+        {currentPage === 'toll-info' && <TollInfoPage />}
+        {currentPage === 'toll-analytics' && <TollAnalytics />}
         {currentPage === 'tier-config' && <TierConfigPage />}
         {currentPage === 'performance' && <PerformanceDashboard />}
         
-        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap', 'fuel-maintenance', 'fuel-stations', 'fuel-database'].includes(currentPage) && (
+        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap', 'fuel-stations', 'fuel-database'].includes(currentPage) && (
           <FuelManagement 
               defaultTab={
                   currentPage === 'fuel-reconciliation' ? 'reconciliation' :
@@ -162,7 +170,6 @@ function AppContent() {
                   currentPage === 'fuel-logs' ? 'logs' :
                   currentPage === 'fuel-reports' ? 'reports' :
                   currentPage === 'fuel-configuration' ? 'configuration' :
-                  currentPage === 'fuel-maintenance' ? 'maintenance' :
                   currentPage === 'fuel-stations' ? 'stations' :
                   currentPage === 'fuel-database' ? 'database' :
                   'dashboard'

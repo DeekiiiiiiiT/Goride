@@ -2,6 +2,24 @@
  * Utility functions for handling CSV Export/Import operations.
  */
 
+/**
+ * Formats an ISO date string (or Date object) to DD/MM/YYYY.
+ * Jamaica exclusively uses DD/MM/YYYY — this is the standard for all exports.
+ */
+export function formatDateJM(value: string | Date | null | undefined): string {
+    if (!value) return '';
+    try {
+        const d = typeof value === 'string' ? new Date(value) : value;
+        if (isNaN(d.getTime())) return String(value);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    } catch {
+        return String(value);
+    }
+}
+
 export interface CsvColumn<T> {
     key: keyof T;
     label: string;

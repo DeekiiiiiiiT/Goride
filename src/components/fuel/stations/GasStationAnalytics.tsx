@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FuelEntry } from '../../../types/fuel';
 import { StationProfile, StationOverride } from '../../../types/station';
-import { aggregateStations, calculateRegionalStats, calculateDistance } from '../../../utils/stationUtils';
+import { aggregateStations, calculateRegionalStats, calculateDistance, generateStationId, normalizeStationName } from '../../../utils/stationUtils';
 import { fuelService } from '../../../services/fuelService';
 import { toast } from 'sonner@2.0.3';
 import { StationDashboard } from './StationDashboard';
@@ -19,13 +19,15 @@ import { isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 interface GasStationAnalyticsProps {
   logs: FuelEntry[];
   loading?: boolean;
+  onRequestRefresh?: () => void;
 }
 
-export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyticsProps) {
+export function GasStationAnalytics({ logs, loading = false, onRequestRefresh }: GasStationAnalyticsProps) {
   const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
   const [masterStations, setMasterStations] = useState<StationProfile[]>([]);
   const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [purchaseDateRange, setPurchaseDateRange] = useState<DateRange | undefined>();
+  const [refreshKey, setRefreshKey] = useState(0);
   
   // Phase 11: Master Ledger Sync
   // Load verified stations from the cloud to power the Evidence Bridge
@@ -43,24 +45,49 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
       }
     };
     syncMasterLedger();
-  }, []);
+  }, [refreshKey]);
 
   // Helper to generate context from logs with Evidence Bridge resolution
   const buildContext = useCallback((inputLogs: FuelEntry[]) => {
-    // 1. Evidence Bridge: Resolve "Unknown" logs to Verified Stations
+    // Build a lookup map for master stations by ID
+    const masterById = new Map(masterStations.map(s => [s.id, s]));
+
+    // 1. Evidence Bridge: Resolve logs to Verified Stations
+    // Priority: matchedStationId (server-side link) > GPS proximity > vendor name as-is
     const resolvedLogs = inputLogs.map(log => {
-      // If the log already has a verified status or matched ID in metadata, respect it
-      // Otherwise, attempt a GPS-based bridge resolution
+      // Phase 11: First check if the log already has a server-side station match.
+      // This covers transactions matched by the reconciler, sync-orphans, or auto-cleanup.
+      const linkedStationId = log.matchedStationId || log.metadata?.matchedStationId;
+      if (linkedStationId) {
+        const master = masterById.get(linkedStationId);
+        if (master) {
+          return {
+            ...log,
+            location: master.name,
+            stationAddress: master.address || log.stationAddress,
+            matchedStationId: linkedStationId,
+            metadata: {
+              ...log.metadata,
+              bridgedStationId: linkedStationId,
+              bridgeSource: 'server_matched',
+            }
+          };
+        }
+        // Station ID exists but not in master list — keep the matchedStationId 
+        // so aggregation still groups correctly
+        return log;
+      }
+
+      // If the log has a known location (not Unknown), keep as-is
       if (log.location && log.location !== 'Unknown' && log.location !== 'Manual Entry' && !log.location.includes('Unknown')) {
         return log;
       }
 
-      // Try to find a verified station within 600m
+      // Try to find a verified station within 600m (GPS-based bridge)
       const lat = log.locationMetadata?.lat || log.metadata?.location?.lat;
       const lng = log.locationMetadata?.lng || log.metadata?.location?.lng;
 
       if (lat && lng) {
-        // Find closest verified station
         let closestStation: StationProfile | null = null;
         let minDistance = Infinity;
 
@@ -70,24 +97,23 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
             station.location.lat, station.location.lng
           );
           
-          if (dist < minDistance && dist <= 600) { // Using the dynamic 600m threshold
+          if (dist < minDistance && dist <= 600) {
             minDistance = dist;
             closestStation = station;
           }
         });
 
         if (closestStation) {
-          // BRIDGE MATCH: Return a decorated log that points to the verified station
           return {
             ...log,
             location: closestStation.name,
             stationAddress: closestStation.address,
-            brand: closestStation.brand,
-            // Tag with metadata so we know it was bridged
+            matchedStationId: closestStation.id,
             metadata: {
               ...log.metadata,
               bridgedStationId: closestStation.id,
-              bridgeDistance: minDistance
+              bridgeDistance: minDistance,
+              bridgeSource: 'gps_proximity',
             }
           };
         }
@@ -95,17 +121,25 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
       return log;
     });
 
-    // 2. Aggregate resolved logs
+    // 2. Aggregate resolved logs (now groups by matchedStationId when present)
     const rawStations = aggregateStations(resolvedLogs);
     const stationMap = new Map(rawStations.map(s => [s.id, s]));
 
     // 3. Apply Master Metadata Overrides
+    // Now that aggregation groups by matchedStationId (UUID), this will match correctly
     masterStations.forEach(master => {
       if (stationMap.has(master.id)) {
         const existing = stationMap.get(master.id)!;
         stationMap.set(master.id, {
            ...existing,
-           ...master,
+           name: master.name || existing.name,
+           address: master.address || existing.address,
+           brand: master.brand || existing.brand,
+           location: master.location || existing.location,
+           plusCode: master.plusCode || existing.plusCode,
+           city: master.city || existing.city,
+           parish: master.parish || existing.parish,
+           status: master.status || existing.status,
            // Merge stats: favor the calculated aggregate for visits/prices
            stats: {
              ...existing.stats,
@@ -121,7 +155,7 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
     return {
       stations,
       regionalStats,
-      resolvedLogs, // Include the matched logs for drill-down views
+      resolvedLogs,
       loading: loading || isDataSyncing,
       togglePreferred: () => {},
       updateStationDetails: () => {}
@@ -142,6 +176,33 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
   }, [context.resolvedLogs, purchaseDateRange]);
 
   const purchaseContext = useMemo(() => buildContext(purchaseDataLogs), [buildContext, purchaseDataLogs]);
+
+  // Bulk Assign: Build a map of stationId -> entryIds[] for the purchase-filtered view
+  const stationEntryIdsMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    purchaseDataLogs.forEach(log => {
+      if (!log.id) return;
+      const verifiedId = log.matchedStationId || log.metadata?.matchedStationId || log.metadata?.bridgedStationId;
+      const name = normalizeStationName(log.location || 'Unidentified Station');
+      const address = log.stationAddress || 'Unknown Address';
+      const stationId = verifiedId || generateStationId(name === 'Unknown' || !name ? 'Unidentified Station' : name, address);
+      if (!map.has(stationId)) map.set(stationId, []);
+      map.get(stationId)!.push(log.id);
+    });
+    return map;
+  }, [purchaseDataLogs]);
+
+  // Bulk Assign: Verified stations available as assignment targets
+  const verifiedStations = useMemo(() =>
+    masterStations.filter(s => s.status === 'verified'),
+    [masterStations]
+  );
+
+  // Bulk Assign: Refresh handler — re-syncs master ledger and parent logs after successful assignment
+  const handleBulkAssignComplete = useCallback(() => {
+    setRefreshKey(k => k + 1);  // Re-fetch master stations
+    onRequestRefresh?.();        // Re-fetch fuel entries from parent
+  }, [onRequestRefresh]);
 
   const handleStationSelect = (stationId: string) => {
     const station = context.stations.find(s => s.id === stationId);
@@ -212,6 +273,9 @@ export function GasStationAnalytics({ logs, loading = false }: GasStationAnalyti
                     }} 
                     onSelectStation={handleStationSelect} 
                     variant="simple"
+                    verifiedStations={verifiedStations}
+                    stationEntryIds={stationEntryIdsMap}
+                    onBulkAssignComplete={handleBulkAssignComplete}
                  />
                </div>
             </TabsContent>

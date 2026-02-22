@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Badge } from "../ui/badge";
 import { 
     LineChart, 
     Line, 
@@ -18,15 +19,16 @@ import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeRespon
 import { FuelEntry } from '../../types/fuel';
 import { Vehicle } from '../../types/vehicle';
 import { format, subMonths, isAfter, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
-import { TrendingUp, TrendingDown, Activity, AlertTriangle, Droplets, Zap, ShieldCheck } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, AlertTriangle, Droplets, Zap, ShieldCheck, Users } from 'lucide-react';
 import { cn } from "../ui/utils";
 
 interface FuelPerformanceAnalyticsProps {
     entries: FuelEntry[];
     vehicles: Vehicle[];
+    drivers: any[];
 }
 
-export function FuelPerformanceAnalytics({ entries, vehicles }: FuelPerformanceAnalyticsProps) {
+export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPerformanceAnalyticsProps) {
     // 1. Prepare Long-term Trend Data (Last 6 Months)
     const trendData = useMemo(() => {
         const sixMonthsAgo = subMonths(new Date(), 6);
@@ -58,7 +60,7 @@ export function FuelPerformanceAnalytics({ entries, vehicles }: FuelPerformanceA
         });
     }, [entries]);
 
-    // 2. Efficiency by Vehicle (Phase 8.3)
+    // 2. Efficiency by Vehicle
     const vehiclePerformance = useMemo(() => {
         return vehicles.map(v => {
             const vEntries = entries.filter(e => e.vehicleId === v.id);
@@ -92,6 +94,33 @@ export function FuelPerformanceAnalytics({ entries, vehicles }: FuelPerformanceA
             integrityRate: Number(integrityRate.toFixed(1))
         };
     }, [entries]);
+
+    // 3. Fuel Spend by Driver
+    const driverPerformance = useMemo(() => {
+        const driverMap: Record<string, { name: string; totalLiters: number; totalCost: number; flags: number }> = {};
+
+        entries.forEach(e => {
+            const dId = e.driverId || 'unknown';
+            if (!driverMap[dId]) {
+                const driverRecord = Array.isArray(drivers) ? drivers.find((d: any) => d.id === dId) : null;
+                driverMap[dId] = {
+                    name: driverRecord?.name || `Driver ${dId.slice(0, 6)}`,
+                    totalLiters: 0,
+                    totalCost: 0,
+                    flags: 0,
+                };
+            }
+            driverMap[dId].totalLiters += e.liters || 0;
+            driverMap[dId].totalCost += e.amount;
+            if (e.metadata?.integrityStatus === 'critical') {
+                driverMap[dId].flags += 1;
+            }
+        });
+
+        return Object.values(driverMap)
+            .sort((a, b) => b.totalCost - a.totalCost)
+            .slice(0, 5);
+    }, [entries, drivers]);
 
     return (
         <div className="space-y-6">
@@ -216,7 +245,7 @@ export function FuelPerformanceAnalytics({ entries, vehicles }: FuelPerformanceA
                 <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                         <Zap className="w-5 h-5 text-orange-500 fill-orange-500" />
-                        Anomaly Insights (Phase 8.3)
+                        Anomaly Insights
                     </CardTitle>
                     <CardDescription>Automatic pattern detection from historical backfill data.</CardDescription>
                 </CardHeader>
@@ -273,16 +302,60 @@ export function FuelPerformanceAnalytics({ entries, vehicles }: FuelPerformanceA
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Driver Performance Chart */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <Users className="w-5 h-5 text-indigo-500" />
+                        Fuel Spend by Driver
+                    </CardTitle>
+                    <CardDescription>Top 5 drivers ranked by total fuel cost. Red bars indicate drivers with critical integrity flags.</CardDescription>
+                </CardHeader>
+                <CardContent className="min-h-[300px] w-full relative">
+                    {driverPerformance.length > 0 ? (
+                        <div className="w-full">
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={driverPerformance} layout="vertical" margin={{ left: 50, right: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                    <XAxis 
+                                        type="number" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 11, fill: '#64748b' }}
+                                        tickFormatter={(value: number) => `$${value.toLocaleString()}`}
+                                    />
+                                    <YAxis 
+                                        dataKey="name" 
+                                        type="category" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 11, fontWeight: 'bold', fill: '#334155' }}
+                                        width={100}
+                                    />
+                                    <Tooltip 
+                                        cursor={{ fill: 'transparent' }}
+                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                        formatter={(value: number, name: string) => {
+                                            if (name === 'Total Cost') return [`$${value.toFixed(2)}`, name];
+                                            return [value, name];
+                                        }}
+                                    />
+                                    <Bar dataKey="totalCost" radius={[0, 4, 4, 0]} barSize={20} name="Total Cost">
+                                        {driverPerformance.map((entry, index) => (
+                                            <Cell key={`dcell-${index}`} fill={entry.flags > 0 ? '#f43f5e' : '#6366f1'} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center h-[300px] text-slate-400">
+                            <p className="text-sm">No driver data available.</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
-}
-
-function Badge({ children, className, variant = 'default' }: { children: React.ReactNode, className?: string, variant?: 'default' | 'destructive' | 'outline' }) {
-    const base = "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider";
-    const variants = {
-        default: "bg-slate-100 text-slate-900",
-        destructive: "bg-red-100 text-red-700",
-        outline: "border border-slate-200 text-slate-600"
-    };
-    return <span className={cn(base, variants[variant], className)}>{children}</span>;
 }

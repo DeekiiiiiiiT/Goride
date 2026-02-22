@@ -1,4 +1,5 @@
 import { Trip } from '../../types/data';
+import { formatDateJM } from '../csv-helper';
 
 export interface IntegrityMetrics {
   totalTrips: number;
@@ -136,7 +137,7 @@ export function generateIntegrityCSV(trips: Trip[]): string {
 
     return [
       trip.id,
-      trip.date,
+      formatDateJM(trip.date),
       trip.routeId,
       trip.status,
       trip.resolutionMethod || 'pending',

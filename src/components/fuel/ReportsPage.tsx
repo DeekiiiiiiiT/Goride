@@ -1,68 +1,222 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { format, startOfWeek, endOfWeek } from "date-fns";
-import { Calendar as CalendarIcon, FileDown, Loader2, DollarSign, Droplets, TrendingUp, BarChart3 } from "lucide-react";
+import { format, startOfWeek, endOfWeek, startOfDay, endOfDay } from "date-fns";
+import { Calendar as CalendarIcon, FileDown, Loader2, DollarSign, Droplets, TrendingUp, BarChart3, Download, Users } from "lucide-react";
 import { cn } from "../ui/utils";
-import { fuelService } from '../../services/fuelService';
-import { api } from '../../services/api';
 import { FuelEntry } from '../../types/fuel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { FuelPerformanceAnalytics } from './FuelPerformanceAnalytics';
 import { TabLoadingSkeleton } from '../ui/TabLoadingSkeleton';
+import { toast } from "sonner@2.0.3";
+import { DateRange } from "react-day-picker";
+import { DatePickerWithRange } from "../ui/date-range-picker";
 
-export function ReportsPage() {
+interface ReportsPageProps {
+    entries: FuelEntry[];
+    vehicles: any[];
+    drivers: any[];
+    isRefreshing?: boolean;
+}
+
+export function ReportsPage({ entries, vehicles, drivers, isRefreshing }: ReportsPageProps) {
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [reportType, setReportType] = useState('weekly');
     const [isGenerating, setIsGenerating] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
     const [reportData, setReportData] = useState<FuelEntry[] | null>(null);
-    const [allEntries, setAllEntries] = useState<FuelEntry[]>([]);
-    const [vehicles, setVehicles] = useState<any[]>([]);
-    const [vehiclesMap, setVehiclesMap] = useState<Record<string, string>>({});
     const [summary, setSummary] = useState({ totalCost: 0, totalLiters: 0, avgPrice: 0, count: 0 });
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+    const [selectedVehicleId, setSelectedVehicleId] = useState<string>('all');
+    const [selectedDriverId, setSelectedDriverId] = useState<string>('all');
 
-    useEffect(() => {
-        const loadInitial = async () => {
-            setIsLoading(true);
-            try {
-                const [entries, vData] = await Promise.all([
-                    fuelService.getFuelEntries(),
-                    api.getVehicles()
-                ]);
-                setAllEntries(entries);
-                setVehicles(vData);
-                
-                const vMap: Record<string, string> = {};
-                if (Array.isArray(vData)) {
-                     vData.forEach((v: any) => vMap[v.id] = v.name || v.licensePlate);
-                }
-                setVehiclesMap(vMap);
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setIsLoading(false);
+    // Clear generated report when switching report types
+    useEffect(() => { setReportData(null); }, [reportType]);
+
+    const vehiclesMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        if (Array.isArray(vehicles)) {
+            vehicles.forEach((v: any) => map[v.id] = v.name || v.licensePlate);
+        }
+        return map;
+    }, [vehicles]);
+
+    const driversMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        if (Array.isArray(drivers)) {
+            drivers.forEach((d: any) => map[d.id] = d.name || `Driver ${d.id.slice(0, 6)}`);
+        }
+        return map;
+    }, [drivers]);
+
+    const escapeCSV = (value: string): string => {
+        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+            return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+    };
+
+    const handleExportCSV = () => {
+        if (!reportData || reportData.length === 0) {
+            toast.error("No data to export. Generate a report first.");
+            return;
+        }
+
+        const lines: string[] = [];
+
+        // Header comment block based on report type
+        if (reportType === 'weekly') {
+            lines.push(`Report Type,Weekly Statement`);
+            lines.push(`Date,${date ? format(date, 'PPP') : 'N/A'}`);
+        } else if (reportType === 'custom') {
+            lines.push(`Report Type,Custom Range`);
+            lines.push(`From,${dateRange?.from ? format(dateRange.from, 'PPP') : 'N/A'}`);
+            lines.push(`To,${dateRange?.to ? format(dateRange.to, 'PPP') : dateRange?.from ? format(dateRange.from, 'PPP') : 'N/A'}`);
+        } else if (reportType === 'vehicle') {
+            const vehicleName = selectedVehicleId === 'all' ? 'All Vehicles' : (vehiclesMap[selectedVehicleId] || selectedVehicleId);
+            lines.push(`Report Type,By Vehicle`);
+            lines.push(`Vehicle,${escapeCSV(vehicleName)}`);
+            if (dateRange?.from) {
+                lines.push(`From,${format(dateRange.from, 'PPP')}`);
+                lines.push(`To,${dateRange.to ? format(dateRange.to, 'PPP') : format(dateRange.from, 'PPP')}`);
             }
-        };
-        loadInitial();
-    }, []);
+        } else if (reportType === 'driver') {
+            const driverName = selectedDriverId === 'all' ? 'All Drivers' : (driversMap[selectedDriverId] || selectedDriverId);
+            lines.push(`Report Type,By Driver`);
+            lines.push(`Driver,${escapeCSV(driverName)}`);
+            if (dateRange?.from) {
+                lines.push(`From,${format(dateRange.from, 'PPP')}`);
+                lines.push(`To,${dateRange.to ? format(dateRange.to, 'PPP') : format(dateRange.from, 'PPP')}`);
+            }
+        }
+        lines.push(`Generated,${format(new Date(), 'PPP p')}`);
+        lines.push('');
+
+        // CSV column headers
+        lines.push('Date,Vehicle,Driver,Location,Volume (L),Amount ($),Status');
+
+        // Data rows
+        reportData.forEach(entry => {
+            const d = new Date(entry.date);
+            const entryDate = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+            const vehicle = escapeCSV(vehiclesMap[entry.vehicleId || ''] || entry.vehicleId || '-');
+            const driver = escapeCSV(driversMap[entry.driverId || ''] || entry.driverId || '-');
+            const location = escapeCSV(entry.location || '-');
+            const volume = entry.liters?.toFixed(2) || '0';
+            const amount = entry.amount.toFixed(2);
+            const status = entry.metadata?.integrityStatus === 'critical'
+                ? 'Critical Anomaly'
+                : entry.metadata?.integrityStatus === 'warning'
+                    ? 'Warning'
+                    : 'Valid';
+            lines.push(`${entryDate},${vehicle},${driver},${location},${volume},${amount},${status}`);
+        });
+
+        // Summary footer
+        lines.push('');
+        lines.push('Summary');
+        lines.push(`Total Cost,$${summary.totalCost.toFixed(2)}`);
+        lines.push(`Total Volume,${summary.totalLiters.toFixed(2)} L`);
+        lines.push(`Avg Price/Liter,$${summary.avgPrice.toFixed(2)}`);
+        lines.push(`Transaction Count,${summary.count}`);
+
+        const csvString = lines.join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+
+        // Build filename based on report type
+        let filename = 'fuel-report';
+        if (reportType === 'weekly') {
+            filename += `-weekly-${date ? format(date, 'yyyy-MM-dd') : 'unknown'}`;
+        } else if (reportType === 'custom') {
+            const fromStr = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : 'unknown';
+            const toStr = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : fromStr;
+            filename += `-custom-${fromStr}-to-${toStr}`;
+        } else if (reportType === 'vehicle') {
+            const plate = (vehiclesMap[selectedVehicleId] || 'all').replace(/\s+/g, '-');
+            filename += `-vehicle-${plate}-${format(new Date(), 'yyyy-MM-dd')}`;
+        } else if (reportType === 'driver') {
+            const driverName = (driversMap[selectedDriverId] || 'all').replace(/\s+/g, '-');
+            filename += `-driver-${driverName}-${format(new Date(), 'yyyy-MM-dd')}`;
+        }
+        filename += '.csv';
+
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        toast.success("CSV exported successfully");
+    };
 
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
-            // Recalculate based on current state (allEntries)
-            let filtered = [...allEntries];
-            if (date) {
-                if (reportType === 'weekly') {
+            // Recalculate based on current entries
+            let filtered = [...entries];
+
+            if (reportType === 'weekly') {
+                if (date) {
                     const start = startOfWeek(date, { weekStartsOn: 1 });
                     const end = endOfWeek(date, { weekStartsOn: 1 });
-                    filtered = allEntries.filter(e => {
+                    filtered = entries.filter(e => {
                          const d = new Date(e.date);
                          return d >= start && d <= end;
+                    });
+                }
+            } else if (reportType === 'custom') {
+                if (!dateRange?.from) {
+                    toast.error("Please select a start date.");
+                    setIsGenerating(false);
+                    return;
+                }
+                const start = startOfDay(dateRange.from);
+                const end = endOfDay(dateRange.to || dateRange.from);
+                filtered = entries.filter(e => {
+                    const d = new Date(e.date);
+                    return d >= start && d <= end;
+                });
+            } else if (reportType === 'vehicle') {
+                // Start with all entries
+                filtered = [...entries];
+
+                // Filter by vehicle if a specific one is selected
+                if (selectedVehicleId !== 'all') {
+                    filtered = filtered.filter(e => e.vehicleId === selectedVehicleId);
+                }
+
+                // Optionally filter by date range if set
+                if (dateRange?.from) {
+                    const start = startOfDay(dateRange.from);
+                    const end = endOfDay(dateRange.to || dateRange.from);
+                    filtered = filtered.filter(e => {
+                        const d = new Date(e.date);
+                        return d >= start && d <= end;
+                    });
+                }
+            } else if (reportType === 'driver') {
+                // Start with all entries
+                filtered = [...entries];
+
+                // Filter by driver if a specific one is selected
+                if (selectedDriverId !== 'all') {
+                    filtered = filtered.filter(e => e.driverId === selectedDriverId);
+                }
+
+                // Optionally filter by date range if set
+                if (dateRange?.from) {
+                    const start = startOfDay(dateRange.from);
+                    const end = endOfDay(dateRange.to || dateRange.from);
+                    filtered = filtered.filter(e => {
+                        const d = new Date(e.date);
+                        return d >= start && d <= end;
                     });
                 }
             }
@@ -83,7 +237,7 @@ export function ReportsPage() {
         }
     };
 
-    if (isLoading) {
+    if (isRefreshing) {
         return <TabLoadingSkeleton />;
     }
 
@@ -111,15 +265,20 @@ export function ReportsPage() {
                             <div className="flex flex-col md:flex-row gap-4 items-end">
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">Report Type</label>
-                                    <Tabs value={reportType} onValueChange={setReportType} className="w-[400px]">
+                                    <Tabs value={reportType} onValueChange={setReportType} className="w-[500px]">
                                         <TabsList>
                                             <TabsTrigger value="weekly">Weekly Statement</TabsTrigger>
-                                            <TabsTrigger value="custom" disabled>Custom Range</TabsTrigger>
-                                            <TabsTrigger value="vehicle" disabled>By Vehicle</TabsTrigger>
+                                            <TabsTrigger value="custom">Custom Range</TabsTrigger>
+                                            <TabsTrigger value="vehicle">By Vehicle</TabsTrigger>
+                                            <TabsTrigger value="driver" className="flex items-center gap-1">
+                                                <Users className="w-3 h-3" />
+                                                By Driver
+                                            </TabsTrigger>
                                         </TabsList>
                                     </Tabs>
                                 </div>
 
+                                {reportType === 'weekly' && (
                                 <div className="space-y-2">
                                      <label className="text-sm font-medium">Select Date</label>
                                      <Popover>
@@ -145,6 +304,64 @@ export function ReportsPage() {
                                         </PopoverContent>
                                     </Popover>
                                 </div>
+                                )}
+
+                                {reportType === 'custom' && (
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Select Date Range</label>
+                                    <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+                                </div>
+                                )}
+
+                                {reportType === 'vehicle' && (
+                                <>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Vehicle</label>
+                                        <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                                            <SelectTrigger className="w-[240px]">
+                                                <SelectValue placeholder="Select a vehicle" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Vehicles</SelectItem>
+                                                {vehicles.map((v: any) => (
+                                                    <SelectItem key={v.id} value={v.id}>
+                                                        {v.name || v.licensePlate}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Date Range</label>
+                                        <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+                                    </div>
+                                </>
+                                )}
+
+                                {reportType === 'driver' && (
+                                <>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Driver</label>
+                                        <Select value={selectedDriverId} onValueChange={setSelectedDriverId}>
+                                            <SelectTrigger className="w-[240px]">
+                                                <SelectValue placeholder="Select a driver" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Drivers</SelectItem>
+                                                {drivers.map((d: any) => (
+                                                    <SelectItem key={d.id} value={d.id}>
+                                                        {d.name || `Driver ${d.id.slice(0, 6)}`}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Date Range</label>
+                                        <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+                                    </div>
+                                </>
+                                )}
 
                                 <Button onClick={handleGenerate} disabled={isGenerating}>
                                     {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
@@ -194,11 +411,19 @@ export function ReportsPage() {
                                     <CardTitle>Detailed Transactions</CardTitle>
                                 </CardHeader>
                                 <CardContent>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <p className="text-sm text-muted-foreground">{reportData.length} transaction{reportData.length !== 1 ? 's' : ''}</p>
+                                        <Button variant="outline" size="sm" onClick={handleExportCSV}>
+                                            <Download className="h-4 w-4 mr-2" />
+                                            Export CSV
+                                        </Button>
+                                    </div>
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Date</TableHead>
                                                 <TableHead>Vehicle</TableHead>
+                                                <TableHead>Driver</TableHead>
                                                 <TableHead>Location</TableHead>
                                                 <TableHead className="text-right">Volume (L)</TableHead>
                                                 <TableHead className="text-right">Amount ($)</TableHead>
@@ -210,6 +435,7 @@ export function ReportsPage() {
                                                 <TableRow key={entry.id}>
                                                     <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
                                                     <TableCell>{vehiclesMap[entry.vehicleId || ''] || entry.vehicleId || '-'}</TableCell>
+                                                    <TableCell>{driversMap[entry.driverId || ''] || entry.driverId || '-'}</TableCell>
                                                     <TableCell className="max-w-[200px] truncate" title={entry.location}>{entry.location || '-'}</TableCell>
                                                     <TableCell className="text-right">{entry.liters?.toFixed(2) || '-'}</TableCell>
                                                     <TableCell className="text-right">${entry.amount.toFixed(2)}</TableCell>
@@ -226,7 +452,7 @@ export function ReportsPage() {
                                             ))}
                                             {reportData.length === 0 && (
                                                 <TableRow>
-                                                    <TableCell colSpan={6} className="h-24 text-center">No transactions found.</TableCell>
+                                                    <TableCell colSpan={7} className="h-24 text-center">No transactions found.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
@@ -245,7 +471,7 @@ export function ReportsPage() {
                 </TabsContent>
 
                 <TabsContent value="performance" className="mt-6">
-                    <FuelPerformanceAnalytics entries={allEntries} vehicles={vehicles} />
+                    <FuelPerformanceAnalytics entries={entries} vehicles={vehicles} drivers={drivers} />
                 </TabsContent>
             </Tabs>
         </div>

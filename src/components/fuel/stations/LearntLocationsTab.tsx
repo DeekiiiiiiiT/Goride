@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../../../services/api';
 import { Button } from '../../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
@@ -17,7 +17,10 @@ import {
   Search,
   Check,
   Plus,
-  Navigation
+  Navigation,
+  ArrowUpDown,
+  Merge,
+  Zap
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { StationProfile } from '../../../types/station';
@@ -32,6 +35,8 @@ import {
 } from '../../ui/dialog';
 import { Input } from '../../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
+import { Tooltip, TooltipTrigger, TooltipContent } from '../../ui/tooltip';
+import { calculateDistance } from '../../../utils/stationUtils';
 
 interface LearntLocationsTabProps {
   onPromoted?: () => void;
@@ -55,6 +60,13 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
   const [syncMasterPin, setSyncMasterPin] = useState(false);
   const [pendingMatches, setPendingMatches] = useState<any[]>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+
+  // --- Link to Existing Station dialog state (Phase 6) ---
+  const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
+  const [linkingLocation, setLinkingLocation] = useState<any | null>(null);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [linkSortBy, setLinkSortBy] = useState<'distance' | 'name'>('distance');
+  const [selectedLinkStation, setSelectedLinkStation] = useState<string | null>(null);
 
   const fetchLearnt = async () => {
     try {
@@ -103,13 +115,21 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
         }
       };
 
-      await api.promoteLearntLocationToMaster({
+      const promoteResult = await api.promoteLearntLocationToMaster({
         learntId: loc.id,
         action: 'create',
         stationData
       });
       
-      toast.success('Location promoted to Verified Master Ledger');
+      if (promoteResult?.autoMerged) {
+        const linked = promoteResult?.linkedEntries || 0;
+        const mergedName = promoteResult?.data?.name || 'existing station';
+        toast.success(`Duplicate detected! Auto-merged into "${mergedName}".`, {
+          description: `${promoteResult.message}${linked > 0 ? ` ${linked} transaction${linked > 1 ? 's' : ''} linked.` : ''}`,
+        });
+      } else {
+        toast.success('Location promoted to Verified Master Ledger');
+      }
       fetchLearnt();
       onPromoted?.();
     } catch (error) {
@@ -157,10 +177,24 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
     try {
       setRescanning(true);
       const result = await api.rescanLearntLocations(rescanRadius);
+
+      // Phase 11: Show auto-cleanup feedback if resolved learnt locations were removed
+      if (result.autoCleanedLearnt > 0) {
+        const cleanedNames = (result.cleanupDetails || [])
+          .map((d: any) => `"${d.learntName}" → ${d.stationName}`)
+          .join(', ');
+        toast.success(`Auto-resolved ${result.autoCleanedLearnt} learnt location(s)`, {
+          description: cleanedNames || 'These transactions were already matched to verified stations.',
+          duration: 8000,
+        });
+        // Refresh the list since items were removed
+        fetchLearnt();
+      }
+
       if (result.matches && result.matches.length > 0) {
         setPendingMatches(result.matches);
         setIsReviewModalOpen(true);
-      } else {
+      } else if (result.autoCleanedLearnt === 0) {
         toast.info(`Analysis complete. No potential matches found within ${rescanRadius}m.`);
       }
     } catch (error) {
@@ -195,6 +229,84 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
     s.name?.toLowerCase().includes(mergeSearch.toLowerCase()) ||
     s.brand?.toLowerCase().includes(mergeSearch.toLowerCase())
   );
+
+  /**
+   * Phase 6: Stations enriched with distance from the currently-linking learnt location.
+   * Sorted by distance (closest first) by default, with search + sort toggle.
+   */
+  const linkStationsWithDistance = useMemo(() => {
+    if (!linkingLocation) return [];
+    const locLat = linkingLocation.location?.lat;
+    const locLng = linkingLocation.location?.lng;
+    if (locLat == null || locLng == null) return [];
+
+    const allStations = [...verifiedStations, ...unverifiedStations];
+    const enriched = allStations.map(station => {
+      const sLat = station.location?.lat ?? 0;
+      const sLng = station.location?.lng ?? 0;
+      const distM = (sLat && sLng) ? Math.round(calculateDistance(locLat, locLng, sLat, sLng)) : Infinity;
+      return { ...station, _distance: distM };
+    });
+
+    // Filter by search term (name, brand, plusCode)
+    const searchLower = linkSearch.toLowerCase();
+    const filtered = searchLower
+      ? enriched.filter(s =>
+          s.name?.toLowerCase().includes(searchLower) ||
+          s.brand?.toLowerCase().includes(searchLower) ||
+          s.plusCode?.toLowerCase().includes(searchLower) ||
+          s.address?.toLowerCase().includes(searchLower)
+        )
+      : enriched;
+
+    // Sort
+    if (linkSortBy === 'distance') {
+      filtered.sort((a, b) => a._distance - b._distance);
+    } else {
+      filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    return filtered;
+  }, [linkingLocation, verifiedStations, unverifiedStations, linkSearch, linkSortBy]);
+
+  /** Format distance for display */
+  const formatDistance = (m: number): string => {
+    if (m === Infinity) return '—';
+    if (m < 1000) return `${m}m`;
+    return `${(m / 1000).toFixed(1)}km`;
+  };
+
+  /** Color class for distance badge */
+  const distanceColor = (m: number): string => {
+    if (m <= 150) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (m <= 500) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-red-50 text-red-700 border-red-200';
+  };
+
+  /** Handle "Link & Merge" confirm in the dialog */
+  const handleLinkConfirm = async () => {
+    if (!linkingLocation || !selectedLinkStation) return;
+    try {
+      setActionId(linkingLocation.id);
+      await api.promoteLearntLocationToMaster({
+        learntId: linkingLocation.id,
+        action: 'merge',
+        targetStationId: selectedLinkStation,
+      });
+      const targetName = linkStationsWithDistance.find(s => s.id === selectedLinkStation)?.name || 'station';
+      toast.success(`Linked to "${targetName}" and merged successfully.`);
+      setIsLinkDialogOpen(false);
+      setLinkingLocation(null);
+      setSelectedLinkStation(null);
+      setLinkSearch('');
+      fetchLearnt();
+      onPromoted?.();
+    } catch (error) {
+      console.error('[Link to Station] Merge failed:', error);
+      toast.error('Failed to link to existing station.');
+    } finally {
+      setActionId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -263,7 +375,16 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
               <TableHead>Detected Name / Vendor</TableHead>
               <TableHead>Coordinates (Lat, Lng)</TableHead>
               <TableHead>Last Transaction</TableHead>
-              <TableHead>Accuracy</TableHead>
+              <TableHead>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help underline decoration-dotted decoration-slate-400 underline-offset-4">Accuracy</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[250px] text-center">
+                    GPS accuracy of the device at the time of the transaction — the radius (in meters) within which the true position lies. Lower is better (e.g. ±2m = excellent, ±15m+ = poor signal).
+                  </TooltipContent>
+                </Tooltip>
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -281,6 +402,25 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
                     <div className="flex flex-col">
                       <span className="font-medium text-slate-900">{loc.name || 'Unknown Merchant'}</span>
                       <span className="text-[10px] text-slate-400 font-mono uppercase">ID: {loc.id.split('-')[0]}</span>
+                      {/* Phase 7: Nearby station indicator */}
+                      {loc.nearbyStation && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-[9px] px-1.5 py-0 h-[18px] font-semibold gap-1 flex items-center',
+                              loc.nearbyStation.distance <= 100
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : loc.nearbyStation.distance <= 300
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-red-50 text-red-700 border-red-200'
+                            )}
+                          >
+                            <MapPin className="h-2.5 w-2.5" />
+                            Near: {loc.nearbyStation.name} ({loc.nearbyStation.distance}m)
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -310,35 +450,128 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end items-center gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                        onClick={() => window.open(`https://www.google.com/maps?q=${loc.location.lat},${loc.location.lng}`, '_blank')}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            onClick={() => window.open(`https://www.google.com/maps?q=${loc.location.lat},${loc.location.lng}`, '_blank')}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                          Open these GPS coordinates in Google Maps to visually confirm the location.
+                        </TooltipContent>
+                      </Tooltip>
+
+                      {/* Phase 7: Quick Merge — single-click merge for close nearby matches */}
+                      {loc.nearbyStation && loc.nearbyStation.distance <= 150 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                              disabled={actionId === loc.id}
+                              onClick={async () => {
+                                try {
+                                  setActionId(loc.id);
+                                  await api.promoteLearntLocationToMaster({
+                                    learntId: loc.id,
+                                    action: 'merge',
+                                    targetStationId: loc.nearbyStation.id,
+                                  });
+                                  toast.success(`Quick-merged into "${loc.nearbyStation.name}".`, {
+                                    description: `GPS alias added. Transaction linked to existing station (${loc.nearbyStation.distance}m away).`,
+                                    icon: <Zap className="h-4 w-4 text-emerald-500" />,
+                                  });
+                                  fetchLearnt();
+                                  onPromoted?.();
+                                } catch (error) {
+                                  console.error('[Quick Merge] Failed:', error);
+                                  toast.error('Quick merge failed. Try the full Link to Station dialog.');
+                                } finally {
+                                  setActionId(null);
+                                }
+                              }}
+                            >
+                              {actionId === loc.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <>
+                                  <Zap className="h-3.5 w-3.5" />
+                                  Quick Merge
+                                </>
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-[260px] text-center">
+                            One-click merge into the nearby detected station ({loc.nearbyStation.name}, {loc.nearbyStation.distance}m away). Adds this location as a GPS alias and links the transaction automatically.
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
 
                       {/* Verify Location — opens the Edit Station modal pre-filled with learnt data */}
                       {onVerifyLocation && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 gap-1.5 border-violet-200 text-violet-700 hover:bg-violet-50 hover:border-violet-300 bg-violet-50/50"
-                          onClick={() => onVerifyLocation(loc)}
-                        >
-                          <Navigation className="h-3.5 w-3.5" />
-                          Verify
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 gap-1.5 border-violet-200 text-violet-700 hover:bg-violet-50 hover:border-violet-300 bg-violet-50/50"
+                              onClick={() => onVerifyLocation(loc)}
+                            >
+                              <Navigation className="h-3.5 w-3.5" />
+                              Verify
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-[260px] text-center">
+                            Create a brand-new verified station from this learnt location. Use this only when no matching station exists yet in the Master Ledger.
+                          </TooltipContent>
+                        </Tooltip>
                       )}
 
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button size="sm" variant="outline" className="h-8 gap-1.5 border-slate-200 text-slate-700">
+                      {/* Link to Existing Station — Phase 6 dialog with distance-sorted station picker */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 bg-emerald-50/50"
+                            onClick={() => {
+                              setLinkingLocation(loc);
+                              setLinkSearch('');
+                              setSelectedLinkStation(null);
+                              setLinkSortBy('distance');
+                              setIsLinkDialogOpen(true);
+                            }}
+                          >
                             <Link2 className="h-3.5 w-3.5" />
-                            Merge
+                            Link to Station
                           </Button>
-                        </PopoverTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[280px] text-center">
+                          Link this transaction to an existing verified station. Best option when the station already exists in the ledger — it associates the fuel transaction, adds a GPS alias, and clears the anomaly.
+                        </TooltipContent>
+                      </Tooltip>
+
+                      <Popover>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                              <PopoverTrigger asChild>
+                                <Button size="sm" variant="outline" className="h-8 gap-1.5 border-slate-200 text-slate-700">
+                                  <Link2 className="h-3.5 w-3.5" />
+                                  Merge
+                                </Button>
+                              </PopoverTrigger>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-[260px] text-center">
+                            Manually merge this learnt location into a specific station from a searchable list. Use when you want to combine two entries into one — the learnt coordinates become a GPS alias on the target station.
+                          </TooltipContent>
+                        </Tooltip>
                         <PopoverContent className="w-80 p-0" align="end">
                           <div className="p-3 border-b border-slate-100 bg-slate-50">
                             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">Select Master Station</h4>
@@ -394,34 +627,48 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
                         </PopoverContent>
                       </Popover>
 
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="h-8 gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
-                        onClick={() => {
-                          setSelectedLocation(loc);
-                          setIsRejectDialogOpen(true);
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Reject
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="h-8 gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                            onClick={() => {
+                              setSelectedLocation(loc);
+                              setIsRejectDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Reject
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[260px] text-center">
+                          Discard this learnt location as a GPS anomaly. The transaction data is kept but the coordinates are flagged as unreliable. Use when the GPS was clearly wrong (e.g. indoor drift, bad signal).
+                        </TooltipContent>
+                      </Tooltip>
 
-                      <Button 
-                        size="sm" 
-                        className="h-8 gap-1.5 bg-blue-600 hover:bg-blue-700 shadow-sm"
-                        onClick={() => handlePromote(loc)}
-                        disabled={actionId === loc.id}
-                      >
-                        {actionId === loc.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <>
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                            Secure Ledger
-                          </>
-                        )}
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            className="h-8 gap-1.5 bg-blue-600 hover:bg-blue-700 shadow-sm"
+                            onClick={() => handlePromote(loc)}
+                            disabled={actionId === loc.id}
+                          >
+                            {actionId === loc.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                Secure Ledger
+                              </>
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[280px] text-center">
+                          Promote this learnt location directly to the Verified Master Ledger as a new station. If a duplicate is detected, it will auto-merge. Use when you're confident this is a real, new gas station not yet in the system.
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -538,6 +785,178 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
             <Button variant="destructive" onClick={handleReject} disabled={actionId !== null}>
               {actionId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Rejection"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link to Existing Station Dialog (Phase 6) */}
+      <Dialog open={isLinkDialogOpen} onOpenChange={(open) => {
+        setIsLinkDialogOpen(open);
+        if (!open) {
+          setLinkingLocation(null);
+          setSelectedLinkStation(null);
+          setLinkSearch('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-[640px] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Link2 className="h-4 w-4 text-emerald-600" />
+              </div>
+              Link to Existing Station
+            </DialogTitle>
+            <DialogDescription>
+              Select a verified or unverified station to link this learnt transaction to. The GPS coordinates will be added as an alias on the target station.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Learnt location context card */}
+          {linkingLocation && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
+              <MapPin className="h-4 w-4 text-amber-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-900 truncate">
+                  {linkingLocation.name || 'Unknown Merchant'}
+                </p>
+                <p className="text-[10px] text-amber-600 font-mono">
+                  {linkingLocation.location?.lat?.toFixed(6)}, {linkingLocation.location?.lng?.toFixed(6)}
+                </p>
+              </div>
+              <Badge variant="outline" className="ml-auto bg-white border-amber-200 text-amber-700 text-[10px] shrink-0">
+                Anomaly
+              </Badge>
+            </div>
+          )}
+
+          {/* Search + Sort controls */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              <Input
+                placeholder="Search by name, brand, Plus Code, or address..."
+                className="pl-8 h-9 text-xs"
+                value={linkSearch}
+                onChange={(e) => setLinkSearch(e.target.value)}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 text-xs gap-1.5 shrink-0"
+              onClick={() => setLinkSortBy(prev => prev === 'distance' ? 'name' : 'distance')}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" />
+              {linkSortBy === 'distance' ? 'By Distance' : 'By Name'}
+            </Button>
+          </div>
+
+          {/* Scrollable station list */}
+          <div className="flex-1 overflow-y-auto border border-slate-200 rounded-lg min-h-0 max-h-[350px]">
+            {linkStationsWithDistance.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <MapPin className="h-8 w-8 text-slate-300 mb-2" />
+                <p className="text-sm text-slate-500 font-medium">No stations found</p>
+                <p className="text-xs text-slate-400 mt-0.5">Try a different search term</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {linkStationsWithDistance.map(station => {
+                  const isSelected = selectedLinkStation === station.id;
+                  const isSuggested = station._distance <= 150;
+                  return (
+                    <button
+                      key={station.id}
+                      type="button"
+                      className={cn(
+                        'w-full text-left p-3 transition-colors flex items-center gap-3',
+                        isSelected
+                          ? 'bg-emerald-50 border-l-3 border-l-emerald-500'
+                          : 'hover:bg-slate-50 border-l-3 border-l-transparent'
+                      )}
+                      onClick={() => setSelectedLinkStation(station.id)}
+                    >
+                      {/* Radio indicator */}
+                      <div className={cn(
+                        'h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0',
+                        isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'
+                      )}>
+                        {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                      </div>
+
+                      {/* Station details */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            'text-sm font-semibold truncate',
+                            isSelected ? 'text-emerald-800' : 'text-slate-900'
+                          )}>
+                            {station.name}
+                          </span>
+                          {isSuggested && (
+                            <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[8px] px-1.5 py-0 h-4 shrink-0 font-bold uppercase tracking-wider">
+                              Suggested
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-slate-500">{station.brand || 'Unknown'}</span>
+                          <span className="text-[10px] text-slate-300">•</span>
+                          <span className="text-[10px] text-slate-500 truncate">{station.address || 'No address'}</span>
+                        </div>
+                        {station.plusCode && (
+                          <span className="text-[9px] text-violet-500 font-mono mt-0.5 block">{station.plusCode}</span>
+                        )}
+                      </div>
+
+                      {/* Distance + Status badges */}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <Badge
+                          variant="outline"
+                          className={cn('text-[10px] font-bold border tabular-nums', distanceColor(station._distance))}
+                        >
+                          {formatDistance(station._distance)} away
+                        </Badge>
+                        <Badge
+                          className={cn('text-[9px] h-4 px-1.5',
+                            station.status === 'verified'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-amber-100 text-amber-700'
+                          )}
+                        >
+                          {station.status === 'verified' ? 'Verified' : 'Unverified'}
+                        </Badge>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer count + confirm */}
+          <DialogFooter className="flex items-center justify-between sm:justify-between gap-4">
+            <span className="text-xs text-slate-500">
+              {linkStationsWithDistance.length} station{linkStationsWithDistance.length !== 1 ? 's' : ''} available
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setIsLinkDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
+                onClick={handleLinkConfirm}
+                disabled={!selectedLinkStation || actionId !== null}
+              >
+                {actionId ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Merge className="h-4 w-4" />
+                )}
+                Link &amp; Merge
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

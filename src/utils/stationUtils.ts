@@ -47,12 +47,19 @@ export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
     address: string;
     brand: string;
     entries: FuelEntry[];
+    isVerifiedStation: boolean;
   }>();
 
-  // 1. Group logs by normalized location
+  // 1. Group logs by station identity
+  // Priority: matchedStationId (verified link) > bridgedStationId > vendor name hash
   logs.forEach(log => {
     // Skip manual entries with no data
     if (log.location === 'Manual Entry' && !log.amount) return;
+
+    // Check for verified station link (set by the Evidence Bridge or reconciler)
+    const verifiedId = log.matchedStationId 
+      || log.metadata?.matchedStationId 
+      || log.metadata?.bridgedStationId;
 
     let name = normalizeStationName(log.location || 'Unidentified Station');
     let address = log.stationAddress || 'Unknown Address';
@@ -62,14 +69,16 @@ export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
       name = 'Unidentified Station';
     }
 
-    const id = generateStationId(name, address);
+    // Use verified station ID when available, otherwise fall back to name hash
+    const id = verifiedId || generateStationId(name, address);
 
     if (!stationMap.has(id)) {
       stationMap.set(id, {
         name,
         address,
         brand: inferBrandFromName(name),
-        entries: []
+        entries: [],
+        isVerifiedStation: !!verifiedId,
       });
     }
     stationMap.get(id)!.entries.push(log);
@@ -104,10 +113,21 @@ export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
     let lat = 18.0179;
     let lng = -76.8099;
     
-    // Deterministic pseudo-random offset based on ID for consistent demo mapping
-    const hashVal = parseInt(id.replace('st_', ''), 16);
-    lat += ((hashVal % 100) - 50) * 0.001;
-    lng += ((hashVal % 100) - 50) * 0.001;
+    // Try to extract real coordinates from entries' locationMetadata
+    const entryWithCoords = sortedEntries.find(e => 
+      (e.locationMetadata?.lat && e.locationMetadata?.lng) ||
+      (e.metadata?.location?.lat && e.metadata?.location?.lng)
+    );
+    if (entryWithCoords) {
+      lat = entryWithCoords.locationMetadata?.lat || entryWithCoords.metadata?.location?.lat || lat;
+      lng = entryWithCoords.locationMetadata?.lng || entryWithCoords.metadata?.location?.lng || lng;
+    } else {
+      // Deterministic pseudo-random offset based on ID for consistent demo mapping
+      const idForHash = id.replace(/[^a-f0-9]/gi, '').slice(0, 8);
+      const hashVal = parseInt(idForHash, 16) || 0;
+      lat += ((hashVal % 100) - 50) * 0.001;
+      lng += (((hashVal >> 8) % 100) - 50) * 0.001;
+    }
 
     return {
       id,

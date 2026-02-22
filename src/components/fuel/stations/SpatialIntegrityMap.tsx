@@ -8,6 +8,7 @@ import { Map as MapIcon, Layers, Maximize2, RefreshCw, AlertCircle, CheckCircle2
 import { cn } from '../../ui/utils';
 import { ForensicExportButton } from './ForensicExportButton';
 import { ForensicSummaryPanel } from './ForensicSummaryPanel';
+import { Tooltip, TooltipTrigger, TooltipContent } from '../../ui/tooltip';
 
 // Fix for Leaflet default marker icons
 const fixLeafletIcon = () => {
@@ -24,11 +25,12 @@ const fixLeafletIcon = () => {
 fixLeafletIcon();
 
 export function SpatialIntegrityMap() {
-  const { features, loading, error, refresh } = useSpatialAudit();
+  const { features, loading, error, refresh, recentFueling } = useSpatialAudit();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const initialFitDoneRef = useRef(false);
   
   const [isMounted, setIsMounted] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -37,6 +39,10 @@ export function SpatialIntegrityMap() {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showDeadZones, setShowDeadZones] = useState(false);
   const [showPredictions, setShowPredictions] = useState(false);
+  const [showStationPins, setShowStationPins] = useState(true);
+  const [showClearSnapshots, setShowClearSnapshots] = useState(true);
+  const [showFlaggedSnapshots, setShowFlaggedSnapshots] = useState(true);
+  const [showTransactionConfirmed, setShowTransactionConfirmed] = useState(true);
 
   useEffect(() => {
     // Inject Leaflet CSS
@@ -52,6 +58,20 @@ export function SpatialIntegrityMap() {
     script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
     script.async = true;
     document.head.appendChild(script);
+
+    // Inject custom CSS for transaction-confirmed pulsing ring
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes txConfirmedPulse {
+        0% { transform: scale(1); opacity: 0.7; }
+        50% { transform: scale(1.4); opacity: 0.2; }
+        100% { transform: scale(1); opacity: 0.7; }
+      }
+      .tx-confirmed-ring {
+        animation: txConfirmedPulse 2s ease-in-out infinite;
+      }
+    `;
+    document.head.appendChild(style);
 
     // Detect theme
     const isDark = document.documentElement.classList.contains('dark') || 
@@ -143,12 +163,34 @@ export function SpatialIntegrityMap() {
     const bounds = L.latLngBounds([]);
     const deadZonePoints: [number, number][] = [];
 
+    // Pre-compute: which station IDs have real driver transactions?
+    // Use raw fuel entries (not just GPS-equipped map features) for maximum coverage
+    const transactionConfirmedIds = new Set<string>();
+    recentFueling.forEach(entry => {
+      if (entry.matchedStationId) {
+        transactionConfirmedIds.add(entry.matchedStationId);
+      }
+    });
+    // Also check station's own totalVisits stat as a fallback
+    features.forEach(f => {
+      if (f.type === 'station') {
+        const stationData = f.properties.originalData;
+        if (stationData?.stats?.totalVisits > 0) {
+          transactionConfirmedIds.add(stationData.id);
+        }
+      }
+    });
+
     features.forEach(feature => {
       // 1. Station Geofences (Integrity Guardrails)
       if (feature.type === 'station' && showGeofences) {
         const [lat, lng] = feature.geometry.coordinates as [number, number];
         const radius = feature.properties.radius || 150;
         const status = feature.properties.status;
+
+        // Skip unverified stations entirely
+        if (status !== 'verified' && status !== 'anomaly') return;
+
         const isCustom = feature.properties.isCustomRadius;
         
         // Tier-aware geofence styling
@@ -176,11 +218,21 @@ export function SpatialIntegrityMap() {
       }
 
       // 2. Station Pins
-      if (feature.type === 'station') {
+      if (feature.type === 'station' && showStationPins) {
         const [lat, lng] = feature.geometry.coordinates as [number, number];
         const status = feature.properties.status;
-        const pinColor = status === 'verified' ? 'bg-emerald-600' : 
-                        status === 'anomaly' ? 'bg-red-600' : 'bg-amber-500';
+
+        // Skip unverified stations entirely
+        if (status !== 'verified' && status !== 'anomaly') return;
+
+        // Check if this station has real driver transactions
+        const stationId = feature.properties.originalData?.id;
+        const isTxConfirmed = stationId && transactionConfirmedIds.has(stationId);
+
+        // Transaction-confirmed verified stations get teal; plain verified stays emerald; anomaly stays red
+        const pinColor = status === 'anomaly' ? 'bg-red-600'
+          : isTxConfirmed ? 'bg-teal-500'
+          : 'bg-emerald-600';
         
         // Compute tier label for popup
         const popupRadius = feature.properties.radius || 150;
@@ -198,6 +250,13 @@ export function SpatialIntegrityMap() {
           ? '<span style="font-size:8px;color:#f59e0b;font-weight:700;margin-left:4px;">CUSTOM</span>'
           : '';
 
+        // Build verification badge for popup
+        const verificationBadge = isTxConfirmed
+          ? '<div style="margin-top:6px;padding:3px 6px;border-radius:4px;background:#f0fdfa;border:1px solid #99f6e4;display:inline-flex;align-items:center;gap:3px;"><span style="font-size:9px;font-weight:700;color:#0d9488;">TRANSACTION-CONFIRMED</span></div>'
+          : status === 'verified'
+          ? '<div style="margin-top:6px;padding:3px 6px;border-radius:4px;background:#f8fafc;border:1px solid #e2e8f0;display:inline-flex;align-items:center;gap:3px;"><span style="font-size:9px;font-weight:600;color:#94a3b8;">PLUS CODE ONLY</span></div>'
+          : '';
+
         const marker = L.marker([lat, lng], {
           icon: L.divIcon({
             className: 'bg-transparent',
@@ -209,6 +268,26 @@ export function SpatialIntegrityMap() {
           })
         }).addTo(group);
 
+        // Draw pulsing gold ring for transaction-confirmed stations
+        if (isTxConfirmed && showTransactionConfirmed) {
+          L.marker([lat, lng], {
+            icon: L.divIcon({
+              className: 'bg-transparent',
+              html: `<div style="
+                width: 48px; height: 48px; border-radius: 50%;
+                border: 3px solid #d97706;
+                background: rgba(245, 158, 11, 0.12);
+                position: absolute; top: -8px; left: -8px;
+                box-shadow: 0 0 12px 4px rgba(245, 158, 11, 0.25);
+              " class="tx-confirmed-ring"></div>`,
+              iconSize: [32, 32],
+              iconAnchor: [16, 16]
+            }),
+            interactive: false,
+            zIndexOffset: -100
+          }).addTo(group);
+        }
+
         marker.bindPopup(`
           <div class="p-2 min-w-[200px]">
             <div class="flex items-center justify-between mb-2">
@@ -217,8 +296,9 @@ export function SpatialIntegrityMap() {
                  ${status}
                </span>
             </div>
-            <p class="text-xs text-slate-500 mb-2">${feature.properties.brand}</p>
-            <div class="space-y-1">
+            <p class="text-xs text-slate-500 mb-1">${feature.properties.brand}</p>
+            ${verificationBadge}
+            <div class="space-y-1 mt-2">
               <div class="text-[10px] flex justify-between items-center">
                 <span class="text-slate-400">Geofence:</span>
                 <span class="flex items-center gap-1">
@@ -267,10 +347,14 @@ export function SpatialIntegrityMap() {
         const [lat, lng] = feature.geometry.coordinates as [number, number];
         const isFlagged = !feature.properties.isInside || feature.properties.status === 'Flagged';
         
-        // Accumulate points for Dead Zone detection
+        // Accumulate points for Dead Zone detection (always, regardless of visibility toggle)
         if (isFlagged && !feature.properties.originalData?.matchedStationId) {
           deadZonePoints.push([lat, lng]);
         }
+
+        // Skip rendering based on toggle state
+        if (isFlagged && !showFlaggedSnapshots) return;
+        if (!isFlagged && !showClearSnapshots) return;
 
         const marker = L.circleMarker([lat, lng], {
           radius: 6,
@@ -321,7 +405,11 @@ export function SpatialIntegrityMap() {
     }
 
     if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
+      // Only auto-fit on the very first data load — not when toggling layers
+      if (!initialFitDoneRef.current) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
+        initialFitDoneRef.current = true;
+      }
     }
 
     // 6. Predictive Consumption Overlays (Phase 13)
@@ -346,7 +434,7 @@ export function SpatialIntegrityMap() {
         }
       });
     }
-  }, [features, loading, showGeofences, showDriftLines, showHeatmap, showDeadZones, showPredictions]);
+  }, [features, loading, recentFueling, showGeofences, showDriftLines, showHeatmap, showDeadZones, showPredictions, showStationPins, showClearSnapshots, showFlaggedSnapshots, showTransactionConfirmed]);
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   const recenter = () => {
@@ -453,50 +541,247 @@ export function SpatialIntegrityMap() {
 
         {/* Legend Overlay */}
         <div className="absolute bottom-6 left-6 z-[500] pointer-events-none">
-          <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl border border-slate-200 shadow-xl pointer-events-auto space-y-4 min-w-[200px]">
+          <div className="bg-white/90 backdrop-blur-sm p-4 rounded-xl border border-slate-200 shadow-xl pointer-events-auto space-y-4 min-w-[220px]">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Layer Legends</span>
-                <span className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">v1.0</span>
+                <span className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">v1.1</span>
               </div>
               
-              <div className="space-y-2.5">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded bg-indigo-600 flex items-center justify-center">
-                    <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                  </div>
-                  <span className="text-xs font-medium text-slate-700">Verified Station Pin</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-sm"></div>
-                  <span className="text-xs font-medium text-slate-700">Clear Fueling Snapshot</span>
-                </div>
+              <div className="space-y-1.5">
+                {/* Station Pins toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowStationPins(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showStationPins && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showStationPins ? "bg-emerald-600 border-emerald-600" : "bg-white border-slate-300"
+                      )}>
+                        {showStationPins && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 bg-emerald-600 rounded-full flex items-center justify-center">
+                          <svg viewBox="0 0 24 24" width="8" height="8" stroke="white" strokeWidth="3" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                        </div>
+                        <span className="text-xs font-medium text-slate-700">Station Pins</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Toggle verified station markers on the map. Green = Verified, Red = Anomaly.</p>
+                  </TooltipContent>
+                </Tooltip>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full bg-red-500 border-2 border-white shadow-sm"></div>
-                  <span className="text-xs font-medium text-slate-700">Out-of-Bounds / Flagged</span>
-                </div>
+                {/* Transaction-Confirmed toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowTransactionConfirmed(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showTransactionConfirmed && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showTransactionConfirmed ? "bg-amber-500 border-amber-500" : "bg-white border-slate-300"
+                      )}>
+                        {showTransactionConfirmed && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 rounded-full bg-teal-500 border-2 border-amber-400 shadow-sm"></div>
+                        <span className="text-xs font-medium text-slate-700">TX-Confirmed</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Stations verified by real driver transactions (not just Plus Code). Teal pin with pulsing gold ring = ground-truthed.</p>
+                  </TooltipContent>
+                </Tooltip>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-0.5 bg-indigo-500 border-b border-dashed border-indigo-400"></div>
-                  <span className="text-xs font-medium text-slate-700">Drift Connector (Bridge)</span>
-                </div>
+                {/* Clear Fueling Snapshot toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowClearSnapshots(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showClearSnapshots && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showClearSnapshots ? "bg-emerald-500 border-emerald-500" : "bg-white border-slate-300"
+                      )}>
+                        {showClearSnapshots && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm"></div>
+                        <span className="text-xs font-medium text-slate-700">Clear Fueling Snapshot</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Fueling transactions that fell within a station's geofence radius. Verified spatial match.</p>
+                  </TooltipContent>
+                </Tooltip>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full border border-emerald-400 bg-emerald-50 opacity-50"></div>
-                  <span className="text-xs font-medium text-slate-700">Integrity Guardrail</span>
-                </div>
+                {/* Out-of-Bounds / Flagged toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowFlaggedSnapshots(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showFlaggedSnapshots && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showFlaggedSnapshots ? "bg-red-500 border-red-500" : "bg-white border-slate-300"
+                      )}>
+                        {showFlaggedSnapshots && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white shadow-sm"></div>
+                        <span className="text-xs font-medium text-slate-700">Out-of-Bounds / Flagged</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Fueling transactions that fell outside all station geofences. Potential fraud or missing station.</p>
+                  </TooltipContent>
+                </Tooltip>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full border border-dashed border-red-400 bg-red-50 opacity-20"></div>
-                  <span className="text-xs font-medium text-slate-700">Dead Zone (Anomaly)</span>
-                </div>
+                {/* Drift Connector toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowDriftLines(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showDriftLines && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showDriftLines ? "bg-indigo-500 border-indigo-500" : "bg-white border-slate-300"
+                      )}>
+                        {showDriftLines && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-0.5 bg-indigo-500 border-b border-dashed border-indigo-400"></div>
+                        <span className="text-xs font-medium text-slate-700">Drift Connector (Bridge)</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Evidence Bridge lines connecting a fueling snapshot to its matched station. Shows spatial drift distance.</p>
+                  </TooltipContent>
+                </Tooltip>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full border-2 border-amber-400 bg-transparent animate-pulse"></div>
-                  <span className="text-xs font-medium text-slate-700">Predictive Gap (&gt;10%)</span>
-                </div>
+                {/* Integrity Guardrail toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowGeofences(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showGeofences && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showGeofences ? "bg-blue-500 border-blue-500" : "bg-white border-slate-300"
+                      )}>
+                        {showGeofences && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 rounded-full border border-emerald-400 bg-emerald-50 opacity-60"></div>
+                        <span className="text-xs font-medium text-slate-700">Geofence</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Geofence circles around each station. Tier-colored by radius: green (tight) to orange (extended). Dashed = unverified.</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* Dead Zone toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowDeadZones(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showDeadZones && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showDeadZones ? "bg-red-600 border-red-600" : "bg-white border-slate-300"
+                      )}>
+                        {showDeadZones && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 rounded-full border border-dashed border-red-400 bg-red-50 opacity-40"></div>
+                        <span className="text-xs font-medium text-slate-700">Dead Zone (Anomaly)</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Areas where flagged fueling occurred with no verified station anchor. Suggests a missing station or suspicious activity.</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* Predictive Gap toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowPredictions(v => !v)}
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-md px-1.5 py-1 transition-colors hover:bg-slate-100 group",
+                        !showPredictions && "opacity-40"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-colors shrink-0",
+                        showPredictions ? "bg-amber-500 border-amber-500" : "bg-white border-slate-300"
+                      )}>
+                        {showPredictions && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="white" strokeWidth="2"><polyline points="2,6 5,9 10,3" /></svg>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 rounded-full border-2 border-amber-400 bg-transparent animate-pulse"></div>
+                        <span className="text-xs font-medium text-slate-700">Predictive Gap (&gt;10%)</span>
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <p className="max-w-[200px]">Highlights where actual fuel consumption deviates more than 10% from predicted volume. Pulse ring = active variance.</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
 

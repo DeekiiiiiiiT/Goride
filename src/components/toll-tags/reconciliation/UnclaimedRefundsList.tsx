@@ -49,8 +49,17 @@ export function UnclaimedRefundsList({ trips }: UnclaimedRefundsListProps) {
                             <TableRow key={trip.id}>
                                 <TableCell>
                                     <div className="flex flex-col">
-                                        <span className="font-medium">{format(new Date(trip.date), 'MMM d, yyyy')}</span>
-                                        <span className="text-xs text-slate-500">{format(new Date(trip.date), 'h:mm a')}</span>
+                                        {(() => {
+                                            const tripDate = new Date(trip.date);
+                                            const isFuture = tripDate > new Date();
+                                            return (
+                                                <>
+                                                    <span className={`font-medium ${isFuture ? 'text-red-600' : ''}`}>{format(tripDate, 'MMM d, yyyy')}</span>
+                                                    <span className="text-xs text-slate-500">{format(tripDate, 'h:mm a')}</span>
+                                                    {isFuture && <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>}
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                 </TableCell>
                                 <TableCell>

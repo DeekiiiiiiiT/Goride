@@ -33,6 +33,7 @@ import {
   Info,
   ChevronRight,
   ShieldCheck,
+  ShieldOff,
   Fuel,
   Grid3X3,
 } from 'lucide-react';
@@ -44,6 +45,16 @@ import { generateStationId, normalizeStationName, calculateDistance } from '../.
 import { encodePlusCode, getPlusCodePrecision } from '../../../utils/plusCode';
 import { AmenitiesSelector } from './ui/AmenitiesSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '../../ui/alert-dialog';
 
 interface StationDetailViewProps {
   station: StationProfile | null;
@@ -52,11 +63,13 @@ interface StationDetailViewProps {
   onTogglePreferred?: (id: string) => void;
   onUpdateStation?: (id: string, details: Partial<StationProfile>) => void;
   onEditInModal?: (station: StationProfile) => void;
+  onDemoteStation?: (stationId: string) => void;
 }
 
-export function StationDetailView({ station, onClose, logs, onTogglePreferred, onUpdateStation, onEditInModal }: StationDetailViewProps) {
+export function StationDetailView({ station, onClose, logs, onTogglePreferred, onUpdateStation, onEditInModal, onDemoteStation }: StationDetailViewProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
+  const [showDemoteConfirm, setShowDemoteConfirm] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [editForm, setEditForm] = useState<{
     name: string;
@@ -263,20 +276,20 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
              </div>
              <div className="flex flex-col items-end flex-shrink-0">
                 <div className="text-3xl font-bold text-slate-900">
-                  ${station.stats.lastPrice.toFixed(2)}
+                  ${(station.stats?.lastPrice ?? 0).toFixed(2)}
                 </div>
                 <div className="flex items-center gap-1 text-xs font-medium mt-1">
-                    {station.stats.priceTrend === 'Up' && (
+                    {station.stats?.priceTrend === 'Up' && (
                         <span className="flex items-center text-red-600">
                             <TrendingUp className="h-3 w-3 mr-1" /> Rising
                         </span>
                     )}
-                    {station.stats.priceTrend === 'Down' && (
+                    {station.stats?.priceTrend === 'Down' && (
                         <span className="flex items-center text-emerald-600">
                             <TrendingDown className="h-3 w-3 mr-1" /> Falling
                         </span>
                     )}
-                     {station.stats.priceTrend === 'Stable' && (
+                     {station.stats?.priceTrend === 'Stable' && (
                         <span className="flex items-center text-slate-500">
                             <Minus className="h-3 w-3 mr-1" /> Stable
                         </span>
@@ -299,6 +312,18 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                 <History className="h-4 w-4 mr-2" />
                 View Logs
             </Button>
+            {/* Demote to Unverified — only shows for verified stations */}
+            {onDemoteStation && station.status === 'verified' && (
+              <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
+                  onClick={() => setShowDemoteConfirm(true)}
+              >
+                  <ShieldOff className="h-4 w-4 mr-1" />
+                  Demote
+              </Button>
+            )}
             {onTogglePreferred && (
               <Button 
                   variant="outline" 
@@ -363,11 +388,11 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                      <div className="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Visits</div>
-                     <div className="text-2xl font-bold text-slate-900 mt-1">{station.stats.totalVisits}</div>
+                     <div className="text-2xl font-bold text-slate-900 mt-1">{station.stats?.totalVisits ?? 0}</div>
                   </div>
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                      <div className="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg Price</div>
-                     <div className="text-2xl font-bold text-slate-900 mt-1">${station.stats.avgPrice.toFixed(2)}</div>
+                     <div className="text-2xl font-bold text-slate-900 mt-1">${(station.stats?.avgPrice ?? 0).toFixed(2)}</div>
                   </div>
                </div>
                
@@ -505,13 +530,13 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                        <div>
                          <Label className="text-[10px] uppercase text-slate-500 font-bold">Latitude</Label>
                          <div className="h-9 px-3 py-2 bg-slate-50 rounded-md text-xs font-mono flex items-center text-slate-700">
-                           {station.location.lat.toFixed(7)}
+                           {(station.location?.lat ?? 0).toFixed(7)}
                          </div>
                        </div>
                        <div>
                          <Label className="text-[10px] uppercase text-slate-500 font-bold">Longitude</Label>
                          <div className="h-9 px-3 py-2 bg-slate-50 rounded-md text-xs font-mono flex items-center text-slate-700">
-                           {station.location.lng.toFixed(7)}
+                           {(station.location?.lng ?? 0).toFixed(7)}
                          </div>
                        </div>
                      </div>
@@ -647,11 +672,6 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                                            <div className="text-sm font-medium text-slate-900">
                                                {new Date(log.date).toLocaleDateString()}
                                            </div>
-                                           {log.metadata?.verificationMethod && (
-                                             <Badge variant="outline" className="text-[8px] h-3.5 px-1 bg-blue-50 text-blue-600 border-blue-100 uppercase font-bold">
-                                               {log.metadata.verificationMethod.replace('_', ' ')}
-                                             </Badge>
-                                           )}
                                            {hasGPS && (
                                              <Badge variant="outline" className={cn(
                                                "text-[9px] h-4 px-1 flex items-center gap-1",
@@ -668,7 +688,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                                      </div>
                                      <div className="text-right flex items-center gap-3">
                                          <div className="flex flex-col">
-                                           <div className="text-sm font-bold text-slate-900">${log.amount.toFixed(2)}</div>
+                                           <div className="text-sm font-bold text-slate-900">${(log.amount ?? 0).toFixed(2)}</div>
                                            <div className="text-xs text-slate-500">
                                              ${(log.pricePerLiter || 0).toFixed(2)}/L
                                            </div>
@@ -713,6 +733,37 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
           </div>
         </Tabs>
       </SheetContent>
+
+      {/* Demote Confirmation Dialog */}
+      <AlertDialog open={showDemoteConfirm} onOpenChange={setShowDemoteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Demote Station</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-muted-foreground">
+                Are you sure you want to demote "{station.name}" back to Unverified?
+                <br /><br />
+                This will:
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>Move the station to the Unverified MGMT tab</li>
+                  <li>Unlink all fuel entries connected to it</li>
+                  <li>Create a Learnt Location so you can re-match them</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-500 hover:bg-amber-600"
+              onClick={() => onDemoteStation?.(station.id)}
+            >
+              <ShieldOff className="h-4 w-4 mr-1.5" />
+              Demote
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }

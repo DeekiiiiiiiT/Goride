@@ -124,7 +124,7 @@ export function DriverEarningsHistory({ driverId, transactions = [] }: DriverEar
 
   const handleExport = () => {
       const data = weeklyData.map(row => ({
-          Week: `${format(row.weekStart, 'yyyy-MM-dd')} to ${format(row.weekEnd, 'yyyy-MM-dd')}`,
+          Week: `${format(row.weekStart, 'dd/MM/yyyy')} to ${format(row.weekEnd, 'dd/MM/yyyy')}`,
           'Gross Revenue': row.grossRevenue.toFixed(2),
           'Expenses': row.expenses.toFixed(2),
           'Tier Name': row.tier.name,

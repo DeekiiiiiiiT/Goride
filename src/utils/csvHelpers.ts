@@ -2300,7 +2300,26 @@ export function processData(rows: ParsedRow[], mapping: CsvMapping, availableFie
 
 export const exportToCSV = (data: any[], filename: string) => {
   if (!data.length) return;
-  const csv = Papa.unparse(data);
+  // Pre-process: Convert ISO date strings to DD/MM/YYYY (Jamaica standard)
+  const isoDateRegex = /^\d{4}-\d{2}-\d{2}(T.*)?$/;
+  const processed = data.map(row => {
+    const newRow: any = {};
+    for (const key of Object.keys(row)) {
+      const val = row[key];
+      if (typeof val === 'string' && isoDateRegex.test(val)) {
+        try {
+          const d = new Date(val);
+          if (!isNaN(d.getTime())) {
+            newRow[key] = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+            continue;
+          }
+        } catch { /* fall through */ }
+      }
+      newRow[key] = val;
+    }
+    return newRow;
+  });
+  const csv = Papa.unparse(processed);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   if (link.download !== undefined) {

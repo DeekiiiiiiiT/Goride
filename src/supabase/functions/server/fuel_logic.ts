@@ -108,14 +108,21 @@ export function calculateIntegrity(
     recentTxCount: number,
     isTopUp?: boolean,
     isAnchor?: boolean,
-    rangeMin?: number
+    rangeMin?: number,
+    isCardTransaction?: boolean,
+    frequencyThreshold?: number,
+    // Phase 23: rolling average and configurable efficiency threshold
+    rollingAvgEfficiency?: number,
+    efficiencyThreshold?: number
   }
 ) {
-  const { volume, tankCapacity, prevCumulative, distanceSinceAnchor, profileEfficiency, recentTxCount, isTopUp, isAnchor, rangeMin } = params;
+  const { volume, tankCapacity, prevCumulative, distanceSinceAnchor, profileEfficiency, recentTxCount, isTopUp, isAnchor, rangeMin, isCardTransaction, frequencyThreshold, rollingAvgEfficiency, efficiencyThreshold } = params;
   
   const totalVolumeInCycle = prevCumulative + volume;
+  // Phase 23: prefer rolling average over manufacturer spec when available
+  const baseline = (rollingAvgEfficiency && rollingAvgEfficiency > 0) ? rollingAvgEfficiency : profileEfficiency;
   const actualKmPerLiter = distanceSinceAnchor > 0 ? distanceSinceAnchor / totalVolumeInCycle : 0;
-  const efficiencyVariance = profileEfficiency > 0 ? (profileEfficiency - actualKmPerLiter) / profileEfficiency : 0;
+  const efficiencyVariance = baseline > 0 ? (baseline - actualKmPerLiter) / baseline : 0;
 
   // Step 3.1: Tank Overfill Anomaly (102% Threshold)
   const OVERFILL_THRESHOLD = 1.02;
@@ -123,8 +130,12 @@ export function calculateIntegrity(
     return { status: 'critical' as const, reason: 'Tank Overfill Anomaly', auditStatus: 'Flagged' as const };
   }
 
-  // Step 3.2: Behavioral Integrity - High Frequency (2+ in 4h)
-  if (recentTxCount >= 1) {
+  // Step 3.2: Behavioral Integrity - High Frequency (card-only, configurable threshold)
+  // Only flag card transactions; cash/reimbursement are exempt.
+  // frequencyThreshold = total card swipes in 4h window that triggers alert (default 3).
+  // recentTxCount excludes the current entry, so we compare >= (threshold - 1).
+  const effectiveThreshold = frequencyThreshold ?? 3;
+  if (isCardTransaction && recentTxCount >= (effectiveThreshold - 1)) {
     return { status: 'critical' as const, reason: 'High Transaction Frequency', auditStatus: 'Flagged' as const };
   }
 
@@ -135,9 +146,14 @@ export function calculateIntegrity(
   }
 
   // Phase 4/5 logic (Efficiency) for Anchors
-  if (isAnchor) {
-    const isHighConsumption = efficiencyVariance > 0.25; 
-    const isRangeSuspicious = rangeMin && rangeMin > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (totalVolumeInCycle / tankCapacity) > 0.8;
+  // Phase 19 fix: skip efficiency checks entirely when distanceSinceAnchor is 0.
+  // Historical entries without anchor metadata have distance=0, which causes:
+  //   - actualKmPerLiter=0 → efficiencyVariance=1.0 → false "High Fuel Consumption"
+  //   - 0 < rangeMin*0.5 → false "Range Suspicious"
+  if (isAnchor && distanceSinceAnchor > 0) {
+    // Phase 23: use configurable threshold (default 30%), skip if no baseline available
+    const isHighConsumption = baseline > 0 && efficiencyVariance > (efficiencyThreshold ?? 0.30);
+    const isRangeSuspicious = rangeMin && rangeMin > 0 && distanceSinceAnchor > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (totalVolumeInCycle / tankCapacity) > 0.8;
 
     if (isHighConsumption || isRangeSuspicious) {
       return { status: 'critical' as const, reason: 'High Fuel Consumption', auditStatus: 'Flagged' as const };
@@ -361,13 +377,18 @@ export function detectPredictiveLeakage(params: {
     actualEfficiency: number,
     profileEfficiency: number,
     utilization: number,
-    isAnchor: boolean
+    isAnchor: boolean,
+    // Phase 23: rolling average for more accurate leakage detection
+    rollingAvgEfficiency?: number
 }) {
-    const { actualEfficiency, profileEfficiency, utilization, isAnchor } = params;
+    const { actualEfficiency, profileEfficiency, utilization, isAnchor, rollingAvgEfficiency } = params;
     
-    if (profileEfficiency <= 0 || actualEfficiency <= 0) return null;
+    // Phase 23: prefer rolling average over manufacturer spec when available
+    const baseline = (rollingAvgEfficiency && rollingAvgEfficiency > 0) ? rollingAvgEfficiency : profileEfficiency;
+    
+    if (baseline <= 0 || actualEfficiency <= 0) return null;
 
-    const variance = (profileEfficiency - actualEfficiency) / profileEfficiency;
+    const variance = (baseline - actualEfficiency) / baseline;
     
     // Leakage Alert Thresholds:
     // 1. If at an Anchor, we have high confidence in the variance.
@@ -400,4 +421,161 @@ export function detectPredictiveLeakage(params: {
         alertReason,
         isAlertTriggered: leakageRisk !== 'low'
     };
+}
+
+/**
+ * Phase 17: Rolling Efficiency Result Type
+ * Returned by both the real-time and batch rolling average functions.
+ */
+export interface RollingEfficiencyResult {
+    avgKmPerLiter: number;
+    window: '30d' | '60d' | 'all';
+    entryCount: number;
+    totalDistance: number;
+    totalFuel: number;
+}
+
+/**
+ * Phase 17 (Step 17.1–17.4): Real-Time Rolling Average Efficiency
+ * 
+ * Computes a vehicle's actual average km/L from its own historical fuel entries.
+ * Used during real-time entry scoring (fuel_entry_post.tsx, fuel_controller.tsx).
+ * 
+ * Logic:
+ *  1. Query fuel entries for the vehicle within a 30-day window (ending at asOfDate).
+ *  2. Only include entries with valid odometer (>0) AND liters (>0).
+ *  3. Exclude entries that are currently flagged (to avoid anomalies polluting the baseline).
+ *  4. Need at least 3 valid entries for a reliable average.
+ *  5. If fewer than 3 in 30 days, expand to 60 days.
+ *  6. If still fewer than 3, return null (caller should skip the efficiency check).
+ *  7. Average = totalDistance / totalFuel across the window.
+ */
+export async function calculateRollingEfficiency(
+    vehicleId: string,
+    asOfDate?: string
+): Promise<RollingEfficiencyResult | null> {
+    const refDate = asOfDate ? new Date(asOfDate) : new Date();
+
+    // Try 30-day window first
+    const result30 = await _queryWindowedEntries(vehicleId, refDate, 30);
+    if (result30 && result30.entryCount >= 3) {
+        return { ...result30, window: '30d' };
+    }
+
+    // Fallback: 60-day window
+    const result60 = await _queryWindowedEntries(vehicleId, refDate, 60);
+    if (result60 && result60.entryCount >= 3) {
+        return { ...result60, window: '60d' };
+    }
+
+    // Insufficient data — caller should skip efficiency check
+    console.log(`[RollingEfficiency] Vehicle ${vehicleId}: insufficient data (${result60?.entryCount ?? 0} entries in 60d). Skipping efficiency check.`);
+    return null;
+}
+
+/**
+ * Internal helper: queries fuel entries within a day-window and computes the average.
+ */
+async function _queryWindowedEntries(
+    vehicleId: string,
+    refDate: Date,
+    windowDays: number
+): Promise<{ avgKmPerLiter: number; entryCount: number; totalDistance: number; totalFuel: number } | null> {
+    const windowStart = new Date(refDate);
+    windowStart.setDate(windowStart.getDate() - windowDays);
+    const startStr = windowStart.toISOString().split('T')[0];
+    const endStr = refDate.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "fuel_entry:%")
+        .eq("value->>vehicleId", vehicleId)
+        .gte("value->>date", startStr)
+        .lte("value->>date", endStr)
+        .order("value->>odometer", { ascending: true });
+
+    if (error) {
+        console.error(`[RollingEfficiency] Query error for ${vehicleId} (${windowDays}d):`, error);
+        return null;
+    }
+
+    // Filter: must have valid odometer AND liters
+    // Note: we intentionally include flagged entries so the baseline stays stable
+    // (excluding them causes a death spiral where each recalculate raises the average)
+    const valid = (data || [])
+        .map(d => d.value)
+        .filter((e: any) => {
+            const odo = Number(e.odometer) || 0;
+            const liters = Number(e.liters) || 0;
+            return odo > 0 && liters > 0;
+        });
+
+    if (valid.length < 3) return { avgKmPerLiter: 0, entryCount: valid.length, totalDistance: 0, totalFuel: 0 };
+
+    // Sort by odometer ascending (should already be, but ensure it)
+    valid.sort((a: any, b: any) => (Number(a.odometer) || 0) - (Number(b.odometer) || 0));
+
+    const firstOdo = Number(valid[0].odometer);
+    const lastOdo = Number(valid[valid.length - 1].odometer);
+    const totalDistance = lastOdo - firstOdo;
+    // Exclude the first entry's liters — that fuel was consumed BEFORE the
+    // distance window (firstOdo → lastOdo). This is the standard fill-up method.
+    const totalFuel = valid.slice(1).reduce((sum: number, e: any) => sum + (Number(e.liters) || 0), 0);
+
+    if (totalDistance <= 0 || totalFuel <= 0) {
+        return { avgKmPerLiter: 0, entryCount: valid.length, totalDistance: 0, totalFuel: 0 };
+    }
+
+    const avgKmPerLiter = Number((totalDistance / totalFuel).toFixed(2));
+    return { avgKmPerLiter, entryCount: valid.length, totalDistance, totalFuel };
+}
+
+/**
+ * Phase 17 (Step 17.5): Batch Rolling Average Efficiency
+ * 
+ * Computes a vehicle's average km/L from a pre-loaded array of entries.
+ * Used by the recalculate endpoint to avoid N+1 DB queries.
+ * 
+ * Same filtering logic (odometer >0, liters >0), minimum 3 entries.
+ * Operates on ALL provided entries (no time window — the recalculate processes
+ * the full history, so the overall average is the most stable baseline).
+ *
+ * IMPORTANT: Does NOT exclude flagged entries. The baseline must be stable
+ * across repeated recalculations — excluding flags creates a death spiral
+ * where the average rises each time, flagging progressively more entries.
+ */
+export function calculateRollingEfficiencyBatch(
+    entries: any[]
+): RollingEfficiencyResult | null {
+    // Filter: must have valid odometer AND liters
+    // Note: we intentionally include flagged entries so the baseline stays stable
+    // (excluding them causes a death spiral where each recalculate raises the average)
+    const valid = entries.filter((e: any) => {
+        const odo = Number(e.odometer) || 0;
+        const liters = Number(e.liters) || 0;
+        return odo > 0 && liters > 0;
+    });
+
+    if (valid.length < 3) {
+        console.log(`[RollingEfficiencyBatch] Insufficient data: ${valid.length} valid entries (need 3). Skipping.`);
+        return null;
+    }
+
+    // Sort by odometer ascending (should already be, but ensure it)
+    valid.sort((a: any, b: any) => (Number(a.odometer) || 0) - (Number(b.odometer) || 0));
+
+    const firstOdo = Number(valid[0].odometer);
+    const lastOdo = Number(valid[valid.length - 1].odometer);
+    const totalDistance = lastOdo - firstOdo;
+    // Exclude the first entry's liters — that fuel was consumed BEFORE the
+    // distance window (firstOdo → lastOdo). This is the standard fill-up method.
+    const totalFuel = valid.slice(1).reduce((sum: number, e: any) => sum + (Number(e.liters) || 0), 0);
+
+    if (totalDistance <= 0 || totalFuel <= 0) {
+        return { avgKmPerLiter: 0, entryCount: valid.length, totalDistance: 0, totalFuel: 0 };
+    }
+
+    const avgKmPerLiter = Number((totalDistance / totalFuel).toFixed(2));
+    return { avgKmPerLiter, entryCount: valid.length, totalDistance, totalFuel };
 }

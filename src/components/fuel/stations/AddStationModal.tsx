@@ -25,6 +25,20 @@ import { fuelService } from '../../../services/fuelService';
 import { Plus, X, Loader2, Building2, MapPin, Search, CheckCircle2, Hash, ArrowDownUp, Info, Grid3X3, Navigation, Globe, Pencil, Copy, Check } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { toast } from 'sonner@2.0.3';
+import { AlertTriangle, Merge, ShieldAlert, ShieldCheck as ShieldCheckIcon } from 'lucide-react';
+import { cn } from "../../ui/utils";
+
+export interface DuplicateStationInfo {
+  id: string;
+  name: string;
+  plusCode: string;
+  address: string;
+  brand: string;
+  status: string;
+  distance: number;
+  matchType: 'pluscode' | 'geofence';
+  geofenceRadius?: number;
+}
 
 interface AddStationModalProps {
   isOpen: boolean;
@@ -32,9 +46,12 @@ interface AddStationModalProps {
   onAdd: (station: StationOverride) => Promise<void>;
   editStation?: StationProfile | null;
   onUpdate?: (id: string, station: StationOverride) => Promise<void>;
+  onMergeIntoExisting?: (existingStationId: string) => Promise<void>;
+  /** Phase 7: Pre-populated nearby station from backend enrichment */
+  initialNearbyStation?: DuplicateStationInfo | null;
 }
 
-export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate }: AddStationModalProps) {
+export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate, onMergeIntoExisting, initialNearbyStation }: AddStationModalProps) {
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [addressGeocoding, setAddressGeocoding] = useState(false);
@@ -47,6 +64,11 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
   const [geofenceRadius, setGeofenceRadius] = useState<number | null>(null);
   const [showCopyField, setShowCopyField] = useState(false);
   const copyInputRef = React.useRef<HTMLInputElement>(null);
+
+  // --- Duplicate detection state (Phase 4) ---
+  const [duplicateStation, setDuplicateStation] = useState<DuplicateStationInfo | null>(initialNearbyStation || null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+  const [forceCreate, setForceCreate] = useState(false);
   
   const isEditMode = !!editStation;
 
@@ -67,6 +89,9 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
   useEffect(() => {
     if (isOpen) {
       setShowCopyField(false);
+      setDuplicateStation(initialNearbyStation || null);
+      setCheckingDuplicate(false);
+      setForceCreate(false);
       if (editStation) {
         // Pre-fill form with existing station data for edit mode
         setFormData({
@@ -106,7 +131,7 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
         setGeofenceRadius(null);
       }
     }
-  }, [isOpen, editStation]);
+  }, [isOpen, editStation, initialNearbyStation]);
 
   useEffect(() => {
     if (isOpen) {
@@ -132,6 +157,8 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
     setPlusCodeInput(value);
     setIsVerified(false);
     setPlusCodeSynced(false);
+    setDuplicateStation(null);
+    setForceCreate(false);
     
     const trimmed = value.trim();
     if (!trimmed) {
@@ -142,6 +169,41 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
     const valid = isValidPlusCode(trimmed);
     setPlusCodeValid(valid);
   }, []);
+
+  /**
+   * Reusable duplicate-check helper (Phase 5).
+   * Non-blocking — logs warnings on failure so verification still succeeds.
+   */
+  const runDuplicateCheck = useCallback(async (plusCode: string, lat: number, lng: number) => {
+    setCheckingDuplicate(true);
+    setDuplicateStation(null);
+    try {
+      const excludeId = isEditMode ? editStation?.id : undefined;
+      const dupeCheck = await fuelService.checkStationDuplicate(plusCode, lat, lng, excludeId, formData.category);
+      if (dupeCheck?.isDuplicate && dupeCheck.existingStation) {
+        setDuplicateStation({
+          id: dupeCheck.existingStation.id,
+          name: dupeCheck.existingStation.name,
+          plusCode: dupeCheck.existingStation.plusCode || '',
+          address: dupeCheck.existingStation.address || '',
+          brand: dupeCheck.existingStation.brand || '',
+          status: dupeCheck.existingStation.status || 'unknown',
+          distance: dupeCheck.existingStation.distance ?? 0,
+          matchType: dupeCheck.existingStation.matchType || 'geofence',
+          geofenceRadius: dupeCheck.existingStation.geofenceRadius,
+        });
+        setForceCreate(false);
+        console.log(`[Duplicate Check] Match found: ${dupeCheck.existingStation.name} (${dupeCheck.existingStation.matchType}, ${dupeCheck.existingStation.distance}m)`);
+      } else {
+        setDuplicateStation(null);
+      }
+    } catch (err) {
+      console.warn('[Duplicate Check] Non-blocking failure:', err);
+      // Don't block the user — verification still succeeded
+    } finally {
+      setCheckingDuplicate(false);
+    }
+  }, [isEditMode, editStation?.id, formData.category]);
 
   /**
    * PRIMARY FLOW: Verify GPS from Plus Code
@@ -258,6 +320,9 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
           setGeofenceRadius(getDefaultGeofenceRadius(fullCode));
         }
         toast.success(`Location verified from Plus Code (${fullCode}). Address, coordinates, and region auto-populated.`);
+        
+        // Run duplicate check
+        runDuplicateCheck(fullCode, lat, lng);
       } catch (reverseError: any) {
         // Even if reverse geocode fails, we still have EXACT coordinates from local decode
         console.warn("Reverse geocode failed, using coordinates only:", reverseError);
@@ -280,6 +345,9 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
           setGeofenceRadius(getDefaultGeofenceRadius(fullCode));
         }
         toast.warning("Coordinates populated from Plus Code. Address lookup failed — enter address manually.");
+        
+        // Run duplicate check
+        runDuplicateCheck(fullCode, lat, lng);
       }
     } catch (error: any) {
       console.error("Plus Code verification error:", error);
@@ -325,6 +393,9 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
         setGeofenceRadius(getDefaultGeofenceRadius(generated));
       }
       toast.success("Location verified from address. Plus Code and coordinates auto-generated.");
+
+      // Run duplicate check against newly generated Plus Code + coordinates
+      runDuplicateCheck(generated, newLat, newLng);
     } catch (error: any) {
       console.error("Geocoding error:", error);
       toast.error(`Could not verify location: ${error.message}`);
@@ -354,6 +425,38 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
       return;
     }
 
+    // --- Final duplicate guard (Phase 5) ---
+    // If the user didn't go through Verify GPS (skipped straight to submit), run a synchronous check now
+    if (!duplicateStation && !forceCreate) {
+      const finalPlusCode = plusCodeInput.trim() || encodePlusCode(lat, lng, 11);
+      try {
+        setLoading(true);
+        const excludeId = isEditMode ? editStation?.id : undefined;
+        const dupeCheck = await fuelService.checkStationDuplicate(finalPlusCode, lat, lng, excludeId, formData.category);
+        if (dupeCheck?.isDuplicate && dupeCheck.existingStation) {
+          // Duplicate found at submit time — show warning and abort save
+          setDuplicateStation({
+            id: dupeCheck.existingStation.id,
+            name: dupeCheck.existingStation.name,
+            plusCode: dupeCheck.existingStation.plusCode || '',
+            address: dupeCheck.existingStation.address || '',
+            brand: dupeCheck.existingStation.brand || '',
+            status: dupeCheck.existingStation.status || 'unknown',
+            distance: dupeCheck.existingStation.distance ?? 0,
+            matchType: dupeCheck.existingStation.matchType || 'geofence',
+            geofenceRadius: dupeCheck.existingStation.geofenceRadius,
+          });
+          setForceCreate(false);
+          setLoading(false);
+          toast.warning(`Duplicate detected: "${dupeCheck.existingStation.name}". Resolve below before saving.`);
+          return; // Abort — user must choose Merge or Create Anyway
+        }
+      } catch (err) {
+        console.warn('[Submit Duplicate Guard] Non-blocking failure:', err);
+        // Proceed with save — don't block on network errors
+      }
+    }
+
     setLoading(true);
     try {
       const normalizedName = normalizeStationName(formData.name);
@@ -379,6 +482,11 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
         location: { lat, lng },
       };
 
+      // If user explicitly chose "Create Anyway", pass the override flag so the backend skips its own dupe check
+      if (forceCreate) {
+        (newStation as any)._overrideDuplicate = true;
+      }
+
       if (isEditMode && editStation && onUpdate) {
         await onUpdate(editStation.id, newStation);
         toast.success("Station updated successfully.");
@@ -387,9 +495,26 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
         toast.success("Station added successfully.");
       }
       onClose();
-    } catch (error) {
-      console.error("Failed to add station:", error);
-      toast.error("Failed to add station. Please try again.");
+    } catch (error: any) {
+      // Handle 409 duplicate errors from the backend (belt-and-suspenders with the backend guard)
+      if (error.duplicate && error.existingStation) {
+        setDuplicateStation({
+          id: error.existingStation.id,
+          name: error.existingStation.name,
+          plusCode: error.existingStation.plusCode || '',
+          address: error.existingStation.address || '',
+          brand: error.existingStation.brand || '',
+          status: error.existingStation.status || 'unknown',
+          distance: error.existingStation.distance ?? 0,
+          matchType: error.existingStation.matchType || 'geofence',
+          geofenceRadius: error.existingStation.geofenceRadius,
+        });
+        setForceCreate(false);
+        toast.warning(`Backend duplicate guard: "${error.existingStation.name}". Resolve below.`);
+      } else {
+        console.error("Failed to add station:", error);
+        toast.error("Failed to add station. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -758,6 +883,137 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
               </div>
             </div>
 
+            {/* ===== DUPLICATE STATION WARNING (Phase 4) ===== */}
+            {duplicateStation && (
+              <div className="col-span-2 animate-in slide-in-from-top-2 duration-300">
+                <div className="bg-gradient-to-r from-red-50 to-orange-50 p-4 rounded-lg border-2 border-red-200 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 mt-0.5">
+                      <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                        <ShieldAlert className="h-4.5 w-4.5 text-red-600" />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-bold text-red-700 mb-1">Duplicate Station Detected</h4>
+                      <p className="text-xs text-red-600 leading-relaxed">
+                        {duplicateStation.matchType === 'pluscode' ? (
+                          <>
+                            A station with Plus Code <span className="font-mono font-bold">{duplicateStation.plusCode}</span> already exists:{' '}
+                            <span className="font-semibold">{duplicateStation.name}</span>
+                            {duplicateStation.address && <span className="text-red-500"> ({duplicateStation.address})</span>}
+                          </>
+                        ) : (
+                          <>
+                            The coordinates fall within <span className="font-bold">{duplicateStation.distance}m</span> of existing station{' '}
+                            <span className="font-semibold">{duplicateStation.name}</span>
+                            {duplicateStation.address && <span className="text-red-500"> ({duplicateStation.address})</span>}
+                            <span className="text-red-500"> — geofence: {duplicateStation.geofenceRadius || 150}m</span>
+                          </>
+                        )}
+                      </p>
+
+                      {/* Existing station details */}
+                      <div className="mt-2 bg-white/60 rounded-md p-2 border border-red-100">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+                          <div>
+                            <span className="text-red-400 uppercase font-bold tracking-wide">Station</span>
+                            <p className="text-red-700 font-medium truncate">{duplicateStation.name}</p>
+                          </div>
+                          <div>
+                            <span className="text-red-400 uppercase font-bold tracking-wide">Brand</span>
+                            <p className="text-red-700 font-medium">{duplicateStation.brand || 'Unknown'}</p>
+                          </div>
+                          <div>
+                            <span className="text-red-400 uppercase font-bold tracking-wide">Status</span>
+                            <p className={cn(
+                              "font-medium capitalize text-[11px] inline-flex items-center gap-1 mt-0.5",
+                              duplicateStation.status === 'verified' ? 'text-emerald-700' :
+                              duplicateStation.status === 'unverified' ? 'text-amber-700' :
+                              'text-red-700'
+                            )}>
+                              <span className={cn(
+                                "inline-block h-1.5 w-1.5 rounded-full",
+                                duplicateStation.status === 'verified' ? 'bg-emerald-500' :
+                                duplicateStation.status === 'unverified' ? 'bg-amber-500' :
+                                'bg-red-500'
+                              )} />
+                              {duplicateStation.status}
+                              {duplicateStation.status === 'verified' && (
+                                <span className="text-[9px] text-emerald-500 font-normal">(merge recommended)</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-red-400 uppercase font-bold tracking-wide">Distance</span>
+                            <p className="text-red-700 font-medium">{duplicateStation.distance}m ({duplicateStation.matchType})</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="mt-3 space-y-2">
+                        <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide">Choose an action:</p>
+                        <div className="flex flex-col gap-2">
+                          {onMergeIntoExisting && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-auto py-2 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 justify-start w-full"
+                              onClick={async () => {
+                                setLoading(true);
+                                try {
+                                  await onMergeIntoExisting(duplicateStation.id);
+                                  toast.success(`Merged into "${duplicateStation.name}" successfully.`);
+                                  onClose();
+                                } catch (err) {
+                                  console.error('[Merge Into Existing] Failed:', err);
+                                  toast.error('Failed to merge into existing station.');
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                              disabled={loading}
+                            >
+                              <Merge className="h-4 w-4 shrink-0" />
+                              <div className="text-left">
+                                <span className="font-semibold block">Merge Into {duplicateStation.name.length > 25 ? duplicateStation.name.slice(0, 25) + '...' : duplicateStation.name}</span>
+                                <span className="text-emerald-200 text-[10px] font-normal block mt-0.5">Combine this data into the existing station record</span>
+                              </div>
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-auto py-2 px-3 text-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:text-amber-900 hover:border-amber-400 gap-2 justify-start w-full"
+                            onClick={() => {
+                              setForceCreate(true);
+                              setDuplicateStation(null);
+                              toast.info('Override accepted — this is a separate station. Click the save button to confirm.');
+                            }}
+                          >
+                            <ShieldCheckIcon className="h-4 w-4 shrink-0 text-amber-600" />
+                            <div className="text-left">
+                              <span className="font-semibold block">Not a Duplicate — Create as Separate Station</span>
+                              <span className="text-amber-600 text-[10px] font-normal block mt-0.5">I've confirmed these are different locations that happen to be nearby</span>
+                            </div>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Duplicate check in progress indicator */}
+            {checkingDuplicate && (
+              <div className="col-span-2 flex items-center justify-center gap-2 py-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+                <span className="text-xs text-violet-600 font-medium">Checking for duplicate stations...</span>
+              </div>
+            )}
+
             {/* Telephone / Country */}
             <div className="space-y-2">
               <Label htmlFor="phone">Telephone</Label>
@@ -783,12 +1039,29 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate 
             <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              type="submit"
+              disabled={loading || !!duplicateStation}
+              className={
+                forceCreate
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : duplicateStation
+                    ? 'bg-red-400 cursor-not-allowed opacity-60'
+                    : 'bg-blue-600 hover:bg-blue-700'
+              }
+            >
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
+              ) : forceCreate ? (
+                <>
+                  <AlertTriangle className="mr-1.5 h-4 w-4" />
+                  {isEditMode ? 'Update Anyway (Override)' : 'Create Anyway (Override)'}
+                </>
+              ) : duplicateStation ? (
+                'Resolve Duplicate First'
               ) : isEditMode ? (
                 'Update Station'
               ) : (

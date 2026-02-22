@@ -10,12 +10,63 @@ import * as cache from "./cache.ts";
 import * as gemini from "./gemini_service.ts";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { pMap } from "./concurrency.ts";
-import { findMatchingStation } from "./geo_matcher.ts";
+import { findMatchingStationSmart } from "./geo_matcher.ts";
+import * as fuelLogic from "./fuel_logic.ts";
 import { Buffer } from "node:buffer";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
+
+// ---------------------------------------------------------------------------
+// Future-Date Guardrail
+// ---------------------------------------------------------------------------
+// Jamaica uses DD/MM/YYYY exclusively. The AI is told to parse dates as
+// DD/MM/YYYY and output ISO strings. This post-processing step catches any
+// date the AI produced that is still in the future (relative to the server
+// clock) — the most common cause is the AI getting the year wrong.
+//
+// Strategy:
+//   1. Parse the ISO date string the AI returned.
+//   2. If the date is in the future (> today + 1 day buffer):
+//      a. Roll back the year by 1 (most likely AI error).
+//      b. If still future, flag it for manual review.
+//   NOTE: We do NOT swap day/month — Jamaica is always DD/MM/YYYY, so the
+//         AI's DD/MM interpretation is correct. Swapping would break it.
+// ---------------------------------------------------------------------------
+function correctFutureDates(transactions: any[]): any[] {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(23, 59, 59, 999);
+
+  return transactions.map(tx => {
+    if (!tx.date) return tx;
+    try {
+      const d = new Date(tx.date);
+      if (isNaN(d.getTime())) return tx;
+      if (d <= tomorrow) return tx; // Date is in the past or today — fine
+
+      // --- Future date detected ---
+      console.log(`[FutureDateFix] Detected future date: ${tx.date}`);
+
+      // Attempt 1: Roll back one year (AI likely got the year wrong)
+      const rolledBack = new Date(d);
+      rolledBack.setFullYear(rolledBack.getFullYear() - 1);
+      if (rolledBack <= tomorrow) {
+        const corrected = rolledBack.toISOString().split('T')[0];
+        console.log(`[FutureDateFix] Rolled back year -> corrected to ${corrected}`);
+        return { ...tx, date: corrected, _dateCorrected: 'year_rollback', _originalDate: tx.date };
+      }
+
+      // Attempt 2: If still future even after rollback, just flag it
+      console.log(`[FutureDateFix] Could not auto-correct ${tx.date}, flagging`);
+      return { ...tx, _dateCorrected: 'unfixable_future', _originalDate: tx.date };
+    } catch {
+      return tx;
+    }
+  });
+}
 
 const app = new Hono();
 
@@ -322,6 +373,12 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
     try {
         console.log("[Recalculate] Starting full history recalculation (100% Logic)...");
 
+        // Load configurable frequency threshold
+        const auditConfig = await kv.get("config:audit_settings");
+        const frequencyThreshold = Number(auditConfig?.frequencyThreshold) || 3;
+        // Phase 21: configurable efficiency variance threshold (default 30%)
+        const efficiencyThreshold = Number(auditConfig?.efficiencyThreshold) || 0.30;
+
         // 1. Fetch all Vehicles (for Tank Capacity)
         const { data: vehicleData } = await supabase
             .from("kv_store_37f42386")
@@ -333,7 +390,11 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
             const v = d.value;
             if (v && v.id) {
                 const cap = Number(v.fuelSettings?.tankCapacity) || Number(v.specifications?.tankCapacity) || 0;
-                vehicleMap.set(v.id, cap);
+                vehicleMap.set(v.id, {
+                    capacity: cap,
+                    fuelEconomy: Number(v.specifications?.fuelEconomy) || Number(v.fuelSettings?.efficiencyCity) || 0,
+                    estimatedRangeMin: Number(v.specifications?.estimatedRangeMin) || 0
+                });
             }
         });
         console.log(`[Recalculate] Loaded ${vehicleMap.size} vehicles.`);
@@ -362,10 +423,12 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
         // 4. Process each vehicle
         const updates: any[] = [];
         let modifiedCount = 0;
+        let efficiencySkippedCount = 0;  // Phase 24: count entries where rolling avg was unavailable
 
         for (const [vId, txs] of byVehicle.entries()) {
-            const capacity = vehicleMap.get(vId) || 0;
-            if (capacity <= 0) continue; 
+            const vehicleInfo = vehicleMap.get(vId);
+            if (!vehicleInfo || vehicleInfo.capacity <= 0) continue;
+            const capacity = vehicleInfo.capacity;
 
             // Sort by date and odometer to ensure chronological processing
             txs.sort((a, b) => {
@@ -382,6 +445,11 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
             let runningCumulative = 0;
             let carryoverVolume = 0;
             let currentCycleId = crypto.randomUUID();
+            // Phase 20: running anchor odometer tracker (replaces broken per-entry metadata lookup)
+            let lastAnchorOdo = 0;
+            // Phase 21: pre-compute rolling average efficiency for this vehicle's transactions
+            const txRollingAvg = fuelLogic.calculateRollingEfficiencyBatch(txs);
+            if (!txRollingAvg) efficiencySkippedCount += txs.length;
 
             for (let i = 0; i < txs.length; i++) {
                 const tx = txs[i];
@@ -396,7 +464,9 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 // Logic: 
                 // 100% = Soft Anchor (System Reset)
                 // 105% = Anomaly (Overflow)
-                const isManualFull = tx.metadata?.isFullTank === true || tx.type === 'Reimbursement';
+                // Phase 18 fix: only metadata.isFullTank / metadata.isAnchor mark a hard anchor
+                // (removed tx.type === 'Reimbursement' — reimbursements are NOT automatic full-tank anchors)
+                const isManualFull = tx.metadata?.isFullTank === true || tx.metadata?.isAnchor === true;
                 const isSoftAnchor = !isManualFull && percentOfTank >= 100;
                 const isAnchor = isManualFull || isSoftAnchor;
 
@@ -408,20 +478,21 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                     excessVolume = volume - volumeContributed;
                 }
 
-                // Phase 1 Efficiency Integration
-                const vehicle = await kv.get(`vehicle:${vId}`);
-                const profileKmPerLiter = Number(vehicle?.specifications?.fuelEconomy) || Number(vehicle?.fuelSettings?.efficiencyCity) || 0;
-                const rangeMin = Number(vehicle?.specifications?.estimatedRangeMin) || 0;
+                // Phase 1 Efficiency Integration (using pre-loaded vehicleMap to avoid N+1 queries)
+                const profileKmPerLiter = vehicleInfo.fuelEconomy;
+                const rangeMin = vehicleInfo.estimatedRangeMin;
+                // Phase 21: use rolling average as efficiency baseline (fall back to skip if insufficient data)
+                const efficiencyBaseline = txRollingAvg?.avgKmPerLiter || 0;
                 
-                const lastAnchorOdo = txs.slice(0, i).reverse().find(t => t.metadata?.isAnchor || t.metadata?.isFullTank || t.metadata?.isSoftAnchor)?.odometer || 0;
+                // Phase 20: use running lastAnchorOdo instead of broken metadata lookup
                 const distanceSinceAnchor = (tx.odometer && lastAnchorOdo) ? (tx.odometer - lastAnchorOdo) : 0;
                 
                 let actualKmPerLiter = 0;
                 let efficiencyVariance = 0;
                 if (distanceSinceAnchor > 0 && runningCumulative > 0) {
                     actualKmPerLiter = distanceSinceAnchor / runningCumulative;
-                    if (profileKmPerLiter > 0) {
-                        efficiencyVariance = (profileKmPerLiter - actualKmPerLiter) / profileKmPerLiter;
+                    if (efficiencyBaseline > 0) {
+                        efficiencyVariance = (efficiencyBaseline - actualKmPerLiter) / efficiencyBaseline;
                     }
                 }
 
@@ -431,15 +502,19 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 // Phase 2: Behavioral Check
                 const fourHoursAgo = new Date(new Date(tx.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
                 const recentTxCount = txs.slice(0, i).filter(t => t.date >= fourHoursAgo).length;
-                const isHighFrequency = recentTxCount >= 1;
+                // Card-only frequency check: only flag card transactions, cash/reimbursement exempt
+                const isCardTx = tx.paymentMethod === 'Gas Card' || tx.paymentMethod === 'Fuel Card' || tx.type === 'Card_Transaction' || tx.paymentSource === 'Gas_Card';
+                const isHighFrequency = isCardTx && recentTxCount >= (frequencyThreshold - 1);
                 const isFragmented = capacity > 0 && (volume / capacity) < 0.15 && !tx.metadata?.isTopUp;
 
                 if (capacity > 0 && volume > capacity) {
                     integrityStatus = 'critical';
                     anomalyReason = 'Soft Anchor / Tank Overfill';
-                } else if (isAnchor) {
-                    const isHighConsumption = efficiencyVariance > 0.25;
-                    const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (runningCumulative / capacity) > 0.8;
+                } else if (isAnchor && distanceSinceAnchor > 0) {
+                    // Phase 19/20: only check efficiency when we have real distance data
+                    // Phase 21: skip if no rolling average (efficiencyBaseline=0), use configurable threshold
+                    const isHighConsumption = efficiencyBaseline > 0 && efficiencyVariance > efficiencyThreshold;
+                    const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (runningCumulative / capacity) > 0.8;
                     
                     if (isHighConsumption || isRangeSuspicious) {
                         integrityStatus = 'critical';
@@ -465,6 +540,12 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                     distanceSinceAnchor,
                     actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
                     profileKmPerLiter,
+                    // Phase 21: rolling average metadata
+                    rollingAvgKmPerLiter: txRollingAvg?.avgKmPerLiter ?? null,
+                    rollingAvgWindow: txRollingAvg?.window ?? null,
+                    rollingAvgEntryCount: txRollingAvg?.entryCount ?? 0,
+                    efficiencyBaseline: txRollingAvg ? 'rolling' : 'skipped',
+                    efficiencyVariance: Number(efficiencyVariance.toFixed(4)),
                     isSoftAnchor: isSoftAnchor,
                     isAnchor: isAnchor,
                     isHighFrequency,
@@ -493,14 +574,16 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                     carryoverVolume = excessVolume;
                     runningCumulative = carryoverVolume;
                     currentCycleId = crypto.randomUUID();
+                    // Phase 20: update running anchor odometer for next iteration
+                    lastAnchorOdo = tx.odometer || lastAnchorOdo;
                 }
             }
         }
 
-        // 5. Batch Save (Chunked)
+        // 5. Batch Save transaction:* (Chunked)
         if (updates.length > 0) {
-            console.log(`[Recalculate] Saving ${updates.length} updates in chunks...`);
-            const CHUNK_SIZE = 50; // Smaller chunks for better stability
+            console.log(`[Recalculate] Saving ${updates.length} transaction updates in chunks...`);
+            const CHUNK_SIZE = 50;
             for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
                 const chunk = updates.slice(i, i + CHUNK_SIZE);
                 const keys = chunk.map(t => `transaction:${t.id}`);
@@ -508,11 +591,197 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
             }
         }
 
+        // ====================================================================
+        // 6. ALSO recalculate fuel_entry:* records (what the Audit Dashboard reads)
+        // ====================================================================
+        console.log(`[Recalculate] Now processing fuel_entry:* records...`);
+        const { data: entryData, error: entryError } = await supabase
+            .from("kv_store_37f42386")
+            .select("key, value")
+            .like("key", "fuel_entry:%");
+        
+        if (entryError) {
+            console.log(`[Recalculate] Warning: Could not load fuel entries: ${entryError.message}`);
+        }
+
+        const allEntries = (entryData || []).map((d: any) => ({ _kvKey: d.key, ...d.value }));
+        console.log(`[Recalculate] Found ${allEntries.length} fuel entries to re-score.`);
+
+        // Group fuel entries by vehicle
+        const entriesByVehicle = new Map<string, any[]>();
+        allEntries.forEach((entry: any) => {
+            const vId = entry.vehicleId || 'unknown';
+            if (!entriesByVehicle.has(vId)) entriesByVehicle.set(vId, []);
+            entriesByVehicle.get(vId)!.push(entry);
+        });
+
+        const entryUpdates: any[] = [];
+        let entryModifiedCount = 0;
+
+        for (const [vId, entries] of entriesByVehicle.entries()) {
+            const vehicleInfo = vehicleMap.get(vId);
+            if (!vehicleInfo || vehicleInfo.capacity <= 0) continue;
+            const capacity = vehicleInfo.capacity;
+            const profileKmPerLiter = vehicleInfo.fuelEconomy;
+            const rangeMin = vehicleInfo.estimatedRangeMin;
+
+            // Sort chronologically
+            entries.sort((a, b) => {
+                const dateA = new Date(a.date).getTime();
+                const dateB = new Date(b.date).getTime();
+                if (!isNaN(dateA) && !isNaN(dateB) && dateA !== dateB) return dateA - dateB;
+                return (a.odometer || 0) - (b.odometer || 0);
+            });
+
+            let runningCumulative = 0;
+            // Phase 20: running anchor odometer tracker (replaces broken per-entry metadata lookup)
+            let lastAnchorOdo = 0;
+            // Phase 21: pre-compute rolling average efficiency for this vehicle's fuel entries
+            const entryRollingAvg = fuelLogic.calculateRollingEfficiencyBatch(entries);
+            const efficiencyBaseline = entryRollingAvg?.avgKmPerLiter || 0;
+            if (!entryRollingAvg) efficiencySkippedCount += entries.length;
+
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i];
+                const volume = Number(entry.liters) || Number(entry.metadata?.fuelVolume) || 0;
+                const prevCumulative = runningCumulative;
+                runningCumulative += volume;
+
+                const percentOfTank = capacity > 0 ? (runningCumulative / capacity) * 100 : 0;
+                // Phase 18 fix: only metadata.isFullTank / metadata.isAnchor mark a hard anchor
+                // (removed entry.type === 'Reimbursement' — reimbursements are NOT automatic full-tank anchors)
+                const isManualFull = entry.metadata?.isFullTank === true || entry.metadata?.isAnchor === true;
+                const isSoftAnchor = !isManualFull && percentOfTank >= 100;
+                const isAnchor = isManualFull || isSoftAnchor;
+
+                // Efficiency calculation
+                // Phase 20: use running lastAnchorOdo instead of broken metadata lookup
+                const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
+                let actualKmPerLiter = 0;
+                let efficiencyVariance = 0;
+                if (distanceSinceAnchor > 0 && runningCumulative > 0 && efficiencyBaseline > 0) {
+                    actualKmPerLiter = distanceSinceAnchor / runningCumulative;
+                    efficiencyVariance = (efficiencyBaseline - actualKmPerLiter) / efficiencyBaseline;
+                }
+
+                // Frequency check (4-hour window) — card-only
+                const fourHoursAgo = new Date(new Date(entry.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
+                const recentTxCount = entries.slice(0, i).filter(e => e.date >= fourHoursAgo).length;
+                const isCardTx = entry.type === 'Card_Transaction' || entry.paymentSource === 'Gas_Card' ||
+                    entry.paymentMethod === 'Gas Card' || entry.paymentMethod === 'Fuel Card';
+                const isHighFrequency = isCardTx && recentTxCount >= (frequencyThreshold - 1);
+                const isFragmented = capacity > 0 && (volume / capacity) < 0.15 && !entry.metadata?.isTopUp;
+
+                // Determine new integrity
+                let newIntegrityStatus = 'stable';
+                let newAnomalyReason: string | null = null;
+                let newAuditStatus = 'Clean';
+
+                if (capacity > 0 && volume > (capacity * 1.02)) {
+                    newIntegrityStatus = 'critical';
+                    newAnomalyReason = 'Tank Overfill Anomaly';
+                    newAuditStatus = 'Flagged';
+                } else if (isAnchor && distanceSinceAnchor > 0) {
+                    // Phase 19/20: only check efficiency when we have real distance data
+                    // Phase 21: skip if no rolling average (efficiencyBaseline=0), use configurable threshold
+                    const isHighConsumption = efficiencyBaseline > 0 && efficiencyVariance > efficiencyThreshold;
+                    const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (runningCumulative / capacity) > 0.8;
+                    if (isHighConsumption || isRangeSuspicious) {
+                        newIntegrityStatus = 'critical';
+                        newAnomalyReason = 'High Fuel Consumption';
+                        newAuditStatus = 'Flagged';
+                    }
+                } else if (isHighFrequency) {
+                    newIntegrityStatus = 'critical';
+                    newAnomalyReason = 'High Transaction Frequency';
+                    newAuditStatus = 'Flagged';
+                } else if (isFragmented) {
+                    newIntegrityStatus = 'warning';
+                    newAnomalyReason = 'Fragmented Purchase';
+                    newAuditStatus = 'Flagged';
+                } else if (percentOfTank > 85) {
+                    newIntegrityStatus = 'warning';
+                    newAnomalyReason = 'Approaching Capacity';
+                    newAuditStatus = 'Observing';
+                }
+
+                const newIsFlagged = newIntegrityStatus === 'critical';
+
+                // Skip if already manually resolved / healed (don't override human decisions)
+                if (entry.auditStatus === 'Resolved' || entry.auditStatus === 'Auto-Resolved' || entry.metadata?.isHealed) {
+                    if (isAnchor) { runningCumulative = 0; }
+                    continue;
+                }
+
+                // Check if anything actually changed
+                const oldStatus = entry.metadata?.integrityStatus;
+                const oldReason = entry.metadata?.anomalyReason || entry.anomalyReason;
+                const oldFlagged = entry.isFlagged;
+
+                if (oldStatus !== newIntegrityStatus || oldReason !== newAnomalyReason || oldFlagged !== newIsFlagged) {
+                    entry.isFlagged = newIsFlagged;
+                    entry.auditStatus = newAuditStatus;
+                    entry.anomalyReason = newAnomalyReason;
+                    entry.metadata = {
+                        ...entry.metadata,
+                        integrityStatus: newIntegrityStatus,
+                        anomalyReason: newAnomalyReason,
+                        auditStatus: newAuditStatus,
+                        distanceSinceAnchor,
+                        actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
+                        profileKmPerLiter,
+                        // Phase 21: rolling average metadata
+                        rollingAvgKmPerLiter: entryRollingAvg?.avgKmPerLiter ?? null,
+                        rollingAvgWindow: entryRollingAvg?.window ?? null,
+                        rollingAvgEntryCount: entryRollingAvg?.entryCount ?? 0,
+                        efficiencyBaseline: entryRollingAvg ? 'rolling' : 'skipped',
+                        efficiencyVariance: Number(efficiencyVariance.toFixed(4)),
+                        isHighFrequency,
+                        isFragmented,
+                        isSoftAnchor,
+                        isAnchor,
+                        recalculatedAt: new Date().toISOString()
+                    };
+                    entryUpdates.push(entry);
+                    entryModifiedCount++;
+                }
+
+                // Reset cycle at anchors
+                if (isAnchor) {
+                    runningCumulative = 0;
+                    // Phase 20: update running anchor odometer for next iteration
+                    lastAnchorOdo = entry.odometer || lastAnchorOdo;
+                }
+            }
+        }
+
+        // 7. Batch Save fuel_entry:* (Chunked)
+        if (entryUpdates.length > 0) {
+            console.log(`[Recalculate] Saving ${entryUpdates.length} fuel entry updates...`);
+            const CHUNK_SIZE = 50;
+            for (let i = 0; i < entryUpdates.length; i += CHUNK_SIZE) {
+                const chunk = entryUpdates.slice(i, i + CHUNK_SIZE);
+                const keys = chunk.map(e => e._kvKey || `fuel_entry:${e.id}`);
+                // Strip the temporary '_kvKey' property before saving
+                const values = chunk.map(e => { const { _kvKey, ...rest } = e; return rest; });
+                await kv.mset(keys, values);
+            }
+        }
+
+        console.log(`[Recalculate] Complete. Transactions: ${modifiedCount} modified. Fuel Entries: ${entryModifiedCount} modified.`);
+
         return c.json({ 
             success: true, 
             processed: fuelTransactions.length,
             modified: modifiedCount,
-            cyclesIdentified: updates.filter(u => u.metadata?.isAnchor).length
+            entriesProcessed: allEntries.length,
+            entriesModified: entryModifiedCount,
+            cyclesIdentified: updates.filter(u => u.metadata?.isAnchor).length,
+            // Phase 21: efficiency config used for this recalculation
+            efficiencyThreshold,
+            efficiencyBaseline: 'rolling-average',
+            // Phase 24: count of entries where rolling avg was unavailable
+            efficiencySkippedCount
         });
 
     } catch (e: any) {
@@ -682,6 +951,31 @@ app.route("/", syncApp);
 app.get("/make-server-37f42386/maps-config", (c) => {
   const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
   return c.json({ apiKey: apiKey || "", timestamp: Date.now() });
+});
+
+// Audit Config Endpoints (configurable frequency threshold)
+app.get("/make-server-37f42386/audit-config", async (c) => {
+  try {
+    const config = await kv.get("config:audit_settings");
+    return c.json(config || { frequencyThreshold: 3, efficiencyThreshold: 0.30 });
+  } catch (e: any) {
+    console.log(`[AuditConfig] GET error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/audit-config", async (c) => {
+  try {
+    const body = await c.req.json();
+    const existing = await kv.get("config:audit_settings") || {};
+    const updated = { ...existing, ...body, updatedAt: new Date().toISOString() };
+    await kv.set("config:audit_settings", updated);
+    console.log(`[AuditConfig] Saved: ${JSON.stringify(updated)}`);
+    return c.json({ success: true, data: updated });
+  } catch (e: any) {
+    console.log(`[AuditConfig] POST error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 // Dashboard Stats Endpoint (Aggregated) - Optimized
@@ -1369,83 +1663,114 @@ app.post("/make-server-37f42386/transactions", async (c) => {
         transaction.timestamp = new Date().toISOString();
     }
 
+    // Future-Date Guard: flag transactions with dates beyond today
+    if (transaction.date) {
+        const txDate = new Date(transaction.date);
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(23, 59, 59, 999);
+        if (!isNaN(txDate.getTime()) && txDate > tomorrow) {
+            console.log(`[FutureDateGuard] Transaction ${transaction.id} has future date: ${transaction.date}`);
+            if (!transaction.metadata) transaction.metadata = {};
+            transaction.metadata._futureDateWarning = true;
+            transaction.metadata._originalDate = transaction.date;
+        }
+    }
+
     // Auto-Approve Logic for AI Verified Fuel
     const isFuel = transaction.category === 'Fuel' || transaction.category === 'Fuel Reimbursement';
     const isAiVerified = transaction.metadata?.odometerMethod === 'ai_verified';
 
+    // Hoisted for cross-block access: GPS matching populates these, fuel_entry block reads them
+    let smartMatchedStation: any = null;
+    let smartMatchConfidence = 'none';
+    let smartMatchDistance: number = Infinity;
+    let allStationsCache: any[] = [];
+
     if (isFuel) {
-        // --- GEOLOCATION MATCHING (Phase 3 + Phase 4.2: Unverified Promotion) ---
+        // --- GEOLOCATION MATCHING (Smart Ambiguity-Aware — replaces dual 150m calls) ---
         const locationMetadata = transaction.metadata?.locationMetadata;
         if (locationMetadata?.lat && locationMetadata?.lng) {
             try {
-                // Fetch all stations from KV
+                // Fetch all stations from KV (single load, reused below)
                 const stationsRaw = await kv.getByPrefix("station:");
-                const allStations = stationsRaw || [];
-                const verifiedStations = allStations.filter((s: any) => s.status === 'verified');
-                const unverifiedStations = allStations.filter((s: any) => s.status === 'unverified');
-                
-                // Step 4.1: First try matching against Verified stations
-                const matchedVerified = findMatchingStation(
-                    locationMetadata.lat, 
-                    locationMetadata.lng, 
-                    verifiedStations, 
-                    150 // 150m matching radius
+                allStationsCache = stationsRaw || [];
+
+                // Single smart match against ALL stations at 600m with ambiguity detection
+                const smartResult = findMatchingStationSmart(
+                    locationMetadata.lat,
+                    locationMetadata.lng,
+                    allStationsCache,
+                    600,
+                    locationMetadata.accuracy || 0
                 );
 
-                if (matchedVerified) {
-                    transaction.metadata.matchedStationId = matchedVerified.id;
-                    transaction.metadata.locationStatus = 'verified';
-                    transaction.metadata.verificationMethod = 'gps_matching';
-                    console.log(`[GeoMatch] Transaction matched Verified station: ${matchedVerified.name} (${matchedVerified.id})`);
-                } else {
-                    // Step 4.2: No verified match — check Unverified (MGMT) stations
-                    const matchedUnverified = findMatchingStation(
-                        locationMetadata.lat,
-                        locationMetadata.lng,
-                        unverifiedStations,
-                        150 // 150m matching radius
-                    );
+                smartMatchConfidence = smartResult.confidence;
+                smartMatchDistance = smartResult.distance;
 
-                    if (matchedUnverified) {
-                        // AUTO-PROMOTE: Unverified → Verified
-                        matchedUnverified.status = 'verified';
-                        matchedUnverified.promotedAt = new Date().toISOString();
-                        matchedUnverified.promotionMethod = 'auto_gps_match';
-                        matchedUnverified.stats = {
-                            ...(matchedUnverified.stats || {}),
-                            totalVisits: ((matchedUnverified.stats?.totalVisits) || 0) + 1,
+                if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
+                    const matched = smartResult.station as any;
+
+                    if (matched.status === 'verified') {
+                        // Verified station match — full linkage
+                        smartMatchedStation = matched;
+                        transaction.metadata.matchedStationId = matched.id;
+                        transaction.metadata.locationStatus = 'verified';
+                        transaction.metadata.verificationMethod = 'gps_smart_matching';
+                        transaction.metadata.matchDistance = smartResult.distance;
+                        transaction.metadata.matchConfidence = smartResult.confidence;
+                        console.log(`[SmartGeoMatch] Matched Verified station: "${matched.name}" (${matched.id}) at ${smartResult.distance}m [${smartResult.confidence}]`);
+                    } else {
+                        // Unverified station — record the suggested match for admin review,
+                        // but do NOT promote the station or mark the entry as verified.
+                        // Admin must manually approve stations before they become verified.
+                        transaction.metadata.suggestedStationId = matched.id;
+                        transaction.metadata.suggestedStationName = matched.name;
+                        transaction.metadata.locationStatus = 'unverified';
+                        transaction.metadata.verificationMethod = 'gps_matched_unverified_station';
+                        transaction.metadata.matchDistance = smartResult.distance;
+                        transaction.metadata.matchConfidence = smartResult.confidence;
+
+                        // Update visit stats on the unverified station (for admin reference when reviewing)
+                        matched.stats = {
+                            ...(matched.stats || {}),
+                            totalVisits: ((matched.stats?.totalVisits) || 0) + 1,
                             lastUpdated: new Date().toISOString()
                         };
-                        await kv.set(`station:${matchedUnverified.id}`, matchedUnverified);
+                        await kv.set(`station:${matched.id}`, matched);
 
-                        transaction.metadata.matchedStationId = matchedUnverified.id;
-                        transaction.metadata.locationStatus = 'verified';
-                        transaction.metadata.verificationMethod = 'gps_auto_promoted';
-                        console.log(`[GeoMatch] Transaction matched Unverified station — AUTO-PROMOTED to Verified: ${matchedUnverified.name} (${matchedUnverified.id})`);
-                    } else {
-                        // Step 4.3: No match at all — create Learnt Location
-                        transaction.metadata.locationStatus = 'unverified';
-                    
-                        const learntId = crypto.randomUUID();
-                        const learntLocation = {
-                            id: learntId,
-                            name: transaction.vendor || transaction.description || 'Unknown Station',
-                            parentCompany: transaction.metadata?.parentCompany,
-                            location: {
-                                lat: locationMetadata.lat,
-                                lng: locationMetadata.lng,
-                                accuracy: locationMetadata.accuracy
-                            },
-                            timestamp: new Date().toISOString(),
-                            transactionId: transaction.id,
-                            status: 'learnt'
-                        };
-                        await kv.set(`learnt_location:${learntId}`, learntLocation);
-                        console.log(`[GeoMatch] No station match — created Learnt Location: ${learntId}`);
+                        console.log(`[SmartGeoMatch] GPS matched Unverified station "${matched.name}" (${matched.id}) at ${smartResult.distance}m — NOT promoting, awaiting admin approval.`);
                     }
+                } else if (smartResult.confidence === 'ambiguous') {
+                    // GPS is near multiple stations — flag for management review, do NOT guess
+                    transaction.metadata.locationStatus = 'review_required';
+                    transaction.metadata.verificationMethod = 'gps_ambiguous';
+                    transaction.metadata.ambiguityReason = smartResult.ambiguityReason;
+                    transaction.metadata.matchConfidence = 'ambiguous';
+                    console.log(`[SmartGeoMatch] Ambiguous match — flagged for review. ${smartResult.ambiguityReason}`);
+                } else {
+                    // No match at all — create Learnt Location (preserved from original)
+                    transaction.metadata.locationStatus = 'unverified';
+
+                    const learntId = crypto.randomUUID();
+                    const learntLocation = {
+                        id: learntId,
+                        name: transaction.vendor || transaction.description || 'Unknown Station',
+                        parentCompany: transaction.metadata?.parentCompany,
+                        location: {
+                            lat: locationMetadata.lat,
+                            lng: locationMetadata.lng,
+                            accuracy: locationMetadata.accuracy
+                        },
+                        timestamp: new Date().toISOString(),
+                        transactionId: transaction.id,
+                        status: 'learnt'
+                    };
+                    await kv.set(`learnt_location:${learntId}`, learntLocation);
+                    console.log(`[SmartGeoMatch] No station match — created Learnt Location: ${learntId}`);
                 }
             } catch (err) {
-                console.error("Geolocation Matching Error:", err);
+                console.error("Geolocation Smart Matching Error:", err);
             }
         }
 
@@ -1607,7 +1932,10 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             transaction.quantity = quantity;
         }
 
-        const fuelEntry = {
+        // Resolve vendor name: smart-matched station > transaction vendor > description > fallback
+        const resolvedVendor = smartMatchedStation?.name || transaction.vendor || transaction.description || 'Reimbursement';
+
+        const fuelEntry: any = {
             id: crypto.randomUUID(),
             date: (transaction.date && transaction.time) 
                 ? `${transaction.date}T${transaction.time}` 
@@ -1617,7 +1945,8 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             liters: quantity,
             pricePerLiter: pricePerLiter,
             odometer: Number(transaction.odometer) || 0,
-            location: transaction.vendor || transaction.description || 'Reimbursement',
+            vendor: resolvedVendor,
+            location: resolvedVendor,
             stationAddress: transaction.metadata?.stationLocation || '',
             vehicleId: transaction.vehicleId,
             driverId: transaction.driverId,
@@ -1627,16 +1956,33 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
             isVerified: true, // Key Requirement: Anchor
             source: 'Fuel Log',
-            locationStatus: transaction.metadata?.locationStatus,
             matchedStationId: transaction.metadata?.matchedStationId,
             metadata: {
                 receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
                 odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
                 originalTransactionId: transaction.id,
                 locationMetadata: transaction.metadata?.locationMetadata,
-                parentCompany: transaction.metadata?.parentCompany
+                parentCompany: transaction.metadata?.parentCompany,
+                // Bug fixes: locationStatus + matchedStationId INSIDE metadata (where FuelLogTable reads them)
+                locationStatus: transaction.metadata?.locationStatus || 'unknown',
+                matchedStationId: transaction.metadata?.matchedStationId,
+                verificationMethod: transaction.metadata?.verificationMethod,
+                matchDistance: transaction.metadata?.matchDistance,
+                matchConfidence: transaction.metadata?.matchConfidence
             }
         };
+
+        // Calculate Audit Confidence Score (matching fuel_controller.tsx gold-standard pattern)
+        if (smartMatchedStation && fuelEntry.matchedStationId) {
+            const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, smartMatchedStation);
+            fuelEntry.metadata = {
+                ...fuelEntry.metadata,
+                auditConfidenceScore: confidence.score,
+                auditConfidenceBreakdown: confidence.breakdown,
+                isHighlyTrusted: confidence.isHighlyTrusted
+            };
+            console.log(`[FuelEntry] Audit confidence for ${fuelEntry.id}: ${confidence.score}/100`);
+        }
 
         if (fuelEntry.vehicleId) {
              await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
@@ -1893,6 +2239,48 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
         }
     }
 
+    // Phase 4: Auto-create Cash Wallet credit for approved fuel reimbursements
+    if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
+        if (!tx.driverId) {
+            console.log('[FuelCredit] Skipping wallet credit: no driverId on transaction ' + id);
+        } else {
+            const creditId = `fuel-credit-${id}`;
+            const existingCredit = await kv.get(`transaction:${creditId}`);
+
+            if (!existingCredit) {
+                const walletCredit = {
+                    id: creditId,
+                    driverId: tx.driverId,
+                    driverName: tx.driverName || '',
+                    vehicleId: tx.vehicleId,
+                    date: new Date().toISOString().split('T')[0],
+                    time: new Date().toISOString().split('T')[1].substring(0, 8),
+                    type: 'Payment_Received',
+                    category: 'Fuel Reimbursement Credit',
+                    description: `Fuel Reimbursement Credit: ${tx.description || tx.merchant || 'Fuel Purchase'}`,
+                    amount: Math.abs(tx.amount || 0),
+                    paymentMethod: 'Cash',
+                    status: 'Completed',
+                    isReconciled: true,
+                    referenceNumber: tx.id,
+                    metadata: {
+                        fuelCreditSourceId: tx.id,
+                        source: 'fuel_reimbursement_approval',
+                        automated: true,
+                        approvedAt: new Date().toISOString(),
+                        originalAmount: tx.amount,
+                        originalCategory: tx.category
+                    }
+                };
+
+                await kv.set(`transaction:${creditId}`, walletCredit);
+                console.log(`[FuelCredit] Created wallet credit ${creditId} for driver ${tx.driverId}, amount: ${walletCredit.amount}`);
+            } else {
+                console.log(`[FuelCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);
+            }
+        }
+    }
+
     await kv.set(`transaction:${id}`, tx);
     return c.json({ success: true, data: tx });
   } catch (e: any) {
@@ -1916,9 +2304,88 @@ app.post("/make-server-37f42386/expenses/reject", async (c) => {
     };
 
     await kv.set(`transaction:${id}`, tx);
+
+    // Clean up wallet credit if this was previously approved
+    const creditKey = `transaction:fuel-credit-${id}`;
+    const existingCredit = await kv.get(creditKey);
+    if (existingCredit) {
+        await kv.del(creditKey);
+        console.log(`[FuelCredit] Removed wallet credit for rejected reimbursement: ${id}`);
+    }
+
     return c.json({ success: true, data: tx });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
+  }
+});
+
+// Phase 9: Backfill wallet credits for existing approved fuel reimbursements
+app.post("/make-server-37f42386/fuel/backfill-wallet-credits", async (c) => {
+  try {
+    console.log('[FuelCredit Backfill] Starting backfill of historical approved fuel reimbursements...');
+
+    // Fetch all transactions
+    const allTransactions = await kv.getByPrefix('transaction:');
+    
+    // Filter for approved fuel reimbursements that are NOT already wallet credits themselves
+    const approvedFuelReimbursements = allTransactions.filter((tx: any) =>
+      tx &&
+      tx.id &&
+      (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') &&
+      tx.category !== 'Fuel Reimbursement Credit' &&
+      tx.status === 'Approved' &&
+      tx.driverId
+    );
+
+    console.log(`[FuelCredit Backfill] Found ${approvedFuelReimbursements.length} approved fuel reimbursements with driverId`);
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const tx of approvedFuelReimbursements) {
+      const creditId = `fuel-credit-${tx.id}`;
+      const existingCredit = await kv.get(`transaction:${creditId}`);
+
+      if (existingCredit) {
+        skipped++;
+        continue;
+      }
+
+      const walletCredit = {
+        id: creditId,
+        driverId: tx.driverId,
+        driverName: tx.driverName || '',
+        vehicleId: tx.vehicleId,
+        date: tx.metadata?.approvedAt ? tx.metadata.approvedAt.split('T')[0] : (tx.date || new Date().toISOString().split('T')[0]),
+        time: tx.metadata?.approvedAt ? tx.metadata.approvedAt.split('T')[1]?.substring(0, 8) || '00:00:00' : (tx.time || '00:00:00'),
+        type: 'Payment_Received',
+        category: 'Fuel Reimbursement Credit',
+        description: `Fuel Reimbursement Credit: ${tx.description || tx.merchant || 'Fuel Purchase'}`,
+        amount: Math.abs(tx.amount || 0),
+        paymentMethod: 'Cash',
+        status: 'Completed',
+        isReconciled: true,
+        referenceNumber: tx.id,
+        metadata: {
+          fuelCreditSourceId: tx.id,
+          source: 'fuel_reimbursement_backfill',
+          automated: true,
+          approvedAt: tx.metadata?.approvedAt || new Date().toISOString(),
+          originalAmount: tx.amount,
+          originalCategory: tx.category
+        }
+      };
+
+      await kv.set(`transaction:${creditId}`, walletCredit);
+      console.log(`[FuelCredit Backfill] Created wallet credit ${creditId} for driver ${tx.driverId}, amount: ${walletCredit.amount}`);
+      created++;
+    }
+
+    console.log(`[FuelCredit Backfill] Complete. Created: ${created}, Skipped (already exist): ${skipped}`);
+    return c.json({ success: true, created, skipped, total: approvedFuelReimbursements.length });
+  } catch (e: any) {
+    console.log(`[FuelCredit Backfill] Error: ${e.message}`);
+    return c.json({ error: `Backfill failed: ${e.message}` }, 500);
   }
 });
 
@@ -2450,6 +2917,91 @@ app.delete("/make-server-37f42386/toll-tags/:id", async (c) => {
     await kv.del(`toll_tag:${id}`);
     return c.json({ success: true });
   } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// =========================================================================
+// Toll Plaza Endpoints (Phase 2 — Toll Database CRUD)
+// KV key pattern: toll_plaza:{id}
+// =========================================================================
+
+// Step 2.1 — GET all toll plazas
+app.get("/make-server-37f42386/toll-plazas", async (c) => {
+  try {
+    const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "toll_plaza:%");
+
+    if (error) throw error;
+    const plazas = data?.map((d: any) => d.value) || [];
+    console.log(`[TollPlaza] GET /toll-plazas — returning ${plazas.length} plazas`);
+    return c.json(plazas);
+  } catch (e: any) {
+    console.log(`[TollPlaza] ERROR GET /toll-plazas: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Step 2.4 — GET single toll plaza by ID
+app.get("/make-server-37f42386/toll-plazas/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    const plaza = await kv.get(`toll_plaza:${id}`);
+    if (!plaza) {
+      console.log(`[TollPlaza] GET /toll-plazas/${id} — not found`);
+      return c.json({ error: "Toll plaza not found" }, 404);
+    }
+    console.log(`[TollPlaza] GET /toll-plazas/${id} — found: ${(plaza as any).name}`);
+    return c.json(plaza);
+  } catch (e: any) {
+    console.log(`[TollPlaza] ERROR GET /toll-plazas/${id}: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Step 2.2 — POST create or update a toll plaza
+app.post("/make-server-37f42386/toll-plazas", async (c) => {
+  try {
+    const plaza = await c.req.json();
+
+    if (!plaza.id) {
+      plaza.id = crypto.randomUUID();
+    }
+    if (!plaza.createdAt) {
+      plaza.createdAt = new Date().toISOString();
+    }
+    plaza.updatedAt = new Date().toISOString();
+
+    if (!plaza.stats) {
+      plaza.stats = {
+        totalTransactions: 0,
+        totalSpend: 0,
+        lastTransactionDate: '',
+        avgAmount: 0,
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+
+    await kv.set(`toll_plaza:${plaza.id}`, plaza);
+    console.log(`[TollPlaza] POST /toll-plazas — saved plaza "${plaza.name}" (${plaza.id})`);
+    return c.json({ success: true, data: plaza });
+  } catch (e: any) {
+    console.log(`[TollPlaza] ERROR POST /toll-plazas: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Step 2.3 — DELETE a toll plaza by ID
+app.delete("/make-server-37f42386/toll-plazas/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`toll_plaza:${id}`);
+    console.log(`[TollPlaza] DELETE /toll-plazas/${id} — deleted`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`[TollPlaza] ERROR DELETE /toll-plazas/${id}: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -3336,6 +3888,28 @@ app.post("/make-server-37f42386/settings/preferences", async (c) => {
   }
 });
 
+// ── Toll Info Endpoints ──────────────────────────────────────────────────
+app.get("/make-server-37f42386/toll-info", async (c) => {
+  try {
+    const data = await kv.get("toll:rate_schedule");
+    return c.json(data || null);
+  } catch (e: any) {
+    console.log(`[toll-info GET] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/toll-info", async (c) => {
+  try {
+    const schedule = await c.req.json();
+    await kv.set("toll:rate_schedule", schedule);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`[toll-info POST] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Fixed Expenses Endpoints
 app.get("/make-server-37f42386/fixed-expenses/:vehicleId", async (c) => {
   try {
@@ -3685,8 +4259,8 @@ app.post("/make-server-37f42386/parse-invoice", async (c) => {
         const base64Data = Buffer.from(arrayBuffer).toString('base64');
         const mimeType = file.type;
 
-        const prompt = `Analyze this vehicle service invoice or receipt. Extract the following information in strict JSON format:
-        - date (YYYY-MM-DD)
+        const prompt = `Analyze this vehicle service invoice or receipt. This is from Jamaica, which EXCLUSIVELY uses DD/MM/YYYY date format. Extract the following information in strict JSON format:
+        - date (YYYY-MM-DD. The receipt uses DD/MM/YYYY. The FIRST number is the day, SECOND is the month. Example: "01/12/2025" = 1st Dec 2025 = "2025-12-01".)
         - type (Choose the best fit: 'oil', 'tires', 'brake', 'inspection', 'repair', 'maintenance' (for multi-service visits), or 'other')
         - cost (number, total numeric amount. Ignore currency symbols like JMD or $)
         - odometer (number, if present)
@@ -3902,6 +4476,7 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
       Parse the following toll transaction data into a JSON array.
       
       The input is likely a CSV, TSV, or copy-pasted table.
+      This data is from Jamaica. Jamaica EXCLUSIVELY uses DD/MM/YYYY date format.
 
       Current Date Context: ${today}
       
@@ -3909,7 +4484,7 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
       {
         "transactions": [
             {
-            "date": "ISO Date String",
+            "date": "ISO Date String (YYYY-MM-DD)",
             "tagId": "Tag ID or Serial Number (String) or empty",
             "location": "Plaza Name (String)",
             "laneId": "Lane ID (String) or empty",
@@ -3920,12 +4495,15 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
       }
       
       Rules:
-      1. DATE FORMAT: The input uses DD/MM/YYYY (Day/Month/Year).
-         - Example: "01/05/2024" is May 1st, 2024 (NOT January 5th).
-         - Example: "10/04/2025" is April 10th, 2025.
+      1. DATE FORMAT — NON-NEGOTIABLE: This is Jamaican data. ALL dates are DD/MM/YYYY (Day/Month/Year). NEVER interpret as MM/DD/YYYY.
+         - "01/05/2024" = 1st May 2024 → output "2024-05-01"
+         - "10/04/2025" = 10th April 2025 → output "2025-04-10"
+         - "23/10/2025" = 23rd October 2025 → output "2025-10-23"
+         - "01/12/2025" = 1st December 2025 → output "2025-12-01"
+         - The FIRST number is ALWAYS the day. The SECOND number is ALWAYS the month.
       2. FUTURE DATE CHECK: The Current Date is ${today}.
-         - Do NOT generate dates in the future relative to the Current Date.
-         - If a parsed date (e.g. DD/MM) results in a future date for the current year, assume it belongs to the previous year.
+         - Do NOT output any date that is in the future relative to the Current Date.
+         - If the resulting date would be in the future, subtract 1 from the year.
       3. If amount is like "JMD -275.00", parse as -275.00.
       4. If amount is negative, type is "Usage". If positive, type is usually "Top-up" (unless it's a refund).
       5. Ignore header rows or irrelevant lines.
@@ -3949,7 +4527,10 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
     const content = response.choices[0].message.content;
     const result = JSON.parse(content || "{}");
     
-    return c.json({ success: true, data: result.transactions || [] });
+    // Post-processing: catch and correct any future dates the AI missed
+    const corrected = correctFutureDates(result.transactions || []);
+    
+    return c.json({ success: true, data: corrected });
   } catch (e: any) {
     console.error("AI Toll Parse Error:", e);
     return c.json({ error: e.message }, 500);
@@ -3982,6 +4563,7 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
       You are an expert data parser.
       Analyze the provided image of a toll transaction history or top-up history.
       Extract the transaction data into a JSON array.
+      This data is from Jamaica. Jamaica EXCLUSIVELY uses DD/MM/YYYY date format.
 
       Current Date Context: ${today}
 
@@ -3989,7 +4571,7 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
       {
         "transactions": [
             {
-            "date": "ISO Date String",
+            "date": "ISO Date String (YYYY-MM-DD)",
             "tagId": "Tag ID or Serial Number (String) or empty",
             "location": "Plaza Name (String) or empty if not visible",
             "laneId": "Lane ID (String) or empty",
@@ -4003,12 +4585,15 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
       }
 
       Rules:
-      1. DATE FORMAT: The input uses DD/MM/YYYY (Day/Month/Year).
-         - Example: "01/05/2024" is May 1st, 2024 (NOT January 5th).
-         - Example: "10/04/2025" is April 10th, 2025.
+      1. DATE FORMAT — NON-NEGOTIABLE: This is Jamaican data. ALL dates are DD/MM/YYYY (Day/Month/Year). NEVER interpret as MM/DD/YYYY.
+         - "01/05/2024" = 1st May 2024 → output "2024-05-01"
+         - "10/04/2025" = 10th April 2025 → output "2025-04-10"
+         - "23/10/2025" = 23rd October 2025 → output "2025-10-23"
+         - "01/12/2025" = 1st December 2025 → output "2025-12-01"
+         - The FIRST number is ALWAYS the day. The SECOND number is ALWAYS the month.
       2. FUTURE DATE CHECK: The Current Date is ${today}.
-         - Do NOT generate dates in the future relative to the Current Date.
-         - If a parsed date (e.g. DD/MM) results in a future date for the current year, assume it belongs to the previous year.
+         - Do NOT output any date that is in the future relative to the Current Date.
+         - If the resulting date would be in the future, subtract 1 from the year.
       3. Identify "Payment" or "Top Up Amount" columns.
       4. If the row indicates "Failure" or "Failed", ignore it or mark status as Failure.
       5. If "Top Up Amount" is present (e.g. "JMD 2,000.00"), it is a positive amount (Top-up).
@@ -4042,7 +4627,10 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
     const content = response.choices[0].message.content;
     const result = JSON.parse(content || "{}");
     
-    return c.json({ success: true, data: result.transactions || [] });
+    // Post-processing: catch and correct any future dates the AI missed
+    const corrected = correctFutureDates(result.transactions || []);
+    
+    return c.json({ success: true, data: corrected });
 
   } catch (e: any) {
     console.error("AI Toll Image Parse Error:", e);
@@ -4760,10 +5348,12 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
         const arrayBuffer = await file.arrayBuffer();
         const base64Image = `data:${file.type};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
 
-        const prompt = `Analyze this receipt image. It is likely a Jamaican toll receipt. 
+        const prompt = `Analyze this receipt image. It is a Jamaican receipt.
+        Jamaica EXCLUSIVELY uses DD/MM/YYYY date format. NEVER interpret dates as MM/DD/YYYY.
+        
         Extract the following details in JSON format:
         - merchant (string, name of the store/service. For tolls, use the Highway name e.g. Highway 2000, East-West, North-South)
-        - date (YYYY-MM-DD, format correctly. NOTE: Date format is likely DD/MM/YYYY. Be careful not to confuse Day and Month.)
+        - date (YYYY-MM-DD. The receipt date is in DD/MM/YYYY format. The FIRST number is ALWAYS the day, the SECOND is ALWAYS the month. Example: "01/12/2025" on the receipt = 1st December 2025 = output "2025-12-01".)
         - time (HH:MM:SS, 24-hour format. Look for the time of transaction.)
         - amount (number, total amount. Remove currency symbols.)
         - type (string, one of: 'Fuel', 'Service', 'Toll', 'Other'. Infer from context. If it mentions tolls, highway, plaza, etc. use 'Toll'.)
@@ -5023,19 +5613,23 @@ app.get("/make-server-37f42386/notifications/list", async (c) => {
         const userId = c.req.query("userId");
         const vehicleId = c.req.query("vehicleId");
         
-        let query = supabase
-            .from("kv_store_37f42386")
-            .select("value")
-            .like("key", "alert:%");
+        // Use kv.getByPrefix for reliable retrieval (avoids unsupported JSON path ordering)
+        let alerts: any[] = await kv.getByPrefix("alert:");
 
-        if (userId) query = query.eq("value->>driverId", userId);
-        if (vehicleId) query = query.eq("value->>vehicleId", vehicleId);
+        // Filter in-memory if optional query params are provided
+        if (userId) alerts = alerts.filter((a: any) => a.driverId === userId);
+        if (vehicleId) alerts = alerts.filter((a: any) => a.vehicleId === vehicleId);
 
-        const { data, error } = await query.order("value->>timestamp", { ascending: false });
-        if (error) throw error;
+        // Sort newest-first by timestamp
+        alerts.sort((a: any, b: any) => {
+            const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return tb - ta;
+        });
 
-        return c.json(data?.map((d: any) => d.value) || []);
+        return c.json(alerts);
     } catch (e: any) {
+        console.log("Error listing persistent alerts:", e.message);
         return c.json({ error: e.message }, 500);
     }
 });
@@ -5080,8 +5674,20 @@ app.route("/", fuelApp);
 Deno.serve({
   onError: (e) => {
     const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("broken pipe") || msg.includes("connection closed") || (e as any).code === "EPIPE") {
-        // Silently handle client disconnects
+    const name = (e as any)?.name || '';
+    const isConnectionError =
+        msg.includes("broken pipe") ||
+        msg.includes("connection closed") ||
+        msg.includes("message completed") ||
+        name === "Http" ||
+        name === "BrokenPipe" ||
+        name === "BadResource" ||
+        (e as any).code === "EPIPE" ||
+        (e as any).code === "ECONNRESET";
+
+    if (isConnectionError) {
+        // Silently handle client disconnects — this is normal when responses
+        // are large or the client navigates away before transfer completes.
         return new Response(null, { status: 499 });
     }
     console.error(e);

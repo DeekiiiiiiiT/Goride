@@ -4,6 +4,7 @@ import { Download, FileText, ShieldCheck } from 'lucide-react';
 import { MapFeature } from '../../../utils/spatialNormalization';
 import { encodePlusCode } from '../../../utils/plusCode';
 import { toast } from 'sonner@2.0.3';
+import { formatDateJM } from '../../../utils/csv-helper';
 
 interface ForensicExportButtonProps {
   features: MapFeature[];
@@ -42,7 +43,7 @@ export function ForensicExportButton({ features }: ForensicExportButtonProps) {
             'Snapshot',
             f.properties.originalData?.transactionId || 'Unknown',
             f.properties.status,
-            f.properties.date,
+            formatDateJM(f.properties.date),
             lat.toString(),
             lng.toString(),
             encodePlusCode(lat, lng, 11),

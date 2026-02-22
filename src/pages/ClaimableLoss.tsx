@@ -289,7 +289,7 @@ export function ClaimableLoss() {
 
     pendingClaims.forEach(claim => {
         const row = [
-            new Date(claim.createdAt).toLocaleDateString(),
+            formatDateJM(claim.createdAt),
             `"${getDriverName(claim.driverId)}"`,
             claim.tripId || '',
             claim.amount.toFixed(2),
@@ -617,3 +617,5 @@ export function ClaimableLoss() {
     </div>
   );
 }
+
+import { formatDateJM } from "../utils/csv-helper";

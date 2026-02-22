@@ -14,6 +14,7 @@ import { toast } from "sonner@2.0.3";
 import { OdometerReading } from '../../../types/vehicle';
 import { Trip } from '../../../types/data';
 import { mileageCalculationService } from '../../../services/mileageCalculationService';
+import { formatDateJM } from '../../../utils/csv-helper';
 
 interface TripManifestSheetProps {
   isOpen: boolean;
@@ -57,7 +58,7 @@ export const TripManifestSheet: React.FC<TripManifestSheetProps> = ({
       try {
           const headers = "Date,Platform,Distance (km),Duration (min),Pickup,Dropoff,Status\n";
           const rows = trips.map(t => 
-              `${t.date},${t.platform},${t.distance},${t.duration},"${t.pickupLocation || ''}","${t.dropoffLocation || ''}",${t.status}`
+              `${formatDateJM(t.date)},${t.platform},${t.distance},${t.duration},"${t.pickupLocation || ''}","${t.dropoffLocation || ''}",${t.status}`
           ).join("\n");
           
           const blob = new Blob([headers + rows], { type: 'text/csv' });

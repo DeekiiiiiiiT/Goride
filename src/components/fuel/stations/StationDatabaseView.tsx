@@ -17,7 +17,7 @@ import { Switch } from '../../ui/switch';
 import { Label } from '../../ui/label';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
-import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, Map as MapIcon } from 'lucide-react';
+import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon } from 'lucide-react';
 import { SpatialIntegrityMap } from './SpatialIntegrityMap';
 import { fuelService } from '../../../services/fuelService';
 import { api } from '../../../services/api';
@@ -41,6 +41,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
   const [isAddStationOpen, setIsAddStationOpen] = useState(false);
   const [editingStation, setEditingStation] = useState<StationProfile | null>(null);
   const [verifyingLearntId, setVerifyingLearntId] = useState<string | null>(null);
+  const [verifyingNearbyStation, setVerifyingNearbyStation] = useState<any>(null);
 
   const fetchData = useCallback(async () => {
     setIsBackendLoading(true);
@@ -158,7 +159,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
     );
 
     try {
-      await fuelService.saveStation(updated);
+      const result = await fuelService.saveStation(updated);
       setStationOverrides(prev => ({ ...prev, [id]: updated }));
       
       if (details.status === 'verified' && current.status !== 'verified') {
@@ -166,21 +167,72 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
           description: "Location successfully moved to Source of Truth.",
           icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />
         });
+      } else if (details.status === 'unverified' && current.status === 'verified') {
+        toast.success(`${updated.name} demoted to Unverified`, {
+          description: "Station moved back to Unverified MGMT tab. Admin approval required to re-verify.",
+          icon: <ShieldOff className="h-4 w-4 text-amber-500" />
+        });
+        // Close the detail sheet so the station disappears from the verified list immediately
+        setSelectedStation(null);
       } else {
         toast.success("Station updated in cloud.");
       }
-    } catch (e) {
-      console.error("Failed to save station to cloud", e);
-      toast.error("Cloud sync failed. Changes may not persist.");
+
+      // Phase 11: Show feedback when stale learnt locations were auto-cleaned
+      if (result?.autoCleanedLearnt > 0) {
+        const cleanedNames = (result.cleanupDetails || [])
+          .map((d: any) => `"${d.learntName}" → ${d.stationName}`)
+          .join(', ');
+        toast.info(`Auto-resolved ${result.autoCleanedLearnt} learnt location(s)`, {
+          description: cleanedNames || 'Stale entries removed from Evidence Bridge.',
+          duration: 8000,
+        });
+      }
+    } catch (e: any) {
+      if (e?.duplicate) {
+        // 409 Duplicate — show override confirmation with station details
+        const existing = e.existingStation;
+        console.warn(`[UpdateStation] Duplicate detected: conflicts with "${existing?.name}" (${e.message})`);
+        toast.error(e.message || 'Duplicate station detected', {
+          description: existing ? `Conflicts with "${existing.name}" (${existing.matchType}, ${existing.distance}m). Click below to save anyway.` : undefined,
+          duration: 15000,
+          action: {
+            label: 'Save Anyway',
+            onClick: async () => {
+              try {
+                await fuelService.saveStation({ ...updated, _overrideDuplicate: true });
+                setStationOverrides(prev => ({ ...prev, [id]: updated }));
+                toast.success("Station updated (duplicate override applied).");
+              } catch (retryErr) {
+                console.error("Override save failed", retryErr);
+                toast.error("Save failed even with override.");
+              }
+            }
+          }
+        });
+      } else {
+        console.error("Failed to save station to cloud", e);
+        toast.error("Cloud sync failed. Changes may not persist.");
+      }
     }
   };
 
   const handleManualAdd = async (station: StationOverride) => {
     setIsBackendLoading(true);
     try {
-      await fuelService.saveStation(station);
+      const result = await fuelService.saveStation(station);
       setStationOverrides(prev => ({ ...prev, [station.id!]: station }));
-      // No toast here as the modal handles it
+
+      // Phase 11: Show feedback when stale learnt locations were auto-cleaned on station add
+      if (result?.autoCleanedLearnt > 0) {
+        const cleanedNames = (result.cleanupDetails || [])
+          .map((d: any) => `"${d.learntName}" → ${d.stationName}`)
+          .join(', ');
+        toast.info(`Auto-resolved ${result.autoCleanedLearnt} learnt location(s)`, {
+          description: cleanedNames || 'Stale entries removed from Evidence Bridge.',
+          duration: 8000,
+        });
+      }
     } catch (e) {
       console.error("Manual add failed", e);
       throw e; // Let the modal handle the error toast
@@ -192,6 +244,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
   const handleImportStations = async (imported: StationOverride[]) => {
     setIsBackendLoading(true);
     let count = 0;
+    let dupeSkipped = 0;
     const newOverrides = { ...stationOverrides };
     
     try {
@@ -209,14 +262,30 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
             geofenceRadius: item.geofenceRadius ?? (item.plusCode ? getDefaultGeofenceRadius(item.plusCode) : undefined),
           };
           
-          await fuelService.saveStation(updatedItem);
-          newOverrides[id] = updatedItem;
-          count++;
+          try {
+            await fuelService.saveStation(updatedItem);
+            newOverrides[id] = updatedItem;
+            count++;
+          } catch (saveErr: any) {
+            // Phase 8.3: Handle 409 duplicate gracefully — skip and continue
+            if (saveErr?.duplicate) {
+              dupeSkipped++;
+              console.warn(`[Import] Skipped duplicate: "${item.name}" conflicts with "${saveErr.existingStation?.name || 'unknown'}"`);
+            } else {
+              throw saveErr; // Re-throw non-duplicate errors
+            }
+          }
         }
       }
 
       setStationOverrides(newOverrides);
-      toast.success(`Cloud Sync: Successfully imported ${count} locations.`);
+      if (dupeSkipped > 0) {
+        toast.success(`Cloud Sync: Imported ${count} locations. ${dupeSkipped} duplicate${dupeSkipped > 1 ? 's' : ''} skipped.`, {
+          description: `${dupeSkipped} station${dupeSkipped > 1 ? 's' : ''} matched existing entries and ${dupeSkipped > 1 ? 'were' : 'was'} not re-created.`,
+        });
+      } else {
+        toast.success(`Cloud Sync: Successfully imported ${count} locations.`);
+      }
     } catch (e) {
       console.error("Import failed", e);
       toast.error("Import interrupted. Some stations might not have been saved.");
@@ -557,6 +626,8 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
 
                  setEditingStation(pseudoStation);
                  setVerifyingLearntId(learntLoc.id);
+                 // Phase 7: Pass nearby station data for pre-populating duplicate warning
+                 setVerifyingNearbyStation(learntLoc.nearbyStation || null);
                  setIsAddStationOpen(true);
                }}
              />
@@ -573,6 +644,23 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
         onEditInModal={(station) => {
           setEditingStation(station);
           setIsAddStationOpen(true);
+        }}
+        onDemoteStation={async (stationId) => {
+          try {
+            const result = await fuelService.demoteStation(stationId);
+            toast.success(result.message, {
+              description: result.learntLocationId
+                ? 'A Learnt Location has been created — go to the Learnt STAGING tab to re-match.'
+                : 'No fuel entries were linked to this station.',
+              icon: <ShieldOff className="h-4 w-4 text-amber-500" />,
+              duration: 8000,
+            });
+            setSelectedStation(null);
+            await fetchData();
+          } catch (e: any) {
+            console.error('[Demote] Failed:', e);
+            toast.error(`Demotion failed: ${e.message}`);
+          }
         }}
       />
 
@@ -605,9 +693,34 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
           setIsAddStationOpen(false);
           setEditingStation(null);
           setVerifyingLearntId(null);
+          setVerifyingNearbyStation(null);
         }}
         onAdd={handleManualAdd}
         editStation={editingStation}
+        initialNearbyStation={verifyingNearbyStation}
+        onMergeIntoExisting={async (existingStationId: string) => {
+          // Phase 5: "Merge Into Existing" button in the duplicate warning
+          if (verifyingLearntId) {
+            // Came from Learnt tab → Verify flow: merge the learnt location into the existing station
+            const promoteResult = await api.promoteLearntLocationToMaster({
+              learntId: verifyingLearntId,
+              action: 'merge',
+              targetStationId: existingStationId,
+            });
+            const linked = promoteResult?.linkedEntries || 0;
+            toast.success('Learnt location merged into existing station.', {
+              description: linked > 0
+                ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked. Anomaly resolved.`
+                : 'The learnt location has been cleared from the Evidence Bridge.',
+              icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+            });
+            setVerifyingLearntId(null);
+            await fetchData();
+          } else {
+            // Regular add-station flow: no learnt location to merge — just inform the user
+            toast.info('Station already exists at this location. No new station was created.');
+          }
+        }}
         onUpdate={async (id, stationData) => {
           // Merge the updated fields while preserving existing metadata
           const current = stationOverrides[id] || {};
@@ -637,13 +750,24 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                   action: 'create',
                   stationData: updated,
                 });
-                const linked = promoteResult?.linkedEntries || 0;
-                toast.success('Learnt location verified and promoted to station database.', {
-                  description: linked > 0 
-                    ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked to this station. Anomaly resolved.`
-                    : 'The anomaly has been resolved and removed from the Evidence Bridge.',
-                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
-                });
+
+                if (promoteResult?.autoMerged) {
+                  // Backend detected a duplicate and auto-merged instead of creating
+                  const linked = promoteResult?.linkedEntries || 0;
+                  const mergedName = promoteResult?.data?.name || 'existing station';
+                  toast.success(`Duplicate detected! Auto-merged into "${mergedName}".`, {
+                    description: `${promoteResult.message}${linked > 0 ? ` ${linked} transaction${linked > 1 ? 's' : ''} linked.` : ''}`,
+                    icon: <ShieldCheck className="h-4 w-4 text-amber-500" />,
+                  });
+                } else {
+                  const linked = promoteResult?.linkedEntries || 0;
+                  toast.success('Learnt location verified and promoted to station database.', {
+                    description: linked > 0 
+                      ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked to this station. Anomaly resolved.`
+                      : 'The anomaly has been resolved and removed from the Evidence Bridge.',
+                    icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+                  });
+                }
               } catch (promoteErr) {
                 console.error('[Verify Learnt] Failed to promote learnt location:', promoteErr);
                 toast.warning('Station saved, but failed to clear the learnt location from Evidence Bridge.');

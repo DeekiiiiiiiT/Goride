@@ -23,7 +23,9 @@ import {
     Activity,
     Info,
     Search,
-    Car
+    Car,
+    Settings2,
+    Save
 } from "lucide-react";
 import { api } from "../../services/api";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "../ui/tooltip";
@@ -59,6 +61,15 @@ export function FuelAuditDashboard() {
     const [integrityMetrics, setIntegrityMetrics] = useState<any>(null);
     const [learntLocations, setLearntLocations] = useState<any[]>([]);
     const [stations, setStations] = useState<any[]>([]);
+    const [drivers, setDrivers] = useState<any[]>([]);
+    const [showSettings, setShowSettings] = useState(false);
+    const [frequencyThreshold, setFrequencyThreshold] = useState(3);
+    const [savedThreshold, setSavedThreshold] = useState(3);
+    // Phase 24: efficiency variance threshold (displayed as %, stored as decimal in KV)
+    const [efficiencyThreshold, setEfficiencyThreshold] = useState(30);
+    const [savedEfficiencyThreshold, setSavedEfficiencyThreshold] = useState(30);
+    const [savingConfig, setSavingConfig] = useState(false);
+    const [recalculating, setRecalculating] = useState(false);
 
     // Step 1.3: URL Persistence
     useEffect(() => {
@@ -76,6 +87,32 @@ export function FuelAuditDashboard() {
         }
         window.history.replaceState({}, '', url.toString());
     }, [selectedVehicleId]);
+
+    // Simple check if a string looks like a raw UUID
+    const looksLikeUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s);
+
+    // Driver name resolution: builds a lookup from driverId → display name
+    const resolveDriverName = useMemo(() => {
+        const map = new Map<string, string>();
+        // Index from drivers list
+        for (const d of drivers) {
+            const name = d.name || d.driverName;
+            if (d.id && name) map.set(d.id, name);
+            if (d.driverId && name) map.set(d.driverId, name);
+        }
+        // Index from vehicles (currentDriverId → currentDriverName)
+        for (const v of vehicles) {
+            if (v.currentDriverId && v.currentDriverName && !map.has(v.currentDriverId)) {
+                map.set(v.currentDriverId, v.currentDriverName);
+            }
+        }
+        return (driverId: string | undefined, fallbackName?: string) => {
+            if (fallbackName && !looksLikeUUID(fallbackName)) return fallbackName;
+            if (driverId && map.has(driverId)) return map.get(driverId)!;
+            if (driverId) return driverId.slice(0, 8) + '…';
+            return 'Unknown Driver';
+        };
+    }, [drivers, vehicles]);
 
     const auditCategories = useMemo(() => {
         const counts = {
@@ -143,7 +180,7 @@ export function FuelAuditDashboard() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [statsResponse, flaggedData, vehicleData, fleetStatsResponse, financialData, integrityData, stationsData, learntData] = await Promise.all([
+            const [statsResponse, flaggedData, vehicleData, fleetStatsResponse, financialData, integrityData, stationsData, learntData, driverData, auditConfig] = await Promise.all([
             api.getFuelAuditSummary(selectedVehicleId === "all" ? undefined : selectedVehicleId), 
             api.getFlaggedTransactions(),
             api.getVehicles(),
@@ -151,9 +188,22 @@ export function FuelAuditDashboard() {
             api.getTransactions(),
             api.getIntegrityMetrics(),
             api.getStations(),
-            api.getLearntLocations().catch(() => []) // Step 6.1: Graceful fail for learnt
+            api.getLearntLocations().catch(() => []), // Step 6.1: Graceful fail for learnt
+            api.getDrivers().catch(() => []), // Fetch drivers for name resolution
+            api.getAuditConfig().catch(() => ({ frequencyThreshold: 3, efficiencyThreshold: 0.30 }))
         ]);
             
+            // Load audit config
+            const threshold = Number(auditConfig?.frequencyThreshold) || 3;
+            setFrequencyThreshold(threshold);
+            setSavedThreshold(threshold);
+            // Phase 24: load efficiency threshold (stored as decimal, display as %)
+            const effThreshold = Math.round(Number(auditConfig?.efficiencyThreshold ?? 0.30) * 100);
+            setEfficiencyThreshold(effThreshold);
+            setSavedEfficiencyThreshold(effThreshold);
+            
+            const allDrivers = driverData || [];
+            setDrivers(allDrivers);
             setVehicles(vehicleData || []);
             setLedgerTxs(financialData || []);
             setIntegrityMetrics(integrityData);
@@ -194,6 +244,43 @@ export function FuelAuditDashboard() {
         }
         fetchData();
     }, [selectedVehicleId]);
+
+    const handleSaveConfig = async () => {
+        setSavingConfig(true);
+        try {
+            // Phase 24: save both frequency and efficiency thresholds
+            await api.saveAuditConfig({
+                frequencyThreshold,
+                efficiencyThreshold: efficiencyThreshold / 100  // Convert % to decimal for storage
+            });
+            setSavedThreshold(frequencyThreshold);
+            setSavedEfficiencyThreshold(efficiencyThreshold);
+            toast.success(`Settings updated: Frequency = ${frequencyThreshold}+ swipes, Efficiency = ${efficiencyThreshold}% variance. Run a recalculate to apply to existing records.`);
+        } catch (err) {
+            console.error("Failed to save audit config:", err);
+            toast.error("Failed to save audit settings");
+        } finally {
+            setSavingConfig(false);
+        }
+    };
+
+    const handleRecalculateAll = async () => {
+        setRecalculating(true);
+        try {
+            const result = await api.recalculateAllIntegrity();
+            const txMod = result?.modified ?? 0;
+            const entryMod = result?.entriesModified ?? 0;
+            const effSkipped = result?.efficiencySkippedCount ?? 0;
+            const effThresh = result?.efficiencyThreshold != null ? `${Math.round(result.efficiencyThreshold * 100)}%` : `${efficiencyThreshold}%`;
+            toast.success(`Recalculation complete! ${entryMod} entries & ${txMod} transactions re-scored (efficiency threshold: ${effThresh}, ${effSkipped} skipped due to insufficient data).`);
+            fetchData(); // Refresh dashboard to show updated counts
+        } catch (err) {
+            console.error("Recalculate failed:", err);
+            toast.error("Recalculation failed. Check logs for details.");
+        } finally {
+            setRecalculating(false);
+        }
+    };
 
     const toggleAnomalySelection = (id: string, e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
@@ -491,8 +578,174 @@ export function FuelAuditDashboard() {
                             <X className="h-4 w-4" />
                         </Button>
                     )}
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowSettings(prev => !prev)}
+                        className={`px-2 ${showSettings ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        <Settings2 className="h-4 w-4" />
+                    </Button>
                 </div>
             </div>
+
+            {/* Audit Settings Panel */}
+            <AnimatePresence>
+                {showSettings && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                    >
+                        <Card className="bg-white border-slate-200 shadow-sm border-l-4 border-l-indigo-400">
+                            <CardContent className="p-4">
+                                <div className="flex items-start gap-4">
+                                    <div className="p-2 bg-indigo-50 rounded-lg mt-0.5">
+                                        <Settings2 className="w-4 h-4 text-indigo-600" />
+                                    </div>
+                                    <div className="flex-1 space-y-3">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-slate-900">Audit Detection Settings</h3>
+                                            <p className="text-xs text-slate-500 mt-0.5">Configure how the system detects anomalies. Changes apply to new entries immediately and existing records after a recalculate.</p>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                                    High Frequency Threshold
+                                                </label>
+                                                <p className="text-[11px] text-slate-500 max-w-md">
+                                                    Flag when a <span className="font-semibold text-indigo-600">gas card</span> is used <span className="font-semibold">{frequencyThreshold} or more times</span> within 4 hours on the same vehicle. Cash and reimbursement entries are always exempt.
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    {[2, 3, 4, 5].map(n => (
+                                                        <button
+                                                            key={n}
+                                                            onClick={() => setFrequencyThreshold(n)}
+                                                            className={`w-9 h-9 rounded-lg text-sm font-bold border transition-all ${
+                                                                frequencyThreshold === n
+                                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
+                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                                                            }`}
+                                                        >
+                                                            {n}+
+                                                        </button>
+                                                    ))}
+                                                    <div className="flex items-center gap-1 ml-2">
+                                                        <input
+                                                            type="number"
+                                                            min={2}
+                                                            max={10}
+                                                            value={frequencyThreshold}
+                                                            onChange={e => {
+                                                                const val = parseInt(e.target.value);
+                                                                if (val >= 2 && val <= 10) setFrequencyThreshold(val);
+                                                            }}
+                                                            className="w-16 h-9 rounded-lg border border-slate-200 text-center text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                                        />
+                                                        <span className="text-[10px] text-slate-400 font-medium">custom</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Phase 24: Efficiency Variance Threshold */}
+                                            <div className="space-y-1.5 mt-2">
+                                                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                                    High Consumption Variance Threshold
+                                                </label>
+                                                <p className="text-[11px] text-slate-500 max-w-md">
+                                                    Flag when actual fuel efficiency is <span className="font-semibold text-red-600">{efficiencyThreshold}% worse</span> than the vehicle's <span className="font-semibold">30-day rolling average</span>. Entries with insufficient history (fewer than 3 records in 60 days) are automatically exempt.
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    {[25, 30, 35, 40].map(n => (
+                                                        <button
+                                                            key={n}
+                                                            onClick={() => setEfficiencyThreshold(n)}
+                                                            className={`w-11 h-9 rounded-lg text-sm font-bold border transition-all ${
+                                                                efficiencyThreshold === n
+                                                                    ? 'bg-red-600 text-white border-red-600 shadow-md shadow-red-200'
+                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-red-300 hover:text-red-600'
+                                                            }`}
+                                                        >
+                                                            {n}%
+                                                        </button>
+                                                    ))}
+                                                    <div className="flex items-center gap-1 ml-2">
+                                                        <input
+                                                            type="number"
+                                                            min={15}
+                                                            max={60}
+                                                            value={efficiencyThreshold}
+                                                            onChange={e => {
+                                                                const val = parseInt(e.target.value);
+                                                                if (val >= 15 && val <= 60) setEfficiencyThreshold(val);
+                                                            }}
+                                                            className="w-16 h-9 rounded-lg border border-slate-200 text-center text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                                        />
+                                                        <span className="text-[10px] text-slate-400 font-medium">%</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Save button row */}
+                                        <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    onClick={handleSaveConfig}
+                                                    disabled={savingConfig || (frequencyThreshold === savedThreshold && efficiencyThreshold === savedEfficiencyThreshold)}
+                                                    className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+                                                >
+                                                    <Save className="w-3.5 h-3.5" />
+                                                    {savingConfig ? 'Saving...' : (frequencyThreshold === savedThreshold && efficiencyThreshold === savedEfficiencyThreshold) ? 'Saved' : 'Save'}
+                                                </Button>
+                                                {(frequencyThreshold !== savedThreshold || efficiencyThreshold !== savedEfficiencyThreshold) && (
+                                                    <span className="text-[10px] text-amber-600 font-medium">Unsaved</span>
+                                                )}
+                                        </div>
+
+                                        {/* Recalculate section */}
+                                        <div className="pt-3 mt-1 border-t border-slate-100">
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                                <div className="flex-1">
+                                                    <p className="text-xs font-semibold text-slate-700">Apply to Existing Records</p>
+                                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                                        Saved settings only apply to <em>new</em> entries. Click <strong>Recalculate All</strong> to re-score every existing fuel record with the current rules. This may take a moment.
+                                                    </p>
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={handleRecalculateAll}
+                                                    disabled={recalculating || frequencyThreshold !== savedThreshold || efficiencyThreshold !== savedEfficiencyThreshold}
+                                                    className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-400 whitespace-nowrap"
+                                                >
+                                                    {recalculating ? (
+                                                        <>
+                                                            <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                                                            Recalculating...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Activity className="w-3.5 h-3.5" />
+                                                            Recalculate All
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                            {(frequencyThreshold !== savedThreshold || efficiencyThreshold !== savedEfficiencyThreshold) && (
+                                                <p className="text-[10px] text-amber-600 mt-1.5 font-medium">Save your settings first before recalculating.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Fleet Health Meter */}
             <Card className="bg-gradient-to-r from-indigo-600 to-indigo-800 border-none shadow-lg overflow-hidden relative">
@@ -1443,7 +1696,7 @@ export function FuelAuditDashboard() {
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
                                                                             <div className="flex items-center gap-2 mb-0.5">
-                                                                                <span className="font-bold text-slate-900 text-sm">{tx.driverName || tx.driverId}</span>
+                                                                                <span className="font-bold text-slate-900 text-sm">{resolveDriverName(tx.driverId, tx.driverName)}</span>
                                                                                 {tx.metadata?.auditStatus === 'Observing' && (
                                                                                     <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 text-[9px] h-4">WAIT-AND-SEE</Badge>
                                                                                 )}

@@ -280,7 +280,8 @@ export function ManualTripForm({
 
           {/* Date & Time Row - Only show for manual entries */}
           {!formData.isLiveRecorded && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
+              {/* Date - full width */}
               <div className="space-y-2">
                 <Label>Date</Label>
                 <div className="relative">
@@ -294,24 +295,60 @@ export function ManualTripForm({
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Time</Label>
-                <div className="relative">
-                  <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input 
-                    type="time" 
-                    className="pl-9"
-                    value={formData.time}
-                    onChange={(e) => handleInputChange('time', e.target.value)}
-                    required
-                  />
+              {/* Pickup Time & Dropoff Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Pickup Time</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500" />
+                    <Input 
+                      type="time" 
+                      className="pl-9"
+                      value={formData.time}
+                      onChange={(e) => {
+                        handleInputChange('time', e.target.value);
+                        // Auto-calc duration if both times set
+                        if (formData.endTime && e.target.value) {
+                          const [sh, sm] = e.target.value.split(':').map(Number);
+                          const [eh, em] = formData.endTime.split(':').map(Number);
+                          let diff = (eh * 60 + em) - (sh * 60 + sm);
+                          if (diff < 0) diff += 24 * 60; // crosses midnight
+                          handleInputChange('duration', diff);
+                        }
+                      }}
+                      required
+                    />
+                  </div>
                 </div>
-                {formData.duration && (
-                  <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
-                    ⏱ Duration: {Math.round(formData.duration)} min
-                  </p>
-                )}
+                <div className="space-y-2">
+                  <Label>Dropoff Time</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-rose-400" />
+                    <Input 
+                      type="time" 
+                      className="pl-9"
+                      value={formData.endTime || ''}
+                      onChange={(e) => {
+                        handleInputChange('endTime', e.target.value);
+                        // Auto-calc duration if both times set
+                        if (formData.time && e.target.value) {
+                          const [sh, sm] = formData.time.split(':').map(Number);
+                          const [eh, em] = e.target.value.split(':').map(Number);
+                          let diff = (eh * 60 + em) - (sh * 60 + sm);
+                          if (diff < 0) diff += 24 * 60; // crosses midnight
+                          handleInputChange('duration', diff);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
+              {/* Duration hint */}
+              {formData.duration && formData.duration > 0 && (
+                <p className="text-[10px] text-emerald-600 font-medium text-right -mt-2">
+                  ⏱ Duration: {Math.floor(formData.duration / 60) > 0 ? `${Math.floor(formData.duration / 60)}h ` : ''}{formData.duration % 60} min
+                </p>
+              )}
             </div>
           )}
 

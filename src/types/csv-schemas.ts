@@ -1,10 +1,10 @@
-import { CsvColumn } from "../utils/csv-helper";
+import { CsvColumn, formatDateJM } from "../utils/csv-helper";
 import { FuelEntry } from "./fuel";
 import { ServiceRequest } from "./data";
 import { OdometerReading } from "./vehicle";
 
 export const FUEL_CSV_COLUMNS: CsvColumn<FuelEntry>[] = [
-    { key: 'date', label: 'date' },
+    { key: 'date', label: 'date', formatter: formatDateJM },
     { key: 'vehicleId', label: 'vehicleId' },
     { key: 'driverId', label: 'driverId' },
     { key: 'odometer', label: 'odometer' },
@@ -17,7 +17,7 @@ export const FUEL_CSV_COLUMNS: CsvColumn<FuelEntry>[] = [
 ];
 
 export const SERVICE_CSV_COLUMNS: CsvColumn<ServiceRequest>[] = [
-    { key: 'date', label: 'date' },
+    { key: 'date', label: 'date', formatter: formatDateJM },
     { key: 'vehicleId', label: 'vehicleId' },
     { key: 'type', label: 'type' },
     { key: 'description', label: 'description' },
@@ -27,7 +27,7 @@ export const SERVICE_CSV_COLUMNS: CsvColumn<ServiceRequest>[] = [
 ];
 
 export const ODOMETER_CSV_COLUMNS: CsvColumn<OdometerReading>[] = [
-    { key: 'date', label: 'date' },
+    { key: 'date', label: 'date', formatter: formatDateJM },
     { key: 'vehicleId', label: 'vehicleId' },
     { key: 'value', label: 'value' },
     { key: 'source', label: 'source' },
@@ -35,7 +35,7 @@ export const ODOMETER_CSV_COLUMNS: CsvColumn<OdometerReading>[] = [
 ];
 
 export const CHECKIN_CSV_COLUMNS: CsvColumn<any>[] = [
-    { key: 'date', label: 'date' },
+    { key: 'date', label: 'date', formatter: formatDateJM },
     { key: 'vehicleId', label: 'vehicleId' },
     { key: 'value', label: 'value' },
     { key: 'source', label: 'source' }

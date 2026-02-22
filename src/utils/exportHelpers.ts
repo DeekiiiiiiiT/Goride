@@ -1,6 +1,7 @@
 import { api } from '../services/api';
 import { FinancialTransaction } from '../types/data';
 import { Vehicle, TollTag } from '../types/vehicle';
+import { formatDateJM } from './csv-helper';
 
 export interface UniversalTollExportRow {
     Date: string;
@@ -70,7 +71,7 @@ export async function fetchFullTollHistory(): Promise<UniversalTollExportRow[]> 
             }
 
             return {
-                Date: tx.date.split('T')[0], // YYYY-MM-DD
+                Date: formatDateJM(tx.date), // DD/MM/YYYY — Jamaica standard
                 Time: tx.time || dateObj.toLocaleTimeString('en-GB', { hour12: false }), // HH:mm:ss
                 Amount: tx.amount,
                 Type: type,

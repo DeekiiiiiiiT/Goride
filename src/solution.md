@@ -1,378 +1,404 @@
-# Plus Code-Anchored Geofence Radius Implementation
+# Toll Analytics Implementation Plan
 
-## Problem Statement
+> **Feature:** Toll Analytics dashboard — a dedicated analytics page under Toll Management, modelled after the existing Fuel Performance Analytics (`FuelPerformanceAnalytics.tsx`) but tailored to toll-specific data dimensions (plazas, highways, payment methods, E-Tag adoption).
 
-The geofence radius is currently hardcoded to 150m everywhere:
-- `spatialNormalization.ts` line 39: `station.location?.radius || 150`
-- `SpatialIntegrityMap.tsx` line 150: `feature.properties.radius || 150`
-- `VerifiedStationsTab.tsx` lines 316-317: static text `"High Accuracy"` / `"±150m Match Radius"`
-- `StationOverride` type has no `radius` or `geofenceRadius` field
-- `AddStationModal.tsx` builds `location: { lat, lng }` with no radius
-- `buildContext()` in `StationDatabaseView.tsx` constructs stations without radius
-- Plus Code is never used to derive geofence center or radius
+> **Data source:** Reuses the existing `useTollLogs` hook which fetches all toll transactions, vehicles, drivers, and plazas in one call. All analytics are computed client-side via `useMemo`.
 
-150m (300m diameter) covers ~3 city blocks, far too large for a gas station forecourt.
-
-## Goal
-
-Replace the hardcoded 150m with a **per-station configurable `geofenceRadius`** that:
-1. Defaults intelligently based on Plus Code precision (11-digit ~3m code = 50m radius)
-2. Is editable in the Add/Edit Station modal via a slider
-3. Is persisted to KV and flows through all save/load paths
-4. Is displayed in the Verified Stations table "Regional Efficiency" column
-5. Is used by the Spatial Integrity Map to draw correctly-sized circles
-6. Centers the geofence on Plus Code-decoded coordinates when available
+> **Target file:** `/components/toll/TollAnalytics.tsx` (new standalone page component)
 
 ---
 
-## Phase 1: Data Model + Utility Functions
+## Phase 1 — Foundation: File Scaffold, Routing & Sidebar Wiring
 
-**Goal:** Establish the `geofenceRadius` field in the type system and create the smart-default utility function that maps Plus Code precision to a sensible radius.
+**Goal:** Create the empty component file, hook it into App.tsx routing and the sidebar, so the page is reachable and renders a placeholder. No charts or data processing yet.
 
-### Step 1.1 — Add `geofenceRadius` to `StationProfile`
+### Step 1.1 — Create `/components/toll/TollAnalytics.tsx` with skeleton
 
-**File:** `/types/station.ts`
-**Change:** Add `geofenceRadius?: number;` to the `StationProfile` interface, directly below the `plusCode` field.
-**Why below `plusCode`:** These are conceptually linked — the Plus Code determines the anchor point, and `geofenceRadius` determines the fence around it.
+- Create the file with a basic React functional component.
+- Import `useTollLogs` from `../../hooks/useTollLogs`.
+- Call `useTollLogs()` inside the component to destructure `{ logs, loading, vehicles, drivers, plazas }`.
+- Render a simple placeholder: page title "Toll Analytics" with a subtitle, and a `Loader2` spinner when `loading` is true.
+- Export the component as a named export: `export function TollAnalytics()`.
+- **Verify:** The file compiles, imports are correct, and `useTollLogs` types align with what we destructure.
 
-```ts
-plusCode?: string;
-geofenceRadius?: number; // Configurable geofence radius in meters, derived from Plus Code precision
-```
+### Step 1.2 — Add route in `App.tsx`
 
-### Step 1.2 — Add `geofenceRadius` to `StationOverride`
+- Import `TollAnalytics` at the top: `import { TollAnalytics } from './components/toll/TollAnalytics';`
+- Add a new route line next to the other toll routes (after line ~156): `{currentPage === 'toll-analytics' && <TollAnalytics />}`
+- **Verify:** No duplicate route keys; the component renders when `currentPage` equals `'toll-analytics'`.
 
-**File:** `/types/station.ts`
-**Change:** Add `geofenceRadius?: number;` to the `StationOverride` interface, directly below the `plusCode` field.
-**Why:** Without this, the override (which is what gets saved to KV) can never persist a custom radius.
+### Step 1.3 — Add sidebar item in `AppLayout.tsx`
 
-```ts
-plusCode?: string;
-geofenceRadius?: number; // Configurable geofence radius in meters
-```
+- Add `'toll-analytics'` to the `isTollManagementOpen` array (line ~86) so the Toll Management collapsible auto-opens when this page is active.
+- Add a new `<SidebarMenuSubItem>` inside the Toll Management collapsible section (between Toll Logs and Toll Reconciliation, or at the end — placing it **first** in the list for prominence):
+  - `isActive={currentPage === 'toll-analytics'}`
+  - `onClick={() => onNavigate?.('toll-analytics')}`
+  - Label text: `"Toll Analytics"`
+  - Include a `<Badge>` with text `"New"` using the same styling as the Fueling Analytics badge: `className="bg-indigo-500 text-white border-none h-4 px-1 text-[8px]"`
+- **Verify:** Clicking the sidebar item navigates to the page; the collapsible auto-opens when the page is active.
 
-### Step 1.3 — Create `getDefaultGeofenceRadius()` utility
+### Step 1.4 — Empty state & loading state
 
-**File:** `/utils/plusCode.ts`
-**Change:** Add a new exported function `getDefaultGeofenceRadius(plusCode?: string): number`
-
-**Logic:**
-- If no Plus Code is provided or it's invalid → return `150` (legacy default, keeps backward compatibility)
-- Strip the Plus Code to just digits (remove `+` and any trailing `0`s)
-- Count the digit length to determine precision tier:
-  - `<= 8` digits (~275m cell) → `150`m (cell is already large, wide fence appropriate)
-  - `10` digits (~14m cell) → `75`m (medium precision, tighter fence)
-  - `11` digits (~3m cell) → `50`m (high precision, covers forecourt + parking)
-  - `>= 12` digits (~0.6m cell) → `30`m (ultra-high precision, tight around pumps)
-
-**Rationale for defaults:**
-- A typical gas station forecourt is ~30-60m across
-- Phone GPS drift under open sky is ~5-15m
-- 50m for an 11-digit code gives ~3m anchor precision + 50m buffer = catches real transactions while rejecting ones across the street
-
-### Step 1.4 — Create `getPlusCodeCellSizeMeters()` utility
-
-**File:** `/utils/plusCode.ts`
-**Change:** Add a new exported function that returns the approximate cell dimensions in meters for a given Plus Code. This is useful for contextual display ("Your Plus Code cell is ~3m x 3.5m") and for Phase 5 if we want to draw the cell rectangle.
-
-**Logic:**
-- Use the existing `PAIR_CELL_SIZES` array and `GRID_ROWS`/`GRID_COLUMNS` constants
-- Convert degree-based cell sizes to approximate meters using `1 degree lat ≈ 111,000m` and `1 degree lng ≈ 111,000m * cos(lat)`
-- For Jamaica (~18°N latitude), `cos(18°) ≈ 0.951`, so `1 degree lng ≈ 105,561m`
-- Return `{ latMeters: number, lngMeters: number }` for the cell at the code's precision
-
-### Step 1.5 — Verification checklist
-
-- [ ] `StationProfile.geofenceRadius` exists and is optional `number`
-- [ ] `StationOverride.geofenceRadius` exists and is optional `number`
-- [ ] `getDefaultGeofenceRadius()` returns correct values for each precision tier
-- [ ] `getPlusCodeCellSizeMeters()` returns reasonable meter values
-- [ ] No existing code is broken (both fields are optional, all existing paths unaffected)
+- In `TollAnalytics.tsx`, add an empty-state view that shows when `!loading && logs.length === 0`:
+  - Icon: `Receipt` from lucide-react
+  - Title: "No toll data yet"
+  - Subtitle: "Import toll transactions from the Imports page or add them via Toll Logs to see analytics here."
+- Add a loading state that shows a centered `Loader2` spinner with "Loading toll analytics..." text when `loading` is true.
+- **Verify:** The three states (loading, empty, has-data) all render correctly without errors.
 
 ---
 
-## Phase 2: Persistence Pipeline
+## Phase 2 — KPI Summary Cards (Top Row)
 
-**Goal:** Wire `geofenceRadius` through every save/load/rebuild path so the field is never silently dropped (the same class of bug that previously affected `plusCode`).
+**Goal:** Build the 4 headline KPI cards across the top of the page. These are computed from the `logs` array.
 
-### Step 2.1 — `buildContext()` else branch in `StationDatabaseView.tsx`
+### Step 2.1 — Compute summary statistics via `useMemo`
 
-**File:** `/components/fuel/stations/StationDatabaseView.tsx`
-**Location:** Inside `buildContext()`, the `else` branch (lines ~276-302) where station profiles are explicitly constructed from overrides.
-**Change:** Add `geofenceRadius: override.geofenceRadius,` to the object literal.
-**Why:** This is the exact same pattern that caused the Plus Code disappearing bug. If `geofenceRadius` is not listed here, it will be silently dropped every time the context rebuilds.
+Create a single `useMemo` block (named `summaryStats`) that computes:
 
-### Step 2.2 — `updateStationDetails()` in `StationDatabaseView.tsx`
+- `totalSpend` — Sum of `absAmount` for all usage logs (`isUsage === true`).
+- `totalTopups` — Sum of `absAmount` for all top-up logs (`isUsage === false`).
+- `totalTransactions` — Count of all logs.
+- `usageCount` — Count of usage-only logs.
+- `avgCostPerPassage` — `totalSpend / usageCount` (guard against division by zero).
+- `eTagCount` — Count of usage logs where `paymentMethodDisplay` equals `'E-Tag'`.
+- `eTagRate` — `(eTagCount / usageCount) * 100` (percentage, guard zero).
+- `netPosition` — `totalTopups - totalSpend` (positive = surplus, negative = deficit).
 
-**File:** `/components/fuel/stations/StationDatabaseView.tsx`
-**Location:** Inside `updateStationDetails()` (lines ~131-148), the explicit field mapping.
-**Change:** Add `geofenceRadius: details.geofenceRadius ?? current.geofenceRadius,` (use nullish coalescing `??` not `||` so that `0` is not treated as falsy — even though 0m radius is unlikely, correctness matters).
-**Why:** The inline profile edit path and any future edit path that calls `updateStationDetails` must not silently drop the field.
+**Dependency array:** `[logs]`
 
-### Step 2.3 — `onUpdate` handler (modal edit) in `StationDatabaseView.tsx`
+### Step 2.2 — Card 1: Total Toll Spend
 
-**File:** `/components/fuel/stations/StationDatabaseView.tsx`
-**Location:** The `onUpdate` prop passed to `<AddStationModal>` (around line ~490+).
-**Current code:** `const updated = { ...current, ...stationData, id, status: ..., dataSource: ... }`
-**Analysis:** The `...stationData` spread WILL include `geofenceRadius` if the modal sends it. But if the modal does NOT send it (e.g., user didn't touch the slider), `geofenceRadius` from `...current` would be overwritten to `undefined`. We need to be explicit:
-**Change:** Add `geofenceRadius: stationData.geofenceRadius ?? current.geofenceRadius,` after the `dataSource` line.
+- Use the dark gradient card style from Fuel Analytics (slate-900 to slate-800 with white text).
+- Icon: `TrendingDown` in rose-400 colour (spend is an outflow).
+- Title: "Total Toll Spend".
+- Value: Format `totalSpend` as JMD currency using `Intl.NumberFormat('en-JM', { style: 'currency', currency: 'JMD', minimumFractionDigits: 0 })`.
+- Subtitle: `"{usageCount} passages"`.
+- Include a small badge: "JMD" with a subtle background.
 
-### Step 2.4 — `handleSubmit()` in `AddStationModal.tsx`
+### Step 2.3 — Card 2: Average Cost per Passage
 
-**File:** `/components/fuel/stations/AddStationModal.tsx`
-**Location:** Inside `handleSubmit()`, the `newStation` object construction (lines ~345-360).
-**Change:** Add `geofenceRadius` to the `newStation` object. The value comes from the form state (to be added in Phase 3). For now, use `getDefaultGeofenceRadius(finalPlusCode)` as the value so that even before the UI slider exists, new stations get a smart radius.
-**Import:** Add `getDefaultGeofenceRadius` to the import from `plusCode.ts`.
+- Standard white card.
+- Icon: `Calculator` in blue on a blue-50 background circle.
+- Title: "Avg Cost per Passage".
+- Value: JMD formatted `avgCostPerPassage`.
+- Subtitle: "Per toll transaction".
 
-### Step 2.5 — `handleImportStations()` in `StationDatabaseView.tsx`
+### Step 2.4 — Card 3: E-Tag Adoption Rate
 
-**File:** `/components/fuel/stations/StationDatabaseView.tsx`
-**Location:** Inside `handleImportStations()`, where imported stations are constructed.
-**Change:** If the imported CSV item has a `plusCode`, set `geofenceRadius: getDefaultGeofenceRadius(item.plusCode)`. If not, omit it (will fall back to 150 at render time).
-**Import:** Add `getDefaultGeofenceRadius` to the import from `plusCode.ts`.
+- Standard white card.
+- Icon: `CreditCard` in emerald on an emerald-50 background circle.
+- Title: "E-Tag Adoption".
+- Value: `{eTagRate}%` formatted to 1 decimal place.
+- Include a progress bar (same style as Fuel Analytics' integrity rate bar): green fill width = eTagRate%.
+- Subtitle: `"{eTagCount} of {usageCount} passages via E-Tag"`.
 
-### Step 2.6 — Verification checklist
+### Step 2.5 — Card 4: Net Position (Balance Health)
 
-- [ ] Create a station via modal with a Plus Code → `geofenceRadius` is saved to KV
-- [ ] Close and reopen the edit modal → `geofenceRadius` is pre-filled correctly
-- [ ] `buildContext()` includes `geofenceRadius` for override-only stations
-- [ ] `updateStationDetails()` preserves `geofenceRadius` through inline edits
-- [ ] `onUpdate` handler preserves `geofenceRadius` through modal edits
-- [ ] CSV imports with Plus Codes get a smart default radius
-- [ ] Stations without a Plus Code still work (no regressions)
+- Standard white card.
+- Icon: Conditional — `TrendingUp` in green if positive, `TrendingDown` in red if negative.
+- Title: "Net Position".
+- Value: JMD formatted `netPosition` with sign (+/−).
+- Colour the value text green if positive, red if negative.
+- Subtitle: "Top-ups minus spend".
 
----
+### Step 2.6 — Layout the 4 cards
 
-## Phase 3: Edit Modal UI — Geofence Radius Control
-
-**Goal:** Add a visible, intuitive control to `AddStationModal.tsx` that lets users set and adjust the geofence radius, with smart defaults driven by Plus Code precision.
-
-### Step 3.1 — Add `geofenceRadius` to form state
-
-**File:** `/components/fuel/stations/AddStationModal.tsx`
-**Change:** Add a new state variable `const [geofenceRadius, setGeofenceRadius] = useState<number | null>(null);`
-**Why `null` default:** `null` means "user hasn't explicitly set a value yet, use the smart default." This lets us distinguish between "user chose 50m" vs "system defaulted to 50m."
-
-### Step 3.2 — Pre-fill `geofenceRadius` in edit mode
-
-**File:** `/components/fuel/stations/AddStationModal.tsx`
-**Location:** Inside the `useEffect` that runs when `isOpen` changes (lines ~63-101).
-**Change:** In the `if (editStation)` branch, add:
-```ts
-setGeofenceRadius(editStation.geofenceRadius ?? null);
-```
-**In the `else` (reset) branch, add:**
-```ts
-setGeofenceRadius(null);
-```
-
-### Step 3.3 — Auto-set radius when "Verify GPS" completes
-
-**File:** `/components/fuel/stations/AddStationModal.tsx`
-**Location:** At the END of `handleVerifyFromPlusCode()`, after coordinates and address are populated.
-**Change:** If `geofenceRadius` is still `null` (user hasn't manually set it), auto-calculate:
-```ts
-if (geofenceRadius === null) {
-  setGeofenceRadius(getDefaultGeofenceRadius(fullCode));
-}
-```
-**Why only when null:** If the user previously set a custom radius (e.g., 75m for a truck stop), we don't overwrite it just because they re-verified the GPS.
-
-### Step 3.4 — Add the Geofence Radius UI control
-
-**File:** `/components/fuel/stations/AddStationModal.tsx`
-**Location:** Below the Plus Code / GPS section, before the submit button.
-**UI Design:**
-```
-[Geofence Radius]
-[===========O--------] 50m
-Recommended: 50m (11-digit Plus Code, ~3m precision)
-```
-
-**Components needed:**
-- A `<Label>` with text "Geofence Radius (meters)" and a tooltip explaining what it is
-- A range `<input type="range">` (HTML native slider) with `min={10}` `max={500}` `step={5}`
-- A numeric `<Input>` beside the slider showing the exact value (editable)
-- A contextual hint line showing the smart default and Plus Code precision
-- The hint text changes dynamically based on the Plus Code input:
-  - No Plus Code: "Default: 150m (no Plus Code anchor)"
-  - 11-digit: "Recommended: 50m (11-digit code, ~3m precision)"
-  - 10-digit: "Recommended: 75m (10-digit code, ~14m precision)"
-
-### Step 3.5 — Include `geofenceRadius` in submit
-
-**File:** `/components/fuel/stations/AddStationModal.tsx`
-**Location:** Inside `handleSubmit()`, the `newStation` object.
-**Change:** Add:
-```ts
-geofenceRadius: geofenceRadius ?? getDefaultGeofenceRadius(finalPlusCode),
-```
-This ensures that even if the user never touched the slider, the station still gets a smart default.
-
-### Step 3.6 — Reset on form clear
-
-**File:** `/components/fuel/stations/AddStationModal.tsx`
-**Location:** The form reset logic in the `useEffect` (the `else` branch for non-edit mode).
-**Change:** `setGeofenceRadius(null);` — already covered in Step 3.2 but verify it's in both branches.
-
-### Step 3.7 — Verification checklist
-
-- [ ] Open "Add Station" modal → slider is hidden/shows default until Plus Code is entered
-- [ ] Enter an 11-digit Plus Code → hit Verify GPS → slider auto-sets to 50m
-- [ ] Enter a 10-digit Plus Code → hit Verify GPS → slider auto-sets to 75m
-- [ ] Manually drag slider to 100m → re-verify GPS → slider stays at 100m (no overwrite)
-- [ ] Edit existing station with saved radius → slider pre-fills correctly
-- [ ] Submit → station saves with correct `geofenceRadius` value
-- [ ] Clear/reset form → slider resets to null/default
+- Use `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4` to lay them out responsively.
+- Wrap in the page's `<div className="space-y-6">` container.
+- **Verify:** Cards render with real or zero data, currency formatting is correct, no NaN values appear.
 
 ---
 
-## Phase 4: Verified Stations Table — Dynamic Radius Display
+## Phase 3 — Monthly Spend Trend Chart + Spend by Plaza Chart
 
-**Goal:** Replace the hardcoded "High Accuracy / ±150m Match Radius" in the Regional Efficiency column with real data from the station's `geofenceRadius` and Plus Code precision.
+**Goal:** Build the first row of charts (2-column grid): an area chart showing monthly spend/top-ups over time, and a horizontal bar chart showing spend per plaza.
 
-### Step 4.1 — Import `getPlusCodePrecision` and `getDefaultGeofenceRadius`
+### Step 3.1 — Compute monthly trend data via `useMemo`
 
-**File:** `/components/fuel/stations/VerifiedStationsTab.tsx`
-**Change:** Add to the import from `plusCode.ts`:
-```ts
-import { encodePlusCode, getPlusCodePrecision, getDefaultGeofenceRadius } from '../../../utils/plusCode';
-```
+- Import `subMonths`, `startOfMonth`, `endOfMonth`, `eachMonthOfInterval`, `format` from `date-fns`.
+- Generate an array of the last 6 months using `eachMonthOfInterval`.
+- For each month, filter `logs` to entries within that month's date range.
+- Compute per-month: `spend` (sum absAmount of usage logs), `topups` (sum absAmount of top-up logs), `count` (number of transactions).
+- Return array of `{ name: format(month, 'MMM'), spend, topups, count }`.
+- **Dependency array:** `[logs]`
 
-### Step 4.2 — Replace the hardcoded table cell
+### Step 3.2 — Render the Monthly Toll Spend Trend area chart
 
-**File:** `/components/fuel/stations/VerifiedStationsTab.tsx`
-**Location:** Lines 314-318, the `<TableCell>` for Regional Efficiency.
-**Current code:**
-```tsx
-<TableCell>
-  <div className="flex flex-col text-xs">
-    <span className="text-slate-900 font-medium">High Accuracy</span>
-    <span className="text-slate-500 text-[10px]">±150m Match Radius</span>
-  </div>
-</TableCell>
-```
+- Use `<Card>` with `<CardHeader>` (title: "Monthly Toll Spend Trend", description: "Toll spend and top-ups over the last 6 months.").
+- Use `SafeResponsiveContainer` (imported as `ResponsiveContainer` from `../ui/SafeResponsiveContainer`), height 300.
+- `<AreaChart>` with:
+  - `<defs>` with a `linearGradient` for the spend area (rose/red gradient, matching the spend-is-outflow colour).
+  - `<CartesianGrid>` with `strokeDasharray="3 3"`, `vertical={false}`, `stroke="#f1f5f9"`.
+  - `<XAxis>` with `dataKey="name"`, no axis line, no tick line, fontSize 12.
+  - `<YAxis>` with no axis line, tickFormatter showing JMD abbreviated (e.g., "$50K").
+  - `<Tooltip>` with rounded style, JMD currency formatter.
+  - `<Area>` for `spend` — rose-500 stroke, gradient fill.
+  - `<Area>` for `topups` — emerald-500 stroke, low opacity fill.
+- **Verify:** Chart renders without errors; gradient IDs are unique.
 
-**New code logic:**
-```tsx
-const radius = s.geofenceRadius || getDefaultGeofenceRadius(s.plusCode);
-const precision = s.plusCode ? getPlusCodePrecision(s.plusCode) : null;
-const isCustom = !!s.geofenceRadius;
-const tierColor = radius <= 50 ? 'text-emerald-600' : radius <= 100 ? 'text-amber-600' : 'text-red-600';
-const tierLabel = radius <= 50 ? 'Tight' : radius <= 100 ? 'Standard' : 'Wide';
-const tierBg = radius <= 50 ? 'bg-emerald-50' : radius <= 100 ? 'bg-amber-50' : 'bg-red-50';
-```
+### Step 3.3 — Compute spend-by-plaza data via `useMemo`
 
-**Display:**
-- Line 1: Tier label (e.g., "Tight Guardrail") with color coding
-- Line 2: `±{radius}m` with font-mono, color-coded
-- Line 3 (optional): Plus Code precision if available (e.g., "~3m anchor precision")
-- If the radius is the legacy 150m default and there's no explicit `geofenceRadius`, show a subtle "Legacy Default" indicator
+- Filter to usage logs only.
+- Group by `plazaName` (fall back to `locationRaw` or `"Unknown Plaza"`).
+- Sum `absAmount` per plaza.
+- Sort descending by total spend.
+- Take top 8 plazas.
+- Return array of `{ name: string, spend: number, count: number }`.
+- **Dependency array:** `[logs]`
 
-### Step 4.3 — Update the table header label
+### Step 3.4 — Render the Spend by Plaza horizontal bar chart
 
-**File:** `/components/fuel/stations/VerifiedStationsTab.tsx`
-**Location:** The `<TableHead>` for "Regional Efficiency" (line ~250).
-**Change:** Rename to "Geofence Radius" to be clearer about what the column shows.
+- Use `<Card>` with title "Spend by Plaza" and description "Top plazas ranked by total toll spend."
+- Use `SafeResponsiveContainer`, height 300.
+- `<BarChart>` with `layout="vertical"`, `margin={{ left: 40 }}`.
+- `<YAxis>` with `dataKey="name"`, type category, truncated labels (fontSize 10).
+- `<XAxis>` type number, hidden or with JMD tick formatter.
+- `<Bar>` with `dataKey="spend"`, indigo-500 fill, radius `[0, 4, 4, 0]`, barSize 18.
+- `<Tooltip>` with JMD formatter.
+- **Verify:** Bar labels don't overflow; chart handles 0-8 plazas gracefully.
 
-### Step 4.4 — Verification checklist
+### Step 3.5 — Layout the two charts
 
-- [ ] Station with `geofenceRadius: 50` shows "Tight Guardrail / ±50m" in green
-- [ ] Station with `geofenceRadius: 150` shows "Wide Guardrail / ±150m" in red
-- [ ] Station without `geofenceRadius` (legacy) shows default based on Plus Code
-- [ ] Station without Plus Code or radius shows "±150m / Legacy Default"
-- [ ] Plus Code precision is shown when available
-- [ ] Column header says "Geofence Radius"
+- Wrap both in `<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">`.
+- **Verify:** Responsive — stacks on mobile, side-by-side on desktop.
 
 ---
 
-## Phase 5: Spatial Integrity Map — Render Real Geofences
+## Phase 4 — Vehicle Spend Chart + Payment Method Distribution Chart
 
-**Goal:** Make the Spatial Audit map draw geofence circles using the station's actual `geofenceRadius` and, when a Plus Code exists, center the circle on the Plus Code-decoded coordinates (the true source of truth).
+**Goal:** Build the second row of charts: toll spend by vehicle (bar chart), and payment method distribution (pie/donut chart).
 
-### Step 5.1 — Update `normalizeStationFeature()` in `spatialNormalization.ts`
+### Step 4.1 — Compute spend-by-vehicle data via `useMemo`
 
-**File:** `/utils/spatialNormalization.ts`
-**Location:** `normalizeStationFeature()` function (lines 24-45).
-**Changes:**
-1. Import `decodePlusCode` and `getDefaultGeofenceRadius` from `./plusCode`
-2. **Radius:** Change `radius: station.location?.radius || 150` to:
-   ```ts
-   radius: station.geofenceRadius ?? getDefaultGeofenceRadius(station.plusCode),
-   ```
-3. **Coordinates (geofence center):** If the station has a Plus Code, decode it and use those coordinates as the geofence center. The `station.location` coordinates may have been manually entered or drifted, but the Plus Code is the canonical anchor:
-   ```ts
-   // Prefer Plus Code-decoded coordinates for geofence center (source of truth)
-   let geofenceLat = lat;
-   let geofenceLng = lng;
-   if (station.plusCode) {
-     const decoded = decodePlusCode(station.plusCode);
-     if (decoded) {
-       geofenceLat = decoded.lat;
-       geofenceLng = decoded.lng;
-     }
-   }
-   ```
-4. Add `geofenceCenter: [geofenceLat, geofenceLng]` and `hasPlusCodeAnchor: !!station.plusCode` to `properties`
+- Filter to usage logs only.
+- Group by `vehicleId` (fall back to `vehicleName` for grouping display).
+- For each vehicle, sum `absAmount` and count flagged logs (where `status === 'Flagged'`).
+- Resolve vehicle display name using `vehicleName` field from logs.
+- Sort descending by total spend.
+- Take top 5.
+- Return array of `{ name: string, spend: number, flags: number, count: number }`.
+- **Dependency array:** `[logs]`
 
-### Step 5.2 — Update `normalizeGeofenceFeature()` in `spatialNormalization.ts`
+### Step 4.2 — Render the Toll Spend by Vehicle horizontal bar chart
 
-**File:** `/utils/spatialNormalization.ts`
-**Location:** `normalizeGeofenceFeature()` function (lines 99-115).
-**Change:** Same radius and coordinate logic as Step 5.1 for consistency.
+- Same pattern as Fuel Analytics' "Integrity Health by Vehicle" chart.
+- `<BarChart layout="vertical">` with `margin={{ left: 50 }}`.
+- `<YAxis dataKey="name">` — vehicle plate/name labels.
+- `<Bar dataKey="spend">` with conditional `<Cell>` colouring: red (`#f43f5e`) if `flags > 0`, indigo (`#6366f1`) otherwise.
+- Title: "Toll Spend by Vehicle", description: "Top 5 vehicles by toll cost. Red bars indicate flagged transactions."
+- **Verify:** Red/indigo colouring works; empty state shows "No vehicle data available" message.
 
-### Step 5.3 — Update geofence drawing in `SpatialIntegrityMap.tsx`
+### Step 4.3 — Compute payment method distribution via `useMemo`
 
-**File:** `/components/fuel/stations/SpatialIntegrityMap.tsx`
-**Location:** The station geofence block (lines 147-162).
-**Changes:**
-1. Use `feature.properties.geofenceCenter` as the circle center instead of `[lat, lng]` (the station pin location). This means the pin and the geofence may be in slightly different positions — that's correct, because the pin shows where the station was registered and the geofence shows the Plus Code anchor.
-2. Remove the `|| 150` fallback from `const radius = feature.properties.radius || 150;` — the normalization layer now handles defaults.
-3. Differentiate visual style:
-   - Plus Code-anchored geofence: solid border, slightly thicker weight
-   - Non-Plus Code geofence: dashed border (less trustworthy anchor)
+- Filter to usage logs only.
+- Group by `paymentMethodDisplay` (values: "E-Tag", "Cash", "Card", "Unknown", etc.).
+- Count transactions and sum spend per method.
+- Return array of `{ name: string, value: number, spend: number, count: number }`.
+- Define a colour map: E-Tag = emerald-500, Cash = amber-500, Card = blue-500, Unknown = slate-400.
+- **Dependency array:** `[logs]`
 
-### Step 5.4 — Update station popup in `SpatialIntegrityMap.tsx`
+### Step 4.4 — Render the Payment Method Distribution pie chart
 
-**File:** `/components/fuel/stations/SpatialIntegrityMap.tsx`
-**Location:** The station popup HTML (lines 182-208).
-**Changes:**
-1. Show "Guardrail Radius: {radius}m" with the actual value (already works, but now shows real data)
-2. Add a line for Plus Code precision if available: "Anchor Precision: ~3m (11-digit)"
-3. Add an indicator: "Plus Code Anchored" badge (green) or "Coordinate Only" badge (amber)
-4. Show whether the radius was explicitly set or auto-defaulted
+- Import `PieChart`, `Pie`, `Cell` from recharts.
+- Use a donut style: `innerRadius={60}`, `outerRadius={100}`.
+- `<Cell>` for each slice using the colour map.
+- Custom centre label showing total transaction count.
+- `<Tooltip>` showing method name, count, and spend (JMD).
+- Legend below the chart showing method name + percentage.
+- Title: "Payment Method Split", description: "Distribution of toll payments by method."
+- **Verify:** Donut renders; legend is readable; handles edge case where only 1 method exists.
 
-### Step 5.5 — Verification checklist
+### Step 4.5 — Layout the two charts
 
-- [ ] Station with Plus Code + `geofenceRadius: 50` → 50m circle centered on Plus Code coordinates
-- [ ] Station without Plus Code → circle centered on `station.location`, radius from `geofenceRadius` or 150m default
-- [ ] Station with Plus Code but no explicit radius → auto-defaults based on Plus Code precision
-- [ ] Geofence visually covers just the gas station area (not 3 city blocks)
-- [ ] Popup shows correct radius, Plus Code precision, and anchor type
-- [ ] Drift lines still connect fueling snapshots to station pin (not to geofence center)
-- [ ] No Leaflet rendering errors or crashes
-- [ ] Dead Zones and Heatmap layers unaffected
-- [ ] Legend still accurate
+- Same 2-column grid as Phase 3: `grid grid-cols-1 lg:grid-cols-2 gap-6`.
 
 ---
 
-## File Change Summary
+## Phase 5 — Highway Corridor Spend + Driver Spend Charts
 
-| File | Phase | Changes |
-|------|-------|---------|
-| `/types/station.ts` | 1 | Add `geofenceRadius` to both interfaces |
-| `/utils/plusCode.ts` | 1 | Add `getDefaultGeofenceRadius()` and `getPlusCodeCellSizeMeters()` |
-| `/components/fuel/stations/StationDatabaseView.tsx` | 2 | Wire `geofenceRadius` through `buildContext`, `updateStationDetails`, `onUpdate`, `handleImportStations` |
-| `/components/fuel/stations/AddStationModal.tsx` | 2, 3 | Include `geofenceRadius` in submit; add slider UI + form state |
-| `/components/fuel/stations/VerifiedStationsTab.tsx` | 4 | Replace hardcoded "±150m" with dynamic radius display |
-| `/utils/spatialNormalization.ts` | 5 | Use `geofenceRadius` and Plus Code center in feature normalization |
-| `/components/fuel/stations/SpatialIntegrityMap.tsx` | 5 | Draw geofences with real radius and Plus Code center; update popup |
+**Goal:** Build the third row of charts: spend grouped by highway, and top drivers by toll cost.
+
+### Step 5.1 — Compute spend-by-highway data via `useMemo`
+
+- Filter to usage logs only.
+- Group by `highway` field (fall back to `"Unknown Highway"` if null).
+- Sum `absAmount` per highway, count transactions.
+- Sort descending by spend.
+- Return array of `{ name: string, spend: number, count: number }`.
+- **Dependency array:** `[logs]`
+
+### Step 5.2 — Render the Spend by Highway Corridor bar chart
+
+- Use a **vertical bar chart** (not horizontal) since highway names are short enough for X-axis labels.
+- `<BarChart>` with `<XAxis dataKey="name">`, angled labels if needed (`angle={-20}`).
+- `<Bar dataKey="spend">` with indigo gradient fill.
+- `<Tooltip>` with JMD formatter and transaction count.
+- Title: "Spend by Highway Corridor", description: "Toll spend distributed across highway networks."
+- **Verify:** Labels don't overlap; handles 1–5 highways gracefully.
+
+### Step 5.3 — Compute spend-by-driver data via `useMemo`
+
+- Filter to usage logs only.
+- Group by `driverId` (use `driverDisplayName` for the label).
+- Sum `absAmount` per driver, count flagged transactions.
+- Sort descending by spend.
+- Take top 5.
+- Return array of `{ name: string, spend: number, flags: number, count: number }`.
+- **Dependency array:** `[logs]`
+
+### Step 5.4 — Render the Toll Spend by Driver horizontal bar chart
+
+- Exactly mirrors the Fuel Analytics "Fuel Spend by Driver" chart pattern.
+- `<BarChart layout="vertical">` with left margin for name labels.
+- Conditional `<Cell>` colouring: red if flags > 0, indigo otherwise.
+- `<Tooltip>` with JMD formatter.
+- Title: "Toll Spend by Driver" with `<Users>` icon, description: "Top 5 drivers ranked by total toll cost. Red bars indicate drivers with flagged transactions."
+- Empty state: "No driver data available." centered message.
+- **Verify:** Driver names display correctly; flags colouring works.
+
+### Step 5.5 — Layout the two charts
+
+- Same 2-column grid pattern.
 
 ---
 
-## Risk Mitigation
+## Phase 6 — Insights Panel (Anomaly-Style Cards)
 
-- **Backward compatibility:** All fields are optional with sensible fallbacks. Existing stations without `geofenceRadius` get auto-defaults via `getDefaultGeofenceRadius()`.
-- **No data loss:** We use `??` (nullish coalescing) not `||` for radius to avoid treating `0` as falsy.
-- **Same bug class as Plus Code:** Every explicit object construction (`buildContext` else branch, `updateStationDetails`, `onUpdate`) must include `geofenceRadius` — we check all paths in Phase 2.
-- **Map stability:** Leaflet cleanup fixes from previous work remain intact. No changes to map initialization or teardown.
+**Goal:** Build the bottom insights section — two side-by-side insight cards highlighting actionable patterns, modelled after Fuel Analytics' "Anomaly Insights" section.
+
+### Step 6.1 — Compute insight data via `useMemo`
+
+Build an `insights` memo that computes:
+
+- **Highest-Cost Vehicles:** Top 3 vehicles by toll spend with their flag counts (reuse `vehicleSpendData` from Phase 4 or recompute).
+- **Cash Overpay Candidates:** Vehicles that have more than 30% of their toll transactions paid by Cash (meaning they could save by switching to E-Tag). For each, calculate: total cash toll spend, estimated savings (e.g., 10-15% tag discount — use a configurable constant `TAG_DISCOUNT_RATE = 0.10`).
+- **Flagged Transaction Summary:** Count of transactions with status "Flagged" grouped by plaza, for the flagged-plaza insight.
+- **Dependency array:** `[logs]`
+
+### Step 6.2 — Render the "Highest-Cost Vehicles" insight card
+
+- Styled like Fuel Analytics' "High Efficiency Risk" card: bg-slate-50 rounded-xl border.
+- Title icon: `TrendingDown` in red.
+- Title: "Highest Toll Spend".
+- List top 3 vehicles with:
+  - Avatar circle showing first 2 letters of plate.
+  - Plate number (bold) and vehicle model (subtitle).
+  - Badge showing total spend in JMD.
+  - If flags > 0, show a red "X Flags" badge.
+- Empty state: "All vehicles within normal spend range."
+
+### Step 6.3 — Render the "Cash Overpay Opportunity" insight card
+
+- Title icon: `CreditCard` in amber.
+- Title: "E-Tag Savings Opportunity".
+- List vehicles with high cash usage:
+  - Avatar circle in amber.
+  - Vehicle plate and "X% cash payments" subtitle.
+  - Badge showing estimated annual savings: `"{estimatedSavings} potential savings"`.
+- Empty state: "All vehicles are using E-Tag efficiently."
+
+### Step 6.4 — Layout the insight cards
+
+- Wrap in a `<Card>` with header (title: "Toll Insights", icon: `Zap` in orange, description: "Actionable patterns detected from your toll transaction data.").
+- Inside `<CardContent>`, use `grid grid-cols-1 md:grid-cols-2 gap-4`.
+- **Verify:** Both cards render; empty states display when no matching data.
+
+---
+
+## Phase 7 — Reconciliation Status Donut + Parish Heatmap
+
+**Goal:** Add a final row with a reconciliation status overview (donut chart) and a parish-level spend summary table, then do a full polish pass.
+
+### Step 7.1 — Compute reconciliation status data via `useMemo`
+
+- Group all logs by `statusDisplay` (Completed, Pending, Flagged, Reconciled, Void, etc.).
+- Count transactions per status.
+- Define colour map: Completed = emerald, Pending = amber, Flagged = red, Reconciled = blue, Void = slate.
+- Return array of `{ name: string, value: number, color: string }`.
+- **Dependency array:** `[logs]`
+
+### Step 7.2 — Render the Reconciliation Status donut chart
+
+- Same donut pattern as Phase 4's payment method chart.
+- `innerRadius={55}`, `outerRadius={95}`.
+- Centre label: total transaction count.
+- Legend below with status name, count, and colour.
+- Title: "Reconciliation Overview", description: "Transaction status distribution across all toll records."
+
+### Step 7.3 — Compute parish-level spend data via `useMemo`
+
+- Group usage logs by `parish` field (fall back to "Unknown").
+- Sum `absAmount` per parish, count transactions, calculate average.
+- Sort descending by spend.
+- Return array of `{ parish: string, spend: number, count: number, avg: number }`.
+- **Dependency array:** `[logs]`
+
+### Step 7.4 — Render the Parish Spend Summary as a compact table
+
+- Use a `<Card>` with title "Spend by Parish" and description "Toll expenditure grouped by Jamaican parish."
+- Render a small `<Table>` with columns: Parish, Transactions, Total Spend, Avg per Passage.
+- Format currency as JMD.
+- Highlight the top-spending parish row with a subtle indigo-50 background.
+- If no parish data, show "No parish data available" placeholder.
+
+### Step 7.5 — Layout the two components
+
+- Same 2-column grid.
+
+### Step 7.6 — Full polish pass
+
+- Ensure all JMD currency formatting uses the same helper function (define once at top of file).
+- Ensure all chart gradient IDs are unique (prefix with `toll-` to avoid collision with fuel charts if both are in DOM).
+- Ensure all `<Tooltip>` contentStyles are consistent (12px border-radius, no border, shadow).
+- Ensure all empty/loading states are covered.
+- Ensure page title section at top includes: `<Receipt>` icon, "Toll Analytics" title, subtitle "Comprehensive analysis of your fleet's toll expenditure", and a refresh button that calls the hook's refetch.
+- Test responsive layout: verify all grids stack on mobile.
+- **Verify:** Full page renders without console errors; all charts display; no NaN or undefined values.
+
+---
+
+## Phase 8 — Date Format Compliance & Final QA ✅ COMPLETED
+
+**Goal:** Ensure DD/MM/YYYY date formatting is used throughout, and do a final quality-assurance pass.
+
+### Step 8.1 — Date format audit ✅
+
+- All date displays in tooltips use `formatJMD()` for JMD amounts; no individual dates appear in tooltips.
+- Monthly axis labels use `MMM yyyy` (abbreviated month names) which are fine as-is.
+- No DD/MM/YYYY conversion was needed since no tooltip or label shows individual date values.
+
+### Step 8.2 — Remove any debug console.logs ✅
+
+- Zero `console.log` statements found in TollAnalytics.tsx.
+- Do NOT touch `console.log` statements in other files (the `[TankCap Debug]` one in FuelLogTable.tsx is noted but not our scope).
+
+### Step 8.3 — Final type-safety check ✅
+
+- **Fixed:** Restored missing `import React, { useMemo } from 'react'` (critical bug — was lost during Phase 6/7 edits).
+- No `any` types used.
+- All `useMemo` dependency arrays are `[logs]` — complete and correct.
+- All recharts `.map()` calls have unique key props.
+
+### Step 8.4 — Cross-reference with Fuel Analytics consistency ✅
+
+- **Fixed:** Bar chart `radius` aligned from `[0, 6, 6, 0]` to `[0, 4, 4, 0]` matching FuelPerformanceAnalytics.
+- Tooltip styles identical: `{ borderRadius: '12px', border: 'none', boxShadow: '...' }`.
+- CartesianGrid identical: `strokeDasharray="3 3"`, `stroke="#f1f5f9"`.
+- Dark gradient hero card identical: `bg-gradient-to-br from-slate-900 to-slate-800`.
+- Layout spacing identical: `space-y-6`.
+- Gradient IDs unique: `tollSpendGrad`, `tollTopupGrad` (vs Fuel's `colorLiters`).
+- Stale comment updated.
+
+---
+
+## Summary — File Manifest
+
+| File | Action | Phase |
+|------|--------|-------|
+| `/components/toll/TollAnalytics.tsx` | **Create** | Phase 1 (scaffold), Phases 2–7 (content), Phase 8 (polish) |
+| `/App.tsx` | **Edit** — add import + route | Phase 1 |
+| `/components/layout/AppLayout.tsx` | **Edit** — add sidebar item + update open-check array | Phase 1 |
+| `/solution.md` | **Edit** — this plan | Pre-work |
+
+No backend changes. No new hooks. No new types. All data comes from the existing `useTollLogs` hook.

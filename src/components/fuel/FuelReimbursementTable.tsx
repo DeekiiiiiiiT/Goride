@@ -61,10 +61,19 @@ export function FuelReimbursementTable({
 
     // Find the settlement transaction for a given source ID
     const findSettlementTx = (sourceId: string) => {
-        return transactions.find(t => 
+        // Check for automated RideShare settlement
+        const autoSettlement = transactions.find(t => 
             t.metadata?.sourceId === sourceId && 
             t.metadata?.settlementType === 'RideShare_Cash_Offset'
         );
+        if (autoSettlement) return autoSettlement;
+        
+        // Check for Cash Wallet credit (from Phase 4)
+        const walletCredit = transactions.find(t => 
+            t.metadata?.fuelCreditSourceId === sourceId &&
+            t.category === 'Fuel Reimbursement Credit'
+        );
+        return walletCredit || null;
     };
 
     // Filter mainly for Reimbursements. 
@@ -152,193 +161,226 @@ export function FuelReimbursementTable({
         }
     };
 
-    const renderTable = (data: FinancialTransaction[], showActions = false) => (
-        <div className="rounded-md border bg-white">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Driver</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Settled</TableHead>
-                        <TableHead>Details</TableHead>
-                        <TableHead>Receipt</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {data.length === 0 ? (
+    const renderTable = (data: FinancialTransaction[], showActions = false) => {
+        // Helper: resolve a display-friendly description, falling back to vendor or linked log data
+        const resolveDescription = (tx: FinancialTransaction) => {
+            const desc = tx.description || '';
+            // If the stored description doesn't contain "Unknown", use it as-is
+            if (desc && !desc.toLowerCase().includes('unknown')) return desc;
+            // Try vendor field
+            if (tx.vendor && !tx.vendor.toLowerCase().includes('unknown')) {
+                return `${tx.category || 'Fuel'} Expense - ${tx.vendor}`;
+            }
+            // Try merchant field
+            if ((tx as any).merchant && !(tx as any).merchant.toLowerCase().includes('unknown')) {
+                return `${tx.category || 'Fuel'} Expense - ${(tx as any).merchant}`;
+            }
+            // Try metadata parentCompany
+            if (tx.metadata?.parentCompany) {
+                return `${tx.category || 'Fuel'} Expense - ${tx.metadata.parentCompany}`;
+            }
+            // Try linked fuel log
+            const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
+            if (linkedLog) {
+                const name = linkedLog.vendor || linkedLog.location || linkedLog.stationName;
+                if (name && !name.toLowerCase().includes('unknown')) {
+                    return `${tx.category || 'Fuel'} Expense - ${name}`;
+                }
+            }
+            // Last resort — show a cleaner label than "Unknown"
+            return `${tx.category || 'Fuel'} Expense - Unverified Station`;
+        };
+
+        return (
+            <div className="rounded-md border bg-white">
+                <Table>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                                No records found.
-                            </TableCell>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Driver</TableHead>
+                            <TableHead>Amount</TableHead>
+                            <TableHead>Settled</TableHead>
+                            <TableHead>Details</TableHead>
+                            <TableHead>Receipt</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                    ) : (
-                        data.map((tx) => (
-                            <TableRow key={tx.id}>
-                                <TableCell className="font-medium">
-                                    {formatDate(tx.date)}
-                                    <div className="text-xs text-slate-500">{tx.time}</div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-medium">
-                                            {tx.driverName?.charAt(0) || 'D'}
-                                        </div>
-                                        <span>{tx.driverName || 'Unknown'}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell className="font-semibold text-slate-900">
-                                    <div className="flex flex-col">
-                                        <span>${Math.abs(tx.amount).toFixed(2)}</span>
-                                        {(() => {
-                                            const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
-                                            if (!linkedLog) return null;
-
-                                            const amountMismatch = Math.abs(Math.abs(tx.amount) - linkedLog.amount) > 0.01;
-
-                                            return (
-                                                <div className="flex items-center gap-1 mt-1">
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Badge variant="outline" className={cn(
-                                                                "text-[8px] h-3.5 px-1 font-bold tracking-tighter uppercase",
-                                                                amountMismatch ? "border-amber-500 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-400"
-                                                            )}>
-                                                                {amountMismatch ? "Mismatch" : "Linked"}
-                                                            </Badge>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            {amountMismatch ? (
-                                                                <div className="space-y-1">
-                                                                    <p className="font-bold text-amber-600">Log Mismatch Detected</p>
-                                                                    <p className="text-xs text-slate-500">Ledger: ${Math.abs(tx.amount).toFixed(2)}</p>
-                                                                    <p className="text-xs text-slate-500">Log: ${linkedLog.amount.toFixed(2)}</p>
-                                                                    <p className="text-[10px] text-slate-400 mt-1 italic">Synchronization may be pending.</p>
-                                                                </div>
-                                                            ) : (
-                                                                <p className="text-xs">Synchronized with Fuel Log</p>
-                                                            )}
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    {tx.status === 'Approved' ? (
-                                        (() => {
-                                            const settlement = findSettlementTx(tx.id);
-                                            return settlement ? (
-                                                <div className="flex flex-col">
-                                                    <span className="text-emerald-600 font-semibold">${settlement.amount.toFixed(2)}</span>
-                                                    <span className="text-[10px] text-slate-400">Ledger Sync: OK</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-slate-400 text-xs italic">Pending sync</span>
-                                            );
-                                        })()
-                                    ) : (
-                                        <span className="text-slate-300">-</span>
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex flex-col max-w-[200px]">
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <span className="truncate text-sm font-medium">{tx.description}</span>
-                                            {tx.metadata?.source && (
-                                                <Badge variant="secondary" className={cn(
-                                                    "text-[10px] h-5 px-1.5 font-normal border hover:bg-slate-200 transition-colors",
-                                                    tx.metadata.source === 'Fuel Log' || tx.metadata.source === 'Bulk Log' 
-                                                        ? "bg-blue-50 text-blue-700 border-blue-200" 
-                                                        : "bg-slate-100 text-slate-600 border-slate-200"
-                                                )}>
-                                                    {tx.metadata.source}
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        {tx.odometer && <span className="text-xs text-slate-500">Odo: {tx.odometer} km</span>}
-                                        <div className="flex gap-2">
-                                            {tx.quantity && <span className="text-xs text-slate-500">Vol: {tx.quantity} L</span>}
-                                            {(tx.metadata?.pricePerLiter || (tx.quantity && tx.amount)) && (
-                                                <span className="text-xs text-slate-400">
-                                                    @{tx.metadata?.pricePerLiter 
-                                                        ? Number(tx.metadata.pricePerLiter).toFixed(3) 
-                                                        : (Math.abs(tx.amount) / tx.quantity!).toFixed(2)}/L
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    {tx.receiptUrl ? (
-                                        <div className="relative h-10 w-10 overflow-hidden rounded border border-slate-200 group cursor-pointer" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}>
-                                            <ImageWithFallback src={tx.receiptUrl} alt="Receipt" className="h-full w-full object-cover" />
-                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                                        </div>
-                                    ) : (
-                                        <span className="text-xs text-slate-400 italic">No receipt</span>
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    {getStatusBadge(tx.status)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }} title="View Details">
-                                            <Eye className="h-4 w-4" />
-                                        </Button>
-
-                                        {/* Edit Button - Enabled for History and Pending to allow metadata repair */}
-                                        {onEdit && (
-                                            tx.metadata?.source === 'Manual' || 
-                                            tx.metadata?.source === 'Bulk Manual' || 
-                                            tx.metadata?.source === 'Manual Request' ||
-                                            tx.metadata?.source === 'Maintenance Repair' || 
-                                            !tx.metadata?.source
-                                        ) && (
-                                            <Button 
-                                                size="sm" 
-                                                variant="outline" 
-                                                onClick={() => onEdit(tx)} 
-                                                title="Edit Transaction"
-                                                className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-                                            >
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                        )}
-                                        
-                                        {showActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
-                                            <>
-                                                {onDelete && (
-                                                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)} title="Delete">
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                            </>
-                                        )}
-
-                                        {showActions && (
-                                            <>
-                                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }} title="Approve">
-                                                    <Check className="h-4 w-4" />
-                                                </Button>
-                                                <Button size="sm" variant="destructive" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('reject'); }} title="Reject">
-                                                    <X className="h-4 w-4" />
-                                                </Button>
-                                            </>
-                                        )}
-                                    </div>
+                    </TableHeader>
+                    <TableBody>
+                        {data.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                                    No records found.
                                 </TableCell>
                             </TableRow>
-                        ))
-                    )}
-                </TableBody>
-            </Table>
-        </div>
-    );
+                        ) : (
+                            data.map((tx) => (
+                                <TableRow key={tx.id}>
+                                    <TableCell className="font-medium">
+                                        {formatDate(tx.date)}
+                                        <div className="text-xs text-slate-500">{tx.time}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-medium">
+                                                {tx.driverName?.charAt(0) || 'D'}
+                                            </div>
+                                            <span>{tx.driverName || 'Unknown'}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="font-semibold text-slate-900">
+                                        <div className="flex flex-col">
+                                            <span>${Math.abs(tx.amount).toFixed(2)}</span>
+                                            {(() => {
+                                                const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
+                                                if (!linkedLog) return null;
+
+                                                const amountMismatch = Math.abs(Math.abs(tx.amount) - linkedLog.amount) > 0.01;
+
+                                                return (
+                                                    <div className="flex items-center gap-1 mt-1">
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Badge variant="outline" className={cn(
+                                                                    "text-[8px] h-3.5 px-1 font-bold tracking-tighter uppercase",
+                                                                    amountMismatch ? "border-amber-500 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-400"
+                                                                )}>
+                                                                    {amountMismatch ? "Mismatch" : "Linked"}
+                                                                </Badge>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                {amountMismatch ? (
+                                                                    <div className="space-y-1">
+                                                                        <p className="font-bold text-amber-600">Log Mismatch Detected</p>
+                                                                        <p className="text-xs text-slate-500">Ledger: ${Math.abs(tx.amount).toFixed(2)}</p>
+                                                                        <p className="text-xs text-slate-500">Log: ${linkedLog.amount.toFixed(2)}</p>
+                                                                        <p className="text-[10px] text-slate-400 mt-1 italic">Synchronization may be pending.</p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-xs">Synchronized with Fuel Log</p>
+                                                                )}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        {tx.status === 'Approved' ? (
+                                            (() => {
+                                                const settlement = findSettlementTx(tx.id);
+                                                return settlement ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="text-emerald-600 font-semibold">${settlement.amount.toFixed(2)}</span>
+                                                        <span className="text-[10px] text-slate-400">
+                                                            {settlement.category === 'Fuel Reimbursement Credit' ? 'Wallet Credit: OK' : 'Ledger Sync: OK'}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-slate-400 text-xs italic">Pending sync</span>
+                                                );
+                                            })()
+                                        ) : (
+                                            <span className="text-slate-300">-</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col max-w-[200px]">
+                                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                                                <span className="truncate text-sm font-medium">{resolveDescription(tx)}</span>
+                                                {tx.metadata?.source && (
+                                                    <Badge variant="secondary" className={cn(
+                                                        "text-[10px] h-5 px-1.5 font-normal border hover:bg-slate-200 transition-colors",
+                                                        tx.metadata.source === 'Fuel Log' || tx.metadata.source === 'Bulk Log' 
+                                                            ? "bg-blue-50 text-blue-700 border-blue-200" 
+                                                            : "bg-slate-100 text-slate-600 border-slate-200"
+                                                    )}>
+                                                        {tx.metadata.source}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            {tx.odometer && <span className="text-xs text-slate-500">Odo: {tx.odometer} km</span>}
+                                            <div className="flex gap-2">
+                                                {tx.quantity && <span className="text-xs text-slate-500">Vol: {tx.quantity} L</span>}
+                                                {(tx.metadata?.pricePerLiter || (tx.quantity && tx.amount)) && (
+                                                    <span className="text-xs text-slate-400">
+                                                        @{tx.metadata?.pricePerLiter 
+                                                            ? Number(tx.metadata.pricePerLiter).toFixed(3) 
+                                                            : (Math.abs(tx.amount) / tx.quantity!).toFixed(2)}/L
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        {tx.receiptUrl ? (
+                                            <div className="relative h-10 w-10 overflow-hidden rounded border border-slate-200 group cursor-pointer" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}>
+                                                <ImageWithFallback src={tx.receiptUrl} alt="Receipt" className="h-full w-full object-cover" />
+                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-slate-400 italic">No receipt</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {getStatusBadge(tx.status)}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }} title="View Details">
+                                                <Eye className="h-4 w-4" />
+                                            </Button>
+
+                                            {/* Edit Button - Enabled for History and Pending to allow metadata repair */}
+                                            {onEdit && (
+                                                tx.metadata?.source === 'Manual' || 
+                                                tx.metadata?.source === 'Bulk Manual' || 
+                                                tx.metadata?.source === 'Manual Request' ||
+                                                tx.metadata?.source === 'Maintenance Repair' || 
+                                                !tx.metadata?.source
+                                            ) && (
+                                                <Button 
+                                                    size="sm" 
+                                                    variant="outline" 
+                                                    onClick={() => onEdit(tx)} 
+                                                    title="Edit Transaction"
+                                                    className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                            )}
+                                            
+                                            {showActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
+                                                <>
+                                                    {onDelete && (
+                                                        <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)} title="Delete">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </>
+                                            )}
+
+                                            {showActions && (
+                                                <>
+                                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }} title="Approve">
+                                                        <Check className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button size="sm" variant="destructive" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('reject'); }} title="Reject">
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -468,37 +510,44 @@ export function FuelReimbursementTable({
                                 {/* Phase 3: Settlement Summary */}
                                 {selectedTx.status === 'Approved' && (
                                     <div className="mt-4 p-4 border border-emerald-100 bg-emerald-50/50 rounded-xl space-y-3">
-                                        <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
-                                            <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
-                                                <Check className="h-3 w-3" />
-                                            </div>
-                                            Settlement Processed
-                                        </div>
-                                        
                                         {(() => {
                                             const settlement = findSettlementTx(selectedTx.id);
-                                            if (!settlement) return <p className="text-xs text-slate-500 italic">No automated settlement found in ledger history.</p>;
-                                            
+                                            const isWalletCredit = settlement?.category === 'Fuel Reimbursement Credit';
                                             return (
                                                 <>
-                                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                                        <div className="text-slate-500">Coverage Applied:</div>
-                                                        <div className="font-medium text-right">{settlement.metadata?.coveragePercent?.toFixed(0)}%</div>
-                                                        <div className="text-slate-500">Auto-Credit Amount:</div>
-                                                        <div className="font-bold text-right text-emerald-600">${settlement.amount.toFixed(2)}</div>
-                                                        <div className="text-slate-500">Ledger Entry:</div>
-                                                        <div className="font-mono text-right truncate">{settlement.id.split('-')[0]}...</div>
+                                                    <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
+                                                        <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
+                                                            <Check className="h-3 w-3" />
+                                                        </div>
+                                                        {isWalletCredit ? 'Wallet Credit Applied' : 'Settlement Processed'}
                                                     </div>
                                                     
-                                                    {onViewDriverLedger && (
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm" 
-                                                            className="w-full mt-2 text-xs h-8 bg-white"
-                                                            onClick={() => onViewDriverLedger(selectedTx.driverId!)}
-                                                        >
-                                                            View Driver Ledger
-                                                        </Button>
+                                                    {!settlement ? (
+                                                        <p className="text-xs text-slate-500 italic">No automated settlement found in ledger history.</p>
+                                                    ) : (
+                                                        <>
+                                                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                                                <div className="text-slate-500">{isWalletCredit ? 'Method:' : 'Coverage Applied:'}</div>
+                                                                <div className="font-medium text-right">
+                                                                    {isWalletCredit ? 'Cash Wallet Credit' : `${settlement.metadata?.coveragePercent?.toFixed(0)}%`}
+                                                                </div>
+                                                                <div className="text-slate-500">{isWalletCredit ? 'Credit Amount:' : 'Auto-Credit Amount:'}</div>
+                                                                <div className="font-bold text-right text-emerald-600">${settlement.amount.toFixed(2)}</div>
+                                                                <div className="text-slate-500">Ledger Entry:</div>
+                                                                <div className="font-mono text-right truncate">{settlement.id.split('-')[0]}...</div>
+                                                            </div>
+                                                            
+                                                            {onViewDriverLedger && (
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="sm" 
+                                                                    className="w-full mt-2 text-xs h-8 bg-white"
+                                                                    onClick={() => onViewDriverLedger(selectedTx.driverId!)}
+                                                                >
+                                                                    View Driver Ledger
+                                                                </Button>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </>
                                             );

@@ -1,6 +1,7 @@
 // cache-bust: v1.0.3 - Explicitly standardizing Badge import
 import React, { useState, useMemo, useEffect } from 'react';
 import { StationAnalyticsContextType } from '../../../types/station';
+import { StationProfile } from '../../../types/station';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
 import { Badge } from '../../ui/badge';
 import { Input } from '../../ui/input';
@@ -21,11 +22,13 @@ import {
   History,
   ShieldCheck,
   Trash2,
-  Loader2
+  Loader2,
+  Link
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { Checkbox } from '../../ui/checkbox';
 import { cn } from '../../ui/utils';
+import { BulkAssignModal } from './BulkAssignModal';
 
 type SortKey = 'name' | 'price' | 'visits' | 'date' | 'city' | 'parish' | 'country' | 'brand' | 'address';
 type SortDir = 'asc' | 'desc';
@@ -36,9 +39,13 @@ interface StationListProps {
   variant?: 'manager' | 'simple';
   selectable?: boolean;
   onDeleteSelected?: (ids: string[]) => Promise<void>;
+  // Bulk Assign props (simple variant only)
+  verifiedStations?: StationProfile[];
+  stationEntryIds?: Map<string, string[]>;
+  onBulkAssignComplete?: () => void;
 }
 
-export function StationList({ context, onSelectStation, variant = 'manager', selectable = false, onDeleteSelected }: StationListProps) {
+export function StationList({ context, onSelectStation, variant = 'manager', selectable = false, onDeleteSelected, verifiedStations, stationEntryIds, onBulkAssignComplete }: StationListProps) {
   const { stations, regionalStats, updateStationDetails } = context;
   
   // -- State --
@@ -50,6 +57,8 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
   const [brandFilter, setBrandFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [cityFilter, setCityFilter] = useState<string>('all');
+  const [parishFilter, setParishFilter] = useState<string>('all');
   
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>('date');
@@ -59,6 +68,9 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  // Bulk Assign modal state
+  const [bulkAssignTarget, setBulkAssignTarget] = useState<{ entryIds: string[]; groupName: string } | null>(null);
+
   // -- Derived Data --
 
   // Extract unique brands for filter
@@ -67,10 +79,34 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
     return Array.from(unique).sort();
   }, [stations]);
 
+  // Extract unique cities for filter
+  const cities = useMemo(() => {
+    const unique = new Set(stations.map(s => s.city).filter(Boolean));
+    return Array.from(unique).sort();
+  }, [stations]);
+
+  // Official 14 parishes of Jamaica (hardcoded — the only valid values)
+  const parishes = [
+    'Clarendon',
+    'Hanover',
+    'Kingston',
+    'Manchester',
+    'Portland',
+    'St. Andrew',
+    'St. Ann',
+    'St. Catherine',
+    'St. Elizabeth',
+    'St. James',
+    'St. Mary',
+    'St. Thomas',
+    'Trelawny',
+    'Westmoreland',
+  ];
+
   // Reset pagination when filters change OR when station data changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, brandFilter, statusFilter, sourceFilter, stations.length]);
+  }, [searchTerm, brandFilter, statusFilter, sourceFilter, cityFilter, parishFilter, stations.length]);
 
   // Filter and Sort
   const processedStations = useMemo(() => {
@@ -103,24 +139,34 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
       result = result.filter(s => s.dataSource === sourceFilter);
     }
 
-    // 5. Sort
+    // 5. Filter by City
+    if (cityFilter !== 'all') {
+      result = result.filter(s => s.city === cityFilter);
+    }
+
+    // 6. Filter by Parish
+    if (parishFilter !== 'all') {
+      result = result.filter(s => s.parish === parishFilter);
+    }
+
+    // 7. Sort
     result.sort((a, b) => {
       let valA: any = '', valB: any = '';
       
       switch(sortKey) {
         case 'price':
-          valA = a.stats.lastPrice;
-          valB = b.stats.lastPrice;
+          valA = a.stats?.lastPrice ?? 0;
+          valB = b.stats?.lastPrice ?? 0;
           if (valA === 0) valA = 999999; 
           if (valB === 0) valB = 999999;
           break;
         case 'visits':
-          valA = a.stats.totalVisits;
-          valB = b.stats.totalVisits;
+          valA = a.stats?.totalVisits ?? 0;
+          valB = b.stats?.totalVisits ?? 0;
           break;
         case 'date':
-          valA = new Date(a.stats.lastUpdated).getTime();
-          valB = new Date(b.stats.lastUpdated).getTime();
+          valA = a.stats?.lastUpdated ? new Date(a.stats.lastUpdated).getTime() : 0;
+          valB = b.stats?.lastUpdated ? new Date(b.stats.lastUpdated).getTime() : 0;
           break;
         case 'city':
           valA = (a.city || '').toLowerCase();
@@ -154,7 +200,7 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
     });
 
     return result;
-  }, [stations, searchTerm, sortKey, sortDir, brandFilter, statusFilter, sourceFilter]);
+  }, [stations, searchTerm, sortKey, sortDir, brandFilter, statusFilter, sourceFilter, cityFilter, parishFilter]);
 
   // Pagination Logic
   const totalItems = processedStations.length;
@@ -186,9 +232,11 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
     setBrandFilter('all');
     setStatusFilter('all');
     setSourceFilter('all');
+    setCityFilter('all');
+    setParishFilter('all');
   };
 
-  const hasActiveFilters = searchTerm || brandFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all';
+  const hasActiveFilters = searchTerm || brandFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all' || cityFilter !== 'all' || parishFilter !== 'all';
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -276,6 +324,30 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
                   <SelectItem value="import">Imported</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Select value={cityFilter} onValueChange={setCityFilter}>
+                <SelectTrigger className="w-[130px] bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="City" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Cities</SelectItem>
+                  {cities.map(city => (
+                    <SelectItem key={city} value={city}>{city}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={parishFilter} onValueChange={setParishFilter}>
+                <SelectTrigger className="w-[130px] bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="Parish" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Parishes</SelectItem>
+                  {parishes.map(parish => (
+                    <SelectItem key={parish} value={parish}>{parish}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           
@@ -310,6 +382,12 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
                   onChange={(e) => setSearchTerm(e.target.value)}
                />
             </div>
+            {context.loading && (
+              <div className="flex items-center gap-1.5 text-xs text-indigo-600 animate-pulse">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Syncing...</span>
+              </div>
+            )}
          </div>
       )}
 
@@ -583,9 +661,9 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {station.stats.lastPrice > 0 ? (
-                           <span className={getPriceColor(station.stats.lastPrice)}>
-                             ${station.stats.lastPrice.toFixed(2)}
+                        {(station.stats?.lastPrice ?? 0) > 0 ? (
+                           <span className={getPriceColor(station.stats!.lastPrice)}>
+                             ${station.stats!.lastPrice.toFixed(2)}
                            </span>
                         ) : (
                            <span className="text-slate-400 italic text-xs">N/A</span>
@@ -593,22 +671,42 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
                       </TableCell>
                       <TableCell className="text-center hidden sm:table-cell">
                         <div className="flex items-center justify-center">
-                            {station.stats.priceTrend === 'Up' && <TrendingUp className="h-4 w-4 text-red-500" />}
-                            {station.stats.priceTrend === 'Down' && <TrendingDown className="h-4 w-4 text-emerald-500" />}
-                            {station.stats.priceTrend === 'Stable' && <Minus className="h-4 w-4 text-slate-400" />}
+                            {station.stats?.priceTrend === 'Up' && <TrendingUp className="h-4 w-4 text-red-500" />}
+                            {station.stats?.priceTrend === 'Down' && <TrendingDown className="h-4 w-4 text-emerald-500" />}
+                            {(station.stats?.priceTrend === 'Stable' || !station.stats?.priceTrend) && <Minus className="h-4 w-4 text-slate-400" />}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium text-slate-600 hidden xl:table-cell">
-                        {station.stats.totalVisits}
+                        {station.stats?.totalVisits ?? 0}
                       </TableCell>
                       <TableCell className="text-right text-slate-500 text-sm hidden md:table-cell">
-                        {new Date(station.stats.lastUpdated).toLocaleDateString()}
+                        {station.stats?.lastUpdated ? new Date(station.stats.lastUpdated).toLocaleDateString() : '-'}
                       </TableCell>
                     </>
                   )}
                   
                   <TableCell>
-                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                    <div className="flex items-center gap-1">
+                      {/* Bulk Assign button — simple variant, non-verified stations only */}
+                      {variant === 'simple' && station.status !== 'verified' && station.status !== 'learnt' && verifiedStations && verifiedStations.length > 0 && stationEntryIds && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 py-0 px-1.5 text-[9px] bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 hover:border-indigo-300 transition-all font-semibold opacity-0 group-hover:opacity-100"
+                          title={`Assign ${stationEntryIds.get(station.id)?.length ?? 0} entries to a verified station`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const entryIds = stationEntryIds.get(station.id) || [];
+                            if (entryIds.length === 0) return;
+                            setBulkAssignTarget({ entryIds, groupName: station.name });
+                          }}
+                        >
+                          <Link className="h-3 w-3 mr-0.5" />
+                          Assign
+                        </Button>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -688,6 +786,21 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
           </div>
         )}
       </div>
+
+      {/* Bulk Assign Modal */}
+      {bulkAssignTarget && verifiedStations && (
+        <BulkAssignModal
+          open={!!bulkAssignTarget}
+          onClose={() => setBulkAssignTarget(null)}
+          entryIds={bulkAssignTarget.entryIds}
+          stationGroupName={bulkAssignTarget.groupName}
+          verifiedStations={verifiedStations}
+          onAssignComplete={() => {
+            // Only trigger data refresh — modal handles its own close timing
+            onBulkAssignComplete?.();
+          }}
+        />
+      )}
     </div>
   );
 }
