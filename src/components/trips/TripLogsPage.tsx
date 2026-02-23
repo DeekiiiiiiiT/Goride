@@ -434,9 +434,14 @@ export function TripLogsPage() {
                                             </Badge>
                                         )}
                                         <span className="font-bold text-slate-900">
-                                            ${(trip.amount || 0).toFixed(2)}
+                                            ${((trip.platform === 'InDrive' && trip.indriveNetIncome != null) ? trip.indriveNetIncome : (trip.amount || 0)).toFixed(2)}
                                         </span>
                                     </div>
+                                    {trip.platform === 'InDrive' && trip.indriveNetIncome != null && trip.indriveNetIncome !== trip.amount && (
+                                        <span className="text-[10px] text-slate-400">
+                                            from ${(trip.amount || 0).toFixed(2)} fare
+                                        </span>
+                                    )}
                                     {trip.fareBreakdown?.tips ? (
                                         <span className="text-xs text-emerald-600 flex items-center gap-1">
                                             +${trip.fareBreakdown.tips.toFixed(2)} Tip

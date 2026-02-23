@@ -18,7 +18,7 @@ import {
   SelectValue 
 } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff } from "lucide-react";
+import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff, Info } from "lucide-react";
 import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
 import { RoutePoint, TripStop } from '../../types/tripSession';
@@ -199,6 +199,14 @@ export function ManualTripForm({
     e.preventDefault();
     if (!formData.amount || formData.amount <= 0) return;
     if (isAdmin && !selectedDriverId) return;
+    // InDrive trips require net income
+    if (formData.platform === 'InDrive' && !formData.isLiveRecorded) {
+      if (!formData.indriveNetIncome || formData.indriveNetIncome <= 0) return;
+      if (formData.indriveNetIncome > formData.amount) {
+        toast.error("Net income cannot exceed the fare amount.");
+        return;
+      }
+    }
 
     try {
       setLoading(true);
@@ -237,6 +245,13 @@ export function ManualTripForm({
         newData.resolutionMethod = 'manual';
         newData.resolutionTimestamp = new Date().toISOString();
         newData.geocodeError = undefined; // Clear error on manual fix
+      }
+      
+      // Clear InDrive fee fields when switching away from InDrive
+      if (field === 'platform' && value !== 'InDrive') {
+        newData.indriveNetIncome = undefined;
+        newData.indriveServiceFee = undefined;
+        newData.indriveServiceFeePercent = undefined;
       }
       
       return newData;
@@ -452,27 +467,153 @@ export function ManualTripForm({
           </div>
 
           {/* Amount Row */}
-          <div className="space-y-2">
-            <Label>Earnings Amount</Label>
-            <div className="relative">
-              <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-600" />
-              <Input 
-                type="number" 
-                min="0" 
-                step="0.01"
-                className="pl-9 font-medium"
-                placeholder="0.00"
-                value={formData.amount || ''}
-                onChange={(e) => handleInputChange('amount', parseFloat(e.target.value))}
-                required
-              />
+          {formData.platform === 'InDrive' && !formData.isLiveRecorded ? (
+            /* InDrive: Two input fields (Profit + Net Income) with auto-calculated fee breakdown */
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                {/* Profit (Fare Collected) */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Fare</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-600" />
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      step="0.01"
+                      className="pl-9 font-medium"
+                      placeholder="0.00"
+                      value={formData.amount || ''}
+                      onChange={(e) => {
+                        const profit = parseFloat(e.target.value) || 0;
+                        setFormData(prev => {
+                          const net = prev.indriveNetIncome || 0;
+                          const fee = profit > 0 && net > 0 ? profit - net : undefined;
+                          const feePct = profit > 0 && fee !== undefined && fee > 0 ? (fee / profit) * 100 : undefined;
+                          return {
+                            ...prev,
+                            amount: profit,
+                            indriveServiceFee: fee !== undefined && fee >= 0 ? parseFloat(fee.toFixed(2)) : undefined,
+                            indriveServiceFeePercent: feePct !== undefined ? parseFloat(feePct.toFixed(2)) : undefined,
+                          };
+                        });
+                      }}
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400">What the passenger paid</p>
+                </div>
+                {/* Net Income (Driver Keeps) */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Net Income</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-blue-500" />
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      step="0.01"
+                      className="pl-9 font-medium"
+                      placeholder="0.00"
+                      value={formData.indriveNetIncome || ''}
+                      onChange={(e) => {
+                        const net = parseFloat(e.target.value) || 0;
+                        setFormData(prev => {
+                          const profit = prev.amount || 0;
+                          const fee = profit > 0 && net > 0 ? profit - net : undefined;
+                          const feePct = profit > 0 && fee !== undefined && fee > 0 ? (fee / profit) * 100 : undefined;
+                          return {
+                            ...prev,
+                            indriveNetIncome: net,
+                            indriveServiceFee: fee !== undefined && fee >= 0 ? parseFloat(fee.toFixed(2)) : undefined,
+                            indriveServiceFeePercent: feePct !== undefined ? parseFloat(feePct.toFixed(2)) : undefined,
+                          };
+                        });
+                      }}
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400">What InDrive says you keep</p>
+                </div>
+              </div>
+              
+              {/* Auto-calculated fee breakdown */}
+              {formData.amount > 0 && formData.indriveNetIncome && formData.indriveNetIncome > 0 && (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Info className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">InDrive Fee Breakdown</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Service Fee</p>
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">
+                        ${(formData.indriveServiceFee ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                        {formData.paymentMethod === 'Cash' ? 'From InDrive Balance' : 'Kept by InDrive'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Fee Rate</p>
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">
+                        {(formData.indriveServiceFeePercent ?? 0).toFixed(2)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">You Keep</p>
+                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        ${formData.indriveNetIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Warning if net income > profit */}
+                  {formData.indriveNetIncome > formData.amount && (
+                    <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium mt-1.5 text-center">
+                      Net income cannot exceed the fare — please double-check your numbers.
+                    </p>
+                  )}
+                </div>
+              )}
+              {formData.paymentMethod === 'Cash' && (
+                <p className="text-[10px] text-emerald-600 font-medium text-right">
+                  {formData.indriveServiceFee && formData.indriveServiceFee > 0
+                    ? `* You collect $${(formData.amount || 0).toLocaleString()} cash from passenger. InDrive deducts $${formData.indriveServiceFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} fee from your InDrive Balance.`
+                    : `* Driver collects the full fare ($${(formData.amount || 0).toLocaleString()}) as cash`
+                  }
+                </p>
+              )}
+              {formData.paymentMethod === 'Card' && (
+                <p className="text-[10px] text-indigo-600 font-medium text-right">
+                  {formData.indriveNetIncome && formData.indriveNetIncome > 0
+                    ? `* InDrive collects $${(formData.amount || 0).toLocaleString()} from passenger and pays you $${formData.indriveNetIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} after deducting their fee.`
+                    : `* InDrive collects payment and pays you after deducting their fee`
+                  }
+                </p>
+              )}
             </div>
-            {formData.paymentMethod === 'Cash' && (
-              <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
-                * Driver collects this amount as cash
-              </p>
-            )}
-          </div>
+          ) : (
+            /* Non-InDrive platforms: Original single Earnings Amount field */
+            <div className="space-y-2">
+              <Label>Earnings Amount</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-600" />
+                <Input 
+                  type="number" 
+                  min="0" 
+                  step="0.01"
+                  className="pl-9 font-medium"
+                  placeholder="0.00"
+                  value={formData.amount || ''}
+                  onChange={(e) => handleInputChange('amount', parseFloat(e.target.value))}
+                  required
+                />
+              </div>
+              {formData.paymentMethod === 'Cash' && (
+                <p className="text-[10px] text-emerald-600 font-medium text-right mt-1">
+                  * Driver collects this amount as cash
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Locations - Hidden for Live Trips */}
           {!formData.isLiveRecorded && (
@@ -565,7 +706,7 @@ export function ManualTripForm({
             <Button 
               type="submit" 
               className="bg-indigo-600 hover:bg-indigo-700"
-              disabled={loading || !formData.amount || (isAdmin && !selectedDriverId)}
+              disabled={loading || !formData.amount || (isAdmin && !selectedDriverId) || (formData.platform === 'InDrive' && !formData.isLiveRecorded && (!formData.indriveNetIncome || formData.indriveNetIncome > formData.amount))}
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Trip

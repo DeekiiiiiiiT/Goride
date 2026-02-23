@@ -54,6 +54,7 @@ import {
   Link2,
   Unlink,
   Database,
+  Route,
   type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
@@ -123,12 +124,30 @@ interface PlazaRates {
   rates: Record<string, TollRate>; // classId → { withTag, withoutTag }
 }
 
+interface RouteSegment {
+  fromPlazaId?: string;           // Optional link to Toll Database plaza
+  fromPlazaName: string;          // Display name (e.g. "Caymanas")
+  toPlazaId?: string;             // Optional link to Toll Database plaza
+  toPlazaName: string;            // Display name (e.g. "Angels")
+  distanceKm: number;             // Route distance in km
+  rates: Record<string, number>;  // classId → single price in JMD (no T-Tag/Cash split for NSH)
+}
+
+interface RouteRateGroup {
+  id: string;                     // Unique group identifier (e.g. "nsh_routes")
+  operator: string;               // e.g. "Jamaica North South Highway Company Limited"
+  highway: string;                // e.g. "North-South Highway (Caymanas to Ocho Rios)"
+  effectiveDate: string;          // DD/MM/YYYY — can differ from flat rate effective date
+  segments: RouteSegment[];       // All origin→destination pairs with their rates
+}
+
 interface TollRateSchedule {
   effectiveDate: string; // DD/MM/YYYY
   operator: string;
   currency: string;
   plazas: PlazaRates[];
   vehicleClasses: VehicleClass[];
+  routeRateGroups: RouteRateGroup[]; // Route-based toll pricing (e.g. NSH origin→destination)
 }
 
 interface TollOperator {
@@ -194,6 +213,44 @@ const JAMAICA_OPERATORS: TollOperator[] = [
   },
 ];
 
+// ── NSH Route-Based Pricing Data ──────────────────────────────────────
+
+const NSH_PLAZA_NAMES = [
+  'Caymanas', 'Angels', 'Linstead',
+  'Unity Valley', 'Lydford', 'Mammee Bay',
+];
+
+const DEFAULT_NSH_ROUTE_GROUP: RouteRateGroup = {
+  id: 'nsh_routes',
+  operator: 'Jamaica North South Highway Company Limited',
+  highway: 'North-South Highway (Caymanas to Ocho Rios)',
+  effectiveDate: '27/12/2025',
+  segments: [
+    // ── From Caymanas ──
+    { fromPlazaName: 'Caymanas', toPlazaName: 'Angels',       distanceKm: 9.55, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Caymanas', toPlazaName: 'Linstead',     distanceKm: 27.3, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Caymanas', toPlazaName: 'Unity Valley', distanceKm: 43.70, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Caymanas', toPlazaName: 'Lydford',      distanceKm: 53.34, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Caymanas', toPlazaName: 'Mammee Bay',   distanceKm: 66.14, rates: { class1: 0, class2: 0, class3: 0 } },
+    // ── From Angels ──
+    { fromPlazaName: 'Angels',   toPlazaName: 'Linstead',     distanceKm: 10, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Angels',   toPlazaName: 'Unity Valley', distanceKm: 20, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Angels',   toPlazaName: 'Lydford',      distanceKm: 31, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Angels',   toPlazaName: 'Mammee Bay',   distanceKm: 52, rates: { class1: 0, class2: 0, class3: 0 } },
+    // ── From Linstead ──
+    { fromPlazaName: 'Linstead', toPlazaName: 'Unity Valley', distanceKm: 10, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Linstead', toPlazaName: 'Lydford',      distanceKm: 21, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Linstead', toPlazaName: 'Mammee Bay',   distanceKm: 42, rates: { class1: 0, class2: 0, class3: 0 } },
+    // ── From Unity Valley ──
+    { fromPlazaName: 'Unity Valley', toPlazaName: 'Lydford',    distanceKm: 11, rates: { class1: 0, class2: 0, class3: 0 } },
+    { fromPlazaName: 'Unity Valley', toPlazaName: 'Mammee Bay', distanceKm: 32, rates: { class1: 0, class2: 0, class3: 0 } },
+    // ── From Lydford ──
+    { fromPlazaName: 'Lydford', toPlazaName: 'Mammee Bay', distanceKm: 21, rates: { class1: 0, class2: 0, class3: 0 } },
+  ],
+};
+
+// ── Default Schedule ──────────────────────────────────────────────────
+
 const DEFAULT_RATE_SCHEDULE: TollRateSchedule = {
   effectiveDate: '27/12/2025',
   operator: 'TransJamaican Highway Limited',
@@ -249,6 +306,7 @@ const DEFAULT_RATE_SCHEDULE: TollRateSchedule = {
       },
     },
   ],
+  routeRateGroups: [DEFAULT_NSH_ROUTE_GROUP],
 };
 
 const PAYMENT_METHODS = [
@@ -283,16 +341,42 @@ function migrateSchedule(raw: any): TollRateSchedule {
     return { plazaId: p.plazaId, plazaName: p.plazaName, rates };
   });
 
+  // Migrate route rate groups — ensure each segment has rates for all current vehicle classes
+  // If old saved data has no routeRateGroups at all, inject the default NSH group
+  // so that NSH plazas get filtered out of the flat table and appear in the route section
+  const rawRouteGroups = raw.routeRateGroups;
+  const hasRouteGroups = Array.isArray(rawRouteGroups) && rawRouteGroups.length > 0;
+  const baseRouteGroups = hasRouteGroups ? rawRouteGroups : DEFAULT_NSH_ROUTE_GROUP.segments.length > 0 ? [DEFAULT_NSH_ROUTE_GROUP] : [];
+  const routeRateGroups: RouteRateGroup[] = baseRouteGroups.map((group: any) => ({
+    ...group,
+    segments: (group.segments || []).map((seg: any) => {
+      const rates: Record<string, number> = {};
+      vehicleClasses.forEach(vc => {
+        rates[vc.id] = seg.rates?.[vc.id] ?? 0;
+      });
+      return { ...seg, rates };
+    }),
+  }));
+
   return {
     effectiveDate: raw.effectiveDate || '27/12/2025',
     operator: raw.operator || 'TransJamaican Highway Limited',
     currency: raw.currency || 'JMD',
     vehicleClasses,
     plazas,
+    routeRateGroups,
   };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+function emptyRouteRatesForClasses(classes: VehicleClass[]): Record<string, number> {
+  const rates: Record<string, number> = {};
+  classes.forEach(vc => {
+    rates[vc.id] = 0;
+  });
+  return rates;
+}
 
 function emptyRatesForClasses(classes: VehicleClass[]): Record<string, TollRate> {
   const rates: Record<string, TollRate> = {};
@@ -308,6 +392,21 @@ function generateClassId(existingClasses: VehicleClass[]): string {
   return `class${n}`;
 }
 
+// ── Route Plaza Detection ─────────────────────────────────────────────
+
+function isRoutePlaza(plazaName: string, routeGroups: RouteRateGroup[]): boolean {
+  const normalized = plazaName.toLowerCase().trim();
+  for (const group of routeGroups) {
+    for (const seg of group.segments) {
+      if (seg.fromPlazaName.toLowerCase().trim() === normalized ||
+          seg.toPlazaName.toLowerCase().trim() === normalized) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // ── Component ──────────────────────────────────────────────────────────
 
 export function TollInfoPage() {
@@ -319,6 +418,7 @@ export function TollInfoPage() {
   const [showAddPlaza, setShowAddPlaza] = useState(false);
   const [newPlazaName, setNewPlazaName] = useState('');
   const [activeTab, setActiveTab] = useState('rates');
+  const [expandedPlazas, setExpandedPlazas] = useState<Set<string>>(new Set());
 
   // ── Toll Database Plaza State ───────────────────────────────────────
   const [dbPlazas, setDbPlazas] = useState<TollPlaza[]>([]);
@@ -337,6 +437,19 @@ export function TollInfoPage() {
     id: '', label: '', iconName: 'car', description: '', examples: '',
     height: '', length: '', fleetRelevance: 'Most Fleet Vehicles', fleetRelevanceColor: 'emerald',
   });
+
+  // ── Route Segment Edit State ─────────────────────────────────────────
+  const [showAddSegment, setShowAddSegment] = useState(false);
+  const [addSegmentGroupIndex, setAddSegmentGroupIndex] = useState<number>(-1);
+  const [newSegFrom, setNewSegFrom] = useState('');
+  const [newSegTo, setNewSegTo] = useState('');
+  const [newSegDistance, setNewSegDistance] = useState('');
+  const [customSegFrom, setCustomSegFrom] = useState(false);
+  const [customSegTo, setCustomSegTo] = useState(false);
+  const [showAddRouteGroup, setShowAddRouteGroup] = useState(false);
+  const [newGroupOperator, setNewGroupOperator] = useState('');
+  const [newGroupHighway, setNewGroupHighway] = useState('');
+  const [newGroupEffDate, setNewGroupEffDate] = useState('');
 
   // ── Lookup map: database plaza ID → plaza object ────────────────────
   const dbPlazaMap = useMemo(() => {
@@ -392,6 +505,32 @@ export function TollInfoPage() {
   // ── Save to KV Store ─────────────────────────────────────────────────
 
   const handleSave = async () => {
+    // ── Validate route-based rate groups before saving ──
+    for (const group of editSchedule.routeRateGroups) {
+      if (!group.operator.trim()) {
+        toast.error('Each route group must have an operator name.');
+        return;
+      }
+      const pairSet = new Set<string>();
+      for (const seg of group.segments) {
+        const key = `${seg.fromPlazaName.toLowerCase().trim()}→${seg.toPlazaName.toLowerCase().trim()}`;
+        if (pairSet.has(key)) {
+          toast.error(`Duplicate route "${seg.fromPlazaName} → ${seg.toPlazaName}" in ${group.highway || 'a route group'}.`);
+          return;
+        }
+        pairSet.add(key);
+        if (seg.distanceKm <= 0) {
+          toast.error(`Distance must be > 0 for ${seg.fromPlazaName} → ${seg.toPlazaName}.`);
+          return;
+        }
+        for (const [classId, rate] of Object.entries(seg.rates)) {
+          if (rate < 0) {
+            toast.error(`Negative rate found for ${seg.fromPlazaName} → ${seg.toPlazaName} (class ${classId}).`);
+            return;
+          }
+        }
+      }
+    }
     setSaving(true);
     try {
       await api.saveTollInfo(editSchedule);
@@ -514,6 +653,146 @@ export function TollInfoPage() {
     toast.success(`Unlinked plaza`);
   };
 
+  // ── Route Rate Editing Helpers ───────────────────────────────────────
+
+  const updateRouteRate = (
+    groupIndex: number,
+    segmentIndex: number,
+    classId: string,
+    value: string
+  ) => {
+    const numVal = parseFloat(value) || 0;
+    setEditSchedule(prev => {
+      const updated = { ...prev, routeRateGroups: [...prev.routeRateGroups] };
+      const group = { ...updated.routeRateGroups[groupIndex] };
+      group.segments = [...group.segments];
+      const seg = { ...group.segments[segmentIndex] };
+      seg.rates = { ...seg.rates, [classId]: numVal };
+      group.segments[segmentIndex] = seg;
+      updated.routeRateGroups[groupIndex] = group;
+      return updated;
+    });
+  };
+
+  const updateRouteDistance = (
+    groupIndex: number,
+    segmentIndex: number,
+    value: string
+  ) => {
+    const numVal = parseFloat(value) || 0;
+    setEditSchedule(prev => {
+      const updated = { ...prev, routeRateGroups: [...prev.routeRateGroups] };
+      const group = { ...updated.routeRateGroups[groupIndex] };
+      group.segments = [...group.segments];
+      group.segments[segmentIndex] = { ...group.segments[segmentIndex], distanceKm: numVal };
+      updated.routeRateGroups[groupIndex] = group;
+      return updated;
+    });
+  };
+
+  const handleRemoveSegment = (groupIndex: number, segmentIndex: number) => {
+    const seg = editSchedule.routeRateGroups[groupIndex]?.segments[segmentIndex];
+    setEditSchedule(prev => {
+      const updated = { ...prev, routeRateGroups: [...prev.routeRateGroups] };
+      const group = { ...updated.routeRateGroups[groupIndex] };
+      group.segments = group.segments.filter((_, i) => i !== segmentIndex);
+      updated.routeRateGroups[groupIndex] = group;
+      return updated;
+    });
+    if (seg) toast.success(`Removed route: ${seg.fromPlazaName} → ${seg.toPlazaName}`);
+  };
+
+  const handleAddSegment = () => {
+    if (!newSegFrom.trim() || !newSegTo.trim()) {
+      toast.error('Both origin and destination are required');
+      return;
+    }
+    if (newSegFrom.trim() === newSegTo.trim()) {
+      toast.error('Origin and destination cannot be the same');
+      return;
+    }
+    const gi = addSegmentGroupIndex;
+    const group = editSchedule.routeRateGroups[gi];
+    if (!group) return;
+    const isDuplicate = group.segments.some(
+      s => s.fromPlazaName.toLowerCase() === newSegFrom.trim().toLowerCase() &&
+           s.toPlazaName.toLowerCase() === newSegTo.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      toast.error(`Route ${newSegFrom.trim()} → ${newSegTo.trim()} already exists`);
+      return;
+    }
+    const rates: Record<string, number> = {};
+    activeClasses.forEach(vc => { rates[vc.id] = 0; });
+    const segment: RouteSegment = {
+      fromPlazaName: newSegFrom.trim(),
+      toPlazaName: newSegTo.trim(),
+      distanceKm: parseFloat(newSegDistance) || 0,
+      rates,
+    };
+    setEditSchedule(prev => {
+      const updated = { ...prev, routeRateGroups: [...prev.routeRateGroups] };
+      const g = { ...updated.routeRateGroups[gi] };
+      g.segments = [...g.segments, segment];
+      updated.routeRateGroups[gi] = g;
+      return updated;
+    });
+    toast.success(`Added route: ${segment.fromPlazaName} → ${segment.toPlazaName}`);
+    setShowAddSegment(false);
+    setNewSegFrom('');
+    setNewSegTo('');
+    setNewSegDistance('');
+  };
+
+  const handleRemoveRouteGroup = (groupIndex: number) => {
+    const group = editSchedule.routeRateGroups[groupIndex];
+    if (!group) return;
+    if (!window.confirm(`Remove entire route group "${group.highway}" with ${group.segments.length} route(s)? This cannot be undone until you cancel.`)) return;
+    setEditSchedule(prev => ({
+      ...prev,
+      routeRateGroups: prev.routeRateGroups.filter((_, i) => i !== groupIndex),
+    }));
+    toast.success(`Removed route group: ${group.highway}`);
+  };
+
+  const handleAddRouteGroup = () => {
+    if (!newGroupHighway.trim()) {
+      toast.error('Highway name is required');
+      return;
+    }
+    const newGroup: RouteRateGroup = {
+      id: `route_group_${Date.now()}`,
+      operator: newGroupOperator.trim() || 'Unknown Operator',
+      highway: newGroupHighway.trim(),
+      effectiveDate: newGroupEffDate.trim() || displaySchedule.effectiveDate,
+      segments: [],
+    };
+    setEditSchedule(prev => ({
+      ...prev,
+      routeRateGroups: [...prev.routeRateGroups, newGroup],
+    }));
+    toast.success(`Added route group: ${newGroup.highway}`);
+    setShowAddRouteGroup(false);
+    setNewGroupOperator('');
+    setNewGroupHighway('');
+    setNewGroupEffDate('');
+  };
+
+  const updateRouteGroupMeta = (
+    groupIndex: number,
+    field: 'operator' | 'highway' | 'effectiveDate',
+    value: string
+  ) => {
+    setEditSchedule(prev => {
+      const updated = { ...prev, routeRateGroups: [...prev.routeRateGroups] };
+      updated.routeRateGroups[groupIndex] = {
+        ...updated.routeRateGroups[groupIndex],
+        [field]: value,
+      };
+      return updated;
+    });
+  };
+
   // ── Auto-Link ───────────────────────────────────────────────────────
   const handleAutoLink = () => {
     let linked = 0;
@@ -549,7 +828,8 @@ export function TollInfoPage() {
   const handleSaveClasses = async () => {
     setSaving(true);
     try {
-      // Update the schedule with new classes and ensure all plazas have rates for new classes
+      // Update the schedule with new classes and ensure all plazas + route segments have rates for new classes
+      const validIds = new Set(editClasses.map(vc => vc.id));
       const updatedSchedule: TollRateSchedule = {
         ...schedule,
         vehicleClasses: editClasses,
@@ -562,12 +842,22 @@ export function TollInfoPage() {
             }
           });
           // Remove rates for deleted classes
-          const validIds = new Set(editClasses.map(vc => vc.id));
           for (const key of Object.keys(newRates)) {
             if (!validIds.has(key)) delete newRates[key];
           }
           return { ...plaza, rates: newRates };
         }),
+        // Propagate class changes to route-based rate groups
+        routeRateGroups: (schedule.routeRateGroups || []).map(group => ({
+          ...group,
+          segments: group.segments.map(seg => {
+            const newRates: Record<string, number> = {};
+            editClasses.forEach(vc => {
+              newRates[vc.id] = seg.rates[vc.id] ?? 0;
+            });
+            return { ...seg, rates: newRates };
+          }),
+        })),
       };
       await api.saveTollInfo(updatedSchedule);
       setSchedule(updatedSchedule);
@@ -638,27 +928,60 @@ export function TollInfoPage() {
 
   const handleExport = () => {
     const data = schedule;
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const classLabels = data.vehicleClasses.map(vc => vc.label);
-    const headers = ['Plaza', 'Class', 'With T-Tag (JMD)', 'Without T-Tag (JMD)'];
-    const rows: string[][] = [headers];
 
-    data.plazas.forEach(p => {
+    // ── Section 1: Per-Plaza Flat Rates ────────────────────────────────
+    const headers = ['Plaza', 'Class', 'With T-Tag (JMD)', 'Without T-Tag (JMD)'];
+    const rows: string[][] = [headers.map(esc)];
+
+    const flatPlazas = data.plazas.filter(
+      p => !isRoutePlaza(p.plazaName, data.routeRateGroups)
+    );
+    flatPlazas.forEach(p => {
       data.vehicleClasses.forEach(vc => {
         const rate = p.rates[vc.id] || { withTag: 0, withoutTag: 0 };
-        rows.push([p.plazaName, vc.label, rate.withTag.toFixed(2), rate.withoutTag.toFixed(2)]);
+        rows.push([esc(p.plazaName), esc(vc.label), rate.withTag.toFixed(2), rate.withoutTag.toFixed(2)]);
       });
     });
+
+    // ── Section 2: Route-Based Tolls ───────────────────────────────────
+    const routeGroups = data.routeRateGroups || [];
+    if (routeGroups.length > 0) {
+      rows.push([]);  // blank separator
+      rows.push([esc('--- Route-Based Tolls ---')]);
+
+      routeGroups.forEach(group => {
+        rows.push([]);
+        rows.push([esc(`${group.highway} — ${group.operator} (Effective: ${group.effectiveDate})`)]);
+
+        // Column headers for route section
+        const routeHeaders = ['Origin', 'Destination', 'Distance (km)', ...classLabels.map(l => `${l} (JMD)`)];
+        rows.push(routeHeaders.map(esc));
+
+        // Segment rows
+        group.segments.forEach(seg => {
+          const rateValues = data.vehicleClasses.map(vc => (seg.rates[vc.id] ?? 0).toFixed(2));
+          rows.push([
+            esc(seg.fromPlazaName),
+            esc(seg.toPlazaName),
+            seg.distanceKm.toFixed(1),
+            ...rateValues,
+          ]);
+        });
+      });
+    }
 
     const csv = rows.map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `toll_rates_${data.effectiveDate.replace(/\//g, '-')}.csv`);
+    link.setAttribute('download', `toll_rates_complete_${data.effectiveDate.replace(/\//g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Toll rates exported');
+    toast.success('Toll rates exported (includes route-based tolls)');
   };
 
   // ── Computed: Tag savings summary ────────────────────────────────────
@@ -667,9 +990,11 @@ export function TollInfoPage() {
     const s = editMode ? editSchedule : schedule;
     const firstClass = s.vehicleClasses[0];
     if (!firstClass) return { perTrip: 0, total: 0 };
+    // Only count per-plaza plazas (route-based plazas like NSH don't have T-Tag/Cash split)
+    const flatPlazas = s.plazas.filter(p => !isRoutePlaza(p.plazaName, s.routeRateGroups));
     let totalSaved = 0;
     let trips = 0;
-    s.plazas.forEach(p => {
+    flatPlazas.forEach(p => {
       const rate = p.rates[firstClass.id];
       if (rate) {
         totalSaved += (rate.withoutTag - rate.withTag);
@@ -679,19 +1004,69 @@ export function TollInfoPage() {
     return { perTrip: trips > 0 ? totalSaved / trips : 0, total: totalSaved };
   }, [schedule, editSchedule, editMode]);
 
-  // ── Computed: Link status summary ───────────────────────────────────
+  // ── Computed: Link status summary (per-plaza only) ──────────────────
 
   const linkStatus = useMemo(() => {
     const s = editMode ? editSchedule : schedule;
-    const linked = s.plazas.filter(p => p.plazaId && dbPlazaMap.has(p.plazaId)).length;
-    const unlinked = s.plazas.length - linked;
-    return { linked, unlinked, total: s.plazas.length };
+    const allPlazas = s.plazas;
+    const linked = allPlazas.filter(p => p.plazaId && dbPlazaMap.has(p.plazaId)).length;
+    const unlinked = allPlazas.length - linked;
+    return { linked, unlinked, total: allPlazas.length };
   }, [schedule, editSchedule, editMode, dbPlazaMap]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
   const displaySchedule = editMode ? editSchedule : schedule;
   const displayClasses = classEditMode ? editClasses : schedule.vehicleClasses;
+
+  // ── Computed: All plazas (unified table) ──
+  const perPlazaPlazas = useMemo(() => {
+    return displaySchedule.plazas
+      .map((plaza, originalIndex) => ({ plaza, originalIndex }));
+  }, [displaySchedule.plazas]);
+
+  // ── Computed: Route segments grouped by origin plaza name ──
+  const plazaRouteMap = useMemo(() => {
+    const map = new Map<string, { groupIndex: number; group: RouteRateGroup; segments: { seg: RouteSegment; origIdx: number }[] }[]>();
+    displaySchedule.routeRateGroups.forEach((group, groupIndex) => {
+      const byOrigin = new Map<string, { seg: RouteSegment; origIdx: number }[]>();
+      group.segments.forEach((seg, idx) => {
+        const key = seg.fromPlazaName.toLowerCase().trim();
+        if (!byOrigin.has(key)) byOrigin.set(key, []);
+        byOrigin.get(key)!.push({ seg, origIdx: idx });
+      });
+      byOrigin.forEach((segments, originKey) => {
+        if (!map.has(originKey)) map.set(originKey, []);
+        map.get(originKey)!.push({
+          groupIndex,
+          group,
+          segments: segments.sort((a, b) => a.seg.distanceKm - b.seg.distanceKm),
+        });
+      });
+    });
+    return map;
+  }, [displaySchedule.routeRateGroups]);
+
+  const routeSegmentCount = useMemo(() => {
+    return displaySchedule.routeRateGroups.reduce((sum, g) => sum + g.segments.length, 0);
+  }, [displaySchedule.routeRateGroups]);
+
+  // ── Computed: Route segments grouped by origin plaza per group ───────
+  const routeGroupsWithOrigins = useMemo(() => {
+    return displaySchedule.routeRateGroups.map((group, groupIndex) => {
+      const originMap = new Map<string, { seg: RouteSegment; origIdx: number }[]>();
+      group.segments.forEach((seg, idx) => {
+        const key = seg.fromPlazaName;
+        if (!originMap.has(key)) originMap.set(key, []);
+        originMap.get(key)!.push({ seg, origIdx: idx });
+      });
+      const origins = Array.from(originMap.entries()).map(([origin, items]) => ({
+        origin,
+        segments: items.sort((a, b) => a.seg.distanceKm - b.seg.distanceKm),
+      }));
+      return { groupIndex, group, origins };
+    });
+  }, [displaySchedule.routeRateGroups]);
 
   if (loading) {
     return (
@@ -778,8 +1153,14 @@ export function TollInfoPage() {
               {displaySchedule.currency}
             </Badge>
             <Badge variant="outline" className="text-xs">
-              {displaySchedule.plazas.length} Plazas
+              {perPlazaPlazas.length} Per-Plaza
             </Badge>
+            {routeSegmentCount > 0 && (
+              <Badge variant="outline" className="text-xs">
+                <Route className="h-3 w-3 mr-1" />
+                {routeSegmentCount} Route Segments
+              </Badge>
+            )}
             <Badge variant="outline" className="text-xs">
               {activeClasses.length} Classes
             </Badge>
@@ -802,7 +1183,11 @@ export function TollInfoPage() {
             )}
           </div>
 
-          {/* Rate Table — Vertical layout: plazas as rows */}
+          {/* Rate Table — All Plazas */}
+          <div className="flex items-center gap-2 mb-1">
+            <Building2 className="h-4 w-4 text-slate-500" />
+            <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Toll Plaza Rates</span>
+          </div>
           <Card className="border-none shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -847,14 +1232,37 @@ export function TollInfoPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {displaySchedule.plazas.map((plaza, pi) => {
+                    {perPlazaPlazas.length === 0 && !editMode && (
+                      <tr>
+                        <td colSpan={1 + activeClasses.length * 2} className="p-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                          <Building2 className="h-5 w-5 mx-auto mb-1 opacity-50" />
+                          No toll plazas configured. Click Edit Rates to add plazas.
+                        </td>
+                      </tr>
+                    )}
+                    {perPlazaPlazas.flatMap(({ plaza, originalIndex: pi }, filteredIdx) => {
                       const isLinked = plaza.plazaId && dbPlazaMap.has(plaza.plazaId);
                       const dbPlaza = isLinked ? dbPlazaMap.get(plaza.plazaId!)! : null;
-                      const bgClass = pi % 2 === 0
+                      const bgClass = filteredIdx % 2 === 0
                         ? 'bg-white dark:bg-slate-900'
                         : 'bg-slate-50 dark:bg-slate-800/50';
-                      return (
-                        <tr key={plaza.plazaId || `plaza-${pi}`} className={`${bgClass} border-b border-slate-200 dark:border-slate-700`}>
+                      const plazaKey = plaza.plazaName.toLowerCase().trim();
+                      const routeGroups = plazaRouteMap.get(plazaKey);
+                      const hasRoutes = !!routeGroups && routeGroups.length > 0;
+                      const isExpanded = expandedPlazas.has(plazaKey);
+                      const totalCols = 1 + activeClasses.length * 2 + (editMode ? 1 : 0);
+                      const toggleExpand = () => {
+                        setExpandedPlazas(prev => {
+                          const next = new Set(prev);
+                          if (next.has(plazaKey)) next.delete(plazaKey);
+                          else next.add(plazaKey);
+                          return next;
+                        });
+                      };
+                      const rowKey = plaza.plazaId || `plaza-${pi}`;
+                      const rows: React.ReactNode[] = [];
+                      rows.push(
+                        <tr key={rowKey} className={`${bgClass} border-b border-slate-200 dark:border-slate-700${hasRoutes ? ' cursor-pointer hover:bg-amber-50/60 dark:hover:bg-amber-950/20 transition-colors' : ''}`} onClick={hasRoutes ? toggleExpand : undefined}>
                           {/* Plaza Name Cell */}
                           <td className="p-3 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
                             <div className="flex items-center gap-2">
@@ -864,17 +1272,24 @@ export function TollInfoPage() {
                                 <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" title="Not linked" />
                               )}
                               <div className="min-w-0">
-                                <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">
-                                  {dbPlaza ? dbPlaza.name : plaza.plazaName}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">
+                                    {dbPlaza ? dbPlaza.name : plaza.plazaName}
+                                  </span>
+                                </div>
                                 {dbPlaza?.highway && (
                                   <span className="text-[10px] text-slate-400 block truncate">
                                     {dbPlaza.highway}
                                   </span>
                                 )}
+                                {hasRoutes && !dbPlaza?.highway && (
+                                  <span className="text-[10px] text-amber-500 dark:text-amber-400 block truncate">
+                                    {routeGroups![0].group.highway || 'Route-based pricing'}
+                                  </span>
+                                )}
                               </div>
                               {editMode && (
-                                <div className="flex items-center gap-0.5 ml-auto shrink-0">
+                                <div className="flex items-center gap-0.5 ml-auto shrink-0" onClick={e => e.stopPropagation()}>
                                   {plaza.plazaId ? (
                                     <button
                                       onClick={() => handleUnlinkPlaza(pi)}
@@ -902,7 +1317,7 @@ export function TollInfoPage() {
                             const editRate = editSchedule.plazas[pi]?.rates?.[vc.id] || { withTag: 0, withoutTag: 0 };
                             return [
                               /* T-Tag */
-                              <td key={`${pi}-${vc.id}-tag`} className="p-2 text-center border-r border-slate-200 dark:border-slate-700">
+                              <td key={`${pi}-${vc.id}-tag`} className="p-2 text-center border-r border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
                                 {editMode ? (
                                   <Input
                                     type="number"
@@ -917,7 +1332,7 @@ export function TollInfoPage() {
                                 )}
                               </td>,
                               /* Cash */
-                              <td key={`${pi}-${vc.id}-cash`} className="p-2 text-center border-r border-slate-200 dark:border-slate-700 last:border-r-0">
+                              <td key={`${pi}-${vc.id}-cash`} className="p-2 text-center border-r border-slate-200 dark:border-slate-700 last:border-r-0" onClick={e => e.stopPropagation()}>
                                 {editMode ? (
                                   <Input
                                     type="number"
@@ -935,7 +1350,7 @@ export function TollInfoPage() {
                           })}
                           {/* Edit mode: actions */}
                           {editMode && (
-                            <td className="p-2 text-center">
+                            <td className="p-2 text-center" onClick={e => e.stopPropagation()}>
                               <button
                                 onClick={() => handleRemovePlaza(pi)}
                                 className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -946,7 +1361,156 @@ export function TollInfoPage() {
                             </td>
                           )}
                         </tr>
-                      );
+                      ); // end rows.push main tr
+                      // ── Expanded Route Detail ──
+                      if (hasRoutes && isExpanded) {
+                        rows.push(
+                          <tr key={`${rowKey}-expanded`} className="border-b border-slate-200 dark:border-slate-700">
+                            <td colSpan={totalCols} className="p-0">
+                              <div className="bg-amber-50/50 dark:bg-amber-950/20 border-t border-amber-200 dark:border-amber-800">
+                                {routeGroups!.map(({ groupIndex, group, segments: segItems }) => (
+                                  <div key={group.id} className="px-4 py-3">
+                                    {/* Route group header */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Route className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                      <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                                        {plaza.plazaName} — Route-Based Rates
+                                      </span>
+                                      {!editMode && (
+                                        <span className="text-[10px] text-amber-500 dark:text-amber-500/70">
+                                          {group.operator} · Effective {group.effectiveDate}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {/* Route sub-table */}
+                                    <div className="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800/50">
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="bg-amber-700 dark:bg-amber-800 text-white text-xs">
+                                            <th className="p-2 text-left font-semibold min-w-[180px] border-r border-amber-600 dark:border-amber-700">
+                                              To and vice versa
+                                            </th>
+                                            <th className="p-2 text-center font-semibold min-w-[80px] border-r border-amber-600 dark:border-amber-700">
+                                              Distance (km)
+                                            </th>
+                                            {activeClasses.map(vc => {
+                                              const Icon = getClassIcon(vc.iconName);
+                                              return (
+                                                <th key={vc.id} className="p-2 text-center font-semibold min-w-[80px] border-r border-amber-600 dark:border-amber-700 last:border-r-0">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <Icon className="h-3 w-3" />
+                                                    {vc.label}
+                                                  </div>
+                                                </th>
+                                              );
+                                            })}
+                                            {editMode && (
+                                              <th className="p-2 text-center border-l border-amber-600 dark:border-amber-700 w-[50px]" />
+                                            )}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {segItems.map(({ seg, origIdx }, segIdx) => {
+                                            const segBg = segIdx % 2 === 0
+                                              ? 'bg-amber-50 dark:bg-amber-950/30'
+                                              : 'bg-white dark:bg-slate-900/50';
+                                            const editSeg = editSchedule.routeRateGroups[groupIndex]?.segments[origIdx];
+                                            return (
+                                              <tr key={`${seg.fromPlazaName}-${seg.toPlazaName}`} className={`${segBg} border-b border-amber-100 dark:border-amber-900/30 last:border-b-0`}>
+                                                <td className="p-2 border-r border-amber-100 dark:border-amber-900/30">
+                                                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                                                    {seg.fromPlazaName} to {seg.toPlazaName}
+                                                  </span>
+                                                </td>
+                                                <td className="p-2 text-center border-r border-amber-100 dark:border-amber-900/30 text-slate-500 dark:text-slate-400 tabular-nums">
+                                                  {editMode ? (
+                                                    <Input
+                                                      type="number"
+                                                      value={editSeg?.distanceKm ?? seg.distanceKm}
+                                                      onChange={e => updateRouteDistance(groupIndex, origIdx, e.target.value)}
+                                                      className="w-[70px] h-7 text-sm text-center mx-auto"
+                                                      step="0.1"
+                                                    />
+                                                  ) : (
+                                                    <span>{seg.distanceKm} km</span>
+                                                  )}
+                                                </td>
+                                                {activeClasses.map(vc => {
+                                                  const rate = seg.rates[vc.id] ?? 0;
+                                                  const editRate = editSeg?.rates[vc.id] ?? rate;
+                                                  return (
+                                                    <td key={vc.id} className="p-2 text-center border-r border-amber-100 dark:border-amber-900/30 last:border-r-0">
+                                                      {editMode ? (
+                                                        <Input
+                                                          type="number"
+                                                          value={editRate}
+                                                          onChange={e => updateRouteRate(groupIndex, origIdx, vc.id, e.target.value)}
+                                                          className="w-[80px] h-7 text-sm text-center mx-auto"
+                                                          step="1"
+                                                        />
+                                                      ) : rate > 0 ? (
+                                                        <span className="font-medium text-amber-700 dark:text-amber-400">
+                                                          ${rate.toLocaleString('en-JM')}
+                                                        </span>
+                                                      ) : (
+                                                        <span className="text-slate-300 dark:text-slate-600 text-xs">$0.00</span>
+                                                      )}
+                                                    </td>
+                                                  );
+                                                })}
+                                                {editMode && (
+                                                  <td className="p-2 text-center">
+                                                    <button
+                                                      onClick={() => handleRemoveSegment(groupIndex, origIdx)}
+                                                      className="text-red-400 hover:text-red-600 transition-colors p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                      title="Remove route"
+                                                    >
+                                                      <Trash2 className="h-3.5 w-3.5" />
+                                                    </button>
+                                                  </td>
+                                                )}
+                                              </tr>
+                                            );
+                                          })}
+                                          {segItems.length === 0 && (
+                                            <tr>
+                                              <td colSpan={2 + activeClasses.length + (editMode ? 1 : 0)} className="p-4 text-center text-xs text-slate-400">
+                                                No route segments from {plaza.plazaName} yet.
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                    {/* Add segment button in edit mode */}
+                                    {editMode && (
+                                      <div className="mt-2 flex justify-center">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-xs text-amber-700 border-amber-200 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-900/20 h-7"
+                                          onClick={() => {
+                                            setAddSegmentGroupIndex(groupIndex);
+                                            setNewSegFrom(plaza.plazaName);
+                                            setNewSegTo('');
+                                            setNewSegDistance('');
+                                            setCustomSegFrom(false);
+                                            setCustomSegTo(false);
+                                            setShowAddSegment(true);
+                                          }}
+                                        >
+                                          <Plus className="h-3 w-3 mr-1" /> Add Route Segment
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ); // end rows.push expanded tr
+                      } // end if expanded
+                      return rows;
                     })}
                     {/* Add Plaza Row (edit mode only) */}
                     {editMode && (
@@ -969,6 +1533,62 @@ export function TollInfoPage() {
             </CardContent>
           </Card>
 
+          {/* Route group management (edit mode only) */}
+          {editMode && (
+            <div className="flex flex-wrap items-center gap-3 px-1">
+              {displaySchedule.routeRateGroups.map((group, groupIndex) => (
+                <div key={group.id} className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-1.5">
+                  <Route className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  <Input
+                    value={editSchedule.routeRateGroups[groupIndex]?.highway ?? group.highway}
+                    onChange={e => updateRouteGroupMeta(groupIndex, 'highway', e.target.value)}
+                    className="h-7 w-[220px] text-xs font-semibold"
+                    placeholder="Highway name"
+                  />
+                  <Input
+                    value={editSchedule.routeRateGroups[groupIndex]?.operator ?? group.operator}
+                    onChange={e => updateRouteGroupMeta(groupIndex, 'operator', e.target.value)}
+                    className="h-7 w-[240px] text-xs"
+                    placeholder="Operator name"
+                  />
+                  <Input
+                    value={editSchedule.routeRateGroups[groupIndex]?.effectiveDate ?? group.effectiveDate}
+                    onChange={e => updateRouteGroupMeta(groupIndex, 'effectiveDate', e.target.value)}
+                    className="h-7 w-[100px] text-xs"
+                    placeholder="DD/MM/YYYY"
+                  />
+                  <button
+                    onClick={() => handleRemoveRouteGroup(groupIndex)}
+                    className="text-red-400 hover:text-red-600 transition-colors p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                    title="Remove entire route group"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-900/20 h-8"
+                onClick={() => {
+                  setNewGroupOperator('');
+                  setNewGroupHighway('');
+                  setNewGroupEffDate('');
+                  setShowAddRouteGroup(true);
+                }}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Route Group
+              </Button>
+            </div>
+          )}
+
+          {/* Note about expandable plazas */}
+          {!editMode && routeSegmentCount > 0 && (
+            <p className="text-xs text-slate-400 dark:text-slate-500 px-1 italic">
+              Plazas with route-based pricing (NSH) are clickable — click the row to view origin-to-destination rates.
+            </p>
+          )}
+
           {/* Vehicle Class Legend */}
           <div className="flex flex-col gap-2 px-1">
             {activeClasses.map(vc => {
@@ -986,71 +1606,114 @@ export function TollInfoPage() {
           </div>
 
           {/* Quick Reference Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Cheapest Toll (across flat + route) */}
             <Card className="dark:bg-slate-900">
               <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Cheapest T-Tag Route</CardTitle>
+                <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Cheapest Toll</CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {(() => {
                   const firstClass = schedule.vehicleClasses[0];
                   if (!firstClass) return <p className="text-sm text-slate-500">No classes defined</p>;
-                  const cheapest = [...schedule.plazas].sort((a, b) =>
-                    (a.rates[firstClass.id]?.withTag ?? 0) - (b.rates[firstClass.id]?.withTag ?? 0)
-                  )[0];
+                  const flat = schedule.plazas
+                    .filter(p => !isRoutePlaza(p.plazaName, schedule.routeRateGroups))
+                    .map(p => ({ name: p.plazaName, rate: p.rates[firstClass.id]?.withTag ?? 0, kind: 'Per-Plaza' as const }))
+                    .filter(r => r.rate > 0);
+                  const routes: { name: string; rate: number; kind: 'Route' }[] = [];
+                  (schedule.routeRateGroups || []).forEach(g => g.segments.forEach(seg => {
+                    const r = seg.rates[firstClass.id] ?? 0;
+                    if (r > 0) routes.push({ name: `${seg.fromPlazaName} → ${seg.toPlazaName}`, rate: r, kind: 'Route' });
+                  }));
+                  const cheapest = [...flat, ...routes].sort((a, b) => a.rate - b.rate)[0];
                   return cheapest ? (
                     <div>
-                      <p className="text-xl font-bold text-emerald-600">
-                        ${(cheapest.rates[firstClass.id]?.withTag ?? 0).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{cheapest.plazaName} - {firstClass.label}</p>
+                      <p className="text-xl font-bold text-emerald-600">${cheapest.rate.toLocaleString()}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{cheapest.name} — {firstClass.label}</p>
+                      <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0">{cheapest.kind}</Badge>
                     </div>
                   ) : <p className="text-sm text-slate-500">No data</p>;
                 })()}
               </CardContent>
             </Card>
 
+            {/* Card 2: Most Expensive Toll (across flat + route) */}
             <Card className="dark:bg-slate-900">
               <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Most Expensive Route</CardTitle>
+                <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Most Expensive Toll</CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {(() => {
                   const firstClass = schedule.vehicleClasses[0];
                   if (!firstClass) return <p className="text-sm text-slate-500">No classes defined</p>;
-                  const most = [...schedule.plazas].sort((a, b) =>
-                    (b.rates[firstClass.id]?.withoutTag ?? 0) - (a.rates[firstClass.id]?.withoutTag ?? 0)
-                  )[0];
+                  const flat = schedule.plazas
+                    .filter(p => !isRoutePlaza(p.plazaName, schedule.routeRateGroups))
+                    .map(p => ({ name: `${p.plazaName} (Cash)`, rate: p.rates[firstClass.id]?.withoutTag ?? 0, kind: 'Per-Plaza' as const }));
+                  const routes: { name: string; rate: number; kind: 'Route' }[] = [];
+                  (schedule.routeRateGroups || []).forEach(g => g.segments.forEach(seg => {
+                    routes.push({ name: `${seg.fromPlazaName} → ${seg.toPlazaName}`, rate: seg.rates[firstClass.id] ?? 0, kind: 'Route' });
+                  }));
+                  const most = [...flat, ...routes].sort((a, b) => b.rate - a.rate)[0];
                   return most ? (
                     <div>
-                      <p className="text-xl font-bold text-rose-600">
-                        ${(most.rates[firstClass.id]?.withoutTag ?? 0).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{most.plazaName} - {firstClass.label} (No Tag)</p>
+                      <p className="text-xl font-bold text-rose-600">${most.rate.toLocaleString()}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{most.name} — {firstClass.label}</p>
+                      <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0">{most.kind}</Badge>
                     </div>
                   ) : <p className="text-sm text-slate-500">No data</p>;
                 })()}
               </CardContent>
             </Card>
 
+            {/* Card 3: T1/T2 Highway Total (per-plaza only) */}
             <Card className="dark:bg-slate-900">
               <CardHeader className="pb-2 pt-4 px-4">
                 <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                  Total All-Plaza Cost ({schedule.vehicleClasses[0]?.label || 'Class 1'})
+                  Hwy 2000 Total ({schedule.vehicleClasses[0]?.label || 'Class 1'})
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {(() => {
                   const firstClass = schedule.vehicleClasses[0];
                   if (!firstClass) return <p className="text-sm text-slate-500">No classes defined</p>;
-                  const totalTag = schedule.plazas.reduce((s, p) => s + (p.rates[firstClass.id]?.withTag ?? 0), 0);
-                  const totalCash = schedule.plazas.reduce((s, p) => s + (p.rates[firstClass.id]?.withoutTag ?? 0), 0);
+                  const flat = schedule.plazas.filter(p => !isRoutePlaza(p.plazaName, schedule.routeRateGroups));
+                  const totalTag = flat.reduce((s, p) => s + (p.rates[firstClass.id]?.withTag ?? 0), 0);
+                  const totalCash = flat.reduce((s, p) => s + (p.rates[firstClass.id]?.withoutTag ?? 0), 0);
                   return (
                     <div>
                       <p className="text-xl font-bold text-indigo-600">
                         ${totalTag.toLocaleString()} <span className="text-sm font-normal text-slate-400">/ ${totalCash.toLocaleString()}</span>
                       </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">T-Tag / Cash (full highway)</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">T-Tag / Cash — {flat.length} plazas</p>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Card 4: NSH End-to-End (longest route segment) */}
+            <Card className="dark:bg-slate-900">
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">NSH End-to-End</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {(() => {
+                  const firstClass = schedule.vehicleClasses[0];
+                  if (!firstClass) return <p className="text-sm text-slate-500">No classes defined</p>;
+                  const allSegs: { seg: RouteSegment; groupName: string }[] = [];
+                  (schedule.routeRateGroups || []).forEach(g => g.segments.forEach(seg => {
+                    allSegs.push({ seg, groupName: g.highway });
+                  }));
+                  if (allSegs.length === 0) return <p className="text-sm text-slate-500">No route data</p>;
+                  const longest = allSegs.sort((a, b) => b.seg.distanceKm - a.seg.distanceKm)[0];
+                  const rate = longest.seg.rates[firstClass.id] ?? 0;
+                  return (
+                    <div>
+                      <p className="text-xl font-bold text-amber-600">${rate.toLocaleString()}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {longest.seg.fromPlazaName} → {longest.seg.toPlazaName} ({longest.seg.distanceKm} km)
+                      </p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">{firstClass.label}</p>
                     </div>
                   );
                 })()}
@@ -1136,14 +1799,34 @@ export function TollInfoPage() {
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Rate Range (T-Tag)</p>
                       {(() => {
-                        const rates = schedule.plazas.map(p => p.rates[vc.id]?.withTag ?? 0);
+                        const flatPlazas = schedule.plazas.filter(p => !isRoutePlaza(p.plazaName, schedule.routeRateGroups));
+                        const rates = flatPlazas.map(p => p.rates[vc.id]?.withTag ?? 0).filter(r => r > 0);
                         const min = rates.length > 0 ? Math.min(...rates) : 0;
                         const max = rates.length > 0 ? Math.max(...rates) : 0;
                         return (
                           <p className="text-lg font-bold text-emerald-600">
-                            ${min.toLocaleString()} — ${max.toLocaleString()}
+                            {rates.length > 0 ? `$${min.toLocaleString()} — $${max.toLocaleString()}` : '$0'}
                             <span className="text-xs font-normal text-slate-400 ml-1">JMD</span>
                           </p>
+                        );
+                      })()}
+                      {(() => {
+                        const routeRates: number[] = [];
+                        (schedule.routeRateGroups || []).forEach(g => g.segments.forEach(seg => {
+                          const r = seg.rates[vc.id] ?? 0;
+                          if (r > 0) routeRates.push(r);
+                        }));
+                        if (routeRates.length === 0) return null;
+                        const rMin = Math.min(...routeRates);
+                        const rMax = Math.max(...routeRates);
+                        return (
+                          <div className="mt-2">
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Route Rate Range</p>
+                            <p className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                              ${rMin.toLocaleString()} — ${rMax.toLocaleString()}
+                              <span className="text-xs font-normal text-slate-400 ml-1">JMD</span>
+                            </p>
+                          </div>
                         );
                       })()}
                     </div>
@@ -1286,7 +1969,7 @@ export function TollInfoPage() {
               <ul className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                  <span><strong>Always use T-Tags</strong> — Even small savings of $10 per trip add up quickly across a fleet. At {schedule.plazas.length} plazas, a single daily round trip saves ~${(tagSavings.total * 2).toLocaleString()} JMD per vehicle per day.</span>
+                  <span><strong>Always use T-Tags</strong> — Even small savings of $10 per trip add up quickly across a fleet. Across {perPlazaPlazas.length} toll plazas, a single daily round trip saves ~${(tagSavings.total * 2).toLocaleString()} JMD per vehicle per day (Highway 2000 flat-rate plazas). NSH route-based tolls use a different pricing model.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
@@ -1380,6 +2063,13 @@ export function TollInfoPage() {
                     <p><strong>Status:</strong> {dbPlazaMap.get(selectedDbPlazaId)!.status}</p>
                   </div>
                 )}
+                {selectedDbPlazaId && dbPlazaMap.has(selectedDbPlazaId) &&
+                  isRoutePlaza(dbPlazaMap.get(selectedDbPlazaId)!.name, editSchedule.routeRateGroups) && (
+                  <div className="mt-2 p-2 rounded bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>This plaza uses <strong>route-based pricing</strong> (NSH). Click the row to expand and view/edit route rates.</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
@@ -1394,6 +2084,12 @@ export function TollInfoPage() {
                 <p className="text-[11px] text-slate-400 mt-1">
                   This plaza won't be linked to the Toll Database. You can link it later.
                 </p>
+                {newPlazaName.trim() && isRoutePlaza(newPlazaName.trim(), editSchedule.routeRateGroups) && (
+                  <div className="mt-2 p-2 rounded bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>"{newPlazaName.trim()}" already has <strong>route-based pricing</strong> segments. You can expand its row to view and edit route rates.</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1578,6 +2274,160 @@ export function TollInfoPage() {
               ) : (
                 <><Plus className="h-4 w-4 mr-1" /> Add Class</>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Route Segment Dialog ────────────────────────────────────── */}
+      <Dialog open={showAddSegment} onOpenChange={(open) => { setShowAddSegment(open); if (!open) { setNewSegFrom(''); setNewSegTo(''); setNewSegDistance(''); setCustomSegFrom(false); setCustomSegTo(false); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Route Segment</DialogTitle>
+            <DialogDescription>
+              Define an origin → destination pair with its distance. Rates can be set inline after adding.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Origin Plaza</Label>
+              {customSegFrom ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Enter custom origin name"
+                    value={newSegFrom}
+                    onChange={e => setNewSegFrom(e.target.value)}
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => { setCustomSegFrom(false); setNewSegFrom(''); }}>
+                    Use list
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Select value={newSegFrom} onValueChange={setNewSegFrom}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select origin plaza" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {NSH_PLAZA_NAMES.map(name => (
+                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => { setCustomSegFrom(true); setNewSegFrom(''); }}>
+                    Custom
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Destination Plaza</Label>
+              {customSegTo ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Enter custom destination name"
+                    value={newSegTo}
+                    onChange={e => setNewSegTo(e.target.value)}
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => { setCustomSegTo(false); setNewSegTo(''); }}>
+                    Use list
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Select value={newSegTo} onValueChange={setNewSegTo}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select destination plaza" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {NSH_PLAZA_NAMES
+                        .filter(n => n !== newSegFrom || customSegFrom)
+                        .map(name => (
+                          <SelectItem key={name} value={name}>{name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => { setCustomSegTo(true); setNewSegTo(''); }}>
+                    Custom
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="seg-dist">Distance (km)</Label>
+              <Input
+                id="seg-dist"
+                type="number"
+                value={newSegDistance}
+                onChange={e => setNewSegDistance(e.target.value)}
+                placeholder="e.g. 45.2"
+                step="0.1"
+                min="0"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddSegment(false)}>Cancel</Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={handleAddSegment}
+              disabled={!newSegFrom.trim() || !newSegTo.trim()}
+            >
+              <Plus className="h-4 w-4 mr-1" /> Add Route
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Route Group Dialog ──────────────────────────────────────── */}
+      <Dialog open={showAddRouteGroup} onOpenChange={(open) => { setShowAddRouteGroup(open); if (!open) { setNewGroupOperator(''); setNewGroupHighway(''); setNewGroupEffDate(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Route Group</DialogTitle>
+            <DialogDescription>
+              Create a new route-based pricing group. You can add route segments after the group is created.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="grp-highway">Highway Name *</Label>
+              <Input
+                id="grp-highway"
+                value={newGroupHighway}
+                onChange={e => setNewGroupHighway(e.target.value)}
+                placeholder="e.g. North-South Highway (Caymanas to Ocho Rios)"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="grp-operator">Operator</Label>
+              <Input
+                id="grp-operator"
+                value={newGroupOperator}
+                onChange={e => setNewGroupOperator(e.target.value)}
+                placeholder="e.g. Jamaica North South Highway Company Limited"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="grp-effdate">Effective Date (DD/MM/YYYY)</Label>
+              <Input
+                id="grp-effdate"
+                value={newGroupEffDate}
+                onChange={e => setNewGroupEffDate(e.target.value)}
+                placeholder={displaySchedule.effectiveDate || 'DD/MM/YYYY'}
+              />
+              <p className="text-xs text-slate-400">Leave blank to inherit the main schedule's effective date.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddRouteGroup(false)}>Cancel</Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={handleAddRouteGroup}
+              disabled={!newGroupHighway.trim()}
+            >
+              <Plus className="h-4 w-4 mr-1" /> Create Group
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -135,7 +135,10 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
       // However, we are NOT adding the *bad* ID to the map.
       // So trips with the "bad" ID will contribute to the "good" driver's stats.
       driver.totalTrips += 1;
-      driver.totalEarnings += trip.amount || 0;
+      // For InDrive trips with fee data, use true profit instead of full fare
+      driver.totalEarnings += (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
+        ? trip.indriveNetIncome
+        : (trip.amount || 0);
     });
     
     // Filter out Unknown Drivers

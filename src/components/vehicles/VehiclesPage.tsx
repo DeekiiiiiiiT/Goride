@@ -145,11 +145,13 @@ export function VehiclesPage() {
         const today = new Date();
 
         vTrips.forEach(t => {
-            totalEarnings += t.amount;
+            // For InDrive trips with fee data, use true profit instead of full fare
+            const effectiveAmount = (t.platform === 'InDrive' && t.indriveNetIncome != null) ? t.indriveNetIncome : t.amount;
+            totalEarnings += effectiveAmount;
             const tDate = new Date(t.date);
             
             if (isSameDay(tDate, today)) {
-                todayEarnings += t.amount;
+                todayEarnings += effectiveAmount;
                 activeMinutesToday += t.duration || 0;
             }
         });

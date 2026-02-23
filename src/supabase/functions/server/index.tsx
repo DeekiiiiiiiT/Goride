@@ -1155,9 +1155,10 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
     }
     
     // Query specific fields to avoid loading heavy route data
+    // Include indriveNetIncome & platform so we can use true profit for InDrive trips
     let query = supabase
         .from("kv_store_37f42386")
-        .select("value->status, value->amount, value->cashCollected, value->duration")
+        .select("value->status, value->amount, value->cashCollected, value->duration, value->platform, value->indriveNetIncome")
         .like("key", "trip:%");
 
     if (driverId) {
@@ -1215,7 +1216,13 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
     const completed = trips.filter((t: any) => t.status === 'Completed').length;
     const cancelled = trips.filter((t: any) => t.status === 'Cancelled').length;
     
-    const totalEarnings = trips.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+    // For InDrive trips with fee data, use true profit (net income) instead of full fare
+    const totalEarnings = trips.reduce((sum: number, t: any) => {
+      const effectiveEarnings = (t.platform === 'InDrive' && t.indriveNetIncome != null)
+        ? Number(t.indriveNetIncome)
+        : (Number(t.amount) || 0);
+      return sum + effectiveEarnings;
+    }, 0);
     const totalCashCollected = trips.reduce((sum: number, t: any) => sum + (Number(t.cashCollected) || 0), 0);
     const avgEarnings = completed > 0 ? totalEarnings / completed : 0;
     
@@ -2074,12 +2081,15 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
     const prompt = `
       You are an OCR assistant for a driver expense portal. 
       Parse the receipt or invoice image. It might be a general receipt, fuel receipt, or toll receipt.
+      This is from Jamaica. Jamaica EXCLUSIVELY uses DD/MM/YYYY date format. NEVER interpret dates as MM/DD/YYYY.
+      
+      Current Date Context: ${new Date().toISOString().split('T')[0]}
       
       Return a valid JSON object with these EXACT fields:
       - type (string): "Fuel", "Toll", "Maintenance", or "Other"
       - merchant (string): Name of the merchant or agency (e.g. "Highway 2000", "Total Gas")
       - amount (number): Total amount paid (number only)
-      - date (string): Date in YYYY-MM-DD format. IMPORTANT: Verify the date format based on locale context (e.g., JMD currency implies DD/MM/YYYY). If ambiguous (like 02/01/2026), prefer Day/Month/Year (Jan 2nd) over Month/Day/Year (Feb 1st).
+      - date (string): Date in YYYY-MM-DD format. The receipt uses DD/MM/YYYY. The FIRST number is ALWAYS the day, the SECOND is ALWAYS the month. Example: "01/12/2025" on the receipt = 1st December 2025 = output "2025-12-01". NEVER swap day and month.
       - time (string): Time in HH:MM format (24h)
       - receiptNumber (string): Invoice, ticket, or reference number
       - plaza (string): Plaza name (for tolls)
@@ -2109,7 +2119,9 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
     const text = response.choices[0].message.content || "{}";
     const data = JSON.parse(text);
 
-    return c.json({ success: true, data });
+    // Post-processing: catch and correct any future dates the AI missed
+    const [corrected] = correctFutureDates([data]);
+    return c.json({ success: true, data: corrected });
 
   } catch (e: any) {
     console.error("Scan Receipt Error:", e);

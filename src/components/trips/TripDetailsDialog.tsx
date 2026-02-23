@@ -56,11 +56,18 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
               <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-1">
                   <DollarSign className="h-4 w-4" />
-                  <span className="text-sm font-medium">Amount</span>
+                  <span className="text-sm font-medium">
+                    {trip.platform === 'InDrive' && trip.indriveNetIncome ? 'Fare' : 'Amount'}
+                  </span>
                 </div>
                 <div className="text-2xl font-bold text-slate-900 dark:text-slate-50">
                   ${trip.amount.toFixed(2)}
                 </div>
+                {trip.platform === 'InDrive' && trip.indriveNetIncome && (
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
+                    You keep: ${trip.indriveNetIncome.toFixed(2)}
+                  </div>
+                )}
               </div>
               <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-1">
@@ -70,6 +77,11 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                 <div className="text-lg font-semibold text-slate-900 dark:text-slate-50">
                   {trip.platform}
                 </div>
+                {trip.paymentMethod && (
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {trip.paymentMethod === 'Cash' ? '💵 Cash' : '💳 Card / Digital'}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -207,7 +219,7 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
             </div>
 
             {/* Detailed Financials */}
-            {(trip.fareBreakdown || trip.cashCollected !== undefined) && (
+            {(trip.fareBreakdown || trip.cashCollected !== undefined || trip.indriveNetIncome) && (
               <>
                 <Separator />
                 <div className="space-y-4">
@@ -216,32 +228,114 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                     Financial Breakdown
                   </h3>
                   <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                    {trip.fareBreakdown && (
+                    
+                    {/* InDrive trips with fee data: enhanced breakdown */}
+                    {trip.platform === 'InDrive' && trip.indriveNetIncome ? (
                       <>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600 dark:text-slate-400">Base Fare</span>
-                          <span className="font-medium text-slate-900 dark:text-slate-50">${trip.fareBreakdown.baseFare.toFixed(2)}</span>
+                        {/* Sub-branch: Cash vs Card */}
+                        {(trip.paymentMethod === 'Cash' || !trip.paymentMethod) ? (
+                          /* InDrive + Cash: Full cash flow story */
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Fare (Cash from Passenger)</span>
+                              <span className="font-medium text-slate-900 dark:text-slate-50">${trip.amount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-start text-amber-600 dark:text-amber-400">
+                              <div>
+                                <span className="flex items-center gap-1.5">
+                                  InDrive Service Fee
+                                  {trip.indriveServiceFeePercent != null && (
+                                    <span className="text-[10px] font-normal text-amber-500 dark:text-amber-500">
+                                      ({trip.indriveServiceFeePercent.toFixed(1)}%)
+                                    </span>
+                                  )}
+                                </span>
+                                <p className="text-[10px] text-amber-500/70 dark:text-amber-500/60 font-normal">Deducted from InDrive Balance</p>
+                              </div>
+                              <span className="font-medium">-${(trip.indriveServiceFee ?? 0).toFixed(2)}</span>
+                            </div>
+                            <Separator className="my-2" />
+                            <div className="flex justify-between text-sm">
+                              <span className="text-emerald-700 dark:text-emerald-400 font-medium">Cash in Hand</span>
+                              <span className="font-medium text-emerald-700 dark:text-emerald-400">${trip.amount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-rose-600 dark:text-rose-400 font-medium">InDrive Balance Impact</span>
+                              <span className="font-medium text-rose-600 dark:text-rose-400">-${(trip.indriveServiceFee ?? 0).toFixed(2)}</span>
+                            </div>
+                            <Separator className="my-2" />
+                            <div className="flex justify-between text-base font-bold text-emerald-700 dark:text-emerald-400">
+                              <span>True Profit</span>
+                              <span>${trip.indriveNetIncome.toFixed(2)}</span>
+                            </div>
+                            {!trip.paymentMethod && (
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                                Payment method not recorded — assuming cash
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          /* InDrive + Card: InDrive collects fare, deducts fee, pays driver */
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Fare (Collected by InDrive)</span>
+                              <span className="font-medium text-slate-900 dark:text-slate-50">${trip.amount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-start text-amber-600 dark:text-amber-400">
+                              <div>
+                                <span className="flex items-center gap-1.5">
+                                  InDrive Service Fee
+                                  {trip.indriveServiceFeePercent != null && (
+                                    <span className="text-[10px] font-normal text-amber-500 dark:text-amber-500">
+                                      ({trip.indriveServiceFeePercent.toFixed(1)}%)
+                                    </span>
+                                  )}
+                                </span>
+                                <p className="text-[10px] text-amber-500/70 dark:text-amber-500/60 font-normal">Retained by InDrive</p>
+                              </div>
+                              <span className="font-medium">-${(trip.indriveServiceFee ?? 0).toFixed(2)}</span>
+                            </div>
+                            <Separator className="my-2" />
+                            <div className="flex justify-between text-base font-bold text-emerald-700 dark:text-emerald-400">
+                              <span>Payout to Driver</span>
+                              <span>${trip.indriveNetIncome.toFixed(2)}</span>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      /* Standard breakdown for non-InDrive or legacy InDrive trips */
+                      <>
+                        {trip.fareBreakdown && (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Base Fare</span>
+                              <span className="font-medium text-slate-900 dark:text-slate-50">${trip.fareBreakdown.baseFare.toFixed(2)}</span>
+                            </div>
+                            {trip.fareBreakdown.tips > 0 && (
+                              <div className="flex justify-between text-emerald-600">
+                                <span>Tip</span>
+                                <span className="font-medium">+${trip.fareBreakdown.tips.toFixed(2)}</span>
+                              </div>
+                            )}
+                            {trip.fareBreakdown.surge > 0 && (
+                              <div className="flex justify-between text-indigo-600">
+                                <span>Surge</span>
+                                <span className="font-medium">+${trip.fareBreakdown.surge.toFixed(2)}</span>
+                              </div>
+                            )}
+                            <Separator className="my-2" />
+                          </>
+                        )}
+                        <div className="flex justify-between text-base font-bold text-slate-900 dark:text-slate-50">
+                          <span>Total Earnings</span>
+                          <span>${trip.amount.toFixed(2)}</span>
                         </div>
-                        {trip.fareBreakdown.tips > 0 && (
-                          <div className="flex justify-between text-emerald-600">
-                            <span>Tip</span>
-                            <span className="font-medium">+${trip.fareBreakdown.tips.toFixed(2)}</span>
-                          </div>
-                        )}
-                        {trip.fareBreakdown.surge > 0 && (
-                          <div className="flex justify-between text-indigo-600">
-                            <span>Surge</span>
-                            <span className="font-medium">+${trip.fareBreakdown.surge.toFixed(2)}</span>
-                          </div>
-                        )}
-                        <Separator className="my-2" />
                       </>
                     )}
-                    <div className="flex justify-between text-base font-bold text-slate-900 dark:text-slate-50">
-                      <span>Total Earnings</span>
-                      <span>${trip.amount.toFixed(2)}</span>
-                    </div>
-                    {trip.cashCollected !== undefined && (
+
+                    {/* Cash / Payout section — hidden for InDrive trips with fee data (shown in their own layout) */}
+                    {trip.cashCollected !== undefined && !(trip.platform === 'InDrive' && trip.indriveNetIncome) && (
                       <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 space-y-1">
                         <div className="flex justify-between text-sm">
                            <span className="text-slate-500 dark:text-slate-400">Cash Collected</span>

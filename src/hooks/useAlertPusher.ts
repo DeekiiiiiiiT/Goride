@@ -43,16 +43,14 @@ export function useAlertPusher() {
         });
       } catch (e) {
         failCount.current += 1;
-        // Only warn once on first failure; suppress repeated poll failures
-        if (failCount.current <= 1) {
-          console.warn("Alert polling: initial fetch failed, will retry silently:", e);
-        }
+        // Suppress network-level failures — these are expected during edge function cold starts.
+        // The 30s polling interval will retry automatically.
       }
     };
 
     // Polling mechanism (Step 1.3)
     const interval = setInterval(fetchAlerts, 30000); // Check every 30s
-    const initialTimeout = setTimeout(fetchAlerts, 3000); // First check after 3s (allow server warm-up)
+    const initialTimeout = setTimeout(fetchAlerts, 8000); // First check after 8s (allow edge function cold start)
 
     return () => {
         clearInterval(interval);

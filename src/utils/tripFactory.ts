@@ -23,6 +23,11 @@ export interface ManualTripInput {
   resolutionMethod?: 'instant' | 'background' | 'manual' | 'pending';
   resolutionTimestamp?: string;
   geocodeError?: string;
+  // InDrive fee tracking
+  indriveNetIncome?: number;    // What the driver keeps after InDrive's cut
+  indriveServiceFee?: number;   // Auto-calculated: amount - indriveNetIncome
+  indriveServiceFeePercent?: number; // Auto-calculated: (fee / amount) * 100
+  indriveBalanceDeduction?: number;  // Auto-calculated: fee from InDrive Balance (cash trips only)
 }
 
 export function createManualTrip(data: ManualTripInput, driverId: string, driverName?: string): Trip {
@@ -54,6 +59,34 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
   const isCashTrip = data.paymentMethod === 'Cash';
   const amount = Number(data.amount);
 
+  // InDrive-aware financial calculation
+  const isInDriveWithFeeData = data.platform === 'InDrive' && data.indriveNetIncome !== undefined;
+
+  let cashCollected: number;
+  let netPayout: number;
+  let balanceDeduction = 0;
+
+  if (isInDriveWithFeeData) {
+    if (isCashTrip) {
+      // InDrive + Cash: Driver pockets ALL the cash from the passenger.
+      // InDrive deducts their service fee from the driver's pre-loaded InDrive Balance.
+      cashCollected = amount;
+      netPayout = 0; // No platform payout — driver already has the cash
+      balanceDeduction = data.indriveServiceFee ?? 0; // Fee taken from InDrive Balance
+    } else {
+      // InDrive + Card: InDrive collects the full fare from the passenger,
+      // deducts their service fee, and pays the driver the net amount.
+      cashCollected = 0; // Driver collects no cash
+      netPayout = data.indriveNetIncome!; // What InDrive sends to the driver
+      balanceDeduction = 0; // No balance deduction — fee was retained before payout
+    }
+  } else {
+    // Non-InDrive platforms (or legacy InDrive trips without fee data):
+    // Generic logic — Cash trips: driver collects, Card trips: platform pays out
+    cashCollected = isCashTrip ? amount : 0;
+    netPayout = isCashTrip ? 0 : amount;
+  }
+
   return {
     id: `manual_${crypto.randomUUID().split('-')[0]}`, // Short unique ID
     platform: data.platform,
@@ -79,11 +112,9 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     stops: data.stops,
     totalWaitTime: data.totalWaitTime,
     
-    // Financials
-    // For Cash trips, driver collects amount directly (Net Payout from platform is 0)
-    // For Platform trips (Uber/Bolt), platform collects and pays driver (Net Payout = amount)
-    cashCollected: isCashTrip ? amount : 0,
-    netPayout: isCashTrip ? 0 : amount, 
+    // Financials — InDrive-aware cash flow
+    cashCollected,
+    netPayout,
     
     fareBreakdown: {
       baseFare: amount,
@@ -100,6 +131,14 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     batchId: data.isLiveRecorded ? 'live_driver_app' : 'manual_entry',
     resolutionMethod: data.resolutionMethod,
     resolutionTimestamp: data.resolutionTimestamp,
-    geocodeError: data.geocodeError
+    geocodeError: data.geocodeError,
+
+    // InDrive fee tracking (only populated for InDrive trips with fee data)
+    ...(isInDriveWithFeeData && {
+      indriveNetIncome: data.indriveNetIncome,
+      indriveServiceFee: data.indriveServiceFee,
+      indriveServiceFeePercent: data.indriveServiceFeePercent,
+      indriveBalanceDeduction: balanceDeduction, // Calculated based on payment method
+    }),
   } as Trip;
 }

@@ -75,10 +75,11 @@ import {
   LineChart,
   Line,
   AreaChart,
-  Area
+  Area,
+  Label as RechartsLabel
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { Trip, DriverMetrics, FinancialTransaction } from '../../types/data';
+import { Trip, DriverMetrics, FinancialTransaction, QuotaConfig } from '../../types/data';
 import { classifyTollTransaction } from '../../utils/tollTransactionUtils';
 import { format, subDays, isWithinInterval, startOfDay, endOfDay, eachDayOfInterval, differenceInDays } from "date-fns";
 import { DateRange } from "react-day-picker";
@@ -90,11 +91,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
+import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { FuelWalletView } from './FuelWalletView';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
+import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
@@ -433,9 +436,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   // Phase 2: Tier State
   const [tiers, setTiers] = useState<TierConfig[]>([]);
+  const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
 
   useEffect(() => {
     tierService.getTiers().then(setTiers).catch(console.error);
+    tierService.getQuotaSettings().then(setQuotaConfig).catch(console.error);
   }, []);
 
   // Calculate Monthly Earnings & Current Tier (Independent of Date Range Selection)
@@ -1071,7 +1076,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
            : (isCashPlatform ? trip.amount : 0);
 
         // Lifetime stats
-        totalEarnings += trip.amount;
+        // For InDrive trips with fee data, use true profit (net income) instead of full fare
+        totalEarnings += (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
+          ? trip.indriveNetIncome
+          : trip.amount;
         lifetimeTrips += 1;
         if (effectiveCash) totalCashCollected += Math.abs(effectiveCash);
         // Only count tolls as debt if they weren't collected in cash (assuming cash collected includes toll reimbursement)
@@ -1081,8 +1089,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
 
         // Filter Check
+        // Effective earnings: use true profit for InDrive trips with fee data
+        const effectiveEarnings = (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
+          ? trip.indriveNetIncome
+          : trip.amount;
+
         if (isWithinInterval(startOfDay(tripDateObj), { start, end })) {
-            periodEarnings += trip.amount;
+            periodEarnings += effectiveEarnings;
             
             const platform = trip.platform || 'Other';
             if (!platformStats[platform]) {
@@ -1091,7 +1104,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             const pStats = platformStats[platform];
 
             // Platform Stats
-            pStats.earnings += trip.amount;
+            pStats.earnings += effectiveEarnings;
             pStats.trips += 1;
             
             if (trip.status === 'Completed') {
@@ -1144,7 +1157,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
         // Previous Period Check
         if (isWithinInterval(startOfDay(tripDateObj), { start: prevStart, end: prevEnd })) {
-            prevPeriodEarnings += trip.amount;
+            prevPeriodEarnings += effectiveEarnings;
         }
      });
 
@@ -1713,6 +1726,38 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         timeMetrics: reconstructedTimeMetrics
      };
   }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms]);
+
+  // ────────────────────────────────────────────────────────────
+  // Platform Breakdown for Earnings donut chart (Phase 6)
+  //   Uses ALL trips (not date-filtered) for a full picture.
+  //   Replaces the old Base Fare / Tips breakdown that was always hollow.
+  // ────────────────────────────────────────────────────────────
+  const platformBreakdownData = useMemo(() => {
+    const completed = (trips || []).filter(t => t.status === 'Completed');
+    const platformTotals: Record<string, number> = {};
+    completed.forEach(trip => {
+      const platform = trip.platform || 'Other';
+      const earnings = getEffectiveTripEarnings(trip);
+      platformTotals[platform] = (platformTotals[platform] || 0) + earnings;
+    });
+    const colors: Record<string, string> = {
+      Uber: '#3b82f6',
+      InDrive: '#10b981',
+      Bolt: '#8b5cf6',
+      GoRide: '#f59e0b',
+      Private: '#ec4899',
+      Cash: '#84cc16',
+      Other: '#94a3b8'
+    };
+    return Object.entries(platformTotals)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({ name, value, color: colors[name] || '#94a3b8' }));
+  }, [trips]);
+
+  const platformTotalEarnings = useMemo(() =>
+    platformBreakdownData.reduce((sum, d) => sum + d.value, 0),
+    [platformBreakdownData]
+  );
 
   const handleDateSelect = (newRange: DateRange | undefined) => {
     if (newRange?.from) {
@@ -2549,38 +2594,107 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          </TabsContent>
 
          <TabsContent value="financial" className="space-y-6">
+           <Tabs defaultValue="earnings" className="space-y-4">
+             <TabsList className="grid w-full grid-cols-2 max-w-[300px]">
+               <TabsTrigger value="earnings">Earnings</TabsTrigger>
+               <TabsTrigger value="expenses">Expenses</TabsTrigger>
+             </TabsList>
+
+             <TabsContent value="earnings" className="space-y-6">
             <div className="grid grid-cols-1 gap-6">
                <Card>
                   <CardHeader>
-                     <CardTitle>Earnings Breakdown</CardTitle>
+                     <CardTitle>Earnings Breakdown by Platform</CardTitle>
+                     <CardDescription className="text-xs text-slate-500">All-time completed trip earnings across platforms</CardDescription>
                   </CardHeader>
-                  <CardContent className="flex items-center justify-center">
-                     <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                           <Pie
-                              data={metrics.earningsBreakdownData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={80}
-                              paddingAngle={5}
-                              dataKey="value"
-                           >
-                              {metrics.earningsBreakdownData.map((entry, index) => (
-                                 <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                           </Pie>
-                           <Tooltip />
-                        </PieChart>
-                     </ResponsiveContainer>
+                  <CardContent>
+                     {platformBreakdownData.length > 0 ? (
+                       <div className="flex flex-col md:flex-row items-center gap-6">
+                         <div className="w-full md:w-1/2">
+                           <ResponsiveContainer width="100%" height={260}>
+                              <PieChart>
+                                 <Pie
+                                    data={platformBreakdownData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={65}
+                                    outerRadius={90}
+                                    paddingAngle={4}
+                                    dataKey="value"
+                                 >
+                                    {platformBreakdownData.map((entry, index) => (
+                                       <Cell key={`plat-${index}`} fill={entry.color} />
+                                    ))}
+                                    <RechartsLabel
+                                      position="center"
+                                      content={({ viewBox }: any) => {
+                                        const { cx, cy } = viewBox || { cx: 130, cy: 130 };
+                                        return (
+                                        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central">
+                                          <tspan x={cx} dy="-8" fontSize="18" fontWeight="bold" fill="#1e293b">
+                                            {`$${platformTotalEarnings.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                                          </tspan>
+                                          <tspan x={cx} dy="22" fontSize="11" fill="#94a3b8">
+                                            Total Earnings
+                                          </tspan>
+                                        </text>
+                                        );
+                                      }}
+                                    />
+                                 </Pie>
+                                 <Tooltip
+                                   formatter={(value: number) => [`$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Earnings']}
+                                 />
+                              </PieChart>
+                           </ResponsiveContainer>
+                         </div>
+                         <div className="w-full md:w-1/2 space-y-2">
+                           {platformBreakdownData.map(d => {
+                             const pct = platformTotalEarnings > 0 ? (d.value / platformTotalEarnings * 100) : 0;
+                             return (
+                               <div key={d.name} className="flex items-center gap-3">
+                                 <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                                 <div className="flex-1 min-w-0">
+                                   <div className="flex items-center justify-between">
+                                     <span className="text-sm font-medium text-slate-700">{d.name}</span>
+                                     <span className="text-sm text-slate-600 font-medium">
+                                       {`$${d.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                                     </span>
+                                   </div>
+                                   <div className="w-full h-1.5 bg-slate-100 rounded-full mt-1">
+                                     <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: d.color }} />
+                                   </div>
+                                 </div>
+                                 <span className="text-xs text-slate-400 w-10 text-right">{pct.toFixed(0)}%</span>
+                               </div>
+                             );
+                           })}
+                         </div>
+                       </div>
+                     ) : (
+                       <div className="flex items-center justify-center h-[200px] text-slate-400 text-sm">
+                         No completed trips found for earnings breakdown.
+                       </div>
+                     )}
                   </CardContent>
                </Card>
             </div>
 
-            <DriverEarningsHistory driverId={driverId} transactions={transactions} />
+            <DriverEarningsHistory
+              driverId={driverId}
+              transactions={transactions}
+              trips={trips}
+              quotaConfig={quotaConfig || undefined}
+            />
          </TabsContent>
 
-         <TabsContent value="wallet" className="space-y-6">
+         <TabsContent value="expenses" className="space-y-6">
+                <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={trips} />
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          <TabsContent value="wallet" className="space-y-6">
              {/* Summary Cards Row (Phase 5) */}
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                  {/* Card 1: Net Outstanding */}
@@ -3321,9 +3435,23 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     </Card>
                 </div>
             </div>
+             </TabsContent>
+
+             <TabsContent value="expenses" className="space-y-6">
+               <Card>
+                 <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={trips} />{null}</Card></TabsContent>{/* DEAD_BLOCK_NEUTRALIZED<CardContent className="hidden">
+                   {null}
+                   {null}
+                   {null}
+                 </CardContent>
+               </Card>
+             </TabsContent>
+           </Tabs>
          </TabsContent>
 
-         <TabsContent value="operations" className="space-y-6">
+         DEAD_BLOCK_END */}
+
+          <TabsContent value="operations" className="space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <MetricCard 
                     title="Earnings per Km" 
@@ -3908,38 +4036,110 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                       <div className="font-medium">{selectedTrip.duration ? `${selectedTrip.duration.toFixed(0)} min` : '-'}</div>
                   </div>
 
-                  <div className="space-y-1">
-                      <Label className="text-slate-500 text-xs">Driver Earnings</Label>
-                      <div className="font-bold text-lg text-emerald-600">${selectedTrip.amount?.toFixed(2)}</div>
-                  </div>
-                  <div className="space-y-1">
-                      <Label className="text-slate-500 text-xs">Cash Collected</Label>
-                      <div className="font-bold text-lg text-amber-600">
-                        {Math.abs(Number(selectedTrip.cashCollected || 0)) > 0 
-                            ? `$${Math.abs(Number(selectedTrip.cashCollected)).toFixed(2)}` 
-                            : (selectedTrip.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(selectedTrip.platform.toLowerCase()) 
-                                ? `$${(selectedTrip.amount ?? 0).toFixed(2)}` 
-                                : '-')}
+                  {/* InDrive trips with fee data: enhanced breakdown */}
+                  {selectedTrip.platform === 'InDrive' && selectedTrip.indriveNetIncome ? (
+                    <>
+                      <div className="space-y-1">
+                        <Label className="text-slate-500 text-xs">Fare</Label>
+                        <div className="font-bold text-lg text-slate-900 dark:text-slate-50">${selectedTrip.amount?.toFixed(2)}</div>
                       </div>
-                  </div>
-
-                  {selectedTrip.fareBreakdown && (
-                    <div className="col-span-2 pt-2 border-t mt-2">
-                        <Label className="text-slate-500 text-xs mb-2 block">Fare Breakdown</Label>
-                        <div className="text-sm bg-slate-50 p-3 rounded-md border space-y-1">
-                            {Object.entries(selectedTrip.fareBreakdown).map(([key, value]) => {
-                                if (!value) return null;
-                                // Convert camelCase to Title Case
-                                const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                                return (
-                                    <div key={key} className="flex justify-between items-center text-xs">
-                                        <span className="text-slate-500">{label}</span>
-                                        <span className="font-medium text-slate-900">${Number(value).toFixed(2)}</span>
-                                    </div>
-                                );
-                            })}
+                      <div className="space-y-1">
+                        <Label className="text-slate-500 text-xs">Payment Method</Label>
+                        <div className="font-medium">
+                          {selectedTrip.paymentMethod === 'Card' ? '💳 Card' : '💵 Cash'}
                         </div>
-                    </div>
+                      </div>
+
+                      <div className="col-span-2 pt-2 border-t mt-2">
+                        <Label className="text-slate-500 text-xs mb-2 block">InDrive Fee Breakdown</Label>
+                        <div className="text-sm bg-slate-50 dark:bg-slate-900 p-3 rounded-md border space-y-2">
+                          {(!selectedTrip.paymentMethod || selectedTrip.paymentMethod === 'Cash') ? (
+                            <>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-600 dark:text-slate-400">Fare (Cash from Passenger)</span>
+                                <span className="font-medium text-slate-900 dark:text-slate-50">${selectedTrip.amount?.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-start text-xs text-amber-600 dark:text-amber-400">
+                                <div>
+                                  <span>InDrive Service Fee{selectedTrip.indriveServiceFeePercent != null ? ` (${selectedTrip.indriveServiceFeePercent.toFixed(1)}%)` : ''}</span>
+                                  <p className="text-[10px] text-amber-500/70 dark:text-amber-500/60">Deducted from InDrive Balance</p>
+                                </div>
+                                <span className="font-medium">-${(selectedTrip.indriveServiceFee ?? 0).toFixed(2)}</span>
+                              </div>
+                              <Separator />
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Cash in Hand</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">${selectedTrip.amount?.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-rose-600 dark:text-rose-400 font-medium">InDrive Balance Impact</span>
+                                <span className="text-rose-600 dark:text-rose-400 font-medium">-${(selectedTrip.indriveServiceFee ?? 0).toFixed(2)}</span>
+                              </div>
+                              <Separator />
+                              <div className="flex justify-between items-center text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                                <span>True Profit</span>
+                                <span>${selectedTrip.indriveNetIncome.toFixed(2)}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-600 dark:text-slate-400">Fare (Collected by InDrive)</span>
+                                <span className="font-medium text-slate-900 dark:text-slate-50">${selectedTrip.amount?.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-start text-xs text-amber-600 dark:text-amber-400">
+                                <div>
+                                  <span>InDrive Service Fee{selectedTrip.indriveServiceFeePercent != null ? ` (${selectedTrip.indriveServiceFeePercent.toFixed(1)}%)` : ''}</span>
+                                  <p className="text-[10px] text-amber-500/70 dark:text-amber-500/60">Retained by InDrive</p>
+                                </div>
+                                <span className="font-medium">-${(selectedTrip.indriveServiceFee ?? 0).toFixed(2)}</span>
+                              </div>
+                              <Separator />
+                              <div className="flex justify-between items-center text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                                <span>Payout to Driver</span>
+                                <span>${selectedTrip.indriveNetIncome.toFixed(2)}</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1">
+                          <Label className="text-slate-500 text-xs">Driver Earnings</Label>
+                          <div className="font-bold text-lg text-emerald-600">${selectedTrip.amount?.toFixed(2)}</div>
+                      </div>
+                      <div className="space-y-1">
+                          <Label className="text-slate-500 text-xs">Cash Collected</Label>
+                          <div className="font-bold text-lg text-amber-600">
+                            {Math.abs(Number(selectedTrip.cashCollected || 0)) > 0 
+                                ? `$${Math.abs(Number(selectedTrip.cashCollected)).toFixed(2)}` 
+                                : (selectedTrip.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(selectedTrip.platform.toLowerCase()) 
+                                    ? `$${(selectedTrip.amount ?? 0).toFixed(2)}` 
+                                    : '-')}
+                          </div>
+                      </div>
+
+                      {selectedTrip.fareBreakdown && (
+                        <div className="col-span-2 pt-2 border-t mt-2">
+                            <Label className="text-slate-500 text-xs mb-2 block">Fare Breakdown</Label>
+                            <div className="text-sm bg-slate-50 p-3 rounded-md border space-y-1">
+                                {Object.entries(selectedTrip.fareBreakdown).map(([key, value]) => {
+                                    if (!value) return null;
+                                    // Convert camelCase to Title Case
+                                    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                                    return (
+                                        <div key={key} className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-500">{label}</span>
+                                            <span className="font-medium text-slate-900">${Number(value).toFixed(2)}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                      )}
+                    </>
                   )}
               </div>
           )}

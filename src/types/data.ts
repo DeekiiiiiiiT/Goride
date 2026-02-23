@@ -87,6 +87,12 @@ export interface Trip {
   resolutionTimestamp?: string; // ISO date string
   geocodeError?: string;
 
+  // InDrive Fee Tracking
+  indriveNetIncome?: number;          // What the driver keeps after InDrive's cut
+  indriveServiceFee?: number;         // Auto-calculated: amount - indriveNetIncome
+  indriveServiceFeePercent?: number;  // Auto-calculated: (fee / amount) * 100
+  indriveBalanceDeduction?: number;   // Fee deducted from driver's InDrive Balance (cash trips only)
+
   [key: string]: any; // Allow dynamic properties
 }
 

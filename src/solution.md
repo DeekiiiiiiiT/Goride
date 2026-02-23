@@ -1,404 +1,503 @@
-# Toll Analytics Implementation Plan
+# Driver Earnings Wiring — Implementation Plan
 
-> **Feature:** Toll Analytics dashboard — a dedicated analytics page under Toll Management, modelled after the existing Fuel Performance Analytics (`FuelPerformanceAnalytics.tsx`) but tailored to toll-specific data dimensions (plazas, highways, payment methods, E-Tag adoption).
+## Problem Statement
 
-> **Data source:** Reuses the existing `useTollLogs` hook which fetches all toll transactions, vehicles, drivers, and plazas in one call. All analytics are computed client-side via `useMemo`.
+The **Earnings History** table in `DriverEarningsHistory.tsx` (shown under Financials > Earnings in `DriverDetail.tsx`) is completely broken:
 
-> **Target file:** `/components/toll/TollAnalytics.tsx` (new standalone page component)
+- **Gross Revenue shows $0.00 for all rows** because the component tries to calculate revenue from `FinancialTransaction[]` entries (ledger records like fuel charges, toll fees), but trip earnings are stored as `Trip` objects — there are zero "Revenue" type transactions.
+- **Tier Applied shows "Bronze (25%)" for all rows** because the tier lookup is based on cumulative revenue from transactions (which is $0), so it always falls back to the lowest tier — even though the driver header shows "PLATINUM".
+- **Net Earnings is always negative** because it's `$0 (broken gross) - expenses = -expenses`.
+- The **Earnings Breakdown donut chart** only shows "Base Fare" and "Tips" (from `fareBreakdown`), and is empty/hollow when no fare breakdown data exists.
 
----
+### Root Cause
 
-## Phase 1 — Foundation: File Scaffold, Routing & Sidebar Wiring
+Trip earnings live in `Trip[]` objects (field: `amount`, or `indriveNetIncome` for InDrive). Financial ledger entries live in `FinancialTransaction[]` objects (fuel, tolls, payouts). The Earnings History component only receives `transactions` — it has **no access to trips at all**.
 
-**Goal:** Create the empty component file, hook it into App.tsx routing and the sidebar, so the page is reachable and renders a placeholder. No charts or data processing yet.
+### The Fix
 
-### Step 1.1 — Create `/components/toll/TollAnalytics.tsx` with skeleton
-
-- Create the file with a basic React functional component.
-- Import `useTollLogs` from `../../hooks/useTollLogs`.
-- Call `useTollLogs()` inside the component to destructure `{ logs, loading, vehicles, drivers, plazas }`.
-- Render a simple placeholder: page title "Toll Analytics" with a subtitle, and a `Loader2` spinner when `loading` is true.
-- Export the component as a named export: `export function TollAnalytics()`.
-- **Verify:** The file compiles, imports are correct, and `useTollLogs` types align with what we destructure.
-
-### Step 1.2 — Add route in `App.tsx`
-
-- Import `TollAnalytics` at the top: `import { TollAnalytics } from './components/toll/TollAnalytics';`
-- Add a new route line next to the other toll routes (after line ~156): `{currentPage === 'toll-analytics' && <TollAnalytics />}`
-- **Verify:** No duplicate route keys; the component renders when `currentPage` equals `'toll-analytics'`.
-
-### Step 1.3 — Add sidebar item in `AppLayout.tsx`
-
-- Add `'toll-analytics'` to the `isTollManagementOpen` array (line ~86) so the Toll Management collapsible auto-opens when this page is active.
-- Add a new `<SidebarMenuSubItem>` inside the Toll Management collapsible section (between Toll Logs and Toll Reconciliation, or at the end — placing it **first** in the list for prominence):
-  - `isActive={currentPage === 'toll-analytics'}`
-  - `onClick={() => onNavigate?.('toll-analytics')}`
-  - Label text: `"Toll Analytics"`
-  - Include a `<Badge>` with text `"New"` using the same styling as the Fueling Analytics badge: `className="bg-indigo-500 text-white border-none h-4 px-1 text-[8px]"`
-- **Verify:** Clicking the sidebar item navigates to the page; the collapsible auto-opens when the page is active.
-
-### Step 1.4 — Empty state & loading state
-
-- In `TollAnalytics.tsx`, add an empty-state view that shows when `!loading && logs.length === 0`:
-  - Icon: `Receipt` from lucide-react
-  - Title: "No toll data yet"
-  - Subtitle: "Import toll transactions from the Imports page or add them via Toll Logs to see analytics here."
-- Add a loading state that shows a centered `Loader2` spinner with "Loading toll analytics..." text when `loading` is true.
-- **Verify:** The three states (loading, empty, has-data) all render correctly without errors.
+Connect the driver's `Trip[]` data into the Earnings History so that:
+- **Gross Revenue** = sum of trip effective earnings in the period
+- **Tier Applied** = looked up from cumulative trip earnings (not transactions)
+- **Driver Share** = Gross Revenue x Tier% (new column)
+- **Expenses** = from FinancialTransactions (already works)
+- **Net Earnings** = Driver Share - Expenses
+- **Quota %** = Gross Revenue vs configured target (from QuotaConfig)
 
 ---
 
-## Phase 2 — KPI Summary Cards (Top Row)
+## Files Involved
 
-**Goal:** Build the 4 headline KPI cards across the top of the page. These are computed from the `logs` array.
-
-### Step 2.1 — Compute summary statistics via `useMemo`
-
-Create a single `useMemo` block (named `summaryStats`) that computes:
-
-- `totalSpend` — Sum of `absAmount` for all usage logs (`isUsage === true`).
-- `totalTopups` — Sum of `absAmount` for all top-up logs (`isUsage === false`).
-- `totalTransactions` — Count of all logs.
-- `usageCount` — Count of usage-only logs.
-- `avgCostPerPassage` — `totalSpend / usageCount` (guard against division by zero).
-- `eTagCount` — Count of usage logs where `paymentMethodDisplay` equals `'E-Tag'`.
-- `eTagRate` — `(eTagCount / usageCount) * 100` (percentage, guard zero).
-- `netPosition` — `totalTopups - totalSpend` (positive = surplus, negative = deficit).
-
-**Dependency array:** `[logs]`
-
-### Step 2.2 — Card 1: Total Toll Spend
-
-- Use the dark gradient card style from Fuel Analytics (slate-900 to slate-800 with white text).
-- Icon: `TrendingDown` in rose-400 colour (spend is an outflow).
-- Title: "Total Toll Spend".
-- Value: Format `totalSpend` as JMD currency using `Intl.NumberFormat('en-JM', { style: 'currency', currency: 'JMD', minimumFractionDigits: 0 })`.
-- Subtitle: `"{usageCount} passages"`.
-- Include a small badge: "JMD" with a subtle background.
-
-### Step 2.3 — Card 2: Average Cost per Passage
-
-- Standard white card.
-- Icon: `Calculator` in blue on a blue-50 background circle.
-- Title: "Avg Cost per Passage".
-- Value: JMD formatted `avgCostPerPassage`.
-- Subtitle: "Per toll transaction".
-
-### Step 2.4 — Card 3: E-Tag Adoption Rate
-
-- Standard white card.
-- Icon: `CreditCard` in emerald on an emerald-50 background circle.
-- Title: "E-Tag Adoption".
-- Value: `{eTagRate}%` formatted to 1 decimal place.
-- Include a progress bar (same style as Fuel Analytics' integrity rate bar): green fill width = eTagRate%.
-- Subtitle: `"{eTagCount} of {usageCount} passages via E-Tag"`.
-
-### Step 2.5 — Card 4: Net Position (Balance Health)
-
-- Standard white card.
-- Icon: Conditional — `TrendingUp` in green if positive, `TrendingDown` in red if negative.
-- Title: "Net Position".
-- Value: JMD formatted `netPosition` with sign (+/−).
-- Colour the value text green if positive, red if negative.
-- Subtitle: "Top-ups minus spend".
-
-### Step 2.6 — Layout the 4 cards
-
-- Use `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4` to lay them out responsively.
-- Wrap in the page's `<div className="space-y-6">` container.
-- **Verify:** Cards render with real or zero data, currency formatting is correct, no NaN values appear.
+| File | Role | Changes |
+|------|------|---------|
+| `/utils/tripEarnings.ts` | **NEW** — shared utility | `getEffectiveTripEarnings(trip)` function |
+| `/components/drivers/DriverEarningsHistory.tsx` | Earnings History table | New props, rewritten aggregation, period tabs, quota |
+| `/components/drivers/DriverDetail.tsx` | Parent component | Pass trips + quota, fix donut chart |
+| `/services/tierService.ts` | Tier/Quota service | Already has `getQuotaSettings()` — no changes needed |
+| `/utils/tierCalculations.ts` | Tier math utilities | No changes needed |
+| `/types/data.ts` | Type definitions | No changes needed |
 
 ---
 
-## Phase 3 — Monthly Spend Trend Chart + Spend by Plaza Chart
+## Phase 1: Foundation — Create `getEffectiveTripEarnings()` Utility
 
-**Goal:** Build the first row of charts (2-column grid): an area chart showing monthly spend/top-ups over time, and a horizontal bar chart showing spend per plaza.
+**Goal:** Create a single, reusable function that returns the "true earnings" for any trip, respecting InDrive fee logic. This is the same guard used across the True Profit fix but centralized into one importable utility.
 
-### Step 3.1 — Compute monthly trend data via `useMemo`
+**File:** `/utils/tripEarnings.ts` (NEW)
 
-- Import `subMonths`, `startOfMonth`, `endOfMonth`, `eachMonthOfInterval`, `format` from `date-fns`.
-- Generate an array of the last 6 months using `eachMonthOfInterval`.
-- For each month, filter `logs` to entries within that month's date range.
-- Compute per-month: `spend` (sum absAmount of usage logs), `topups` (sum absAmount of top-up logs), `count` (number of transactions).
-- Return array of `{ name: format(month, 'MMM'), spend, topups, count }`.
-- **Dependency array:** `[logs]`
+### Step 1.1: Create the utility file
 
-### Step 3.2 — Render the Monthly Toll Spend Trend area chart
+Create `/utils/tripEarnings.ts` with a single exported function:
 
-- Use `<Card>` with `<CardHeader>` (title: "Monthly Toll Spend Trend", description: "Toll spend and top-ups over the last 6 months.").
-- Use `SafeResponsiveContainer` (imported as `ResponsiveContainer` from `../ui/SafeResponsiveContainer`), height 300.
-- `<AreaChart>` with:
-  - `<defs>` with a `linearGradient` for the spend area (rose/red gradient, matching the spend-is-outflow colour).
-  - `<CartesianGrid>` with `strokeDasharray="3 3"`, `vertical={false}`, `stroke="#f1f5f9"`.
-  - `<XAxis>` with `dataKey="name"`, no axis line, no tick line, fontSize 12.
-  - `<YAxis>` with no axis line, tickFormatter showing JMD abbreviated (e.g., "$50K").
-  - `<Tooltip>` with rounded style, JMD currency formatter.
-  - `<Area>` for `spend` — rose-500 stroke, gradient fill.
-  - `<Area>` for `topups` — emerald-500 stroke, low opacity fill.
-- **Verify:** Chart renders without errors; gradient IDs are unique.
+```ts
+getEffectiveTripEarnings(trip: Trip): number
+```
 
-### Step 3.3 — Compute spend-by-plaza data via `useMemo`
+**Logic:**
+- If `trip.platform === 'InDrive'` AND `trip.indriveNetIncome != null` → return `trip.indriveNetIncome`
+- Otherwise → return `trip.amount || 0`
+- Guard against null/undefined trip → return 0
 
-- Filter to usage logs only.
-- Group by `plazaName` (fall back to `locationRaw` or `"Unknown Plaza"`).
-- Sum `absAmount` per plaza.
-- Sort descending by total spend.
-- Take top 8 plazas.
-- Return array of `{ name: string, spend: number, count: number }`.
-- **Dependency array:** `[logs]`
+This matches the exact guard pattern already used in `TripStatsCard.tsx`, `TripLogsPage.tsx`, `DriverDetail.tsx`, `VehiclesPage.tsx`, and `DriverAssignmentModal.tsx` (the 6 files from the True Profit fix). It just centralizes it.
 
-### Step 3.4 — Render the Spend by Plaza horizontal bar chart
+### Step 1.2: Verify the function handles edge cases
 
-- Use `<Card>` with title "Spend by Plaza" and description "Top plazas ranked by total toll spend."
-- Use `SafeResponsiveContainer`, height 300.
-- `<BarChart>` with `layout="vertical"`, `margin={{ left: 40 }}`.
-- `<YAxis>` with `dataKey="name"`, type category, truncated labels (fontSize 10).
-- `<XAxis>` type number, hidden or with JMD tick formatter.
-- `<Bar>` with `dataKey="spend"`, indigo-500 fill, radius `[0, 4, 4, 0]`, barSize 18.
-- `<Tooltip>` with JMD formatter.
-- **Verify:** Bar labels don't overflow; chart handles 0-8 plazas gracefully.
+The function must handle:
+- `trip` is null/undefined → 0
+- `trip.amount` is undefined/NaN → 0
+- `trip.platform` is undefined → falls through to `trip.amount`
+- InDrive trip WITHOUT `indriveNetIncome` (legacy) → uses `trip.amount` (preserves backward compat)
+- InDrive trip WITH `indriveNetIncome` → uses `indriveNetIncome` (true profit)
 
-### Step 3.5 — Layout the two charts
+### Step 1.3: No existing code changes in this phase
 
-- Wrap both in `<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">`.
-- **Verify:** Responsive — stacks on mobile, side-by-side on desktop.
+This is additive only. No imports are changed, no existing behavior is altered. The utility will be consumed starting in Phase 3.
+
+**Checkpoint:** New file created, zero risk, zero side effects.
 
 ---
 
-## Phase 4 — Vehicle Spend Chart + Payment Method Distribution Chart
+## Phase 2: Extend `DriverEarningsHistory` Interface (Backward-Compatible)
 
-**Goal:** Build the second row of charts: toll spend by vehicle (bar chart), and payment method distribution (pie/donut chart).
+**Goal:** Add `trips` and `quotaConfig` props to the `DriverEarningsHistory` component without changing any logic. The component should still render exactly as before when only `transactions` is passed.
 
-### Step 4.1 — Compute spend-by-vehicle data via `useMemo`
+**File:** `/components/drivers/DriverEarningsHistory.tsx`
 
-- Filter to usage logs only.
-- Group by `vehicleId` (fall back to `vehicleName` for grouping display).
-- For each vehicle, sum `absAmount` and count flagged logs (where `status === 'Flagged'`).
-- Resolve vehicle display name using `vehicleName` field from logs.
-- Sort descending by total spend.
-- Take top 5.
-- Return array of `{ name: string, spend: number, flags: number, count: number }`.
-- **Dependency array:** `[logs]`
+### Step 2.1: Update the `DriverEarningsHistoryProps` interface
 
-### Step 4.2 — Render the Toll Spend by Vehicle horizontal bar chart
+Add two new optional props:
 
-- Same pattern as Fuel Analytics' "Integrity Health by Vehicle" chart.
-- `<BarChart layout="vertical">` with `margin={{ left: 50 }}`.
-- `<YAxis dataKey="name">` — vehicle plate/name labels.
-- `<Bar dataKey="spend">` with conditional `<Cell>` colouring: red (`#f43f5e`) if `flags > 0`, indigo (`#6366f1`) otherwise.
-- Title: "Toll Spend by Vehicle", description: "Top 5 vehicles by toll cost. Red bars indicate flagged transactions."
-- **Verify:** Red/indigo colouring works; empty state shows "No vehicle data available" message.
+```ts
+interface DriverEarningsHistoryProps {
+  driverId: string;
+  transactions: FinancialTransaction[];
+  trips?: Trip[];          // NEW — source of Gross Revenue
+  quotaConfig?: QuotaConfig; // NEW — for Quota % column
+}
+```
 
-### Step 4.3 — Compute payment method distribution via `useMemo`
+Both are optional so the existing call site (`<DriverEarningsHistory driverId={driverId} transactions={transactions} />` at DriverDetail.tsx line ~2595) continues to work unchanged.
 
-- Filter to usage logs only.
-- Group by `paymentMethodDisplay` (values: "E-Tag", "Cash", "Card", "Unknown", etc.).
-- Count transactions and sum spend per method.
-- Return array of `{ name: string, value: number, spend: number, count: number }`.
-- Define a colour map: E-Tag = emerald-500, Cash = amber-500, Card = blue-500, Unknown = slate-400.
-- **Dependency array:** `[logs]`
+### Step 2.2: Add imports for the new types
 
-### Step 4.4 — Render the Payment Method Distribution pie chart
+Add imports at the top of the file:
 
-- Import `PieChart`, `Pie`, `Cell` from recharts.
-- Use a donut style: `innerRadius={60}`, `outerRadius={100}`.
-- `<Cell>` for each slice using the colour map.
-- Custom centre label showing total transaction count.
-- `<Tooltip>` showing method name, count, and spend (JMD).
-- Legend below the chart showing method name + percentage.
-- Title: "Payment Method Split", description: "Distribution of toll payments by method."
-- **Verify:** Donut renders; legend is readable; handles edge case where only 1 method exists.
+```ts
+import { Trip, QuotaConfig } from "../../types/data";
+```
 
-### Step 4.5 — Layout the two charts
+`Trip` and `QuotaConfig` are already exported from `types/data.ts`. `FinancialTransaction` and `TierConfig` are already imported.
 
-- Same 2-column grid as Phase 3: `grid grid-cols-1 lg:grid-cols-2 gap-6`.
+### Step 2.3: Destructure new props with defaults
 
----
+In the component function signature:
 
-## Phase 5 — Highway Corridor Spend + Driver Spend Charts
+```ts
+export function DriverEarningsHistory({ driverId, transactions = [], trips = [], quotaConfig }: DriverEarningsHistoryProps)
+```
 
-**Goal:** Build the third row of charts: spend grouped by highway, and top drivers by toll cost.
+Default `trips` to empty array so existing logic doesn't break.
 
-### Step 5.1 — Compute spend-by-highway data via `useMemo`
+### Step 2.4: No logic changes
 
-- Filter to usage logs only.
-- Group by `highway` field (fall back to `"Unknown Highway"` if null).
-- Sum `absAmount` per highway, count transactions.
-- Sort descending by spend.
-- Return array of `{ name: string, spend: number, count: number }`.
-- **Dependency array:** `[logs]`
+The `weeklyData` memo still runs from transactions exactly as before. Trips are accepted but not yet used. This ensures the component compiles and renders identically.
 
-### Step 5.2 — Render the Spend by Highway Corridor bar chart
-
-- Use a **vertical bar chart** (not horizontal) since highway names are short enough for X-axis labels.
-- `<BarChart>` with `<XAxis dataKey="name">`, angled labels if needed (`angle={-20}`).
-- `<Bar dataKey="spend">` with indigo gradient fill.
-- `<Tooltip>` with JMD formatter and transaction count.
-- Title: "Spend by Highway Corridor", description: "Toll spend distributed across highway networks."
-- **Verify:** Labels don't overlap; handles 1–5 highways gracefully.
-
-### Step 5.3 — Compute spend-by-driver data via `useMemo`
-
-- Filter to usage logs only.
-- Group by `driverId` (use `driverDisplayName` for the label).
-- Sum `absAmount` per driver, count flagged transactions.
-- Sort descending by spend.
-- Take top 5.
-- Return array of `{ name: string, spend: number, flags: number, count: number }`.
-- **Dependency array:** `[logs]`
-
-### Step 5.4 — Render the Toll Spend by Driver horizontal bar chart
-
-- Exactly mirrors the Fuel Analytics "Fuel Spend by Driver" chart pattern.
-- `<BarChart layout="vertical">` with left margin for name labels.
-- Conditional `<Cell>` colouring: red if flags > 0, indigo otherwise.
-- `<Tooltip>` with JMD formatter.
-- Title: "Toll Spend by Driver" with `<Users>` icon, description: "Top 5 drivers ranked by total toll cost. Red bars indicate drivers with flagged transactions."
-- Empty state: "No driver data available." centered message.
-- **Verify:** Driver names display correctly; flags colouring works.
-
-### Step 5.5 — Layout the two charts
-
-- Same 2-column grid pattern.
+**Checkpoint:** Component accepts new props, existing behavior unchanged, fully backward-compatible.
 
 ---
 
-## Phase 6 — Insights Panel (Anomaly-Style Cards)
+## Phase 3: Rewrite Aggregation Engine to Use Trips for Revenue
 
-**Goal:** Build the bottom insights section — two side-by-side insight cards highlighting actionable patterns, modelled after Fuel Analytics' "Anomaly Insights" section.
+**Goal:** Replace the broken transaction-based Gross Revenue with trip-based calculation. Fix the tier lookup to use cumulative trip earnings. Add the "Driver Share" calculation.
 
-### Step 6.1 — Compute insight data via `useMemo`
+**File:** `/components/drivers/DriverEarningsHistory.tsx`
 
-Build an `insights` memo that computes:
+### Step 3.1: Import the `getEffectiveTripEarnings` utility
 
-- **Highest-Cost Vehicles:** Top 3 vehicles by toll spend with their flag counts (reuse `vehicleSpendData` from Phase 4 or recompute).
-- **Cash Overpay Candidates:** Vehicles that have more than 30% of their toll transactions paid by Cash (meaning they could save by switching to E-Tag). For each, calculate: total cash toll spend, estimated savings (e.g., 10-15% tag discount — use a configurable constant `TAG_DISCOUNT_RATE = 0.10`).
-- **Flagged Transaction Summary:** Count of transactions with status "Flagged" grouped by plaza, for the flagged-plaza insight.
-- **Dependency array:** `[logs]`
+```ts
+import { getEffectiveTripEarnings } from "../../utils/tripEarnings";
+```
 
-### Step 6.2 — Render the "Highest-Cost Vehicles" insight card
+### Step 3.2: Add a `periodType` state variable
 
-- Styled like Fuel Analytics' "High Efficiency Risk" card: bg-slate-50 rounded-xl border.
-- Title icon: `TrendingDown` in red.
-- Title: "Highest Toll Spend".
-- List top 3 vehicles with:
-  - Avatar circle showing first 2 letters of plate.
-  - Plate number (bold) and vehicle model (subtitle).
-  - Badge showing total spend in JMD.
-  - If flags > 0, show a red "X Flags" badge.
-- Empty state: "All vehicles within normal spend range."
+Add state to track the selected aggregation period (for Phase 4, but we set it up now):
 
-### Step 6.3 — Render the "Cash Overpay Opportunity" insight card
+```ts
+const [periodType, setPeriodType] = React.useState<'daily' | 'weekly' | 'monthly'>('weekly');
+```
 
-- Title icon: `CreditCard` in amber.
-- Title: "E-Tag Savings Opportunity".
-- List vehicles with high cash usage:
-  - Avatar circle in amber.
-  - Vehicle plate and "X% cash payments" subtitle.
-  - Badge showing estimated annual savings: `"{estimatedSavings} potential savings"`.
-- Empty state: "All vehicles are using E-Tag efficiently."
+Default is `'weekly'` which matches the current behavior.
 
-### Step 6.4 — Layout the insight cards
+### Step 3.3: Rewrite the `weeklyData` memo → rename to `periodData`
 
-- Wrap in a `<Card>` with header (title: "Toll Insights", icon: `Zap` in orange, description: "Actionable patterns detected from your toll transaction data.").
-- Inside `<CardContent>`, use `grid grid-cols-1 md:grid-cols-2 gap-4`.
-- **Verify:** Both cards render; empty states display when no matching data.
+Replace the existing `weeklyData` useMemo with a new `periodData` useMemo that:
 
----
+**3.3a — Determine date range from BOTH trips AND transactions:**
+- Collect all dates from `trips[].date` and `transactions[].date`
+- Find min/max across both collections
+- If both are empty, return `[]`
 
-## Phase 7 — Reconciliation Status Donut + Parish Heatmap
+**3.3b — Generate period buckets:**
+- For `'weekly'`: use `eachWeekOfInterval()` with `weekStartsOn: 1` (Monday) — same as current
+- For `'daily'`: use `eachDayOfInterval()` — each day is its own bucket
+- For `'monthly'`: use `eachMonthOfInterval()` — each calendar month is a bucket
 
-**Goal:** Add a final row with a reconciliation status overview (donut chart) and a parish-level spend summary table, then do a full polish pass.
+**3.3c — For each period bucket, calculate:**
 
-### Step 7.1 — Compute reconciliation status data via `useMemo`
+1. **Gross Revenue** (FROM TRIPS):
+   - Filter `trips` where `trip.date` falls within the period's start/end range
+   - Sum using `getEffectiveTripEarnings(trip)` for each trip
+   - Only include trips with `status === 'Completed'`
 
-- Group all logs by `statusDisplay` (Completed, Pending, Flagged, Reconciled, Void, etc.).
-- Count transactions per status.
-- Define colour map: Completed = emerald, Pending = amber, Flagged = red, Reconciled = blue, Void = slate.
-- Return array of `{ name: string, value: number, color: string }`.
-- **Dependency array:** `[logs]`
+2. **Cumulative Earnings** (FROM TRIPS — for tier lookup):
+   - Filter ALL trips where `trip.date <= periodEnd`
+   - Sum using `getEffectiveTripEarnings(trip)`
+   - This gives the driver's lifetime earnings up to that point
+   - Pass to `TierCalculations.getTierForEarnings(cumulative, tiers)` → correct tier for that period
 
-### Step 7.2 — Render the Reconciliation Status donut chart
+3. **Driver Share** (NEW):
+   - `driverShareAmount = grossRevenue * (tier.sharePercentage / 100)`
+   - This is the portion the driver keeps per the tier agreement
 
-- Same donut pattern as Phase 4's payment method chart.
-- `innerRadius={55}`, `outerRadius={95}`.
-- Centre label: total transaction count.
-- Legend below with status name, count, and colour.
-- Title: "Reconciliation Overview", description: "Transaction status distribution across all toll records."
+4. **Fleet Share** (NEW, informational):
+   - `fleetShareAmount = grossRevenue - driverShareAmount`
 
-### Step 7.3 — Compute parish-level spend data via `useMemo`
+5. **Expenses** (FROM TRANSACTIONS — unchanged logic):
+   - Filter `transactions` where date falls in the period
+   - Filter where `type === 'Expense'` or `(type === 'Adjustment' && amount < 0)`
+   - Sum `Math.abs(amount)` → display as positive deduction
 
-- Group usage logs by `parish` field (fall back to "Unknown").
-- Sum `absAmount` per parish, count transactions, calculate average.
-- Sort descending by spend.
-- Return array of `{ parish: string, spend: number, count: number, avg: number }`.
-- **Dependency array:** `[logs]`
+6. **Net Earnings** (FIXED):
+   - `netEarnings = driverShareAmount - expenses`
+   - This is the driver's actual take-home after their share minus deductions
 
-### Step 7.4 — Render the Parish Spend Summary as a compact table
+7. **Payouts** (FROM TRANSACTIONS — unchanged):
+   - Filter transactions where `type === 'Payout'`
+   - Sum `Math.abs(amount)`
 
-- Use a `<Card>` with title "Spend by Parish" and description "Toll expenditure grouped by Jamaican parish."
-- Render a small `<Table>` with columns: Parish, Transactions, Total Spend, Avg per Passage.
-- Format currency as JMD.
-- Highlight the top-spending parish row with a subtle indigo-50 background.
-- If no parish data, show "No parish data available" placeholder.
+8. **Trip Count** (NEW):
+   - Count of completed trips in this period (useful context)
 
-### Step 7.5 — Layout the two components
+### Step 3.4: Update the row data structure
 
-- Same 2-column grid.
+Each row now includes:
 
-### Step 7.6 — Full polish pass
+```ts
+{
+  periodStart: Date,
+  periodEnd: Date,
+  grossRevenue: number,      // From trips
+  driverShare: number,       // grossRevenue * tier%
+  fleetShare: number,        // grossRevenue - driverShare
+  expenses: number,          // From transactions
+  tier: TierConfig,          // Looked up from cumulative trip earnings
+  netEarnings: number,       // driverShare - expenses
+  payouts: number,           // From transactions
+  tripCount: number,         // From trips
+  transactionCount: number   // From transactions (for filtering empty rows)
+}
+```
 
-- Ensure all JMD currency formatting uses the same helper function (define once at top of file).
-- Ensure all chart gradient IDs are unique (prefix with `toll-` to avoid collision with fuel charts if both are in DOM).
-- Ensure all `<Tooltip>` contentStyles are consistent (12px border-radius, no border, shadow).
-- Ensure all empty/loading states are covered.
-- Ensure page title section at top includes: `<Receipt>` icon, "Toll Analytics" title, subtitle "Comprehensive analysis of your fleet's toll expenditure", and a refresh button that calls the hook's refetch.
-- Test responsive layout: verify all grids stack on mobile.
-- **Verify:** Full page renders without console errors; all charts display; no NaN or undefined values.
+### Step 3.5: Filter logic — show rows with activity
 
----
+A row should be displayed if `tripCount > 0 OR transactionCount > 0` (i.e., there was either a trip or a financial transaction in that period). Currently it filters on `transactionCount > 0` only, which hides weeks that had trips but no transactions.
 
-## Phase 8 — Date Format Compliance & Final QA ✅ COMPLETED
+### Step 3.6: Update the table columns
 
-**Goal:** Ensure DD/MM/YYYY date formatting is used throughout, and do a final quality-assurance pass.
+Update the `<Table>` columns to reflect the new data:
 
-### Step 8.1 — Date format audit ✅
+| Column | Source | Format |
+|--------|--------|--------|
+| Period | `periodStart - periodEnd` | Date range (format varies by period type) |
+| Gross Revenue | `grossRevenue` | `$X,XXX.XX` in slate |
+| Driver Share | `driverShare` | `$X,XXX.XX` in emerald with tier% badge |
+| Tier Applied | `tier.name (tier.sharePercentage%)` | Badge |
+| Expenses | `expenses` | `-$X,XXX.XX` in rose (or `-` if zero) |
+| Net Earnings | `netEarnings` | `$X,XXX.XX` in bold emerald (or rose if negative) |
+| Payouts | `payouts` | `$X,XXX.XX` in slate (or `-` if zero) |
 
-- All date displays in tooltips use `formatJMD()` for JMD amounts; no individual dates appear in tooltips.
-- Monthly axis labels use `MMM yyyy` (abbreviated month names) which are fine as-is.
-- No DD/MM/YYYY conversion was needed since no tooltip or label shows individual date values.
+Note: "Driver Share" is a new column between "Gross Revenue" and "Tier Applied". It makes the math visible: Gross → Tier% → Driver Share → minus Expenses → Net.
 
-### Step 8.2 — Remove any debug console.logs ✅
+### Step 3.7: Update the CSV export
 
-- Zero `console.log` statements found in TollAnalytics.tsx.
-- Do NOT touch `console.log` statements in other files (the `[TankCap Debug]` one in FuelLogTable.tsx is noted but not our scope).
+The `handleExport` function's `data` map must include the new fields:
+- Add "Driver Share" column
+- Add "Trip Count" column
+- Keep existing columns updated
 
-### Step 8.3 — Final type-safety check ✅
+### Step 3.8: Sort and display
 
-- **Fixed:** Restored missing `import React, { useMemo } from 'react'` (critical bug — was lost during Phase 6/7 edits).
-- No `any` types used.
-- All `useMemo` dependency arrays are `[logs]` — complete and correct.
-- All recharts `.map()` calls have unique key props.
+Rows sorted in descending order (newest period first) — same as current behavior.
 
-### Step 8.4 — Cross-reference with Fuel Analytics consistency ✅
-
-- **Fixed:** Bar chart `radius` aligned from `[0, 6, 6, 0]` to `[0, 4, 4, 0]` matching FuelPerformanceAnalytics.
-- Tooltip styles identical: `{ borderRadius: '12px', border: 'none', boxShadow: '...' }`.
-- CartesianGrid identical: `strokeDasharray="3 3"`, `stroke="#f1f5f9"`.
-- Dark gradient hero card identical: `bg-gradient-to-br from-slate-900 to-slate-800`.
-- Layout spacing identical: `space-y-6`.
-- Gradient IDs unique: `tollSpendGrad`, `tollTopupGrad` (vs Fuel's `colorLiters`).
-- Stale comment updated.
+**Checkpoint:** Earnings History now shows real Gross Revenue from trips, correct tier, and accurate Net Earnings. The table is still weekly-only (daily/monthly comes in Phase 4).
 
 ---
 
-## Summary — File Manifest
+## Phase 4: Add Daily / Weekly / Monthly Period Sub-Tabs
 
-| File | Action | Phase |
-|------|--------|-------|
-| `/components/toll/TollAnalytics.tsx` | **Create** | Phase 1 (scaffold), Phases 2–7 (content), Phase 8 (polish) |
-| `/App.tsx` | **Edit** — add import + route | Phase 1 |
-| `/components/layout/AppLayout.tsx` | **Edit** — add sidebar item + update open-check array | Phase 1 |
-| `/solution.md` | **Edit** — this plan | Pre-work |
+**Goal:** Add inner tab navigation so the admin can view earnings aggregated by day, week, or month. The weekly view is default and matches the current layout.
 
-No backend changes. No new hooks. No new types. All data comes from the existing `useTollLogs` hook.
+**File:** `/components/drivers/DriverEarningsHistory.tsx`
+
+### Step 4.1: Add period tab UI
+
+Above the table (inside the Card, below the CardHeader), add a small `Tabs` component:
+
+```
+[Daily] [Weekly] [Monthly]
+```
+
+- `defaultValue="weekly"` (matches current behavior)
+- `onValueChange` updates the `periodType` state (created in Phase 3, Step 3.2)
+- Use a compact `TabsList` that doesn't dominate the header
+
+### Step 4.2: Create period-specific date formatting
+
+The "Period" column should format differently based on the period type:
+
+- **Daily:** `"Mon, Feb 16, 2026"` (single day)
+- **Weekly:** `"Feb 16 - Feb 22, 2026"` (week range, current format)
+- **Monthly:** `"February 2026"` (month name + year)
+
+Create a helper function:
+```ts
+function formatPeriodLabel(start: Date, end: Date, periodType: string): string
+```
+
+### Step 4.3: Verify the aggregation functions work for each period
+
+The `periodData` memo from Phase 3 already branches on `periodType` for bucket generation. Verify:
+
+- **Daily:** `eachDayOfInterval()` → each bucket is 1 day. `periodEnd` = same as `periodStart` (end of that day).
+- **Weekly:** `eachWeekOfInterval({ weekStartsOn: 1 })` → each bucket is Mon-Sun. Already implemented.
+- **Monthly:** Use `startOfMonth()`/`endOfMonth()` to create monthly buckets. Each bucket spans the full calendar month.
+
+### Step 4.4: Handle the "daily" view's potential for many rows
+
+The daily view could have hundreds of rows if the date range is wide. Add:
+- A pagination control (e.g., show 14 rows per page for daily, 12 for weekly, 6 for monthly)
+- Or a "Show more" button at the bottom
+
+### Step 4.5: Ensure the export respects the current period type
+
+The CSV export should export data in the currently-selected period aggregation. The filename should reflect it:
+- `driver_earnings_daily_{driverId}.csv`
+- `driver_earnings_weekly_{driverId}.csv`
+- `driver_earnings_monthly_{driverId}.csv`
+
+**Checkpoint:** Three period views available. Weekly is default. Daily gives granular day-by-day breakdown. Monthly gives high-level summaries.
+
+---
+
+## Phase 5: Quota Progress Integration
+
+**Goal:** Compare actual earnings against the configured Earning Quota targets. Show a "Quota %" column and summary progress indicator.
+
+**File:** `/components/drivers/DriverEarningsHistory.tsx`
+
+### Step 5.1: Determine the quota target for the current period type
+
+From the `quotaConfig` prop, extract the relevant target:
+
+- **Daily:** `quotaConfig.weekly.amount / (quotaConfig.weekly.workingDays?.length || 6)` (daily target = weekly target / working days). Only if `quotaConfig.weekly.enabled`.
+- **Weekly:** `quotaConfig.weekly.amount` if `quotaConfig.weekly.enabled`
+- **Monthly:** `quotaConfig.monthly.amount` if `quotaConfig.monthly.enabled`. If monthly isn't configured but weekly is, derive it: `quotaConfig.weekly.amount * 4.33`
+
+If the relevant quota period is not enabled, the Quota % column is hidden entirely.
+
+### Step 5.2: Add `quotaTarget` and `quotaPercent` to each row
+
+In the `periodData` memo, for each row:
+
+```ts
+quotaTarget: number | null,  // null if quota not enabled for this period
+quotaPercent: number | null,  // (grossRevenue / quotaTarget) * 100
+```
+
+### Step 5.3: Add the Quota % column to the table
+
+Position it as the **last column** (after Payouts):
+
+| Quota % |
+|---------|
+| 120% |
+| 85% |
+| 43% |
+
+**Color coding:**
+- `>= 100%`: emerald background badge (target met/exceeded)
+- `70% - 99%`: amber background badge (close but not met)
+- `< 70%`: rose background badge (significantly below target)
+- If quota not configured: column not rendered at all
+
+### Step 5.4: Add a summary card above the table
+
+Above the table, show a compact summary for the **current/latest period**:
+
+```
+┌──────────────────────────────────────────────────┐
+│  This Week: $85,000 / $100,000 (85%)   ████████░░  │
+│  Tier: Platinum (31%)  |  Trips: 47              │
+└──────────────────────────────────────────────────┘
+```
+
+- Shows the most recent period's gross revenue vs quota target
+- A progress bar (Tailwind `bg-emerald-500` with `bg-slate-100` track)
+- The tier badge and trip count for quick context
+- Only rendered if quota is enabled for the current period type
+
+### Step 5.5: Add Quota % to CSV export
+
+If quota is enabled, add "Quota Target" and "Quota %" columns to the export.
+
+**Checkpoint:** Quota comparison is live. Admin can see at a glance which periods met target and which didn't. The summary card gives immediate "this period" context.
+
+---
+
+## Phase 6: Wire Everything in `DriverDetail.tsx`
+
+**Goal:** Connect the data pipes. Pass trips and quota config to `DriverEarningsHistory`. Fix the Earnings Breakdown donut chart. Final integration and verification.
+
+**File:** `/components/drivers/DriverDetail.tsx`
+
+### Step 6.1: Fetch QuotaConfig
+
+Add a state variable and effect to load quota settings:
+
+```ts
+const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
+
+useEffect(() => {
+  tierService.getQuotaSettings().then(setQuotaConfig).catch(console.error);
+}, []);
+```
+
+Note: `tierService` is already imported (line ~95). `QuotaConfig` needs to be added to the type import from `../../types/data`.
+
+### Step 6.2: Update the `DriverEarningsHistory` call
+
+Change line ~2595 from:
+
+```tsx
+<DriverEarningsHistory driverId={driverId} transactions={transactions} />
+```
+
+To:
+
+```tsx
+<DriverEarningsHistory
+  driverId={driverId}
+  transactions={transactions}
+  trips={trips}
+  quotaConfig={quotaConfig || undefined}
+/>
+```
+
+`trips` is already a prop on `DriverDetail` (line ~216). No additional fetching needed.
+
+### Step 6.3: Fix the Earnings Breakdown donut chart
+
+Currently the donut chart at lines ~2568-2592 uses `metrics.earningsBreakdownData` which only has "Base Fare" and "Tips" (often empty, resulting in a hollow donut).
+
+Replace with a more meaningful breakdown:
+
+**Option A — Per-Platform Earnings (recommended):**
+Show how much came from each platform (Uber, InDrive, Other):
+
+```ts
+const platformBreakdownData = useMemo(() => {
+  const platformTotals: Record<string, number> = {};
+  trips.forEach(trip => {
+    const platform = trip.platform || 'Other';
+    const earnings = getEffectiveTripEarnings(trip);
+    platformTotals[platform] = (platformTotals[platform] || 0) + earnings;
+  });
+  const colors: Record<string, string> = {
+    Uber: '#3b82f6',
+    InDrive: '#10b981',
+    Bolt: '#8b5cf6',
+    GoRide: '#f59e0b',
+    Other: '#94a3b8'
+  };
+  return Object.entries(platformTotals)
+    .filter(([_, value]) => value > 0)
+    .map(([name, value]) => ({ name, value, color: colors[name] || '#94a3b8' }));
+}, [trips]);
+```
+
+This replaces `metrics.earningsBreakdownData` in the `<Pie data={...}>`.
+
+### Step 6.4: Add a center label to the donut
+
+Inside the `<PieChart>`, add a text element showing the total earnings in the center of the donut:
+
+```
+$XXX,XXX
+Total Earnings
+```
+
+This gives the donut chart visual meaning even at a glance.
+
+### Step 6.5: Ensure date range filtering is respected
+
+The `trips` prop passed to `DriverDetail` includes ALL trips for this driver. However, the Financials > Earnings tab should ideally respect the global date range filter (the "Feb 15, 2026 - Feb 22, 2026" picker at the top).
+
+Check whether `DriverEarningsHistory` should receive the full trip history (for proper cumulative tier calculation) or date-filtered trips. Answer: **pass ALL trips** — the component needs the full history for cumulative tier math. The period buckets will naturally filter what's displayed.
+
+### Step 6.6: Verify no regressions
+
+Check that:
+- The Overview tab still shows the Financial Performance bar chart correctly
+- The Cash Wallet tab still works (it uses the same `transactions` state)
+- The tier badge in the profile header still shows correctly
+- Platform filter (`selectedPlatforms`) does NOT affect the Earnings History (it should show all-platform aggregated data — the filter is for the Overview tab's charts)
+- The Expenses sub-tab (the placeholder we just added) is unaffected
+
+### Step 6.7: Import cleanup
+
+Ensure all new imports are added:
+- `QuotaConfig` in the type import line
+- `getEffectiveTripEarnings` from the utility (if used for the donut chart)
+- Remove any unused imports if we replaced `earningsBreakdownData`
+
+**Checkpoint:** Everything is wired. The Earnings History shows real data. The donut chart is meaningful. The system is complete and functional.
+
+---
+
+## Testing Checklist (Post All Phases)
+
+After all 6 phases are implemented, verify:
+
+- [ ] Gross Revenue shows actual trip earnings (not $0)
+- [ ] Tier Applied matches the driver's actual tier (e.g., Platinum for a high-earner, not Bronze)
+- [ ] Driver Share = Gross Revenue x Tier% (math checks out)
+- [ ] Net Earnings = Driver Share - Expenses (can be negative if expenses exceed share)
+- [ ] Weekly/Daily/Monthly tabs all render correctly
+- [ ] Quota % column appears when quota is configured, hidden when not
+- [ ] Quota colors: emerald ≥100%, amber 70-99%, rose <70%
+- [ ] Donut chart shows per-platform breakdown with actual data
+- [ ] CSV export includes all new columns
+- [ ] InDrive trips use `indriveNetIncome` (true profit), not raw `amount`
+- [ ] Legacy InDrive trips (without fee data) gracefully fall back to `amount`
+- [ ] Empty state ("No financial history available") still renders when driver has zero trips AND zero transactions
+- [ ] No regressions in Overview tab, Cash Wallet tab, or other driver detail sections
+- [ ] Date format is DD/MM/YYYY in exports (Jamaica format)

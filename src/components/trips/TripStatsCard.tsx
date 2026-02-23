@@ -61,7 +61,13 @@ export function TripStatsCard({ trips, title = "Current View Summary", stats, lo
       totalTrips = trips.length;
       completed = trips.filter(t => t.status === 'Completed').length;
       cancelled = trips.filter(t => t.status === 'Cancelled').length;
-      totalEarnings = trips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      totalEarnings = trips.reduce((sum, t) => {
+        // For InDrive trips with fee data, use true profit (net income) instead of full fare
+        const effectiveEarnings = (t.platform === 'InDrive' && t.indriveNetIncome != null)
+          ? t.indriveNetIncome
+          : (t.amount || 0);
+        return sum + effectiveEarnings;
+      }, 0);
       totalCashCollected = trips.reduce((sum, t) => sum + (t.cashCollected || 0), 0);
       avgEarnings = completed > 0 ? totalEarnings / completed : 0;
       
@@ -125,7 +131,7 @@ export function TripStatsCard({ trips, title = "Current View Summary", stats, lo
             <h3 className="text-2xl font-bold text-indigo-600">${totalEarnings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
             <div className="text-xs text-slate-400 mt-1 flex flex-col gap-0.5">
                <span className="text-emerald-600 font-medium">${totalCashCollected.toLocaleString()} Cash</span>
-               <span className="text-slate-400">${(totalEarnings - totalCashCollected).toLocaleString()} Payout</span>
+               <span className="text-slate-400">${Math.max(0, totalEarnings - totalCashCollected).toLocaleString()} Payout</span>
             </div>
           </div>
           <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">

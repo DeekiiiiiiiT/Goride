@@ -3,197 +3,467 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Download } from "lucide-react";
-import { FinancialTransaction, TierConfig } from "../../types/data";
-import { startOfWeek, endOfWeek, format, eachWeekOfInterval, startOfYear, endOfYear, isSameWeek } from "date-fns";
+import { Download, ChevronDown, Target } from "lucide-react";
+import { FinancialTransaction, TierConfig, Trip, QuotaConfig } from "../../types/data";
+import {
+  startOfWeek, endOfWeek, format,
+  eachWeekOfInterval, eachDayOfInterval, eachMonthOfInterval,
+  startOfDay, endOfDay, startOfMonth, endOfMonth
+} from "date-fns";
 import { TierCalculations } from "../../utils/tierCalculations";
 import { tierService } from "../../services/tierService";
+import { getEffectiveTripEarnings } from "../../utils/tripEarnings";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 
 interface DriverEarningsHistoryProps {
   driverId: string;
   transactions: FinancialTransaction[];
+  trips?: Trip[];              // Source of Gross Revenue (Phase 2)
+  quotaConfig?: QuotaConfig;   // For Quota % column (Phase 5)
 }
 
-export function DriverEarningsHistory({ driverId, transactions = [] }: DriverEarningsHistoryProps) {
+export type PeriodType = 'daily' | 'weekly' | 'monthly';
+
+interface PeriodRow {
+  periodStart: Date;
+  periodEnd: Date;
+  grossRevenue: number;
+  driverShare: number;
+  fleetShare: number;
+  expenses: number;
+  tier: TierConfig;
+  netEarnings: number;
+  payouts: number;
+  tripCount: number;
+  transactionCount: number;
+  quotaTarget: number | null;
+  quotaPercent: number | null;
+}
+
+// ────────────────────────────────────────────────────────────
+// Derive the quota target for a given period type from quotaConfig.
+//   Daily  → weekly target / working days (derived from weekly config)
+//   Weekly → weekly target directly
+//   Monthly → monthly target if enabled, else weekly * 4.33
+// Returns null if the relevant quota is not enabled.
+// ────────────────────────────────────────────────────────────
+function getQuotaTarget(periodType: PeriodType, quotaConfig?: QuotaConfig): number | null {
+  if (!quotaConfig) return null;
+
+  if (periodType === 'daily') {
+    if (!quotaConfig.weekly?.enabled) return null;
+    const workingDays = quotaConfig.weekly.workingDays?.length || 6;
+    return quotaConfig.weekly.amount / workingDays;
+  }
+
+  if (periodType === 'weekly') {
+    if (!quotaConfig.weekly?.enabled) return null;
+    return quotaConfig.weekly.amount;
+  }
+
+  // monthly
+  if (quotaConfig.monthly?.enabled) return quotaConfig.monthly.amount;
+  if (quotaConfig.weekly?.enabled) return quotaConfig.weekly.amount * 4.33;
+  return null;
+}
+
+function getQuotaBadgeStyle(percent: number): string {
+  if (percent >= 100) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (percent >= 70) return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-rose-50 text-rose-700 border-rose-200';
+}
+
+export function DriverEarningsHistory({ driverId, transactions = [], trips = [], quotaConfig }: DriverEarningsHistoryProps) {
   const [tiers, setTiers] = React.useState<TierConfig[]>([]);
+  const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
+  const [visibleCount, setVisibleCount] = React.useState(12);
 
   React.useEffect(() => {
     tierService.getTiers().then(setTiers);
   }, []);
 
-  const weeklyData = useMemo(() => {
-    if (!transactions || transactions.length === 0 || tiers.length === 0) return [];
+  // Reset visible rows when switching period type
+  const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;
 
-    // 1. Find date range
-    const dates = transactions.map(t => new Date(t.date));
-    const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-    const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
-
-    // 2. Generate weeks
-    const weeks = eachWeekOfInterval({
-        start: startOfWeek(minDate),
-        end: endOfWeek(maxDate)
-    }, { weekStartsOn: 1 }); // Monday start
-
-    // 3. Aggregate per week
-    // We need to calculate cumulative earnings progressively to determine Tier for each week.
-    // However, Tiers are usually based on "Lifetime" or "Monthly" or "Rolling".
-    // The current system uses "Lifetime Cumulative".
-    
-    // Sort transactions by date asc for cumulative calc
-    const sortedTx = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    let runningCumulative = 0;
-    const weeklyRows: any[] = [];
-
-    // We can't just iterate weeks, we must iterate transactions to build cumulative correctly, 
-    // then snapshot at week boundaries.
-    
-    // Better approach:
-    // Iterate weeks in descending order (newest first) for display.
-    // For each week, calculate:
-    // - Gross Revenue in that week
-    // - Expenses in that week
-    // - Tier (based on cumulative earnings UP TO that week's end)
-    
-    // To do this efficiently:
-    // 1. Calculate total cumulative map by week end?
-    // Let's just iterate weeks, filter tx, and calc cumulative up to that point.
-    
-    const rows = weeks.map(weekStart => {
-        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-        
-        // Filter tx in this week
-        const weekTx = transactions.filter(t => {
-            const d = new Date(t.date);
-            return d >= weekStart && d <= weekEnd;
-        });
-
-        // Filter tx BEFORE this week end (for cumulative tier)
-        const pastTx = transactions.filter(t => {
-             const d = new Date(t.date);
-             return d <= weekEnd;
-        });
-        
-        const cumulative = pastTx
-            .filter(t => (t.type === 'Revenue' || (t.type === 'Adjustment' && t.amount > 0)) && t.paymentMethod !== 'Tag Balance')
-            .reduce((sum, t) => sum + (t.amount > 0 ? t.amount : 0), 0);
-            
-        const currentTier = TierCalculations.getTierForEarnings(cumulative, tiers);
-
-        // Week Stats
-        const grossRevenue = weekTx
-            .filter(t => (t.type === 'Revenue' || (t.type === 'Adjustment' && t.amount > 0)) && t.paymentMethod !== 'Tag Balance')
-            .reduce((sum, t) => sum + t.amount, 0);
-            
-        const expenses = weekTx
-            .filter(t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0))
-            .reduce((sum, t) => sum + Math.abs(t.amount), 0); // Display as positive deduction
-            
-        const payouts = weekTx
-            .filter(t => t.type === 'Payout')
-            .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-        // Net Earnings (Calculated)
-        // Formula: (Gross * TierShare) - Expenses? 
-        // Or did we already apply the share in the transaction? 
-        // In this system, "Revenue" tx are usually Gross Fares.
-        // So we apply the share here.
-        
-        const driverShareAmount = grossRevenue * (currentTier.sharePercentage / 100);
-        const netEarnings = driverShareAmount - expenses; 
-        
-        return {
-            weekStart,
-            weekEnd,
-            grossRevenue,
-            expenses,
-            tier: currentTier,
-            netEarnings,
-            payouts,
-            transactionCount: weekTx.length
-        };
-    });
-
-    // Sort Descending (Newest Week First)
-    return rows.reverse().filter(r => r.transactionCount > 0);
-
-  }, [transactions, tiers]);
-
-  const handleExport = () => {
-      const data = weeklyData.map(row => ({
-          Week: `${format(row.weekStart, 'dd/MM/yyyy')} to ${format(row.weekEnd, 'dd/MM/yyyy')}`,
-          'Gross Revenue': row.grossRevenue.toFixed(2),
-          'Expenses': row.expenses.toFixed(2),
-          'Tier Name': row.tier.name,
-          'Tier Share %': row.tier.sharePercentage + '%',
-          'Net Earnings (Calc)': row.netEarnings.toFixed(2),
-          'Actual Payouts': row.payouts.toFixed(2)
-      }));
-      
-      exportToCSV(data, `driver_earnings_history_${driverId}`);
-      toast.success("History Exported");
+  const handlePeriodChange = (pt: PeriodType) => {
+    setPeriodType(pt);
+    setVisibleCount(defaultPageSize(pt));
   };
 
-  if (weeklyData.length === 0) {
-      return (
-          <div className="text-center p-8 border border-dashed rounded-lg text-slate-500">
-              No financial history available.
-          </div>
+  // ────────────────────────────────────────────────────────────
+  // Quota target for the current period type (null = not enabled)
+  // ────────────────────────────────────────────────────────────
+  const quotaTarget = useMemo(() => getQuotaTarget(periodType, quotaConfig), [periodType, quotaConfig]);
+  const quotaEnabled = quotaTarget !== null;
+
+  // ────────────────────────────────────────────────────────────
+  // Core aggregation engine — computes rows for the selected period type.
+  //   • Gross Revenue comes from TRIPS (via getEffectiveTripEarnings)
+  //   • Expenses / Payouts come from TRANSACTIONS
+  //   • Tier is looked up from cumulative trip earnings
+  // ────────────────────────────────────────────────────────────
+  const periodData: PeriodRow[] = useMemo(() => {
+    if (tiers.length === 0) return [];
+    if (trips.length === 0 && transactions.length === 0) return [];
+
+    // 1. Collect all dates from trips + transactions to find the overall range
+    const allDates: number[] = [];
+    trips.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
+    transactions.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
+    if (allDates.length === 0) return [];
+
+    const minDate = new Date(Math.min(...allDates));
+    const maxDate = new Date(Math.min(Math.max(...allDates), Date.now()));
+
+    // 2. Generate period buckets based on periodType
+    let buckets: { start: Date; end: Date }[] = [];
+
+    if (periodType === 'daily') {
+      const days = eachDayOfInterval({ start: startOfDay(minDate), end: endOfDay(maxDate) });
+      buckets = days.map(d => ({ start: startOfDay(d), end: endOfDay(d) }));
+    } else if (periodType === 'monthly') {
+      const months = eachMonthOfInterval({ start: startOfMonth(minDate), end: endOfMonth(maxDate) });
+      buckets = months.map(m => ({ start: startOfMonth(m), end: endOfMonth(m) }));
+    } else {
+      // weekly (default)
+      const weeks = eachWeekOfInterval(
+        { start: startOfWeek(minDate, { weekStartsOn: 1 }), end: endOfWeek(maxDate, { weekStartsOn: 1 }) },
+        { weekStartsOn: 1 }
       );
+      buckets = weeks.map(w => ({ start: w, end: endOfWeek(w, { weekStartsOn: 1 }) }));
+    }
+
+    // 3. Pre-filter completed trips for revenue calculations
+    const completedTrips = trips.filter(t => t.status === 'Completed');
+
+    // 4. Pre-sort completed trips by date for efficient cumulative calculation
+    const sortedTrips = [...completedTrips].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    // 5. Aggregate each bucket
+    const rows: PeriodRow[] = buckets.map(({ start: periodStart, end: periodEnd }) => {
+      const pStartTime = periodStart.getTime();
+      const pEndTime = periodEnd.getTime();
+
+      // --- Trips in this period ---
+      const periodTrips = completedTrips.filter(t => {
+        const d = new Date(t.date).getTime();
+        return d >= pStartTime && d <= pEndTime;
+      });
+
+      const grossRevenue = periodTrips.reduce(
+        (sum, t) => sum + getEffectiveTripEarnings(t), 0
+      );
+
+      const tripCount = periodTrips.length;
+
+      // --- Monthly-reset cumulative earnings for tier lookup ---
+      // Tier resets on the 1st of each month. The "reference month" is
+      // determined by the period's start date. Only trips dated within
+      // that calendar month (up to the period end, capped at month-end)
+      // count toward the cumulative that determines the tier.
+      const refMonthStart = startOfMonth(periodStart).getTime();
+      const refMonthEnd = endOfMonth(periodStart).getTime();
+      const cumulativeCap = Math.min(pEndTime, refMonthEnd);
+
+      const cumulativeEarnings = sortedTrips.reduce((sum, t) => {
+        const d = new Date(t.date).getTime();
+        if (d >= refMonthStart && d <= cumulativeCap) {
+          return sum + getEffectiveTripEarnings(t);
+        }
+        return sum;
+      }, 0);
+
+      const tier = TierCalculations.getTierForEarnings(cumulativeEarnings, tiers);
+
+      // --- Driver / Fleet share ---
+      const driverShare = grossRevenue * (tier.sharePercentage / 100);
+      const fleetShare = grossRevenue - driverShare;
+
+      // --- Transactions in this period ---
+      const periodTx = transactions.filter(t => {
+        const d = new Date(t.date).getTime();
+        return d >= pStartTime && d <= pEndTime;
+      });
+
+      const expenses = periodTx
+        .filter(t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0))
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+      const payouts = periodTx
+        .filter(t => t.type === 'Payout')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+      // --- Net Earnings = Driver Share minus Expenses ---
+      const netEarnings = driverShare - expenses;
+
+      // --- Quota ---
+      const qTarget = quotaTarget;
+      const qPercent = qTarget !== null && qTarget > 0 ? (grossRevenue / qTarget) * 100 : null;
+
+      return {
+        periodStart,
+        periodEnd,
+        grossRevenue,
+        driverShare,
+        fleetShare,
+        expenses,
+        tier,
+        netEarnings,
+        payouts,
+        tripCount,
+        transactionCount: periodTx.length,
+        quotaTarget: qTarget,
+        quotaPercent: qPercent,
+      };
+    });
+
+    // 6. Only show rows that had trip earnings, sorted newest-first
+    return rows
+      .filter(r => r.tripCount > 0)
+      .reverse();
+
+  }, [trips, transactions, tiers, periodType, quotaTarget]);
+
+  // ────────────────────────────────────────────────────────────
+  // Period label formatting
+  // ────────────────────────────────────────────────────────────
+  const formatPeriodLabel = (row: PeriodRow): string => {
+    if (periodType === 'daily') {
+      return format(row.periodStart, 'EEE, dd/MM/yyyy');
+    }
+    if (periodType === 'monthly') {
+      return format(row.periodStart, 'MMMM yyyy');
+    }
+    // weekly
+    return `${format(row.periodStart, 'MMM d')} – ${format(row.periodEnd, 'MMM d, yyyy')}`;
+  };
+
+  const periodColumnLabel = periodType === 'daily' ? 'Day' : periodType === 'monthly' ? 'Month' : 'Week';
+  const periodLabel = periodType === 'daily' ? 'day' : periodType === 'weekly' ? 'week' : 'month';
+
+  // ────────────────────────────────────────────────────────────
+  // Latest period row (for summary card)
+  // ────────────────────────────────────────────────────────────
+  const latestRow = periodData.length > 0 ? periodData[0] : null;
+
+  // ────────────────────────────────────────────────────────────
+  // CSV Export
+  // ────────────────────────────────────────────────────────────
+  const handleExport = () => {
+    const data = periodData.map(row => {
+      const base: Record<string, string | number> = {
+        [periodColumnLabel]: periodType === 'weekly'
+          ? `${format(row.periodStart, 'dd/MM/yyyy')} to ${format(row.periodEnd, 'dd/MM/yyyy')}`
+          : periodType === 'daily'
+            ? format(row.periodStart, 'dd/MM/yyyy')
+            : format(row.periodStart, 'MMMM yyyy'),
+        'Trip Count': row.tripCount,
+        'Gross Revenue': row.grossRevenue.toFixed(2),
+        'Tier Name': row.tier.name,
+        'Tier Share %': row.tier.sharePercentage + '%',
+        'Driver Share': row.driverShare.toFixed(2),
+        'Payouts': row.payouts.toFixed(2),
+      };
+
+      if (quotaEnabled) {
+        base['Quota Target'] = row.quotaTarget !== null ? row.quotaTarget.toFixed(2) : '-';
+        base['Quota %'] = row.quotaPercent !== null ? row.quotaPercent.toFixed(1) + '%' : '-';
+      }
+
+      return base;
+    });
+
+    exportToCSV(data, `driver_earnings_history_${periodType}_${driverId}`);
+    toast.success("History Exported");
+  };
+
+  // ────────────────────────────────────────────────────────────
+  // Paginated slice
+  // ────────────────────────────────────────────────────────────
+  const visibleRows = periodData.slice(0, visibleCount);
+  const hasMore = periodData.length > visibleCount;
+  const remainingCount = periodData.length - visibleCount;
+
+  // ────────────────────────────────────────────────────────────
+  // Empty state
+  // ────────────────────────────────────────────────────────────
+  if (periodData.length === 0) {
+    return (
+      <div className="text-center p-8 border border-dashed rounded-lg text-slate-500">
+        No earnings history available.
+      </div>
+    );
   }
 
+  // ────────────────────────────────────────────────────────────
+  // Render
+  // ────────────────────────────────────────────────────────────
   return (
     <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Earnings History</CardTitle>
-            <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-2" />
-                Export History
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-lg">Earnings History</CardTitle>
+        <Button variant="outline" size="sm" onClick={handleExport}>
+          <Download className="h-4 w-4 mr-2" />
+          Export History
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Period selector tabs */}
+        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+          {(['daily', 'weekly', 'monthly'] as PeriodType[]).map(pt => (
+            <button
+              key={pt}
+              onClick={() => handlePeriodChange(pt)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                periodType === pt
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {pt === 'daily' ? 'Daily' : pt === 'weekly' ? 'Weekly' : 'Monthly'}
+            </button>
+          ))}
+          <span className="ml-2 text-[10px] text-slate-400">
+            {periodData.length} {periodLabel}{periodData.length !== 1 ? 's' : ''} with activity
+          </span>
+        </div>
+
+        {/* Quota summary card — only when quota is enabled and we have a latest row */}
+        {quotaEnabled && latestRow && latestRow.quotaTarget !== null && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-slate-500" />
+                <span className="text-sm font-medium text-slate-700">
+                  This {periodLabel}: ${latestRow.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {' / '}
+                  ${latestRow.quotaTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {latestRow.quotaPercent !== null && (
+                    <span className={`ml-1.5 font-semibold ${latestRow.quotaPercent >= 100 ? 'text-emerald-600' : latestRow.quotaPercent >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      ({latestRow.quotaPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-500">
+                <Badge
+                  variant="outline"
+                  className="text-[10px]"
+                  style={{ backgroundColor: latestRow.tier.color ? `${latestRow.tier.color}15` : undefined, borderColor: latestRow.tier.color || undefined, color: latestRow.tier.color || undefined }}
+                >
+                  {latestRow.tier.name} ({latestRow.tier.sharePercentage}%)
+                </Badge>
+                {latestRow.tripCount > 0 && (
+                  <span>{latestRow.tripCount} trip{latestRow.tripCount !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  (latestRow.quotaPercent ?? 0) >= 100
+                    ? 'bg-emerald-500'
+                    : (latestRow.quotaPercent ?? 0) >= 70
+                      ? 'bg-amber-500'
+                      : 'bg-rose-500'
+                }`}
+                style={{ width: `${Math.min(100, latestRow.quotaPercent ?? 0)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{periodColumnLabel}</TableHead>
+              <TableHead className="text-right">Gross Revenue</TableHead>
+              <TableHead className="text-right">Driver Share</TableHead>
+              <TableHead className="text-center">Tier Applied</TableHead>
+              <TableHead className="text-right">Payouts</TableHead>
+              {quotaEnabled && <TableHead className="text-right">Quota %</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visibleRows.map((row, idx) => (
+              <TableRow key={idx}>
+                {/* Period label */}
+                <TableCell className="font-medium text-xs whitespace-nowrap">
+                  {formatPeriodLabel(row)}
+                  {row.tripCount > 0 && (
+                    <span className="ml-1.5 text-slate-400 text-[10px]">
+                      {row.tripCount} trip{row.tripCount !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </TableCell>
+
+                {/* Gross Revenue */}
+                <TableCell className="text-right text-slate-600">
+                  ${row.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </TableCell>
+
+                {/* Driver Share with tier % badge */}
+                <TableCell className="text-right text-emerald-600">
+                  <span className="font-medium">
+                    ${row.driverShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                  <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
+                    {row.tier.sharePercentage}%
+                  </Badge>
+                </TableCell>
+
+                {/* Tier Applied */}
+                <TableCell className="text-center">
+                  <Badge
+                    variant="outline"
+                    className="text-xs"
+                    style={{ backgroundColor: row.tier.color ? `${row.tier.color}15` : undefined, borderColor: row.tier.color || undefined, color: row.tier.color || undefined }}
+                  >
+                    {row.tier.name}
+                  </Badge>
+                </TableCell>
+
+                {/* Payouts */}
+                <TableCell className="text-right text-slate-500">
+                  {row.payouts > 0
+                    ? `$${row.payouts.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                    : '-'}
+                </TableCell>
+
+                {/* Quota % — only rendered when quota is enabled */}
+                {quotaEnabled && (
+                  <TableCell className="text-right">
+                    {row.quotaPercent !== null ? (
+                      <Badge variant="outline" className={`text-xs font-medium ${getQuotaBadgeStyle(row.quotaPercent)}`}>
+                        {row.quotaPercent.toFixed(0)}%
+                      </Badge>
+                    ) : '-'}
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        {/* Show more / pagination */}
+        {hasMore && (
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-500 hover:text-slate-700"
+              onClick={() => setVisibleCount(prev => prev + defaultPageSize(periodType))}
+            >
+              <ChevronDown className="h-4 w-4 mr-1.5" />
+              Show more ({remainingCount} remaining)
             </Button>
-        </CardHeader>
-        <CardContent>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Week</TableHead>
-                        <TableHead className="text-right">Gross Revenue</TableHead>
-                        <TableHead className="text-center">Tier Applied</TableHead>
-                        <TableHead className="text-right">Expenses</TableHead>
-                        <TableHead className="text-right">Net Earnings</TableHead>
-                        <TableHead className="text-right">Payouts</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {weeklyData.map((row, idx) => (
-                        <TableRow key={idx}>
-                            <TableCell className="font-medium text-xs">
-                                {format(row.weekStart, 'MMM d')} - {format(row.weekEnd, 'MMM d, yyyy')}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-600">
-                                ${row.grossRevenue.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                            </TableCell>
-                            <TableCell className="text-center">
-                                <Badge variant="outline" className="text-xs bg-slate-50">
-                                    {row.tier.name} ({row.tier.sharePercentage}%)
-                                </Badge>
-                            </TableCell>
-                            <TableCell className="text-right text-rose-600">
-                                {row.expenses > 0 ? `-$${row.expenses.toLocaleString(undefined, {minimumFractionDigits: 2})}` : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-bold text-emerald-600">
-                                ${row.netEarnings.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-500">
-                                {row.payouts > 0 ? `$${row.payouts.toLocaleString(undefined, {minimumFractionDigits: 2})}` : '-'}
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </CardContent>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }
