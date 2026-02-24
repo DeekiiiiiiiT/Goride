@@ -67,16 +67,42 @@ export async function processFuelReceiptVision(imageBase64: string): Promise<OCR
     }
 }
 
-export async function verifyOdometerLogic(currentOdo: number, previousOdo: number, tripsDistance: number) {
+export async function verifyOdometerLogic(currentOdo: number, previousOdo: number, tripsDistance: number, previousDate?: string, currentDate?: string) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+    // Compute elapsed time context if dates are available
+    let timeContext = "";
+    if (previousDate && currentDate) {
+        const prev = new Date(previousDate);
+        const curr = new Date(currentDate);
+        const elapsedMs = curr.getTime() - prev.getTime();
+        const elapsedHours = Math.max(0, elapsedMs / (1000 * 60 * 60));
+        const elapsedDays = Math.floor(elapsedHours / 24);
+        const remainingHours = Math.round(elapsedHours % 24);
+        const elapsedStr = elapsedDays > 0 
+            ? `${elapsedDays} day${elapsedDays !== 1 ? 's' : ''}, ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`
+            : `${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
+        const odometerGap = currentOdo - previousOdo;
+        const kmPerDay = elapsedDays > 0 ? (odometerGap / (elapsedHours / 24)).toFixed(1) : "N/A";
+        timeContext = `
+        - Time elapsed between readings: ${elapsedStr}
+        - Previous reading date: ${previousDate}
+        - Current reading date: ${currentDate}
+        - Implied driving rate: ${kmPerDay} km/day (typical Jamaican fleet vehicle: 50-200 km/day)`;
+    }
+
     const prompt = `
-        Act as an automated fleet auditor. A driver submitted an odometer reading of ${currentOdo}.
+        Act as an automated fleet auditor for a Jamaican vehicle fleet. A driver submitted an odometer reading of ${currentOdo}.
         Context:
         - Previous verified odometer: ${previousOdo}
-        - Logged trips distance since then: ${tripsDistance} km
+        - Odometer gap: ${currentOdo - previousOdo} km
+        - Logged trips distance since then: ${tripsDistance} km${timeContext}
         
         Analyze if this reading is realistic or likely a typo (e.g. digit swap, missing digit).
+        Consider:
+        1. Whether the odometer gap is physically possible given the time elapsed (a vehicle cannot drive 500+ km in 1 hour).
+        2. Whether the gap is reasonable compared to logged trip distance (some unlogged personal driving is normal, but large discrepancies are suspicious).
+        3. Whether the implied km/day rate is realistic for a fleet vehicle in Jamaica.
         If it looks like a typo, suggest the most logical correction.
         Return a JSON object:
         {

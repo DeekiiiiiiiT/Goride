@@ -81,6 +81,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   
   const [viewState, setViewState] = useState<ViewState>(defaultOpen ? 'category_select' : 'list');
   const [fuelEntry, setFuelEntry] = useState<FuelEntryState>({});
@@ -105,6 +106,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [collector, setCollector] = useState('');
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
 
@@ -292,39 +294,58 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('[DriverExpenses] handleSubmit fired from form onSubmit');
     e.preventDefault();
+    setSubmitError(null);
+    await doSubmit();
+  };
+
+  const doSubmit = async () => {
+    console.log('[DriverExpenses] doSubmit called, isSubmitting:', isSubmitting);
+    if (isSubmitting) {
+      console.log('[DriverExpenses] BLOCKED — isSubmitting is already true');
+      return;
+    }
     
     const isGasCard = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
     
     if (!category || !date) {
-      toast.error("Please fill in all required fields");
+      const msg = "Please fill in all required fields";
+      console.log('[DriverExpenses] Validation fail:', msg);
+      setSubmitError(msg);
+      toast.error(msg);
       return;
     }
     
     if (!isGasCard && !amount) {
-        toast.error("Please enter an amount");
+        const msg = "Please enter an amount";
+        console.log('[DriverExpenses] Validation fail:', msg);
+        setSubmitError(msg);
+        toast.error(msg);
         return;
     }
 
     if (category === 'Fuel' && !isGasCard) {
-        // Require station selection for Fuel
-        if (!merchant || merchant.trim() === '') {
-            toast.error("Please select a gas station");
-            return;
-        }
-
         const price = parseFloat(fuelEntry.pricePerLiter || '0');
         if (!fuelEntry.pricePerLiter || isNaN(price) || price <= 0) {
-             toast.error("Please enter a valid fuel price");
+             const msg = "Please enter a valid fuel price";
+             console.log('[DriverExpenses] Validation fail:', msg);
+             setSubmitError(msg);
+             toast.error(msg);
              return;
         }
         
         if (price < 0.50) {
-             toast.error("Fuel price seems too low. Please verify.");
+             const msg = "Fuel price seems too low. Please verify.";
+             console.log('[DriverExpenses] Validation fail:', msg);
+             setSubmitError(msg);
+             toast.error(msg);
              return;
         }
     }
 
+    console.log('[DriverExpenses] All validation passed! Submitting to API...');
+    setSubmitError(null);
     setIsSubmitting(true);
     try {
       let receiptUrl = '';
@@ -370,7 +391,9 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       fetchTransactions();
 
     } catch (err) {
-      console.error(err);
+      console.error('[DriverExpenses] Submit error:', err);
+      const msg = `Failed to submit expense: ${err instanceof Error ? err.message : String(err)}`;
+      setSubmitError(msg);
       toast.error("Failed to submit expense");
     } finally {
       setIsSubmitting(false);
@@ -547,11 +570,13 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   }
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-40">
       <div className="flex items-center gap-3">
-         <Button variant="ghost" size="icon" onClick={goBack}>
-            <ChevronLeft className="h-5 w-5" />
-         </Button>
+         {!(viewState === 'entry_details' && category === 'Fuel') && (
+           <Button variant="ghost" size="icon" onClick={goBack}>
+              <ChevronLeft className="h-5 w-5" />
+           </Button>
+         )}
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-bold">
@@ -641,67 +666,18 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                    onSubmit={handleSubmit}
                 />
             ) : (
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="p-6 space-y-6" id="expense-form" ref={formRef} noValidate>
               <div className="space-y-4">
-                <div className="space-y-2">
-                    <Label>{category === 'Fuel' ? 'Gas Station' : 'Merchant / Vendor'}</Label>
-                    {category === 'Fuel' ? (
-                      <div className="space-y-3">
-                        <Select 
-                          value={merchant} 
-                          onValueChange={(val) => {
-                            setMerchant(val);
-                            setFuelEntry(prev => ({ ...prev, parentCompany: val }));
-                          }}
-                        >
-                          <SelectTrigger className="w-full bg-white">
-                            <SelectValue placeholder="Select Verified Station" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <div className="p-2 border-b border-slate-100 mb-1">
-                              <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase rounded-md">
-                                <ShieldCheck className="w-3 h-3" />
-                                Master Audit Ledger
-                              </div>
-                            </div>
-                            {verifiedStations.map(s => (
-                              <SelectItem key={s.id} value={s.name}>
-                                <div className="flex flex-col items-start py-0.5">
-                                  <span className="font-medium">{s.name}</span>
-                                  <span className="text-[10px] text-slate-500">{s.brand} • {s.address}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                            <SelectItem value="Other">
-                              <span className="italic text-slate-500">Other / Not Listed</span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        {merchant === 'Other' && (
-                          <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                             <Input 
-                               placeholder="Enter station name manually" 
-                               className="bg-slate-50 border-orange-100 focus:border-orange-200"
-                               onChange={e => {
-                                 setFuelEntry(prev => ({ ...prev, parentCompany: e.target.value }));
-                               }} 
-                             />
-                             <p className="text-[10px] text-orange-600 mt-1 flex items-center gap-1">
-                               <MapPin className="w-2 h-2" />
-                               New locations will be learnt and verified by the Evidence Bridge.
-                             </p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <Input 
-                          placeholder="e.g. Mechanic name, Parts store, etc." 
-                          value={merchant} 
-                          onChange={e => setMerchant(e.target.value)} 
-                      />
-                    )}
-                </div>
+                {category !== 'Fuel' && (
+                  <div className="space-y-2">
+                    <Label>Merchant / Vendor</Label>
+                    <Input 
+                        placeholder="e.g. Mechanic name, Parts store, etc." 
+                        value={merchant} 
+                        onChange={e => setMerchant(e.target.value)} 
+                    />
+                  </div>
+                )}
 
                 {category !== 'Fuel' && (
                   <div className="grid grid-cols-2 gap-4">
@@ -753,22 +729,48 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                   </div>
                 )}
 
-                <ReceiptUploader 
-                  previewUrl={receiptPreview}
-                  isScanning={isScanning}
-                  onFileSelect={handleFileChange}
-                  onClear={() => { setReceiptFile(null); setReceiptPreview(null); }}
-                />
+                {category !== 'Fuel' && (
+                  <ReceiptUploader 
+                    previewUrl={receiptPreview}
+                    isScanning={isScanning}
+                    onFileSelect={handleFileChange}
+                    onClear={() => { setReceiptFile(null); setReceiptPreview(null); }}
+                  />
+                )}
 
-                <div className="space-y-2">
-                  <Label>Notes (Optional)</Label>
-                  <Textarea placeholder="Add details..." value={notes} onChange={e => setNotes(e.target.value)} />
-                </div>
+                {category !== 'Fuel' && (
+                  <div className="space-y-2">
+                    <Label>Notes (Optional)</Label>
+                    <Textarea placeholder="Add details..." value={notes} onChange={e => setNotes(e.target.value)} />
+                  </div>
+                )}
               </div>
 
-              <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Expense"}
-              </Button>
+              <div className="pt-4 pb-28">
+                {submitError && (
+                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm font-medium">
+                    {submitError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full h-14 text-lg font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 shadow-lg transition-colors"
+                >
+                  {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Expense"}
+                </button>
+                {category === 'Fuel' && (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => { resetForm(); setViewState('category_select'); }}
+                    className="w-full h-12 text-base font-semibold rounded-xl bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-700 active:bg-slate-100 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 transition-colors mt-3"
+                  >
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </button>
+                )}
+              </div>
             </form>
             )
           )}

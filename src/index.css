@@ -4974,6 +4974,14 @@
     padding-bottom: calc(var(--spacing) * 20);
   }
 
+  .pb-28 {
+    padding-bottom: calc(var(--spacing) * 28);
+  }
+
+  .pb-40 {
+    padding-bottom: calc(var(--spacing) * 40);
+  }
+
   .pl-0 {
     padding-left: calc(var(--spacing) * 0);
   }
@@ -5857,6 +5865,10 @@
     text-decoration-style: dotted;
   }
 
+  .underline-offset-2 {
+    text-underline-offset: 2px;
+  }
+
   .underline-offset-4 {
     text-underline-offset: 4px;
   }
@@ -6186,6 +6198,10 @@
   .grayscale {
     --tw-grayscale: grayscale(100%);
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
+  }
+
+  .\!filter {
+    filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, ) !important;
   }
 
   .filter {
@@ -7929,10 +7945,6 @@
     border-color: var(--color-indigo-400);
   }
 
-  .focus\:border-orange-200:focus {
-    border-color: var(--color-orange-200);
-  }
-
   .focus\:border-primary:focus {
     border-color: var(--primary);
   }
@@ -8153,8 +8165,16 @@
     scale: .99;
   }
 
+  .active\:bg-indigo-800:active {
+    background-color: var(--color-indigo-800);
+  }
+
   .active\:bg-sidebar-accent:active {
     background-color: var(--sidebar-accent);
+  }
+
+  .active\:bg-slate-100:active {
+    background-color: var(--color-slate-100);
   }
 
   .active\:text-sidebar-accent-foreground:active {

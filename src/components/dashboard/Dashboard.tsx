@@ -210,6 +210,10 @@ export function Dashboard() {
   }, [driverMetrics, vehicleMetrics, trips, apiNotifications, rules, fuelEntries, adjustments, checkIns, maintenanceLogs]);
 
   // Phase 1 Backbone: Sync critical alerts to server persistent store (Side-effect)
+  // DISABLED: This was causing an infinite feedback loop with useAlertPusher.
+  // The effect pushes critical alerts → server stores them → useAlertPusher polls and shows toasts
+  // → React Query refetches persistentAlerts → this effect re-runs → pushes again → loop
+  /*
   useEffect(() => {
     const criticalToSync = fleetAlerts.filter(a => a.severity === 'critical');
     if (criticalToSync.length > 0) {
@@ -234,6 +238,7 @@ export function Dashboard() {
         });
     }
   }, [fleetAlerts, apiNotifications, persistentAlerts]);
+  */
 
   const selectedCheckIn = useMemo(() => {
       return checkIns.find((c: any) => c.id === reviewCheckInId);

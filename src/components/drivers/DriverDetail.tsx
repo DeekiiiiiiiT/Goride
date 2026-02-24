@@ -93,6 +93,7 @@ import { WeeklySettlementView } from './WeeklySettlementView';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { FuelWalletView } from './FuelWalletView';
+import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
@@ -250,6 +251,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [claims, setClaims] = useState<any[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['All']));
+  const [timeFilter, setTimeFilter] = useState<TimeFilterValue>({ preset: 'all' });
   
   // Phase 1: Date Range & Data Context Filtering
   const { minDate, maxDate, tripIds } = useMemo(() => {
@@ -1059,8 +1061,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // This ignores mismatched file dates and focuses on the Driver's Performance Profile.
 
      const filteredTrips = trips.filter(t => {
-         if (selectedPlatforms.has('All')) return true;
-         return selectedPlatforms.has(t.platform || 'Other');
+         if (selectedPlatforms.has('All') || selectedPlatforms.has(t.platform || 'Other')) { const timeScoped = activeTab === 'overview' || activeTab === 'trips'; if (timeScoped && timeFilter.preset !== 'all') { const h = new Date(t.date).getHours(); if (!isHourInTimeFilter(h, timeFilter)) return false; } return true; } return false;
+         // time+platform filter handled above
      });
 
      filteredTrips.forEach(trip => {
@@ -1725,7 +1727,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         // Phase 2.1: Expose Time Metrics for Debug/Advanced View
         timeMetrics: reconstructedTimeMetrics
      };
-  }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms]);
+  }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms, timeFilter, activeTab]);
 
   // ────────────────────────────────────────────────────────────
   // Platform Breakdown for Earnings donut chart (Phase 6)
@@ -1863,7 +1865,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              </DropdownMenuContent>
            </DropdownMenu>
 
-           {/* Date Picker */}
+           <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} inactive={activeTab !== 'overview' && activeTab !== 'trips'} />{/* Date Picker */}
            <div className={cn("grid gap-2")}>
             <Popover>
               <PopoverTrigger asChild>

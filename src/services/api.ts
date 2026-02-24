@@ -202,7 +202,8 @@ export const api = {
         }
     });
     if (!response.ok) throw new Error("Failed to fetch vehicle metrics");
-    return response.json();
+    const txt = await response.text();
+    try { return JSON.parse(txt); } catch (e) { console.error(`getVehicleMetrics JSON parse error, len=${txt.length}, snippet=${txt.slice(0, 200)}`); throw new Error(`Vehicle metrics response is not valid JSON (len=${txt.length})`); }
   },
 
   async getDriverMetrics(): Promise<DriverMetrics[]> {
@@ -212,7 +213,8 @@ export const api = {
         }
     });
     if (!response.ok) throw new Error("Failed to fetch driver metrics");
-    return response.json();
+    const txt = await response.text();
+    try { return JSON.parse(txt); } catch (e) { console.error(`getDriverMetrics JSON parse error, len=${txt.length}, snippet=${txt.slice(0, 200)}`); throw new Error(`Driver metrics response is not valid JSON (len=${txt.length})`); }
   },
 
   async getTripsFiltered(params: TripFilterParams): Promise<PaginatedTripResponse> {
@@ -266,7 +268,14 @@ export const api = {
       throw new Error(`Failed to fetch trips: ${response.statusText}`);
     }
     
-    return response.json();
+    // Use text + JSON.parse for safer parsing with better error diagnostics
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      console.error(`getTrips JSON parse error at limit=${limit}, response length=${text.length}, snippet=${text.slice(0, 200)}`);
+      throw new Error(`Trips response is not valid JSON (length=${text.length}). Possibly truncated.`);
+    }
   },
 
   async getUnifiedVehicleLogs(vehicleId: string) {
@@ -583,7 +592,8 @@ export const api = {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch drivers");
-    return response.json();
+    const txt = await response.text();
+    try { return JSON.parse(txt); } catch (e) { console.error(`getDrivers JSON parse error, len=${txt.length}, snippet=${txt.slice(0, 200)}`); throw new Error(`Drivers response is not valid JSON (len=${txt.length})`); }
   },
 
   async saveDriver(driver: any) {
@@ -614,14 +624,19 @@ export const api = {
     );
   },
 
-  async getTransactions(driverIdOrIds?: string | string[]) {
+  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number }) {
     let url = `${API_ENDPOINTS.financial}/transactions`;
+    const params = new URLSearchParams();
     if (driverIdOrIds) {
         const ids = Array.isArray(driverIdOrIds) ? driverIdOrIds.filter(Boolean).join(',') : driverIdOrIds;
         if (ids) {
-            url += `?driverIds=${ids}`;
+            params.set('driverIds', ids);
         }
     }
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.offset !== undefined) params.set('offset', String(options.offset));
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
     const response = await fetchWithRetry(url, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

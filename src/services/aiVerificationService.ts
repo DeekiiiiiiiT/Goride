@@ -40,7 +40,9 @@ export const aiVerificationService = {
     async verifyOdometer(
         currentOdo: number, 
         previousOdo: number, 
-        tripsDistance: number
+        tripsDistance: number,
+        previousDate?: string,
+        currentDate?: string
     ): Promise<{
         isValid: boolean;
         confidence: number;
@@ -53,7 +55,7 @@ export const aiVerificationService = {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${publicAnonKey}`
             },
-            body: JSON.stringify({ currentOdo, previousOdo, tripsDistance })
+            body: JSON.stringify({ currentOdo, previousOdo, tripsDistance, previousDate, currentDate })
         });
 
         if (!response.ok) {

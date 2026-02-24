@@ -396,7 +396,8 @@ export function DriverDashboard() {
           setTimeout(() => window.location.reload(), 1500);
       } catch (e) {
           console.error("Failed to save fuel log", e);
-          toast.error("Failed to save fuel log");
+          // Re-throw so FuelLogForm keeps the dialog open with driver's data intact
+          throw e;
       }
   };
 

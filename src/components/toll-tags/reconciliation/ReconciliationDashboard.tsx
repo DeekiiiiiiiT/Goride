@@ -114,6 +114,8 @@ export function ReconciliationDashboard() {
                   subject: 'Unmatched Toll - Personal Use',
                   message: 'This toll was identified as personal usage and charged to your account.'
               });
+              // Update transaction status to Rejected (driver liability, no fleet reimbursement)
+              await reject(tx, 'Manual Resolution: Personal (Driver Pays)');
               toast.success("Marked as Personal (Driver Liability)");
           } else if (type === 'WriteOff') {
                await createClaim({
@@ -123,6 +125,8 @@ export function ReconciliationDashboard() {
                   subject: 'Unmatched Toll - Write Off',
                   message: 'Fleet wrote off this expense.'
               });
+              // Update transaction status to Approved (fleet absorbs cost → triggers wallet credit for Cash tolls)
+              await approve(tx, 'Manual Resolution: Write Off (Fleet Pays)');
               toast.success("Written off as Fleet Loss");
           } else if (type === 'Business') {
                await createClaim({
@@ -132,6 +136,8 @@ export function ReconciliationDashboard() {
                   subject: 'Business Expense',
                   message: 'Legitimate business expense (e.g. maintenance).'
               });
+              // Update transaction status to Approved (fleet absorbs cost → triggers wallet credit for Cash tolls)
+              await approve(tx, 'Manual Resolution: Business Expense');
               toast.success("Marked as Business Expense");
           }
           

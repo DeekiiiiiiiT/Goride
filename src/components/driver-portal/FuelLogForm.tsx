@@ -17,6 +17,7 @@ import { Progress } from "../ui/progress";
 import { calculateDistance, isInsideGeofence } from '../../utils/geoUtils';
 import { EvidenceBridgeStatus } from './EvidenceBridgeStatus';
 import { Textarea } from '../ui/textarea';
+import { motion } from 'motion/react';
 
 interface FuelLogFormProps {
   open: boolean;
@@ -25,7 +26,7 @@ interface FuelLogFormProps {
     paymentMethod?: string;
     geofenceMetadata?: any;
     deviationReason?: string;
-  }) => void;
+  }) => Promise<void> | void;
   vehicleId?: string;
 }
 
@@ -179,45 +180,53 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
 
     const calculatedLiters = Number((amount / price).toFixed(2));
 
-    onSubmit({
-      date: formData.date,
-      odometer: parseFloat(formData.odometer),
-      liters: calculatedLiters,
-      totalCost: amount,
-      notes: formData.notes,
-      receiptUrl: '',
-      paymentMethod,
-      deviationReason: formData.deviationReason,
-      geofenceMetadata: capturedGeo ? {
-        isInside: capturedGeo.isInside,
-        distanceMeters: capturedGeo.distance,
-        timestamp: capturedGeo.timestamp,
-        radiusAtTrigger: 75, // Default or specific if found
-        lat: capturedGeo.lat,
-        lng: capturedGeo.lng,
-        accuracy: capturedGeo.accuracy
-      } : undefined,
-      metadata: {
-        pricePerLiter: price,
-        isFullTank: formData.isFullTank
-      }
-    } as any);
+    try {
+      await onSubmit({
+        date: formData.date,
+        odometer: parseFloat(formData.odometer),
+        liters: calculatedLiters,
+        totalCost: amount,
+        notes: formData.notes,
+        receiptUrl: '',
+        paymentMethod,
+        deviationReason: formData.deviationReason,
+        geofenceMetadata: capturedGeo ? {
+          isInside: capturedGeo.isInside,
+          distanceMeters: capturedGeo.distance,
+          timestamp: capturedGeo.timestamp,
+          radiusAtTrigger: 75, // Default or specific if found
+          lat: capturedGeo.lat,
+          lng: capturedGeo.lng,
+          accuracy: capturedGeo.accuracy
+        } : undefined,
+        metadata: {
+          pricePerLiter: price,
+          isFullTank: formData.isFullTank
+        }
+      } as any);
     
-    setIsUploading(false);
-    onOpenChange(false);
+      // Only close and reset AFTER the save succeeds
+      onOpenChange(false);
     
-    // Reset fields for next time
-    setFormData({
-        date: new Date().toISOString().split('T')[0],
-        odometer: '',
-        pricePerLiter: '',
-        totalCost: '',
-        notes: '',
-        isFullTank: false,
-        deviationReason: ''
-    });
-    setPaymentMethod('reimbursement');
-    setCapturedGeo(null);
+      // Reset fields for next time
+      setFormData({
+          date: new Date().toISOString().split('T')[0],
+          odometer: '',
+          pricePerLiter: '',
+          totalCost: '',
+          notes: '',
+          isFullTank: false,
+          deviationReason: ''
+      });
+      setPaymentMethod('reimbursement');
+      setCapturedGeo(null);
+    } catch (err) {
+      // Save failed — keep dialog open with data intact so driver can retry
+      console.error("Fuel save failed:", err);
+      toast.error("Failed to save fuel log. Your data is still here — please try again.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (

@@ -52,7 +52,7 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const { user, role, loading, signOut } = useAuth();
-  useAlertPusher(); // Phase 5: Simulated Push Alerts
+  // useAlertPusher(); // DISABLED: Was causing infinite loop feedback with Dashboard alert sync
   
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverPage, setDriverPage] = useState('dashboard');

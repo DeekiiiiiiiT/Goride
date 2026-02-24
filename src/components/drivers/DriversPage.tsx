@@ -163,7 +163,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     const fetchData = async () => {
       try {
         const [tripsData, driversData, metricsData, vehicleMetricsData, tiersData] = await Promise.all([
-             api.getTrips({ limit: 2000 }),
+             api.getTrips({ limit: 1000 }),
              api.getDrivers().catch(() => []),
              api.getDriverMetrics().catch(() => []),
              api.getVehicleMetrics().catch(() => []),

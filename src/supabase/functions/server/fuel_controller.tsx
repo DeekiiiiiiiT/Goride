@@ -200,6 +200,83 @@ async function signRecord(record: any): Promise<string> {
 }
 
 /**
+ * STATION GATE RELEASE: When admin promotes a learnt location, release any
+ * held transactions tied to it. Creates the fuel_entry that was deferred.
+ */
+async function releaseHeldTransaction(learnt: any, resolvedStationId: string, stationName: string) {
+    const txId = learnt.transactionId;
+    if (!txId) {
+        console.log(`[StationGate-Release] Learnt ${learnt.id} has no transactionId — nothing to release.`);
+        return 0;
+    }
+
+    const tx = await kv.get(`transaction:${txId}`);
+    if (!tx) {
+        console.log(`[StationGate-Release] Transaction ${txId} not found — may have been deleted.`);
+        return 0;
+    }
+
+    if (!tx.metadata?.stationGateHold) {
+        console.log(`[StationGate-Release] Transaction ${txId} is not gate-held — skipping.`);
+        return 0;
+    }
+
+    // Release the hold and approve
+    tx.status = 'Approved';
+    tx.isReconciled = true;
+    tx.metadata = {
+        ...tx.metadata,
+        stationGateHold: false,
+        locationStatus: 'verified',
+        matchedStationId: resolvedStationId,
+        approvedAt: new Date().toISOString(),
+        approvalReason: 'Auto-approved after station verified via Learnt Locations',
+        notes: (tx.metadata?.notes || '') + ' [Station Gate Released]',
+    };
+
+    // Create the fuel entry that was deferred
+    const quantity = Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0;
+    const amount = Math.abs(Number(tx.amount) || 0);
+    const pricePerLiter = tx.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
+
+    const fuelEntry: any = {
+        id: crypto.randomUUID(),
+        date: (tx.date && tx.time)
+            ? `${tx.date}T${tx.time}`
+            : (tx.date || new Date().toISOString().split('T')[0]),
+        type: 'Reimbursement',
+        amount: amount,
+        liters: quantity,
+        pricePerLiter: pricePerLiter,
+        odometer: Number(tx.odometer) || 0,
+        vendor: stationName,
+        location: stationName,
+        stationAddress: tx.metadata?.stationLocation || '',
+        vehicleId: tx.vehicleId,
+        driverId: tx.driverId,
+        transactionId: tx.id,
+        receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
+        odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
+        isVerified: true,
+        source: 'Fuel Log',
+        matchedStationId: resolvedStationId,
+        metadata: {
+            locationStatus: 'verified',
+            verificationMethod: 'station_gate_release',
+            matchedStationId: resolvedStationId,
+            stationName: stationName,
+            originalTransactionId: tx.id,
+        },
+    };
+    fuelEntry.signature = await signRecord(fuelEntry);
+
+    await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
+    await kv.set(`transaction:${tx.id}`, tx);
+    console.log(`[StationGate-Release] Transaction ${txId} released → fuel_entry ${fuelEntry.id} created, station ${stationName} (${resolvedStationId}).`);
+    return 1;
+}
+
+/**
  * Robust coordinate extraction from a fuel entry.
  * 
  * Driver Portal entries store GPS in `geofenceMetadata.lat/lng`.
@@ -476,10 +553,12 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
 
             // Link fuel entries to the station, then clean up
             const linkedCount = await linkOrphanEntriesToStation(learnt, resolvedStationId, station.name);
+            // Release any gate-held transactions tied to this learnt location
+            const releasedCount = await releaseHeldTransaction(learnt, resolvedStationId, station.name);
             await kv.del(`learnt_location:${learntId}`);
-            console.log(`[Promote-Learnt] Merged learnt ${learntId} → station ${resolvedStationId}, linked ${linkedCount} fuel entries.`);
+            console.log(`[Promote-Learnt] Merged learnt ${learntId} → station ${resolvedStationId}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
             
-            return c.json({ success: true, message: "Merged successfully", data: station, linkedEntries: linkedCount });
+            return c.json({ success: true, message: "Merged successfully", data: station, linkedEntries: linkedCount, releasedTransactions: releasedCount });
         } else if (action === 'create') {
             // --- Duplicate Guard: check before creating ---
             const checkLat = stationData?.location?.lat || learnt.location?.lat || 0;
@@ -508,8 +587,9 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
                     await kv.set(`station:${existingStation.id}`, existingStation);
 
                     const linkedCount = await linkOrphanEntriesToStation(learnt, existingStation.id, existingStation.name);
+                    const releasedCount = await releaseHeldTransaction(learnt, existingStation.id, existingStation.name);
                     await kv.del(`learnt_location:${learntId}`);
-                    console.log(`[Promote-Learnt] Auto-merge complete: learnt ${learntId} → station ${existingStation.id}, linked ${linkedCount} fuel entries.`);
+                    console.log(`[Promote-Learnt] Auto-merge complete: learnt ${learntId} → station ${existingStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
 
                     return c.json({
                         success: true,
@@ -517,6 +597,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
                         message: `Duplicate detected (${dupeResult.matchType}, ${dupeResult.distance}m). Auto-merged into existing station: ${existingStation.name}`,
                         data: existingStation,
                         linkedEntries: linkedCount,
+                        releasedTransactions: releasedCount,
                         matchType: dupeResult.matchType,
                         distance: dupeResult.distance,
                     });
@@ -540,15 +621,16 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
 
             // Link fuel entries to the station, then clean up
             const linkedCount = await linkOrphanEntriesToStation(learnt, resolvedStationId, newStation.name);
+            const releasedCount = await releaseHeldTransaction(learnt, resolvedStationId, newStation.name);
             // Update visit count based on actual linked entries
-            if (linkedCount > 0) {
-                newStation.stats.totalVisits = linkedCount;
+            if (linkedCount > 0 || releasedCount > 0) {
+                newStation.stats.totalVisits = linkedCount + releasedCount;
                 await kv.set(`station:${newStationId}`, newStation);
             }
             await kv.del(`learnt_location:${learntId}`);
-            console.log(`[Promote-Learnt] Created station ${resolvedStationId} from learnt ${learntId}, linked ${linkedCount} fuel entries.`);
+            console.log(`[Promote-Learnt] Created station ${resolvedStationId} from learnt ${learntId}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
             
-            return c.json({ success: true, data: newStation, linkedEntries: linkedCount });
+            return c.json({ success: true, data: newStation, linkedEntries: linkedCount, releasedTransactions: releasedCount });
         }
 
         return c.json({ error: "Invalid action" }, 400);
@@ -2698,7 +2780,8 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
                 await kv.del(`learnt_location:${id}`);
 
                 const linkedCount = await linkOrphanEntriesToStation(learnt, existingStation.id, existingStation.name);
-                console.log(`[Promote] Phase 8 auto-merge complete: learnt ${id} → station ${existingStation.id}, linked ${linkedCount} fuel entries.`);
+                const releasedCount = await releaseHeldTransaction(learnt, existingStation.id, existingStation.name);
+                console.log(`[Promote] Phase 8 auto-merge complete: learnt ${id} → station ${existingStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
 
                 return c.json({
                     success: true,
@@ -2707,6 +2790,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
                     data: existingStation,
                     matchedExisting: true,
                     linkedEntries: linkedCount,
+                    releasedTransactions: releasedCount,
                 });
             }
 
@@ -2729,16 +2813,18 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
         
         // Link all orphaned fuel entries to the promoted station (source entry + spatial sweep)
         const linkedCount = await linkOrphanEntriesToStation(learnt, promotedStation.id, promotedStation.name);
-        if (linkedCount > 0) {
+        // Release any gate-held transactions tied to this learnt location
+        const releasedCount = await releaseHeldTransaction(learnt, promotedStation.id, promotedStation.name);
+        if (linkedCount > 0 || releasedCount > 0) {
             promotedStation.stats = {
                 ...(promotedStation.stats || {}),
-                totalVisits: linkedCount,
+                totalVisits: linkedCount + releasedCount,
             };
             await kv.set(`station:${promotedStation.id}`, promotedStation);
         }
-        console.log(`[Promote] Learnt ${id} → station ${promotedStation.id}, linked ${linkedCount} fuel entries.`);
+        console.log(`[Promote] Learnt ${id} → station ${promotedStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
 
-        return c.json({ success: true, data: promotedStation, matchedExisting: !!matchedUnverified, linkedEntries: linkedCount });
+        return c.json({ success: true, data: promotedStation, matchedExisting: !!matchedUnverified, linkedEntries: linkedCount, releasedTransactions: releasedCount });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }

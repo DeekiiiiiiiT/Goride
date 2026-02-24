@@ -3,6 +3,34 @@ import { api } from '../services/api';
 import { FinancialTransaction, Trip } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
 
+// Helper to paginate through ALL trips (the /trips endpoint defaults to 500)
+async function fetchAllTrips(): Promise<Trip[]> {
+  const PAGE_SIZE = 500;
+  let offset = 0;
+  const all: Trip[] = [];
+  while (true) {
+    const batch = await api.getTrips({ limit: PAGE_SIZE, offset });
+    all.push(...batch);
+    if (batch.length < PAGE_SIZE) break; // last page
+    offset += PAGE_SIZE;
+  }
+  return all;
+}
+
+// Helper to paginate through ALL transactions (the /transactions endpoint defaults to only 100)
+async function fetchAllTransactions(): Promise<FinancialTransaction[]> {
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+  const all: FinancialTransaction[] = [];
+  while (true) {
+    const batch: FinancialTransaction[] = await api.getTransactions(undefined, { limit: PAGE_SIZE, offset });
+    all.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return all;
+}
+
 export function useTollReconciliation() {
   const [loading, setLoading] = useState(true);
   const [unreconciledTolls, setUnreconciledTolls] = useState<FinancialTransaction[]>([]);
@@ -15,8 +43,8 @@ export function useTollReconciliation() {
     setLoading(true);
     try {
       const [rawTx, allTrips] = await Promise.all([
-        api.getTransactions(),
-        api.getTrips()
+        fetchAllTransactions(),
+        fetchAllTrips()
       ]);
 
       // Deduplicate transactions to prevent key collisions

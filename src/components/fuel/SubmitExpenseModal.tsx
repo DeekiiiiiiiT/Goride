@@ -7,13 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2 } from 'lucide-react';
+import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2, Building2 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { api } from '../../services/api';
 import { aiVerificationService, AIReceiptResult } from '../../services/aiVerificationService';
 import { AIExtractionReview } from './AIExtractionReview';
 import { searchAddress, AddressResult, debounce } from '../../utils/locationService';
 import { cn } from "../ui/utils";
+import { fuelService } from '../../services/fuelService';
+import { StationProfile } from '../../types/station';
 
 interface SubmitExpenseModalProps {
     isOpen: boolean;
@@ -32,6 +34,47 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     // AI Review Workflow (Phase 2 Step 2.3)
     const [aiReviewData, setAiReviewData] = useState<{ index: number, result: AIReceiptResult, image: string } | null>(null);
 
+    // --- Verified Station Data for Brand → Station cascade ---
+    const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
+    const [stationsLoading, setStationsLoading] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+        setStationsLoading(true);
+        fuelService.getStations()
+            .then((allStations: StationProfile[]) => {
+                if (cancelled) return;
+                const verified = allStations.filter((s: StationProfile) => s.status === 'verified');
+                setVerifiedStations(verified);
+            })
+            .catch((err) => {
+                console.error('Failed to fetch verified stations:', err);
+                if (!cancelled) setVerifiedStations([]);
+            })
+            .finally(() => {
+                if (!cancelled) setStationsLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [isOpen]);
+
+    // Derive unique brands from verified stations + fallback hardcoded brands
+    const uniqueBrands = useMemo(() => {
+        const brands = new Set<string>();
+        verifiedStations.forEach(s => { if (s.brand) brands.add(s.brand); });
+        // Always include known Jamaican brands even if no verified stations yet
+        ["TotalEnergies", "Texaco", "Rubis", "FESCO", "Petcom", "Thrifty Gas", "Cool Oasis", "Jampet"].forEach(b => brands.add(b));
+        return Array.from(brands).sort((a, b) => a.localeCompare(b));
+    }, [verifiedStations]);
+
+    // Get verified stations filtered by a specific brand
+    const getStationsForBrand = useCallback((brand: string): StationProfile[] => {
+        if (!brand) return [];
+        return verifiedStations
+            .filter(s => s.brand === brand)
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [verifiedStations]);
+
     const getLocalDateString = () => {
         const d = new Date();
         const year = d.getFullYear();
@@ -47,10 +90,6 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         paymentSource: 'driver_cash',
     });
 
-    const stations = [
-        "TotalEnergies", "Texaco", "Rubis", "FESCO", "Petcom", "Thrifty Gas", "Cool Oasis", "Jampet", "Independent"
-    ];
-
     const [entries, setEntries] = useState<any[]>([{
         id: crypto.randomUUID(),
         date: '',
@@ -63,6 +102,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         receiptUrl: '',
         stationName: '',
         stationLocation: '',
+        matchedStationId: '',
         paymentSource: '',
         isFlagged: false,
         flagReason: undefined, 
@@ -80,7 +120,8 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             notes: '',
             receiptUrl: '',
             stationName: entries[entries.length - 1]?.stationName || '',
-            stationLocation: entries[entries.length - 1]?.stationLocation || '',
+            stationLocation: '',
+            matchedStationId: '',
             paymentSource: '',
             isFlagged: false,
         }]);
@@ -129,6 +170,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 receiptUrl: initialData.receiptUrl || '',
                 stationName: initialData.vendor || '',
                 stationLocation: initialData.metadata?.stationLocation || '',
+                matchedStationId: initialData.matchedStationId || initialData.metadata?.matchedStationId || '',
                 paymentSource: initialData.metadata?.paymentSource || '',
                 isFlagged: initialData.metadata?.isFlagged || false,
                 flagReason: initialData.metadata?.flagReason,
@@ -138,6 +180,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 driverId: '',
                 vehicleId: '',
                 date: '',
+                paymentSource: 'driver_cash',
             });
             setEntries([{
                 id: crypto.randomUUID(),
@@ -151,6 +194,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 receiptUrl: '',
                 stationName: '',
                 stationLocation: '',
+                matchedStationId: '',
                 isFlagged: false,
             }]);
         }
@@ -180,7 +224,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
 
     const handleLocationChange = (index: number, val: string) => {
         setActiveLocationIndex(index);
-        updateEntry(index, { stationLocation: val });
+        updateEntry(index, { stationLocation: val, matchedStationId: '' });
         handleSearchAddress(val);
     };
 
@@ -188,6 +232,22 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         updateEntry(index, { stationLocation: address.display_name });
         setShowSuggestions(false);
         setActiveLocationIndex(null);
+    };
+
+    // Handler: when a verified station is picked from the Location dropdown
+    const handleVerifiedStationSelect = (index: number, stationId: string) => {
+        const station = verifiedStations.find(s => s.id === stationId);
+        if (station) {
+            updateEntry(index, {
+                stationLocation: station.address || '',
+                matchedStationId: station.id,
+            });
+        }
+    };
+
+    // Handler: when brand changes, clear the station selection for that entry
+    const handleBrandChange = (index: number, brand: string) => {
+        updateEntry(index, { stationName: brand, stationLocation: '', matchedStationId: '' });
     };
 
     const handleAmountChange = (index: number, val: string) => {
@@ -299,7 +359,10 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             });
 
             const tripsDist = trips.reduce((sum, t) => sum + (t.distance || 0), 0);
-            const result = await aiVerificationService.verifyOdometer(currentOdo, prevOdo, tripsDist);
+            const entryDate = entry.date || commonData.date || new Date().toISOString().split('T')[0];
+            const entryTime = entry.time || '12:00';
+            const currentDateStr = `${entryDate}T${entryTime}`;
+            const result = await aiVerificationService.verifyOdometer(currentOdo, prevOdo, tripsDist, lastReading.date, currentDateStr);
             
             if (result.correction && result.correction !== currentOdo) {
                 toast("AI suggests correction", {
@@ -376,6 +439,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     odometer: entry.odometer ? parseFloat(entry.odometer) : 0,
                     quantity: entry.liters ? parseFloat(entry.liters) : undefined,
                     vendor: entry.stationName,
+                    matchedStationId: entry.matchedStationId || undefined,
                     metadata: {
                         stationLocation: entry.stationLocation,
                         pricePerLiter: entry.pricePerLiter ? parseFloat(entry.pricePerLiter) : undefined,
@@ -385,7 +449,8 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         paymentSource: pSource,
                         totalCost: amountVal,
                         isFlagged: entry.isFlagged,
-                        flagReason: entry.flagReason
+                        flagReason: entry.flagReason,
+                        matchedStationId: entry.matchedStationId || undefined,
                     },
                     isReconciled: false
                 };
@@ -469,8 +534,12 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                             {activeTab === 'single' ? (
                                 <SingleForm 
                                     entry={entries[0]} 
-                                    stations={stations}
+                                    brands={uniqueBrands}
+                                    getStationsForBrand={getStationsForBrand}
+                                    stationsLoading={stationsLoading}
                                     onUpdate={(u: any) => updateEntry(0, u)}
+                                    onBrandChange={(brand: string) => handleBrandChange(0, brand)}
+                                    onVerifiedStationSelect={(stationId: string) => handleVerifiedStationSelect(0, stationId)}
                                     onAmountChange={(v: string) => handleAmountChange(0, v)}
                                     onPriceChange={(v: string) => handlePriceChange(0, v)}
                                     onLocationChange={(v: string) => handleLocationChange(0, v)}
@@ -485,8 +554,12 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                             ) : (
                                 <BulkTable 
                                     entries={entries} 
-                                    stations={stations}
+                                    brands={uniqueBrands}
+                                    getStationsForBrand={getStationsForBrand}
+                                    stationsLoading={stationsLoading}
                                     onUpdate={updateEntry}
+                                    onBrandChange={handleBrandChange}
+                                    onVerifiedStationSelect={handleVerifiedStationSelect}
                                     onAdd={addEntry}
                                     onRemove={removeEntry}
                                     onDuplicate={duplicateEntry}
@@ -522,7 +595,11 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     );
 }
 
-function SingleForm({ entry, stations, onUpdate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onAIVerify, isUploading, isVerifying, suggestions, showSuggestions }: any) {
+function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onAIVerify, isUploading, isVerifying, suggestions, showSuggestions }: any) {
+    // Get verified stations for the currently selected brand
+    const matchingStations: StationProfile[] = entry.stationName ? getStationsForBrand(entry.stationName) : [];
+    const hasVerifiedStations = matchingStations.length > 0;
+
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
@@ -552,26 +629,114 @@ function SingleForm({ entry, stations, onUpdate, onAmountChange, onPriceChange, 
                     </div>
                 </div>
             </div>
+
+            {/* Station Brand + Verified Location Cascade */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label>Station</Label>
-                    <Select value={entry.stationName} onValueChange={(val) => onUpdate({ stationName: val })}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>{stations.map((s: string) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    <Select value={entry.stationName} onValueChange={(val) => onBrandChange(val)}>
+                        <SelectTrigger><SelectValue placeholder="Select Brand" /></SelectTrigger>
+                        <SelectContent>
+                            {brands.map((b: string) => (
+                                <SelectItem key={b} value={b}>
+                                    <span className="flex items-center gap-2">
+                                        {b}
+                                        {(getStationsForBrand(b) as StationProfile[]).length > 0 && (
+                                            <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0 rounded-full">
+                                                {(getStationsForBrand(b) as StationProfile[]).length} verified
+                                            </span>
+                                        )}
+                                    </span>
+                                </SelectItem>
+                            ))}
+                            <SelectItem value="Independent">
+                                <span className="text-slate-500 italic">Independent / Other</span>
+                            </SelectItem>
+                        </SelectContent>
                     </Select>
                 </div>
                 <div className="space-y-2">
-                    <Label>Location</Label>
-                    <div className="relative">
-                        <Input value={entry.stationLocation} onChange={(e) => onLocationChange(e.target.value)} />
-                        {showSuggestions && suggestions.length > 0 && (
-                            <div className="absolute z-50 w-full mt-1 bg-white border rounded shadow-lg max-h-40 overflow-auto">
-                                {suggestions.map((s: any, i: number) => <button key={i} className="w-full text-left p-2 text-xs hover:bg-slate-100 truncate" onClick={() => onSelectAddress(s)}>{s.display_name}</button>)}
-                            </div>
+                    <div className="flex items-center gap-2">
+                        <Label>Location</Label>
+                        {entry.matchedStationId && (
+                            <span className="text-[9px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0 rounded-full flex items-center gap-0.5">
+                                <MapPin className="w-2.5 h-2.5" /> Verified
+                            </span>
                         )}
+                        {stationsLoading && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
                     </div>
+                    {hasVerifiedStations ? (
+                        /* Show dropdown of verified stations for this brand */
+                        <Select 
+                            value={entry.matchedStationId || ''} 
+                            onValueChange={(val) => {
+                                if (val === '__custom__') {
+                                    onUpdate({ matchedStationId: '', stationLocation: '' });
+                                } else {
+                                    onVerifiedStationSelect(val);
+                                }
+                            }}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select verified station" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {matchingStations.map((s: StationProfile) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                        <span className="flex flex-col">
+                                            <span className="font-medium text-sm">{s.name}</span>
+                                            {s.address && <span className="text-[10px] text-slate-400 truncate max-w-[220px]">{s.address}</span>}
+                                        </span>
+                                    </SelectItem>
+                                ))}
+                                <SelectItem value="__custom__">
+                                    <span className="text-slate-500 italic text-xs">Type address manually...</span>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    ) : (
+                        /* Fallback: free-text location input with address search */
+                        <div className="relative">
+                            <Input 
+                                value={entry.stationLocation} 
+                                onChange={(e) => onLocationChange(e.target.value)} 
+                                placeholder={entry.stationName ? "Type address or location" : "Select a station first"}
+                            />
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div className="absolute z-50 w-full mt-1 bg-white border rounded shadow-lg max-h-40 overflow-auto">
+                                    {suggestions.map((s: any, i: number) => <button key={i} className="w-full text-left p-2 text-xs hover:bg-slate-100 truncate" onClick={() => onSelectAddress(s)}>{s.display_name}</button>)}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* If user picked a verified station, show the address as read-only confirmation */}
+                    {hasVerifiedStations && entry.matchedStationId && entry.stationLocation && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50/50 border border-emerald-100 rounded text-[10px] text-slate-600">
+                            <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <span className="truncate">{entry.stationLocation}</span>
+                        </div>
+                    )}
+
+                    {/* If user chose "Type address manually" after seeing verified stations */}
+                    {hasVerifiedStations && !entry.matchedStationId && (
+                        <div className="relative mt-1">
+                            <Input 
+                                value={entry.stationLocation} 
+                                onChange={(e) => onLocationChange(e.target.value)} 
+                                placeholder="Type address manually"
+                                className="h-8 text-sm"
+                            />
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div className="absolute z-50 w-full mt-1 bg-white border rounded shadow-lg max-h-40 overflow-auto">
+                                    {suggestions.map((s: any, i: number) => <button key={i} className="w-full text-left p-2 text-xs hover:bg-slate-100 truncate" onClick={() => onSelectAddress(s)}>{s.display_name}</button>)}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
+
             <div className="space-y-2">
                 <Label>Receipt</Label>
                 <div className="flex items-center gap-4">
@@ -589,7 +754,7 @@ function SingleForm({ entry, stations, onUpdate, onAmountChange, onPriceChange, 
     );
 }
 
-function BulkTable({ entries, stations, onUpdate, onAdd, onRemove, onDuplicate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
+function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAdd, onRemove, onDuplicate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
     return (
         <div className="border rounded-lg bg-white overflow-hidden">
             <div className="bg-slate-50 p-2 flex justify-between items-center"><span className="text-xs font-bold uppercase text-slate-500">Items</span><Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={onAdd}><Plus className="h-3 w-3 mr-1" />Add</Button></div>
@@ -599,37 +764,57 @@ function BulkTable({ entries, stations, onUpdate, onAdd, onRemove, onDuplicate, 
                         <tr><th className="p-2 text-left">Time</th><th className="p-2 text-left">Amount</th><th className="p-2 text-left">Price</th><th className="p-2 text-left">Vol</th><th className="p-2 text-left">Station</th><th className="p-2 text-left">Odo</th><th className="p-2"></th></tr>
                     </thead>
                     <tbody className="divide-y">
-                        {entries.map((e: any, i: number) => (
-                            <tr key={e.id} className="hover:bg-slate-50">
-                                <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="time" value={e.time} onChange={(evt) => onUpdate(i, { time: evt.target.value })} /></td>
-                                <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.amount} onChange={(evt) => onAmountChange(i, evt.target.value)} /></td>
-                                <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.pricePerLiter} onChange={(evt) => onPriceChange(i, evt.target.value)} /></td>
-                                <td className="p-1 text-slate-400">{e.liters || '--'}</td>
-                                <td className="p-1">
-                                    <div className="space-y-1">
-                                        <Select value={e.stationName} onValueChange={(v) => onUpdate(i, { stationName: v })}>
-                                            <SelectTrigger className="h-7 text-[10px]"><SelectValue placeholder="Station" /></SelectTrigger>
-                                            <SelectContent>{stations.map((s: string) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                                        </Select>
-                                        <div className="relative">
-                                            <Input className="h-7 text-[10px]" placeholder="Address" value={e.stationLocation} onChange={(evt) => onLocationChange(i, evt.target.value)} />
-                                            {showSuggestions && activeLocationIndex === i && suggestions.length > 0 && (
-                                                <div className="absolute z-50 w-48 mt-1 bg-white border rounded shadow-lg max-h-32 overflow-auto">
-                                                    {suggestions.map((s: any, idx: number) => <button key={idx} className="w-full text-left p-1 text-[10px] hover:bg-slate-100 truncate" onClick={() => onSelectAddress(i, s)}>{s.display_name}</button>)}
+                        {entries.map((e: any, i: number) => {
+                            const matchingStations: StationProfile[] = e.stationName ? getStationsForBrand(e.stationName) : [];
+                            const hasVerified = matchingStations.length > 0;
+                            return (
+                                <tr key={e.id} className="hover:bg-slate-50">
+                                    <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="time" value={e.time} onChange={(evt) => onUpdate(i, { time: evt.target.value })} /></td>
+                                    <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.amount} onChange={(evt) => onAmountChange(i, evt.target.value)} /></td>
+                                    <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.pricePerLiter} onChange={(evt) => onPriceChange(i, evt.target.value)} /></td>
+                                    <td className="p-1 text-slate-400">{e.liters || '--'}</td>
+                                    <td className="p-1">
+                                        <div className="space-y-1">
+                                            <Select value={e.stationName} onValueChange={(v) => onBrandChange(i, v)}>
+                                                <SelectTrigger className="h-7 text-[10px]"><SelectValue placeholder="Station" /></SelectTrigger>
+                                                <SelectContent>{brands.map((s: string) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                            {hasVerified ? (
+                                                <Select value={e.matchedStationId || ''} onValueChange={(val) => {
+                                                    if (val === '__custom__') {
+                                                        onUpdate(i, { matchedStationId: '', stationLocation: '' });
+                                                    } else {
+                                                        onVerifiedStationSelect(i, val);
+                                                    }
+                                                }}>
+                                                    <SelectTrigger className="h-7 text-[10px]"><SelectValue placeholder="Select location" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {matchingStations.map((s: StationProfile) => <SelectItem key={s.id} value={s.id}>{s.name}{s.city ? ` — ${s.city}` : ''}</SelectItem>)}
+                                                        <SelectItem value="__custom__"><span className="italic text-slate-400">Manual...</span></SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <div className="relative">
+                                                    <Input className="h-7 text-[10px]" placeholder="Address" value={e.stationLocation} onChange={(evt) => onLocationChange(i, evt.target.value)} />
+                                                    {showSuggestions && activeLocationIndex === i && suggestions.length > 0 && (
+                                                        <div className="absolute z-50 w-48 mt-1 bg-white border rounded shadow-lg max-h-32 overflow-auto">
+                                                            {suggestions.map((s: any, idx: number) => <button key={idx} className="w-full text-left p-1 text-[10px] hover:bg-slate-100 truncate" onClick={() => onSelectAddress(i, s)}>{s.display_name}</button>)}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                </td>
-                                <td className="p-1">
-                                    <div className="relative">
-                                        <Input className={cn("h-7 text-[10px] w-16", e.isFlagged && "bg-amber-50 border-amber-200")} value={e.odometer} onChange={(evt) => onUpdate(i, { odometer: evt.target.value })} />
-                                        <button className="absolute -top-3 right-0 text-[8px] text-blue-600 hover:underline" onClick={() => onAIVerify(i)}>Verify</button>
-                                    </div>
-                                </td>
-                                <td className="p-1"><div className="flex gap-1"><label className="cursor-pointer p-1 text-slate-400 hover:text-indigo-600"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onFileUpload(i, evt)} /><Upload className="h-3 w-3" /></label><Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => onRemove(i)}><Trash2 className="h-3 w-3" /></Button></div></td>
-                            </tr>
-                        ))}
+                                    </td>
+                                    <td className="p-1">
+                                        <div className="relative">
+                                            <Input className={cn("h-7 text-[10px] w-16", e.isFlagged && "bg-amber-50 border-amber-200")} value={e.odometer} onChange={(evt) => onUpdate(i, { odometer: evt.target.value })} />
+                                            <button className="absolute -top-3 right-0 text-[8px] text-blue-600 hover:underline" onClick={() => onAIVerify(i)}>Verify</button>
+                                        </div>
+                                    </td>
+                                    <td className="p-1"><div className="flex gap-1"><label className="cursor-pointer p-1 text-slate-400 hover:text-indigo-600"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onFileUpload(i, evt)} /><Upload className="h-3 w-3" /></label><Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => onRemove(i)}><Trash2 className="h-3 w-3" /></Button></div></td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>

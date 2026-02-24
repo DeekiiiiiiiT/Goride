@@ -233,8 +233,8 @@ app.post("/make-server-37f42386/ai/process-fuel-receipt", async (c) => {
 
 app.post("/make-server-37f42386/ai/verify-odometer", async (c) => {
     try {
-        const { currentOdo, previousOdo, tripsDistance } = await c.req.json();
-        const data = await gemini.verifyOdometerLogic(currentOdo, previousOdo, tripsDistance);
+        const { currentOdo, previousOdo, tripsDistance, previousDate, currentDate } = await c.req.json();
+        const data = await gemini.verifyOdometerLogic(currentOdo, previousOdo, tripsDistance, previousDate, currentDate);
         return c.json(data);
     } catch (e: any) {
         console.error("AI Odo Verification Error:", e);
@@ -1323,14 +1323,26 @@ app.get("/make-server-37f42386/trips", async (c) => {
 
     if (error) throw error;
     
-    // Phase 8.4: Large Data Stripping
+    // Phase 8.4: Large Data Stripping + sanitize control chars
     const trips = (data || []).map((d: any) => {
         const v = d.value || {};
         const { route, stops, ...lightweight } = v;
-        return lightweight;
+        const sanitized: Record<string, any> = {};
+        for (const [k, val] of Object.entries(lightweight)) {
+          sanitized[k] = typeof val === 'string' ? val.replace(/[\x00-\x1F\x7F]/g, ' ') : val;
+        }
+        return sanitized;
     });
 
-    return c.json(trips);
+    // Manual stringify to catch serialization errors before sending
+    let jsonStr: string;
+    try {
+      jsonStr = JSON.stringify(trips);
+    } catch (serErr: any) {
+      console.error("JSON serialization error in /trips:", serErr);
+      return c.json({ error: "Failed to serialize trips response" }, 500);
+    }
+    return new Response(jsonStr, { headers: { "Content-Type": "application/json" } });
   } catch (e: any) {
     console.error("Error fetching trips:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);
@@ -1551,7 +1563,18 @@ app.get("/make-server-37f42386/drivers", async (c) => {
         drivers.splice(ghostIndex, 1);
     }
 
-    return c.json(drivers);
+    // Sanitize control chars in string fields to prevent JSON parse errors
+    const sanitizedDrivers = drivers.map((d: any) => {
+      if (!d || typeof d !== 'object') return d;
+      const s: Record<string, any> = {};
+      for (const [k, val] of Object.entries(d)) {
+        s[k] = typeof val === 'string' ? val.replace(/[\x00-\x1F\x7F]/g, ' ') : val;
+      }
+      return s;
+    });
+    let jsonStr: string;
+    try { jsonStr = JSON.stringify(sanitizedDrivers); } catch (serErr: any) { console.error("JSON serialization error in /drivers:", serErr); return c.json({ error: "Failed to serialize drivers" }, 500); }
+    return new Response(jsonStr, { headers: { "Content-Type": "application/json" } });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -1781,6 +1804,16 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             }
         }
 
+        // Manual Station Pick: If the form pre-selected a verified station (no GPS needed),
+        // set locationStatus so the blue shield badge appears in FuelLogTable.
+        if (!transaction.metadata?.locationStatus && (transaction.matchedStationId || transaction.metadata?.matchedStationId)) {
+            if (!transaction.metadata) transaction.metadata = {};
+            transaction.metadata.locationStatus = 'verified';
+            transaction.metadata.verificationMethod = 'manual_station_picker';
+            transaction.metadata.matchedStationId = transaction.matchedStationId || transaction.metadata.matchedStationId;
+            console.log(`[ManualStationPick] Verified station linked via form picker: ${transaction.metadata.matchedStationId}`);
+        }
+
         // --- CUMULATIVE LITERS & INTEGRITY LOGIC (Phase 1 & 2) ---
         const vehicleId = transaction.vehicleId;
         const volume = Number(transaction.quantity) || Number(transaction.metadata?.fuelVolume) || 0;
@@ -1919,6 +1952,23 @@ app.post("/make-server-37f42386/transactions", async (c) => {
     }
 
     if (isFuel && isAiVerified && transaction.status === 'Pending') {
+        // STATION VERIFICATION GATE: Only allow auto-approval if GPS matched
+        // a verified station. All other cases (unverified, ambiguous, no GPS)
+        // are held for admin review via Learnt Locations tab.
+        const locationStatus = transaction.metadata?.locationStatus;
+        if (locationStatus !== 'verified') {
+            transaction.status = 'Pending';
+            transaction.metadata = {
+                ...transaction.metadata,
+                stationGateHold: true,
+                holdReason: 'Unverified station — awaiting admin review from Learnt Locations',
+                holdTimestamp: new Date().toISOString(),
+            };
+            console.log(`[StationGate] Transaction ${transaction.id} held — station locationStatus="${locationStatus || 'none'}", skipping auto-approval and fuel entry creation.`);
+            await kv.set(`transaction:${transaction.id}`, transaction);
+            return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
+        }
+
         transaction.status = 'Approved';
         transaction.isReconciled = true;
         transaction.metadata = {
@@ -2204,25 +2254,29 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
     if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
         // Calculate price per liter if quantity is available
         const quantity = Number(tx.quantity) || 0;
-        const amount = Math.abs(Number(tx.amount) || 0);
-        const pricePerLiter = quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0;
+        const amount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
+        const pricePerLiter = Number(tx.metadata?.pricePerLiter) || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
         
         const fuelEntry = {
             id: crypto.randomUUID(),
-            date: tx.date || new Date().toISOString().split('T')[0],
+            date: (tx.date && tx.time) ? `${tx.date}T${tx.time}` : (tx.date || new Date().toISOString().split('T')[0]),
             type: 'Reimbursement', // Using internal type even if UI doesn't show it
             amount: amount,
             liters: quantity,
             pricePerLiter: pricePerLiter,
             odometer: Number(tx.odometer) || 0,
-            location: tx.merchant || tx.description || 'Reimbursement',
-            stationAddress: tx.location || '',
+            location: tx.vendor || tx.merchant || tx.description || 'Reimbursement',
+            vendor: tx.vendor || tx.merchant || tx.description || 'Reimbursement',
+            stationAddress: tx.metadata?.stationLocation || tx.location || '',
             vehicleId: tx.vehicleId, // Must be present to link to vehicle stats
             driverId: tx.driverId,
             cardId: undefined, // Not a card transaction
             transactionId: tx.id, // Link back to original transaction
+            matchedStationId: tx.matchedStationId || tx.metadata?.matchedStationId,
             receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
             odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
+            isVerified: true, // Matches auto-approve path (line 1974)
+            source: 'Manual Approval', // Distinguishes from auto-approve 'Fuel Log'
             metadata: {
                 ...tx.metadata,
                 portal_type: tx.metadata?.portal_type || 'Manual_Entry',
@@ -2231,8 +2285,39 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
                 source: tx.metadata?.source || 'Manual Approval',
                 receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
                 odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
+                locationStatus: tx.metadata?.locationStatus || ((tx.matchedStationId || tx.metadata?.matchedStationId) ? 'verified' : 'unknown'),
+                matchedStationId: tx.matchedStationId || tx.metadata?.matchedStationId,
+                verificationMethod: tx.metadata?.verificationMethod || ((tx.matchedStationId || tx.metadata?.matchedStationId) ? 'manual_station_picker' : undefined),
             }
         };
+
+        // Calculate Audit Confidence Score (matching auto-approve gold-standard pattern)
+        const resolvedStationId = fuelEntry.matchedStationId;
+        let matchedStation = null;
+        if (resolvedStationId) {
+            matchedStation = await kv.get(`station:${resolvedStationId}`);
+        }
+
+        if (matchedStation && fuelEntry.matchedStationId) {
+            const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, matchedStation);
+            fuelEntry.metadata = {
+                ...fuelEntry.metadata,
+                auditConfidenceScore: confidence.score,
+                auditConfidenceBreakdown: confidence.breakdown,
+                isHighlyTrusted: confidence.isHighlyTrusted
+            };
+            console.log(`[ApproveHandler] Audit confidence for ${fuelEntry.id}: ${confidence.score}/100`);
+        } else {
+            // No matched station — still calculate base confidence (behavioral + physical only)
+            const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, null);
+            fuelEntry.metadata = {
+                ...fuelEntry.metadata,
+                auditConfidenceScore: confidence.score,
+                auditConfidenceBreakdown: confidence.breakdown,
+                isHighlyTrusted: confidence.isHighlyTrusted
+            };
+            console.log(`[ApproveHandler] Audit confidence (no station) for ${fuelEntry.id}: ${confidence.score}/100`);
+        }
 
         // Only save if we have a vehicleId (Critical for fleet stats)
         if (fuelEntry.vehicleId) {
@@ -2252,7 +2337,14 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
     }
 
     // Phase 4: Auto-create Cash Wallet credit for approved fuel reimbursements
-    if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
+    const paymentSource = tx.metadata?.paymentSource || 'driver_cash'; // default to driver_cash for legacy entries
+    const isDriverCash = paymentSource === 'driver_cash';
+
+    if (!isDriverCash) {
+        console.log(`[FuelCredit] Skipping wallet credit: payment source is '${paymentSource}' (not driver_cash) for transaction ${id}`);
+    }
+
+    if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved' && isDriverCash) {
         if (!tx.driverId) {
             console.log('[FuelCredit] Skipping wallet credit: no driverId on transaction ' + id);
         } else {
@@ -2269,8 +2361,8 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
                     time: new Date().toISOString().split('T')[1].substring(0, 8),
                     type: 'Payment_Received',
                     category: 'Fuel Reimbursement Credit',
-                    description: `Fuel Reimbursement Credit: ${tx.description || tx.merchant || 'Fuel Purchase'}`,
-                    amount: Math.abs(tx.amount || 0),
+                    description: `Fuel Reimbursement Credit: ${tx.vendor || tx.description || tx.merchant || 'Fuel Purchase'}`,
+                    amount: Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0),
                     paymentMethod: 'Cash',
                     status: 'Completed',
                     isReconciled: true,
@@ -2289,6 +2381,52 @@ app.post("/make-server-37f42386/expenses/approve", async (c) => {
                 console.log(`[FuelCredit] Created wallet credit ${creditId} for driver ${tx.driverId}, amount: ${walletCredit.amount}`);
             } else {
                 console.log(`[FuelCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);
+            }
+        }
+    }
+
+    // Phase 4b: Auto-create Cash Wallet credit for approved Toll reimbursements (Manual Resolve: WriteOff/Business)
+    const isTollCategory = tx.category === 'Toll Usage' || tx.category === 'Tolls';
+    const isTollCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
+
+    if (isTollCategory && tx.status === 'Approved' && isTollCash) {
+        if (!tx.driverId || tx.driverId === 'fleet') {
+            console.log(`[TollCredit] Skipping wallet credit: driverId is '${tx.driverId}' (fleet-absorbed, no driver to credit) for transaction ${id}`);
+        } else {
+            const tollCreditId = `toll-credit-${id}`;
+            const existingTollCredit = await kv.get(`transaction:${tollCreditId}`);
+
+            if (!existingTollCredit) {
+                const tollWalletCredit = {
+                    id: tollCreditId,
+                    driverId: tx.driverId,
+                    driverName: tx.driverName || '',
+                    vehicleId: tx.vehicleId,
+                    date: new Date().toISOString().split('T')[0],
+                    time: new Date().toISOString().split('T')[1].substring(0, 8),
+                    type: 'Payment_Received',
+                    category: 'Toll Reimbursement Credit',
+                    description: `Toll Reimbursement Credit: ${tx.description || tx.vendor || tx.merchant || 'Toll Charge'}`,
+                    amount: Math.abs(Number(tx.amount) || 0),
+                    paymentMethod: 'Cash',
+                    status: 'Completed',
+                    isReconciled: true,
+                    referenceNumber: tx.id,
+                    metadata: {
+                        tollCreditSourceId: tx.id,
+                        source: 'toll_reimbursement_approval',
+                        automated: true,
+                        approvedAt: new Date().toISOString(),
+                        originalAmount: tx.amount,
+                        originalCategory: tx.category,
+                        resolutionNotes: tx.metadata?.notes
+                    }
+                };
+
+                await kv.set(`transaction:${tollCreditId}`, tollWalletCredit);
+                console.log(`[TollCredit] Created wallet credit ${tollCreditId} for driver ${tx.driverId}, amount: ${tollWalletCredit.amount}`);
+            } else {
+                console.log(`[TollCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);
             }
         }
     }
@@ -2317,12 +2455,19 @@ app.post("/make-server-37f42386/expenses/reject", async (c) => {
 
     await kv.set(`transaction:${id}`, tx);
 
-    // Clean up wallet credit if this was previously approved
-    const creditKey = `transaction:fuel-credit-${id}`;
-    const existingCredit = await kv.get(creditKey);
-    if (existingCredit) {
-        await kv.del(creditKey);
+    // Clean up wallet credit if this was previously approved (fuel or toll)
+    const fuelCreditKey = `transaction:fuel-credit-${id}`;
+    const existingFuelCredit = await kv.get(fuelCreditKey);
+    if (existingFuelCredit) {
+        await kv.del(fuelCreditKey);
         console.log(`[FuelCredit] Removed wallet credit for rejected reimbursement: ${id}`);
+    }
+
+    const tollCreditKey = `transaction:toll-credit-${id}`;
+    const existingTollCredit = await kv.get(tollCreditKey);
+    if (existingTollCredit) {
+        await kv.del(tollCreditKey);
+        console.log(`[TollCredit] Removed wallet credit for rejected toll: ${id}`);
     }
 
     return c.json({ success: true, data: tx });
@@ -2355,6 +2500,14 @@ app.post("/make-server-37f42386/fuel/backfill-wallet-credits", async (c) => {
     let skipped = 0;
 
     for (const tx of approvedFuelReimbursements) {
+      // Phase 5 parity: Skip wallet credits for Gas Card/Petty Cash entries (matching approve handler guard)
+      const paymentSource = tx.metadata?.paymentSource || 'driver_cash';
+      if (paymentSource !== 'driver_cash') {
+        console.log(`[FuelCredit Backfill] Skipping ${tx.id}: payment source is '${paymentSource}' (not driver_cash)`);
+        skipped++;
+        continue;
+      }
+
       const creditId = `fuel-credit-${tx.id}`;
       const existingCredit = await kv.get(`transaction:${creditId}`);
 
@@ -2372,8 +2525,8 @@ app.post("/make-server-37f42386/fuel/backfill-wallet-credits", async (c) => {
         time: tx.metadata?.approvedAt ? tx.metadata.approvedAt.split('T')[1]?.substring(0, 8) || '00:00:00' : (tx.time || '00:00:00'),
         type: 'Payment_Received',
         category: 'Fuel Reimbursement Credit',
-        description: `Fuel Reimbursement Credit: ${tx.description || tx.merchant || 'Fuel Purchase'}`,
-        amount: Math.abs(tx.amount || 0),
+        description: `Fuel Reimbursement Credit: ${tx.vendor || tx.description || tx.merchant || 'Fuel Purchase'}`,
+        amount: Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0),
         paymentMethod: 'Cash',
         status: 'Completed',
         isReconciled: true,

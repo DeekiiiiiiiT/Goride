@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -139,7 +139,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
     fetchTripsForRange();
   }, [reconciliationDateRange]);
 
-  const loadData = async (silent = false) => {
+  const loadData = useCallback(async (silent = false) => {
       if (!silent) setIsRefreshing(true);
       try {
           // Fetch critical configuration and identifiers first
@@ -177,7 +177,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       } finally {
           setIsRefreshing(false);
       }
-  };
+  }, []);
 
   useEffect(() => {
     loadData(true);
@@ -194,7 +194,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   }, []);
 
   // Card Handlers
-  const handleSaveCard = async (card: FuelCard) => {
+  const handleSaveCard = useCallback(async (card: FuelCard) => {
       try {
           const savedCard = await fuelService.saveFuelCard(card);
           if (editingCard) {
@@ -210,9 +210,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           console.error(e);
           toast.error("Failed to save fuel card");
       }
-  };
+  }, [editingCard]);
 
-  const handleDeleteCard = async (id: string) => {
+  const handleDeleteCard = useCallback(async (id: string) => {
       try {
           await fuelService.deleteFuelCard(id);
           setCards(prev => prev.filter(c => c.id !== id));
@@ -221,7 +221,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           console.error(e);
           toast.error("Failed to delete fuel card");
       }
-  };
+  }, []);
 
   // Log Handlers
   const handleSaveLog = async (entryOrEntries: FuelEntry | FuelEntry[]) => {
@@ -317,10 +317,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       }
   };
 
-  const handleDeleteLog = async (id: string) => {
+  const handleDeleteLog = useCallback(async (id: string) => {
       setDeleteLogConfirmationId(id);
       setCascadeDelete(true);
-  };
+  }, []);
 
   const handleVerifyLog = async (id: string) => {
       // Optimistic UI Update (Phase 3: Fuel Management & Odometer Audit Core)
@@ -359,7 +359,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   };
 
   // Reimbursement Handlers
-  const handleApproveReimbursement = async (id: string, notes?: string) => {
+  const handleApproveReimbursement = useCallback(async (id: string, notes?: string) => {
       try {
           const updated = await api.approveExpense(id, notes);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
@@ -379,9 +379,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           console.error(e);
           toast.error("Failed to approve reimbursement");
       }
-  };
+  }, []);
 
-  const handleRejectReimbursement = async (id: string, reason?: string) => {
+  const handleRejectReimbursement = useCallback(async (id: string, reason?: string) => {
       try {
           const updated = await api.rejectExpense(id, reason);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
@@ -390,7 +390,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           console.error(e);
           toast.error("Failed to reject reimbursement");
       }
-  };
+  }, []);
 
     const handleSaveExpense = async (transactionData: any, shouldRefresh = true) => {
         setIsSyncing(true);
@@ -415,7 +415,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                                 ...linkedLog,
                                 amount: Math.abs(savedTx.amount),
                                 date: savedTx.date.includes('T') ? savedTx.date : `${savedTx.date}T${savedTx.time || '12:00:00'}`,
-                                location: savedTx.merchant || linkedLog.location,
+                                location: savedTx.vendor || savedTx.merchant || linkedLog.location,
+                                vendor: savedTx.vendor || savedTx.merchant || linkedLog.vendor,
+                                matchedStationId: savedTx.matchedStationId || savedTx.metadata?.matchedStationId || linkedLog.matchedStationId,
                                 driverId: savedTx.driverId || linkedLog.driverId,
                                 vehicleId: savedTx.vehicleId || linkedLog.vehicleId,
                                 odometer: savedTx.odometer || linkedLog.odometer,
@@ -459,10 +461,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
         }
     };
 
-  const handleEditExpense = (tx: FinancialTransaction) => {
+  const handleEditExpense = useCallback((tx: FinancialTransaction) => {
       setEditingExpense(tx);
       setIsSubmitExpenseModalOpen(true);
-  };
+  }, []);
 
   const confirmDeleteLog = async () => {
       if (!deleteLogConfirmationId) return;
@@ -520,10 +522,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       }
   };
 
-  const handleDeleteExpense = (id: string) => {
+  const handleDeleteExpense = useCallback((id: string) => {
       setDeleteConfirmationId(id);
       setCascadeDelete(true);
-  };
+  }, []);
 
   const confirmDeleteExpense = async () => {
       if (!deleteConfirmationId) return;
@@ -619,18 +621,18 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   };
 
   // Helper Lookups
-  const getVehicleName = (id?: string) => {
+  const getVehicleName = useCallback((id?: string) => {
       if (!id) return '';
       const v = vehicles.find(v => v.id === id);
       return v ? `${v.licensePlate} (${v.model})` : 'Unknown Vehicle';
-  };
+  }, [vehicles]);
 
-  const getDriverName = (id?: string) => {
+  const getDriverName = useCallback((id?: string) => {
       if (!id) return '';
       // Step 9.2: Correct Driver Lookup Utility - Search by both id and driverId for legacy/mismatch compatibility
       const d = drivers.find(d => d.id === id || d.driverId === id);
       return d ? d.name : 'Unknown Driver';
-  };
+  }, [drivers]);
 
   // Phase 7: Shared Anchor Logic
   const { validAnchorIds, getLinkedTransaction } = useFuelAnchors(logs, transactions);
@@ -945,7 +947,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           <StationDatabaseView logs={logs} loading={isRefreshing} />
       )}
 
-      {/* Modals */}
+      {/* Modals - Conditionally rendered to prevent mount-time effect cascades */}
+      {isCardModalOpen && (
       <FuelCardModal 
             isOpen={isCardModalOpen}
             onClose={() => { setIsCardModalOpen(false); setEditingCard(null); }}
@@ -954,7 +957,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             vehicles={vehicles}
             drivers={drivers}
       />
+      )}
 
+      {isLogModalOpen && (
       <FuelLogModal 
             isOpen={isLogModalOpen}
             onClose={() => { setIsLogModalOpen(false); setEditingLog(null); }}
@@ -964,8 +969,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             drivers={drivers}
             cards={cards}
       />
+      )}
 
 
+      {isAdjustmentModalOpen && (
       <MileageAdjustmentModal 
             isOpen={isAdjustmentModalOpen}
             onClose={() => setIsAdjustmentModalOpen(false)}
@@ -974,7 +981,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             initialVehicleId={adjustmentDefaults.vehicleId}
             initialDate={adjustmentDefaults.date}
       />
+      )}
 
+      {isResolutionModalOpen && (
       <DisputeResolutionModal 
             isOpen={isResolutionModalOpen}
             onClose={() => { setIsResolutionModalOpen(false); setSelectedDispute(null); }}
@@ -982,7 +991,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             onSave={handleDisputeUpdated}
             onCreateAdjustment={handleCreateAdjustmentFromDispute}
       />
+      )}
 
+      {isSubmitExpenseModalOpen && (
       <SubmitExpenseModal 
             isOpen={isSubmitExpenseModalOpen}
             onClose={() => { setIsSubmitExpenseModalOpen(false); setEditingExpense(null); }}
@@ -991,6 +1002,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             vehicles={vehicles}
             initialData={editingExpense}
       />
+      )}
 
       <AlertDialog open={!!deleteConfirmationId} onOpenChange={(open) => !open && setDeleteConfirmationId(null)}>
         <AlertDialogContent>

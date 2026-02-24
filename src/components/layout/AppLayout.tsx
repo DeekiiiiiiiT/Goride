@@ -1,4 +1,5 @@
 import React from 'react';
+import { Toaster } from 'sonner@2.0.3';
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -78,6 +79,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
           </div>
         </main>
       </div>
+      <Toaster position="top-right" richColors closeButton style={{ zIndex: 99999 }} />
     </SidebarProvider>
   );
 }

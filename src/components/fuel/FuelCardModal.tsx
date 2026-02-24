@@ -45,6 +45,7 @@ export function FuelCardModal({ isOpen, onClose, onSave, initialData, vehicles =
     });
 
     useEffect(() => {
+        if (!isOpen) return; // Guard: don't reset state when modal is closed
         if (initialData) {
             setFormData({
                 ...initialData,

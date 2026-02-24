@@ -78,6 +78,7 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   const [tiers, setTiers] = React.useState<TierConfig[]>([]);
   const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
   const [visibleCount, setVisibleCount] = React.useState(12);
+  const [selectedRowIdx, setSelectedRowIdx] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     tierService.getTiers().then(setTiers);
@@ -89,6 +90,7 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   const handlePeriodChange = (pt: PeriodType) => {
     setPeriodType(pt);
     setVisibleCount(defaultPageSize(pt));
+    setSelectedRowIdx(null);
   };
 
   // ────────────────────────────────────────────────────────────
@@ -250,6 +252,12 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   const latestRow = periodData.length > 0 ? periodData[0] : null;
 
   // ────────────────────────────────────────────────────────────
+  // Display row for the progress bar — selected row or latest
+  // ────────────────────────────────────────────────────────────
+  const displayRow = (selectedRowIdx !== null && periodData[selectedRowIdx]) ? periodData[selectedRowIdx] : latestRow;
+  const isViewingSelected = selectedRowIdx !== null && periodData[selectedRowIdx] !== undefined;
+
+  // ────────────────────────────────────────────────────────────
   // CSV Export
   // ────────────────────────────────────────────────────────────
   const handleExport = () => {
@@ -289,7 +297,7 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
 
   // ────────────────────────────────────────────────────────────
   // Empty state
-  // ────────────────────────────────────────────────────────────
+  // ─────────────��──────────────────────────────────────────────
   if (periodData.length === 0) {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-500">
@@ -331,51 +339,64 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
           </span>
         </div>
 
-        {/* Quota summary card — only when quota is enabled and we have a latest row */}
-        {quotaEnabled && latestRow && latestRow.quotaTarget !== null && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        {/* Quota summary card — only when quota is enabled and we have a display row */}
+        {quotaEnabled && displayRow && displayRow.quotaTarget !== null && (() => {
+          const barLabel = isViewingSelected
+            ? formatPeriodLabel(displayRow)
+            : `This ${periodLabel}`;
+          return (
+          <div className={`rounded-lg border p-3 transition-all duration-300 ${isViewingSelected ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-200 bg-slate-50'}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Target className="h-4 w-4 text-slate-500" />
+                <Target className={`h-4 w-4 ${isViewingSelected ? 'text-indigo-500' : 'text-slate-500'}`} />
                 <span className="text-sm font-medium text-slate-700">
-                  This {periodLabel}: ${latestRow.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {barLabel}: ${displayRow.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   {' / '}
-                  ${latestRow.quotaTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  {latestRow.quotaPercent !== null && (
-                    <span className={`ml-1.5 font-semibold ${latestRow.quotaPercent >= 100 ? 'text-emerald-600' : latestRow.quotaPercent >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
-                      ({latestRow.quotaPercent.toFixed(0)}%)
+                  ${displayRow.quotaTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {displayRow.quotaPercent !== null && (
+                    <span className={`ml-1.5 font-semibold ${displayRow.quotaPercent >= 100 ? 'text-emerald-600' : displayRow.quotaPercent >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      ({displayRow.quotaPercent.toFixed(0)}%)
                     </span>
                   )}
                 </span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
+                {isViewingSelected && (
+                  <button
+                    onClick={() => setSelectedRowIdx(null)}
+                    className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium underline underline-offset-2"
+                  >
+                    Reset to current
+                  </button>
+                )}
                 <Badge
                   variant="outline"
                   className="text-[10px]"
-                  style={{ backgroundColor: latestRow.tier.color ? `${latestRow.tier.color}15` : undefined, borderColor: latestRow.tier.color || undefined, color: latestRow.tier.color || undefined }}
+                  style={{ backgroundColor: displayRow.tier.color ? `${displayRow.tier.color}15` : undefined, borderColor: displayRow.tier.color || undefined, color: displayRow.tier.color || undefined }}
                 >
-                  {latestRow.tier.name} ({latestRow.tier.sharePercentage}%)
+                  {displayRow.tier.name} ({displayRow.tier.sharePercentage}%)
                 </Badge>
-                {latestRow.tripCount > 0 && (
-                  <span>{latestRow.tripCount} trip{latestRow.tripCount !== 1 ? 's' : ''}</span>
+                {displayRow.tripCount > 0 && (
+                  <span>{displayRow.tripCount} trip{displayRow.tripCount !== 1 ? 's' : ''}</span>
                 )}
               </div>
             </div>
             {/* Progress bar */}
             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${
-                  (latestRow.quotaPercent ?? 0) >= 100
+                className={`h-full rounded-full transition-all duration-500 ease-out ${
+                  (displayRow.quotaPercent ?? 0) >= 100
                     ? 'bg-emerald-500'
-                    : (latestRow.quotaPercent ?? 0) >= 70
+                    : (displayRow.quotaPercent ?? 0) >= 70
                       ? 'bg-amber-500'
                       : 'bg-rose-500'
                 }`}
-                style={{ width: `${Math.min(100, latestRow.quotaPercent ?? 0)}%` }}
+                style={{ width: `${Math.min(100, displayRow.quotaPercent ?? 0)}%` }}
               />
             </div>
           </div>
-        )}
+          );
+        })()}
 
         <Table>
           <TableHeader>
@@ -390,9 +411,20 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
           </TableHeader>
           <TableBody>
             {visibleRows.map((row, idx) => (
-              <TableRow key={idx}>
+              <TableRow
+                key={idx}
+                onClick={() => setSelectedRowIdx(selectedRowIdx === idx ? null : idx)}
+                className={`cursor-pointer transition-colors ${
+                  selectedRowIdx === idx
+                    ? 'bg-indigo-50 hover:bg-indigo-100'
+                    : 'hover:bg-slate-50'
+                }`}
+              >
                 {/* Period label */}
                 <TableCell className="font-medium text-xs whitespace-nowrap">
+                  {selectedRowIdx === idx && (
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 mr-1.5 align-middle" />
+                  )}
                   {formatPeriodLabel(row)}
                   {row.tripCount > 0 && (
                     <span className="ml-1.5 text-slate-400 text-[10px]">
