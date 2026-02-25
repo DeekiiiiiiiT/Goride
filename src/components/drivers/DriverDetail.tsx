@@ -252,12 +252,63 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['All']));
   const [timeFilter, setTimeFilter] = useState<TimeFilterValue>({ preset: 'all' });
+
+  // ────────────────────────────────────────────────────────────
+  // Server-side trip fetching: load ALL trips for this driver
+  // so we aren't limited by the initial 1,000-trip page load.
+  // ────────────────────────────────────────────────────────────
+  const [serverTrips, setServerTrips] = useState<Trip[]>([]);
+  const [serverTripsLoaded, setServerTripsLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchAllDriverTrips = async () => {
+      try {
+        const idsToSearch = new Set<string>();
+        idsToSearch.add(driverId);
+        if (driver?.uberDriverId) idsToSearch.add(driver.uberDriverId);
+        if (driver?.inDriveDriverId) idsToSearch.add(driver.inDriveDriverId);
+        const fetches = Array.from(idsToSearch).map(id =>
+          api.getTripsFiltered({ driverId: id, limit: 2000 }).catch(() => ({ data: [] as Trip[], total: 0 }))
+        );
+        const results = await Promise.all(fetches);
+        if (cancelled) return;
+        const seen = new Set<string>();
+        const merged: Trip[] = [];
+        for (const result of results) {
+          for (const trip of (result.data || [])) {
+            if (trip.id && !seen.has(trip.id)) { seen.add(trip.id); merged.push(trip); }
+          }
+        }
+        console.log(`[DriverDetail] Server fetched ${merged.length} trips for driver ${driverId} (searched ${idsToSearch.size} IDs)`);
+        setServerTrips(merged);
+      } catch (err) {
+        console.error('[DriverDetail] Failed to fetch server trips:', err);
+      } finally {
+        if (!cancelled) setServerTripsLoaded(true);
+      }
+    };
+    fetchAllDriverTrips();
+    return () => { cancelled = true; };
+  }, [driverId, driver?.uberDriverId, driver?.inDriveDriverId]);
+
+  const allTrips = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: Trip[] = [];
+    for (const t of serverTrips) {
+      if (t.id && !seen.has(t.id)) { seen.add(t.id); merged.push(t); }
+    }
+    for (const t of (trips || [])) {
+      if (t.id && !seen.has(t.id)) { seen.add(t.id); merged.push(t); }
+    }
+    return merged;
+  }, [serverTrips, trips]);
   
   // Phase 1: Date Range & Data Context Filtering
   const { minDate, maxDate, tripIds } = useMemo(() => {
-      if (!trips || trips.length === 0) return { minDate: null, maxDate: null, tripIds: new Set<string>() };
+      if (!allTrips || allTrips.length === 0) return { minDate: null, maxDate: null, tripIds: new Set<string>() };
       
-      const validTrips = trips.filter(Boolean);
+      const validTrips = allTrips.filter(Boolean);
       const timestamps = validTrips.map(t => new Date(t.date).getTime());
       const ids = new Set(validTrips.map(t => t.id));
       
@@ -266,7 +317,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           maxDate: new Date(Math.max(...timestamps)),
           tripIds: ids
       };
-  }, [trips]);
+  }, [allTrips]);
 
   const dateFilteredTransactions = useMemo(() => {
       // If no trips loaded, we can't determine context. showing nothing is safer than showing lifetime.
@@ -447,10 +498,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   // Calculate Monthly Earnings & Current Tier (Independent of Date Range Selection)
   const { monthlyEarnings, currentTier } = useMemo(() => {
-      const mEarnings = TierCalculations.calculateMonthlyEarnings(trips);
+      const mEarnings = TierCalculations.calculateMonthlyEarnings(allTrips);
       const cTier = TierCalculations.getTierForEarnings(mEarnings, tiers);
       return { monthlyEarnings: mEarnings, currentTier: cTier };
-  }, [trips, tiers]);
+  }, [allTrips, tiers]);
 
   // Fetch Transactions & Claims
   const refreshData = React.useCallback(async () => {
@@ -544,7 +595,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const tripGroups: { type: 'trip', data: Trip, children: FinancialTransaction[] }[] = [];
       const tripsWithTx = new Set<string>();
 
-      (trips || []).forEach(trip => {
+      (allTrips || []).forEach(trip => {
           if (!trip) return;
           const children = txByTrip.get(trip.id);
           if (children && children.length > 0) {
@@ -615,7 +666,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       }
 
       return sortedList;
-  }, [cashTollTransactions, trips, showHidden, driverId]);
+  }, [cashTollTransactions, allTrips, showHidden, driverId]);
 
   const toggleRow = (id: string) => {
       const newSet = new Set(expandedRows);
@@ -1060,7 +1111,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // We no longer need to calculate "Report Duration" because we use the Efficiency Ratio method.
      // This ignores mismatched file dates and focuses on the Driver's Performance Profile.
 
-     const filteredTrips = trips.filter(t => {
+     const filteredTrips = allTrips.filter(t => {
          if (selectedPlatforms.has('All') || selectedPlatforms.has(t.platform || 'Other')) { const timeScoped = activeTab === 'overview' || activeTab === 'trips'; if (timeScoped && timeFilter.preset !== 'all') { const h = new Date(t.date).getHours(); if (!isHourInTimeFilter(h, timeFilter)) return false; } return true; } return false;
          // time+platform filter handled above
      });
@@ -1599,7 +1650,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      const activePlates = new Set<string>();
      
      // 1. Identify vehicles driven in this period from Trip Logs
-     trips.forEach(trip => {
+     allTrips.forEach(trip => {
          let tripDateObj: Date;
          if (typeof trip.date === 'string') {
             if (trip.date.includes('T')) {
@@ -1727,7 +1778,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         // Phase 2.1: Expose Time Metrics for Debug/Advanced View
         timeMetrics: reconstructedTimeMetrics
      };
-  }, [trips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms, timeFilter, activeTab]);
+  }, [allTrips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms, timeFilter, activeTab]);
 
   // ────────────────────────────────────────────────────────────
   // Platform Breakdown for Earnings donut chart (Phase 6)
@@ -1735,7 +1786,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   //   Replaces the old Base Fare / Tips breakdown that was always hollow.
   // ────────────────────────────────────────────────────────────
   const platformBreakdownData = useMemo(() => {
-    const completed = (trips || []).filter(t => t.status === 'Completed');
+    const completed = (allTrips || []).filter(t => t.status === 'Completed');
     const platformTotals: Record<string, number> = {};
     completed.forEach(trip => {
       const platform = trip.platform || 'Other';
@@ -1754,7 +1805,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     return Object.entries(platformTotals)
       .filter(([_, value]) => value > 0)
       .map(([name, value]) => ({ name, value, color: colors[name] || '#94a3b8' }));
-  }, [trips]);
+  }, [allTrips]);
 
   const platformTotalEarnings = useMemo(() =>
     platformBreakdownData.reduce((sum, d) => sum + d.value, 0),
@@ -2685,13 +2736,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             <DriverEarningsHistory
               driverId={driverId}
               transactions={transactions}
-              trips={trips}
+              trips={allTrips}
               quotaConfig={quotaConfig || undefined}
             />
          </TabsContent>
 
          <TabsContent value="expenses" className="space-y-6">
-                <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={trips} />
+                <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={allTrips} />
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -2791,7 +2842,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 <div className="lg:col-span-2">
                     {walletView === 'settlements' ? (
                         <WeeklySettlementView 
-                            trips={trips}
+                            trips={allTrips}
                             transactions={transactions}
                             csvMetrics={csvMetrics}
                             onLogPayment={(start, end, amount) => setPaymentModalState({
@@ -3441,7 +3492,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
              <TabsContent value="expenses" className="space-y-6">
                <Card>
-                 <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={trips} />{null}</Card></TabsContent>{/* DEAD_BLOCK_NEUTRALIZED<CardContent className="hidden">
+                 <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={allTrips} />{null}</Card></TabsContent>{/* DEAD_BLOCK_NEUTRALIZED<CardContent className="hidden">
                    {null}
                    {null}
                    {null}

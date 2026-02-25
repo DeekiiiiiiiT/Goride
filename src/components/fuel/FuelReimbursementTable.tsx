@@ -230,12 +230,16 @@ export function FuelReimbursementTable({
                                     </TableCell>
                                     <TableCell className="font-semibold text-slate-900">
                                         <div className="flex flex-col">
-                                            <span>${Math.abs(tx.amount).toFixed(2)}</span>
+                                            <span>${Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0).toFixed(2)}</span>
+                                            {tx.metadata?.paymentSource && tx.metadata.paymentSource !== 'driver_cash' && (
+                                                <span className="text-[9px] font-normal text-slate-400 uppercase">{tx.metadata.paymentSource === 'rideshare_cash' ? 'RideShare' : tx.metadata.paymentSource === 'company_card' ? 'Gas Card' : tx.metadata.paymentSource === 'petty_cash' ? 'Petty Cash' : tx.metadata.paymentSource}</span>
+                                            )}
                                             {(() => {
                                                 const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
                                                 if (!linkedLog) return null;
 
-                                                const amountMismatch = Math.abs(Math.abs(tx.amount) - linkedLog.amount) > 0.01;
+                                                const displayAmount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
+                                                const amountMismatch = Math.abs(displayAmount - linkedLog.amount) > 0.01;
 
                                                 return (
                                                     <div className="flex items-center gap-1 mt-1">
@@ -337,7 +341,6 @@ export function FuelReimbursementTable({
                                                 tx.metadata?.source === 'Manual' || 
                                                 tx.metadata?.source === 'Bulk Manual' || 
                                                 tx.metadata?.source === 'Manual Request' ||
-                                                tx.metadata?.source === 'Maintenance Repair' || 
                                                 !tx.metadata?.source
                                             ) && (
                                                 <Button 
@@ -475,7 +478,7 @@ export function FuelReimbursementTable({
                                     <Label className="text-slate-500 text-xs uppercase tracking-wider">Amount Claimed</Label>
                                     <div className="flex items-center gap-2 font-bold text-lg text-emerald-600">
                                         <DollarSign className="h-5 w-5" />
-                                        {Math.abs(selectedTx.amount).toFixed(2)}
+                                        {Math.abs(Number(selectedTx.amount) || Number(selectedTx.metadata?.totalCost) || 0).toFixed(2)}
                                     </div>
                                 </div>
 

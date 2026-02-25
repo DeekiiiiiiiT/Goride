@@ -70,8 +70,10 @@ export const api = {
     return response.json();
   },
 
-  async deleteOdometerReading(id: string, vehicleId: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${id}?vehicleId=${vehicleId}`, {
+  async deleteOdometerReading(id: string, vehicleId: string, source?: string) {
+    const params = new URLSearchParams({ vehicleId });
+    if (source) params.set('source', source);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${id}?${params.toString()}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -994,6 +996,17 @@ export const api = {
     return response.json();
   },
 
+  async deleteLearntLocation(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/${id}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${publicAnonKey}`
+        }
+    });
+    if (!response.ok) throw new Error("Failed to delete learnt location");
+    return response.json();
+  },
+
   async mergeLearntLocation(id: string, targetStationId: string, updateMasterPin: boolean = false) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/merge`, {
         method: 'POST',
@@ -1461,6 +1474,8 @@ export const api = {
     }
     return response.json();
   },
+
+
 
   async lockTransaction(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/transactions/${id}/lock`, {

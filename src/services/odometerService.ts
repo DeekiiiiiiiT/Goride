@@ -157,8 +157,8 @@ export const odometerService = {
     return await api.addOdometerReading(reading);
   },
 
-  deleteReading: async (id: string, vehicleId: string) => {
-    return await api.deleteOdometerReading(id, vehicleId);
+  deleteReading: async (id: string, vehicleId: string, source?: string) => {
+    return await api.deleteOdometerReading(id, vehicleId, source);
   },
 
   getLatestReading: (history: OdometerReading[]): OdometerReading | null => {

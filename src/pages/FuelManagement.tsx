@@ -406,6 +406,26 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             }
 
             if (editingExpense) {
+                // Safeguard: if payment source changed away from driver_cash on an approved transaction,
+                // delete the orphaned wallet credit that was created during original approval
+                const oldPaymentSource = editingExpense.metadata?.paymentSource;
+                const newPaymentSource = savedTx.metadata?.paymentSource || savedTx.metadata?.previousPaymentSource;
+                const actualNewSource = savedTx.metadata?.paymentSource;
+                if (
+                    editingExpense.status === 'Approved' &&
+                    oldPaymentSource === 'driver_cash' &&
+                    actualNewSource && actualNewSource !== 'driver_cash'
+                ) {
+                    try {
+                        const creditId = `fuel-credit-${savedTx.id}`;
+                        await api.deleteTransaction(creditId);
+                        console.log(`[handleSaveExpense] Deleted orphaned wallet credit ${creditId} — payment source changed from driver_cash to ${actualNewSource}`);
+                    } catch (creditErr: any) {
+                        // Credit may not exist — that's OK, log and continue
+                        console.warn(`[handleSaveExpense] Could not delete wallet credit fuel-credit-${savedTx.id}:`, creditErr?.message || creditErr);
+                    }
+                }
+
                 // ... logic to sync with logs ...
                 if (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement') {
                     const linkedLog = logs.find(l => l.transactionId === savedTx.id || l.id === savedTx.metadata?.sourceId);

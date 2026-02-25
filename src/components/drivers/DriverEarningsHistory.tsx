@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Download, ChevronDown, Target } from "lucide-react";
+import { Download, Target } from "lucide-react";
 import { FinancialTransaction, TierConfig, Trip, QuotaConfig } from "../../types/data";
 import {
   startOfWeek, endOfWeek, format,
@@ -15,6 +15,7 @@ import { tierService } from "../../services/tierService";
 import { getEffectiveTripEarnings } from "../../utils/tripEarnings";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
+import { ScrollArea } from "../ui/scroll-area";
 
 interface DriverEarningsHistoryProps {
   driverId: string;
@@ -77,7 +78,6 @@ function getQuotaBadgeStyle(percent: number): string {
 export function DriverEarningsHistory({ driverId, transactions = [], trips = [], quotaConfig }: DriverEarningsHistoryProps) {
   const [tiers, setTiers] = React.useState<TierConfig[]>([]);
   const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
-  const [visibleCount, setVisibleCount] = React.useState(12);
   const [selectedRowIdx, setSelectedRowIdx] = React.useState<number | null>(null);
 
   React.useEffect(() => {
@@ -85,11 +85,8 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   }, []);
 
   // Reset visible rows when switching period type
-  const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;
-
   const handlePeriodChange = (pt: PeriodType) => {
     setPeriodType(pt);
-    setVisibleCount(defaultPageSize(pt));
     setSelectedRowIdx(null);
   };
 
@@ -289,15 +286,8 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   };
 
   // ────────────────────────────────────────────────────────────
-  // Paginated slice
-  // ────────────────────────────────────────────────────────────
-  const visibleRows = periodData.slice(0, visibleCount);
-  const hasMore = periodData.length > visibleCount;
-  const remainingCount = periodData.length - visibleCount;
-
-  // ────────────────────────────────────────────────────────────
   // Empty state
-  // ─────────────��──────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────
   if (periodData.length === 0) {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-500">
@@ -398,103 +388,90 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
           );
         })()}
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{periodColumnLabel}</TableHead>
-              <TableHead className="text-right">Gross Revenue</TableHead>
-              <TableHead className="text-right">Driver Share</TableHead>
-              <TableHead className="text-center">Tier Applied</TableHead>
-              <TableHead className="text-right">Payouts</TableHead>
-              {quotaEnabled && <TableHead className="text-right">Quota %</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visibleRows.map((row, idx) => (
-              <TableRow
-                key={idx}
-                onClick={() => setSelectedRowIdx(selectedRowIdx === idx ? null : idx)}
-                className={`cursor-pointer transition-colors ${
-                  selectedRowIdx === idx
-                    ? 'bg-indigo-50 hover:bg-indigo-100'
-                    : 'hover:bg-slate-50'
-                }`}
-              >
-                {/* Period label */}
-                <TableCell className="font-medium text-xs whitespace-nowrap">
-                  {selectedRowIdx === idx && (
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 mr-1.5 align-middle" />
-                  )}
-                  {formatPeriodLabel(row)}
-                  {row.tripCount > 0 && (
-                    <span className="ml-1.5 text-slate-400 text-[10px]">
-                      {row.tripCount} trip{row.tripCount !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </TableCell>
-
-                {/* Gross Revenue */}
-                <TableCell className="text-right text-slate-600">
-                  ${row.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </TableCell>
-
-                {/* Driver Share with tier % badge */}
-                <TableCell className="text-right text-emerald-600">
-                  <span className="font-medium">
-                    ${row.driverShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                  <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
-                    {row.tier.sharePercentage}%
-                  </Badge>
-                </TableCell>
-
-                {/* Tier Applied */}
-                <TableCell className="text-center">
-                  <Badge
-                    variant="outline"
-                    className="text-xs"
-                    style={{ backgroundColor: row.tier.color ? `${row.tier.color}15` : undefined, borderColor: row.tier.color || undefined, color: row.tier.color || undefined }}
-                  >
-                    {row.tier.name}
-                  </Badge>
-                </TableCell>
-
-                {/* Payouts */}
-                <TableCell className="text-right text-slate-500">
-                  {row.payouts > 0
-                    ? `$${row.payouts.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                    : '-'}
-                </TableCell>
-
-                {/* Quota % — only rendered when quota is enabled */}
-                {quotaEnabled && (
-                  <TableCell className="text-right">
-                    {row.quotaPercent !== null ? (
-                      <Badge variant="outline" className={`text-xs font-medium ${getQuotaBadgeStyle(row.quotaPercent)}`}>
-                        {row.quotaPercent.toFixed(0)}%
-                      </Badge>
-                    ) : '-'}
-                  </TableCell>
-                )}
+        <ScrollArea className="h-80">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{periodColumnLabel}</TableHead>
+                <TableHead className="text-right">Gross Revenue</TableHead>
+                <TableHead className="text-right">Driver Share</TableHead>
+                <TableHead className="text-center">Tier Applied</TableHead>
+                <TableHead className="text-right">Payouts</TableHead>
+                {quotaEnabled && <TableHead className="text-right">Quota %</TableHead>}
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {periodData.map((row, idx) => (
+                <TableRow
+                  key={idx}
+                  onClick={() => setSelectedRowIdx(selectedRowIdx === idx ? null : idx)}
+                  className={`cursor-pointer transition-colors ${
+                    selectedRowIdx === idx
+                      ? 'bg-indigo-50 hover:bg-indigo-100'
+                      : 'hover:bg-slate-50'
+                  }`}
+                >
+                  {/* Period label */}
+                  <TableCell className="font-medium text-xs whitespace-nowrap">
+                    {selectedRowIdx === idx && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 mr-1.5 align-middle" />
+                    )}
+                    {formatPeriodLabel(row)}
+                    {row.tripCount > 0 && (
+                      <span className="ml-1.5 text-slate-400 text-[10px]">
+                        {row.tripCount} trip{row.tripCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </TableCell>
 
-        {/* Show more / pagination */}
-        {hasMore && (
-          <div className="flex justify-center pt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-slate-500 hover:text-slate-700"
-              onClick={() => setVisibleCount(prev => prev + defaultPageSize(periodType))}
-            >
-              <ChevronDown className="h-4 w-4 mr-1.5" />
-              Show more ({remainingCount} remaining)
-            </Button>
-          </div>
-        )}
+                  {/* Gross Revenue */}
+                  <TableCell className="text-right text-slate-600">
+                    ${row.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </TableCell>
+
+                  {/* Driver Share with tier % badge */}
+                  <TableCell className="text-right text-emerald-600">
+                    <span className="font-medium">
+                      ${row.driverShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                    <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
+                      {row.tier.sharePercentage}%
+                    </Badge>
+                  </TableCell>
+
+                  {/* Tier Applied */}
+                  <TableCell className="text-center">
+                    <Badge
+                      variant="outline"
+                      className="text-xs"
+                      style={{ backgroundColor: row.tier.color ? `${row.tier.color}15` : undefined, borderColor: row.tier.color || undefined, color: row.tier.color || undefined }}
+                    >
+                      {row.tier.name}
+                    </Badge>
+                  </TableCell>
+
+                  {/* Payouts */}
+                  <TableCell className="text-right text-slate-500">
+                    {row.payouts > 0
+                      ? `$${row.payouts.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                      : '-'}
+                  </TableCell>
+
+                  {/* Quota % — only rendered when quota is enabled */}
+                  {quotaEnabled && (
+                    <TableCell className="text-right">
+                      {row.quotaPercent !== null ? (
+                        <Badge variant="outline" className={`text-xs font-medium ${getQuotaBadgeStyle(row.quotaPercent)}`}>
+                          {row.quotaPercent.toFixed(0)}%
+                        </Badge>
+                      ) : '-'}
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
       </CardContent>
     </Card>
   );

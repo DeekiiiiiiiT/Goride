@@ -32,6 +32,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
     // --- Verified Station Data ---
     const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
     const [stationsLoading, setStationsLoading] = useState(false);
+    const [parentCompanies, setParentCompanies] = useState<string[]>([]);
 
     // Single entry: brand + station selection
     const [selectedBrand, setSelectedBrand] = useState('');
@@ -77,9 +78,9 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
 
     // --- Derive unique brands and filtered stations ---
     const uniqueBrands: string[] = useMemo(() => {
-        const brands = new Set(verifiedStations.map(s => s.brand).filter(Boolean));
-        return Array.from(brands).sort() as string[];
-    }, [verifiedStations]);
+        // Parent Company tab is the single source of truth — no fallback to station brands
+        return parentCompanies;
+    }, [parentCompanies]);
 
     const stationsForBrand: StationProfile[] = useMemo(() => {
         if (!selectedBrand || selectedBrand === OTHER_BRAND) return [];
@@ -91,9 +92,33 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         return verifiedStations.filter(s => s.brand === bulkSelectedBrand);
     }, [verifiedStations, bulkSelectedBrand]);
 
-    // --- Fetch verified stations when modal opens ---
+    // --- Fetch verified stations and parent companies when modal opens ---
     useEffect(() => {
         if (!isOpen) return;
+
+        // Fetch stations + parent companies
+        const loadData = async () => {
+            setStationsLoading(true);
+            try {
+                const [stations, companies] = await Promise.all([
+                    fuelService.getStations(),
+                    fuelService.getParentCompanies()
+                ]);
+                setVerifiedStations(stations || []);
+                // Extract sorted company names, add "Independent / Other" at the end
+                const companyNames = (companies || [])
+                    .map((c: any) => c.name)
+                    .filter(Boolean)
+                    .sort() as string[];
+                setParentCompanies(companyNames);
+            } catch (error) {
+                console.error('[FuelLogModal] Failed to load stations/companies:', error);
+            } finally {
+                setStationsLoading(false);
+            }
+        };
+        loadData();
+
         if (initialData) {
             setActiveTab('single');
             const priceFromMetadata = initialData.metadata?.pricePerLiter;
@@ -471,20 +496,25 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                 <SelectValue placeholder={stationsLoading ? "Loading brands..." : "Select Brand"} />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {uniqueBrands.map(brand => (
-                                                    <SelectItem key={brand} value={brand}>
-                                                        <span className="flex items-center gap-2">
-                                                            <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                                                            {brand}
-                                                            <span className="text-[10px] text-slate-400 ml-1">
-                                                                ({verifiedStations.filter(s => s.brand === brand).length})
+                                                {uniqueBrands.map(brand => {
+                                                    const count = verifiedStations.filter(s => s.brand === brand).length;
+                                                    return (
+                                                        <SelectItem key={brand} value={brand}>
+                                                            <span className="flex items-center gap-2">
+                                                                <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                                                                {brand}
+                                                                {count > 0 && (
+                                                                    <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0 rounded-full ml-1">
+                                                                        {count} verified
+                                                                    </span>
+                                                                )}
                                                             </span>
-                                                        </span>
-                                                    </SelectItem>
-                                                ))}
+                                                        </SelectItem>
+                                                    );
+                                                })}
                                                 <SelectItem value={OTHER_BRAND}>
                                                     <span className="flex items-center gap-2 text-slate-500 italic">
-                                                        Other / Unlisted
+                                                        Independent / Other
                                                     </span>
                                                 </SelectItem>
                                             </SelectContent>

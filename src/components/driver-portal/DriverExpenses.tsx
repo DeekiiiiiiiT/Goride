@@ -60,7 +60,7 @@ interface FuelEntryState {
   odometerReading?: number;
   odometerProof?: File;
   odometerMethod?: string;
-  paymentMethod?: 'gas_card' | 'personal_cash';
+  paymentMethod?: 'gas_card' | 'personal_cash' | 'rideshare_cash';
   pricePerLiter?: string;
   isFullTank?: boolean;
   manualReason?: string;
@@ -250,7 +250,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
     let methodStr = 'Cash'; 
     if (isFuel) {
-        methodStr = isGasCard ? 'Gas Card' : 'Cash';
+        methodStr = isGasCard ? 'Gas Card' : (fuelEntry.paymentMethod === 'rideshare_cash' ? 'RideShare Cash' : 'Cash');
     }
 
     const finalOdometer = isFuel ? fuelEntry.odometerReading : (odometer ? parseInt(odometer) : undefined);
@@ -276,6 +276,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         odometerManualReason: (isFuel) ? fuelEntry.manualReason : undefined,
         locationMetadata: fuelEntry.locationMetadata,
         parentCompany: fuelEntry.parentCompany,
+        paymentSource: isFuel ? (isGasCard ? 'company_card' : (fuelEntry.paymentMethod === 'rideshare_cash' ? 'rideshare_cash' : 'driver_cash')) : undefined,
     };
 
     return {
@@ -467,7 +468,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setViewState('method_select');
   };
 
-  const handleMethodSelect = (method: 'gas_card' | 'personal_cash') => {
+  const handleMethodSelect = (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => {
     setFuelEntry(prev => ({ ...prev, paymentMethod: method }));
     setViewState('entry_details');
   };
@@ -700,7 +701,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                   </div>
                 )}
 
-                {category === 'Fuel' && fuelEntry.paymentMethod === 'personal_cash' && (
+                {category === 'Fuel' && (fuelEntry.paymentMethod === 'personal_cash' || fuelEntry.paymentMethod === 'rideshare_cash') && (
                   <div className="space-y-4">
                       <div className="space-y-2">
                         <Label>Cash Spent ($)</Label>
@@ -764,7 +765,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => { resetForm(); setViewState('category_select'); }}
-                    className="w-full h-12 text-base font-semibold rounded-xl bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-700 active:bg-slate-100 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 transition-colors mt-3"
+                    className="w-full h-12 text-base font-semibold rounded-xl bg-red-500 text-white border border-red-600 hover:bg-red-600 hover:text-white active:bg-red-700 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 transition-colors mt-3"
                   >
                     <X className="h-4 w-4" />
                     Cancel

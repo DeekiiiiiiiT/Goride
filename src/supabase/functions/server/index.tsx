@@ -1951,10 +1951,10 @@ app.post("/make-server-37f42386/transactions", async (c) => {
         }
     }
 
-    if (isFuel && isAiVerified && transaction.status === 'Pending') {
-        // STATION VERIFICATION GATE: Only allow auto-approval if GPS matched
-        // a verified station. All other cases (unverified, ambiguous, no GPS)
-        // are held for admin review via Learnt Locations tab.
+    if (isFuel && transaction.status === 'Pending') {
+        // STATION VERIFICATION GATE: ALL fuel logs must pass station verification.
+        // If the station is not verified, hold the transaction for admin review
+        // via Learnt Locations tab — regardless of odometer method (AI or manual).
         const locationStatus = transaction.metadata?.locationStatus;
         if (locationStatus !== 'verified') {
             transaction.status = 'Pending';
@@ -1967,6 +1967,14 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             console.log(`[StationGate] Transaction ${transaction.id} held — station locationStatus="${locationStatus || 'none'}", skipping auto-approval and fuel entry creation.`);
             await kv.set(`transaction:${transaction.id}`, transaction);
             return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
+        }
+
+        // Station is verified — but only auto-approve + create fuel entry if AI-verified.
+        // Manual/non-AI entries with a verified station pass the gate but stay Pending for admin.
+        if (!isAiVerified) {
+            console.log(`[StationGate] Transaction ${transaction.id} passed station gate (verified) but odometerMethod="${transaction.metadata?.odometerMethod || 'none'}" — staying Pending for admin review.`);
+            await kv.set(`transaction:${transaction.id}`, transaction);
+            return c.json({ success: true, data: transaction });
         }
 
         transaction.status = 'Approved';
@@ -2550,6 +2558,68 @@ app.post("/make-server-37f42386/fuel/backfill-wallet-credits", async (c) => {
     return c.json({ success: true, created, skipped, total: approvedFuelReimbursements.length });
   } catch (e: any) {
     console.log(`[FuelCredit Backfill] Error: ${e.message}`);
+    return c.json({ error: `Backfill failed: ${e.message}` }, 500);
+  }
+});
+
+// Phase C: Backfill paymentSource for RideShare Cash entries and remove orphaned wallet credits
+app.post("/make-server-37f42386/fuel/backfill-rideshare-payment-source", async (c) => {
+  try {
+    console.log('[Backfill RideShare] Starting paymentSource backfill scan...');
+
+    const allTransactions = await kv.getByPrefix('transaction:');
+
+    // Find approved fuel transactions that should be rideshare_cash (match 'Cash' or 'RideShare Cash')
+    const targets = allTransactions.filter((tx: any) =>
+      tx &&
+      tx.id &&
+      (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') &&
+      tx.category !== 'Fuel Reimbursement Credit' &&
+      tx.status === 'Approved' &&
+      (tx.paymentMethod === 'Cash' || tx.paymentMethod === 'RideShare Cash') &&
+      tx.metadata?.paymentSource !== 'rideshare_cash'
+    );
+
+    console.log(`[Backfill RideShare] Found ${targets.length} entries to fix`);
+
+    let fixed = 0;
+    let creditsDeleted = 0;
+    const errors: string[] = [];
+
+    for (const tx of targets) {
+      try {
+        // Step 1: Fix paymentMethod and set metadata.paymentSource = 'rideshare_cash'
+        tx.paymentMethod = 'RideShare Cash';
+        tx.metadata = {
+          ...(tx.metadata || {}),
+          paymentSource: 'rideshare_cash',
+          backfilledAt: new Date().toISOString(),
+          backfillReason: 'rideshare_cash_fix'
+        };
+        await kv.set(`transaction:${tx.id}`, tx);
+
+        // Step 2: Delete orphaned fuel-credit if it exists
+        const creditKey = `transaction:fuel-credit-${tx.id}`;
+        const existingCredit = await kv.get(creditKey);
+        if (existingCredit) {
+          await kv.del(creditKey);
+          creditsDeleted++;
+          console.log(`[Backfill RideShare] Deleted orphaned credit fuel-credit-${tx.id}`);
+        }
+
+        fixed++;
+        console.log(`[Backfill RideShare] Fixed transaction ${tx.id}: set paymentSource=rideshare_cash, credit deleted=${!!existingCredit}`);
+      } catch (entryErr: any) {
+        const msg = `Error fixing ${tx.id}: ${entryErr.message}`;
+        console.log(`[Backfill RideShare] ${msg}`);
+        errors.push(msg);
+      }
+    }
+
+    console.log(`[Backfill RideShare] Complete. Fixed: ${fixed}, Credits deleted: ${creditsDeleted}, Errors: ${errors.length}`);
+    return c.json({ success: true, fixed, creditsDeleted, errors, totalScanned: allTransactions.length, totalTargeted: targets.length });
+  } catch (e: any) {
+    console.log(`[Backfill RideShare] Fatal error: ${e.message}`);
     return c.json({ error: `Backfill failed: ${e.message}` }, 500);
   }
 });
@@ -4806,13 +4876,45 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
 app.delete("/make-server-37f42386/odometer-history/:id", async (c) => {
     const id = c.req.param("id");
     const vehicleId = c.req.query("vehicleId");
+    const source = c.req.query("source");
     
     if (!vehicleId) return c.json({ error: "vehicleId query param required" }, 400);
     
     try {
-        await kv.del(`odometer_reading:${vehicleId}:${id}`);
+        // Determine the correct KV key based on source type
+        const keysToTry: string[] = [];
+        
+        if (source === 'checkin') {
+            const rawId = id.startsWith('checkin_') ? id.replace('checkin_', '') : id;
+            keysToTry.push(`checkin:${rawId}`);
+        } else if (source === 'fuel') {
+            const rawId = id.startsWith('fuel_') ? id.replace('fuel_', '') : id;
+            keysToTry.push(`fuel_entry:${rawId}`);
+        } else if (source === 'service') {
+            const rawId = id.startsWith('service_') ? id.replace('service_', '') : id;
+            keysToTry.push(`maintenance_log:${vehicleId}:${rawId}`);
+        } else {
+            keysToTry.push(`odometer_reading:${vehicleId}:${id}`);
+        }
+        
+        // Also always try the legacy odometer_reading key as fallback
+        if (!keysToTry.includes(`odometer_reading:${vehicleId}:${id}`)) {
+            keysToTry.push(`odometer_reading:${vehicleId}:${id}`);
+        }
+        
+        console.log(`[DELETE odometer-history] Deleting keys for source=${source}, id=${id}:`, keysToTry);
+        
+        for (const key of keysToTry) {
+            try {
+                await kv.del(key);
+            } catch (_e) {
+                // Ignore errors for keys that don't exist
+            }
+        }
+        
         return c.json({ success: true });
     } catch(e: any) {
+        console.log(`[DELETE odometer-history] Error: ${e.message}`);
         return c.json({ error: e.message }, 500);
     }
 });

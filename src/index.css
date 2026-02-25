@@ -1446,6 +1446,10 @@
     height: calc(var(--spacing) * 64);
   }
 
+  .h-80 {
+    height: calc(var(--spacing) * 80);
+  }
+
   .h-96 {
     height: calc(var(--spacing) * 96);
   }
@@ -6195,11 +6199,6 @@
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
   }
 
-  .grayscale {
-    --tw-grayscale: grayscale(100%);
-    filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
-  }
-
   .\!filter {
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, ) !important;
   }
@@ -6891,6 +6890,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:border-amber-500:hover {
+      border-color: var(--color-amber-500);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:border-blue-200:hover {
       border-color: var(--color-blue-200);
     }
@@ -7403,6 +7408,12 @@
   @media (hover: hover) {
     .hover\:bg-red-200:hover {
       background-color: var(--color-red-200);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-red-600:hover {
+      background-color: var(--color-red-600);
     }
   }
 
@@ -7961,6 +7972,14 @@
     background-color: var(--accent);
   }
 
+  .focus\:bg-blue-50:focus {
+    background-color: var(--color-blue-50);
+  }
+
+  .focus\:bg-emerald-50:focus {
+    background-color: var(--color-emerald-50);
+  }
+
   .focus\:bg-orange-50:focus {
     background-color: var(--color-orange-50);
   }
@@ -7977,12 +7996,28 @@
     background-color: var(--color-rose-50);
   }
 
+  .focus\:bg-slate-50:focus {
+    background-color: var(--color-slate-50);
+  }
+
+  .focus\:bg-violet-50:focus {
+    background-color: var(--color-violet-50);
+  }
+
   .focus\:text-accent-foreground:focus {
     color: var(--accent-foreground);
   }
 
+  .focus\:text-blue-800:focus {
+    color: var(--color-blue-800);
+  }
+
   .focus\:text-emerald-600:focus {
     color: var(--color-emerald-600);
+  }
+
+  .focus\:text-emerald-800:focus {
+    color: var(--color-emerald-800);
   }
 
   .focus\:text-orange-700:focus {
@@ -7997,12 +8032,28 @@
     color: var(--color-red-600);
   }
 
+  .focus\:text-red-700:focus {
+    color: var(--color-red-700);
+  }
+
+  .focus\:text-red-800:focus {
+    color: var(--color-red-800);
+  }
+
   .focus\:text-rose-600:focus {
     color: var(--color-rose-600);
   }
 
   .focus\:text-rose-700:focus {
     color: var(--color-rose-700);
+  }
+
+  .focus\:text-slate-800:focus {
+    color: var(--color-slate-800);
+  }
+
+  .focus\:text-violet-800:focus {
+    color: var(--color-violet-800);
   }
 
   .focus\:ring-0:focus {
@@ -8169,12 +8220,12 @@
     background-color: var(--color-indigo-800);
   }
 
-  .active\:bg-sidebar-accent:active {
-    background-color: var(--sidebar-accent);
+  .active\:bg-red-700:active {
+    background-color: var(--color-red-700);
   }
 
-  .active\:bg-slate-100:active {
-    background-color: var(--color-slate-100);
+  .active\:bg-sidebar-accent:active {
+    background-color: var(--sidebar-accent);
   }
 
   .active\:text-sidebar-accent-foreground:active {

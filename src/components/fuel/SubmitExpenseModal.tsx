@@ -37,20 +37,32 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     // --- Verified Station Data for Brand → Station cascade ---
     const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
     const [stationsLoading, setStationsLoading] = useState(false);
+    const [parentCompanies, setParentCompanies] = useState<string[]>([]);
 
     useEffect(() => {
         if (!isOpen) return;
         let cancelled = false;
         setStationsLoading(true);
-        fuelService.getStations()
-            .then((allStations: StationProfile[]) => {
+        Promise.all([
+            fuelService.getStations(),
+            fuelService.getParentCompanies()
+        ])
+            .then(([allStations, companies]: [StationProfile[], any[]]) => {
                 if (cancelled) return;
                 const verified = allStations.filter((s: StationProfile) => s.status === 'verified');
                 setVerifiedStations(verified);
+                const companyNames = (companies || [])
+                    .map((c: any) => c.name)
+                    .filter(Boolean)
+                    .sort() as string[];
+                setParentCompanies(companyNames);
             })
             .catch((err) => {
-                console.error('Failed to fetch verified stations:', err);
-                if (!cancelled) setVerifiedStations([]);
+                console.error('Failed to fetch stations/parent companies:', err);
+                if (!cancelled) {
+                    setVerifiedStations([]);
+                    setParentCompanies([]);
+                }
             })
             .finally(() => {
                 if (!cancelled) setStationsLoading(false);
@@ -58,14 +70,10 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         return () => { cancelled = true; };
     }, [isOpen]);
 
-    // Derive unique brands from verified stations + fallback hardcoded brands
+    // Use parent companies as the single source of truth for brand list
     const uniqueBrands = useMemo(() => {
-        const brands = new Set<string>();
-        verifiedStations.forEach(s => { if (s.brand) brands.add(s.brand); });
-        // Always include known Jamaican brands even if no verified stations yet
-        ["TotalEnergies", "Texaco", "Rubis", "FESCO", "Petcom", "Thrifty Gas", "Cool Oasis", "Jampet"].forEach(b => brands.add(b));
-        return Array.from(brands).sort((a, b) => a.localeCompare(b));
-    }, [verifiedStations]);
+        return parentCompanies;
+    }, [parentCompanies]);
 
     // Get verified stations filtered by a specific brand
     const getStationsForBrand = useCallback((brand: string): StationProfile[] => {
@@ -432,8 +440,8 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     type: 'Fuel_Manual_Entry',
                     category: 'Fuel',
                     description: entry.notes || 'Fuel Expense Log',
-                    amount: pSource === 'driver_cash' ? amountVal : 0, 
-                    paymentMethod: pSource === 'company_card' ? 'Gas Card' : (pSource === 'petty_cash' ? 'Other' : 'Cash'),
+                    amount: amountVal, 
+                    paymentMethod: pSource === 'company_card' ? 'Gas Card' : (pSource === 'petty_cash' ? 'Other' : (pSource === 'rideshare_cash' ? 'RideShare Cash' : 'Cash')),
                     status: initialData?.status || 'Pending',
                     receiptUrl: entry.receiptUrl,
                     odometer: entry.odometer ? parseFloat(entry.odometer) : 0,
@@ -451,8 +459,10 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         isFlagged: entry.isFlagged,
                         flagReason: entry.flagReason,
                         matchedStationId: entry.matchedStationId || undefined,
+                        // Preserve previous payment source so the parent can detect changes
+                        previousPaymentSource: initialData?.metadata?.paymentSource || undefined,
                     },
-                    isReconciled: false
+                    isReconciled: initialData ? (initialData.isReconciled ?? false) : false
                 };
                 await (onSave as any)(transactionData, isLast);
             }
@@ -519,12 +529,37 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                             </div>
                             <div className="pt-3 border-t border-slate-200">
                                 <Label className="text-[10px] font-bold uppercase text-slate-400">Paid By *</Label>
-                                <Select value={commonData.paymentSource} onValueChange={(val) => setCommonData(prev => ({ ...prev, paymentSource: val }))}>
+                                <Select value={commonData.paymentSource} onValueChange={(val) => {
+                                    setCommonData(prev => ({ ...prev, paymentSource: val }));
+                                    // Sync payment source to all entries so it doesn't get overridden on save
+                                    setEntries(prev => prev.map(e => ({ ...e, paymentSource: val })));
+                                }}>
                                     <SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="driver_cash">Driver Cash</SelectItem>
-                                        <SelectItem value="company_card">Gas Card</SelectItem>
-                                        <SelectItem value="petty_cash">Petty Cash</SelectItem>
+                                    <SelectContent className="w-72">
+                                        <SelectItem value="driver_cash">
+                                            <div>
+                                                <span className="font-medium">Driver Cash</span>
+                                                <p className="text-[10px] text-slate-400 leading-tight">Driver paid out of pocket — needs reimbursement</p>
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="rideshare_cash">
+                                            <div>
+                                                <span className="font-medium">RideShare Cash</span>
+                                                <p className="text-[10px] text-slate-400 leading-tight">Paid with cash collected from customers / fares</p>
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="company_card">
+                                            <div>
+                                                <span className="font-medium">Gas Card</span>
+                                                <p className="text-[10px] text-slate-400 leading-tight">Used the company-issued fuel card</p>
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="petty_cash">
+                                            <div>
+                                                <span className="font-medium">Petty Cash</span>
+                                                <p className="text-[10px] text-slate-400 leading-tight">Paid from office petty cash — already company funds</p>
+                                            </div>
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -649,8 +684,8 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                                     </span>
                                 </SelectItem>
                             ))}
-                            <SelectItem value="Independent">
-                                <span className="text-slate-500 italic">Independent / Other</span>
+                            <SelectItem value="__other_brand__">
+                                <span className="text-slate-500 italic">Other / Unlisted</span>
                             </SelectItem>
                         </SelectContent>
                     </Select>

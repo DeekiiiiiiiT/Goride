@@ -161,10 +161,6 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
   };
 
   const handleDeleteRequest = (id: string) => {
-    if (id.startsWith('fuel') || id.startsWith('checkin') || id.startsWith('service')) {
-        toast.info("Cannot delete linked records directly. Manage them in their respective modules.");
-        return;
-    }
     setReadingToDelete(id);
   };
 
@@ -172,10 +168,14 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
     if (!readingToDelete) return;
     
     try {
-      await odometerService.deleteReading(readingToDelete, vehicleId);
+      // Find the reading to get its source type
+      const reading = history.find(r => r.id === readingToDelete);
+      const source = reading?.source || 'manual';
+      await odometerService.deleteReading(readingToDelete, vehicleId, source);
       toast.success("Reading deleted");
       fetchHistory();
     } catch (error) {
+      console.error("Delete failed:", error);
       toast.error("Failed to delete reading");
     } finally {
       setReadingToDelete(null);
@@ -457,11 +457,10 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem 
                                   onClick={() => handleDeleteRequest(reading.id)} 
-                                  className={`text-red-600 focus:text-red-600 ${(!isManual) ? 'opacity-50 grayscale' : ''}`}
-                                  disabled={!isManual}
+                                  className="text-red-600 focus:text-red-600"
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete Manual Entry
+                                  Delete Entry
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

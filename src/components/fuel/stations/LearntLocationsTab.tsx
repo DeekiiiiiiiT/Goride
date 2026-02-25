@@ -20,7 +20,9 @@ import {
   Navigation,
   ArrowUpDown,
   Merge,
-  Zap
+  Zap,
+  XCircle,
+  MoreHorizontal
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { StationProfile } from '../../../types/station';
@@ -36,6 +38,7 @@ import {
 import { Input } from '../../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../../ui/tooltip';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel } from '../../ui/dropdown-menu';
 import { calculateDistance } from '../../../utils/stationUtils';
 
 interface LearntLocationsTabProps {
@@ -52,8 +55,11 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
   // Action States
   const [actionId, setActionId] = useState<string | null>(null);
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
   const [mergeSearch, setMergeSearch] = useState('');
+  const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
+  const [mergingLocation, setMergingLocation] = useState<any | null>(null);
   const [rejectReason, setRejectReason] = useState('Incorrect GPS coordinates');
   const [rescanning, setRescanning] = useState(false);
   const [rescanRadius, setRescanRadius] = useState(150);
@@ -168,6 +174,25 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
       fetchLearnt();
     } catch (error) {
       toast.error('Failed to reject location');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedLocation) return;
+    try {
+      setActionId(selectedLocation.id);
+      const result = await api.deleteLearntLocation(selectedLocation.id);
+      const msg = result.transactionDeleted 
+        ? 'Location and linked transaction permanently deleted' 
+        : 'Location permanently deleted (no linked transaction found)';
+      toast.success(msg);
+      setIsDeleteDialogOpen(false);
+      fetchLearnt();
+    } catch (error) {
+      console.log('[DeleteLearnt] Frontend error:', error);
+      toast.error('Failed to delete location');
     } finally {
       setActionId(null);
     }
@@ -449,7 +474,7 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex justify-end items-center gap-2">
+                    <div className="flex justify-end items-center gap-1.5">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button 
@@ -458,22 +483,84 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
                             className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                             onClick={() => window.open(`https://www.google.com/maps?q=${loc.location.lat},${loc.location.lng}`, '_blank')}
                           >
-                            <ExternalLink className="h-4 w-4" />
+                            <ExternalLink className="h-3.5 w-3.5" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-[220px] text-center">
-                          Open these GPS coordinates in Google Maps to visually confirm the location.
-                        </TooltipContent>
+                        <TooltipContent side="bottom">View in Google Maps</TooltipContent>
                       </Tooltip>
 
-                      {/* Phase 7: Quick Merge — single-click merge for close nearby matches */}
-                      {loc.nearbyStation && loc.nearbyStation.distance <= 150 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                              disabled={actionId === loc.id}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="h-8 w-8 p-0 border-slate-200">
+                            {actionId === loc.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4 text-slate-500" />
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-80">
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Resolve</DropdownMenuLabel>
+                          
+                          <DropdownMenuItem
+                            className="gap-2.5 text-blue-700 focus:text-blue-800 focus:bg-blue-50 font-medium items-start py-2"
+                            onClick={() => handlePromote(loc)}
+                          >
+                            <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-sm font-medium">Secure Ledger</div>
+                              <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">Promote directly to the Verified Master Ledger as a new station. Auto-merges if a duplicate is detected.</div>
+                            </div>
+                          </DropdownMenuItem>
+
+                          {onVerifyLocation && (
+                            <DropdownMenuItem
+                              className="gap-2.5 text-violet-700 focus:text-violet-800 focus:bg-violet-50 items-start py-2"
+                              onClick={() => onVerifyLocation(loc)}
+                            >
+                              <Navigation className="h-4 w-4 mt-0.5 shrink-0" />
+                              <div>
+                                <div className="text-sm font-medium">Verify Location</div>
+                                <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">Create a brand-new verified station from this learnt location. Use when no matching station exists yet.</div>
+                              </div>
+                            </DropdownMenuItem>
+                          )}
+
+                          <DropdownMenuItem
+                            className="gap-2.5 text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50 items-start py-2"
+                            onClick={() => {
+                              setLinkingLocation(loc);
+                              setLinkSearch('');
+                              setSelectedLinkStation(null);
+                              setLinkSortBy('distance');
+                              setIsLinkDialogOpen(true);
+                            }}
+                          >
+                            <Link2 className="h-4 w-4 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-sm font-medium">Link to Station</div>
+                              <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">Link to an existing verified station. Best when the station already exists — associates the transaction, adds a GPS alias, and clears the anomaly.</div>
+                            </div>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            className="gap-2.5 text-slate-700 focus:text-slate-800 focus:bg-slate-50 items-start py-2"
+                            onClick={() => {
+                              setMergingLocation(loc);
+                              setMergeSearch('');
+                              setIsMergeDialogOpen(true);
+                            }}
+                          >
+                            <Merge className="h-4 w-4 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-sm font-medium">Merge into Station</div>
+                              <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">Manually merge into a specific station from a searchable list. The learnt coordinates become a GPS alias on the target.</div>
+                            </div>
+                          </DropdownMenuItem>
+
+                          {loc.nearbyStation && loc.nearbyStation.distance <= 150 && (
+                            <DropdownMenuItem
+                              className="gap-2.5 text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50 font-medium items-start py-2"
                               onClick={async () => {
                                 try {
                                   setActionId(loc.id);
@@ -490,185 +577,52 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
                                   onPromoted?.();
                                 } catch (error) {
                                   console.error('[Quick Merge] Failed:', error);
-                                  toast.error('Quick merge failed. Try the full Link to Station dialog.');
+                                  toast.error('Quick merge failed.');
                                 } finally {
                                   setActionId(null);
                                 }
                               }}
                             >
-                              {actionId === loc.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <>
-                                  <Zap className="h-3.5 w-3.5" />
-                                  Quick Merge
-                                </>
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-[260px] text-center">
-                            One-click merge into the nearby detected station ({loc.nearbyStation.name}, {loc.nearbyStation.distance}m away). Adds this location as a GPS alias and links the transaction automatically.
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                              <Zap className="h-4 w-4 mt-0.5 shrink-0" />
+                              <div>
+                                <div className="text-sm font-medium">Quick Merge ({loc.nearbyStation.distance}m)</div>
+                                <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">One-click merge into {loc.nearbyStation.name} ({loc.nearbyStation.distance}m away). Adds GPS alias and links the transaction automatically.</div>
+                              </div>
+                            </DropdownMenuItem>
+                          )}
 
-                      {/* Verify Location — opens the Edit Station modal pre-filled with learnt data */}
-                      {onVerifyLocation && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 gap-1.5 border-violet-200 text-violet-700 hover:bg-violet-50 hover:border-violet-300 bg-violet-50/50"
-                              onClick={() => onVerifyLocation(loc)}
-                            >
-                              <Navigation className="h-3.5 w-3.5" />
-                              Verify
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-[260px] text-center">
-                            Create a brand-new verified station from this learnt location. Use this only when no matching station exists yet in the Master Ledger.
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Discard</DropdownMenuLabel>
 
-                      {/* Link to Existing Station — Phase 6 dialog with distance-sorted station picker */}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 bg-emerald-50/50"
-                            onClick={() => {
-                              setLinkingLocation(loc);
-                              setLinkSearch('');
-                              setSelectedLinkStation(null);
-                              setLinkSortBy('distance');
-                              setIsLinkDialogOpen(true);
-                            }}
-                          >
-                            <Link2 className="h-3.5 w-3.5" />
-                            Link to Station
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-[280px] text-center">
-                          Link this transaction to an existing verified station. Best option when the station already exists in the ledger — it associates the fuel transaction, adds a GPS alias, and clears the anomaly.
-                        </TooltipContent>
-                      </Tooltip>
-
-                      <Popover>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex">
-                              <PopoverTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 gap-1.5 border-slate-200 text-slate-700">
-                                  <Link2 className="h-3.5 w-3.5" />
-                                  Merge
-                                </Button>
-                              </PopoverTrigger>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-[260px] text-center">
-                            Manually merge this learnt location into a specific station from a searchable list. Use when you want to combine two entries into one — the learnt coordinates become a GPS alias on the target station.
-                          </TooltipContent>
-                        </Tooltip>
-                        <PopoverContent className="w-80 p-0" align="end">
-                          <div className="p-3 border-b border-slate-100 bg-slate-50">
-                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">Select Master Station</h4>
-                            <div className="relative mb-3">
-                              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                              <Input 
-                                placeholder="Search stations..." 
-                                className="pl-8 h-8 text-xs"
-                                value={mergeSearch}
-                                onChange={(e) => setMergeSearch(e.target.value)}
-                              />
-                            </div>
-                            <div className="flex items-center gap-2 px-1">
-                                <input 
-                                  type="checkbox" 
-                                  id="syncMasterPin"
-                                  className="h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                  checked={syncMasterPin}
-                                  onChange={(e) => setSyncMasterPin(e.target.checked)}
-                                />
-                                <label htmlFor="syncMasterPin" className="text-[10px] font-medium text-slate-600 cursor-pointer">
-                                  Sync Master Pin to these coordinates
-                                </label>
-                            </div>
-                          </div>
-                          <div className="max-h-[300px] overflow-y-auto p-1">
-                            {filteredStations.length === 0 ? (
-                              <div className="p-4 text-center text-xs text-slate-400">No stations found</div>
-                            ) : (
-                              filteredStations.map(station => (
-                                <button
-                                  key={station.id}
-                                  className="w-full text-left p-2.5 hover:bg-blue-50 rounded transition-colors group flex items-center justify-between"
-                                  onClick={() => handleMerge(loc.id, station.id)}
-                                >
-                                  <div>
-                                    <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-700">{station.name}</div>
-                                    <div className="text-[10px] text-slate-500">{station.brand} • {station.address}</div>
-                                  </div>
-                                  <Badge 
-                                    className={`text-[9px] h-4 px-1.5 ${
-                                      station.status === 'verified' 
-                                        ? 'bg-emerald-100 text-emerald-700' 
-                                        : 'bg-amber-100 text-amber-700'
-                                    }`}
-                                  >
-                                    {station.status === 'verified' ? 'Master' : 'Unverified'}
-                                  </Badge>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="h-8 gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                          <DropdownMenuItem
+                            className="gap-2.5 text-red-600 focus:text-red-700 focus:bg-red-50 items-start py-2"
                             onClick={() => {
                               setSelectedLocation(loc);
                               setIsRejectDialogOpen(true);
                             }}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Reject
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-[260px] text-center">
-                          Discard this learnt location as a GPS anomaly. The transaction data is kept but the coordinates are flagged as unreliable. Use when the GPS was clearly wrong (e.g. indoor drift, bad signal).
-                        </TooltipContent>
-                      </Tooltip>
+                            <Trash2 className="h-4 w-4 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-sm font-medium">Reject as Anomaly</div>
+                              <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">Discard as a GPS anomaly. Transaction data is kept but coordinates flagged as unreliable. Use when GPS was clearly wrong.</div>
+                            </div>
+                          </DropdownMenuItem>
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            size="sm" 
-                            className="h-8 gap-1.5 bg-blue-600 hover:bg-blue-700 shadow-sm"
-                            onClick={() => handlePromote(loc)}
-                            disabled={actionId === loc.id}
+                          <DropdownMenuItem
+                            className="gap-2.5 text-red-700 focus:text-red-800 focus:bg-red-50 font-medium items-start py-2"
+                            onClick={() => {
+                              setSelectedLocation(loc);
+                              setIsDeleteDialogOpen(true);
+                            }}
                           >
-                            {actionId === loc.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <>
-                                <ShieldCheck className="h-3.5 w-3.5" />
-                                Secure Ledger
-                              </>
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-[280px] text-center">
-                          Promote this learnt location directly to the Verified Master Ledger as a new station. If a duplicate is detected, it will auto-merge. Use when you're confident this is a real, new gas station not yet in the system.
-                        </TooltipContent>
-                      </Tooltip>
+                            <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-sm font-medium">Delete Permanently</div>
+                              <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">Permanently delete this learnt location AND its linked pending transaction. Cannot be undone.</div>
+                            </div>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -785,6 +739,138 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
             <Button variant="destructive" onClick={handleReject} disabled={actionId !== null}>
               {actionId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Rejection"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <XCircle className="h-5 w-5" />
+              Permanently Delete
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete the learnt location record <strong>and</strong> its linked pending fuel transaction. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedLocation && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1 text-sm">
+              <div className="font-medium text-red-800">{selectedLocation.name || 'Unknown Station'}</div>
+              {selectedLocation.transactionId && (
+                <div className="text-red-600 text-xs">Linked transaction: {selectedLocation.transactionId}</div>
+              )}
+              <div className="text-red-500 text-xs">
+                Location: {selectedLocation.location?.lat?.toFixed(5)}, {selectedLocation.location?.lng?.toFixed(5)}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={actionId !== null}>
+              {actionId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete Permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link to Existing Station Dialog (Phase 6) */}
+      <Dialog open={isMergeDialogOpen} onOpenChange={(open) => {
+        setIsMergeDialogOpen(open);
+        if (!open) {
+          setMergingLocation(null);
+          setMergeSearch('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <Merge className="h-4 w-4 text-slate-600" />
+              </div>
+              Merge into Station
+            </DialogTitle>
+            <DialogDescription>
+              Search and select a station to merge this learnt location into. The GPS coordinates will become an alias on the target station.
+            </DialogDescription>
+          </DialogHeader>
+
+          {mergingLocation && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
+              <MapPin className="h-4 w-4 text-amber-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-900 truncate">
+                  {mergingLocation.name || 'Unknown Merchant'}
+                </p>
+                <p className="text-[10px] text-amber-600 font-mono">
+                  {mergingLocation.location?.lat?.toFixed(6)}, {mergingLocation.location?.lng?.toFixed(6)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              <Input 
+                placeholder="Search stations..." 
+                className="pl-8 h-8 text-xs"
+                value={mergeSearch}
+                onChange={(e) => setMergeSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2 px-1">
+              <input 
+                type="checkbox" 
+                id="syncMasterPinMerge"
+                className="h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                checked={syncMasterPin}
+                onChange={(e) => setSyncMasterPin(e.target.checked)}
+              />
+              <label htmlFor="syncMasterPinMerge" className="text-[10px] font-medium text-slate-600 cursor-pointer">
+                Sync Master Pin to these coordinates
+              </label>
+            </div>
+          </div>
+
+          <div className="max-h-[300px] overflow-y-auto border border-slate-200 rounded-lg">
+            {filteredStations.length === 0 ? (
+              <div className="p-4 text-center text-xs text-slate-400">No stations found</div>
+            ) : (
+              filteredStations.map(station => (
+                <button
+                  key={station.id}
+                  className="w-full text-left p-2.5 hover:bg-blue-50 transition-colors group flex items-center justify-between border-b border-slate-100 last:border-0"
+                  onClick={() => {
+                    if (mergingLocation) {
+                      handleMerge(mergingLocation.id, station.id);
+                      setIsMergeDialogOpen(false);
+                    }
+                  }}
+                >
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-700">{station.name}</div>
+                    <div className="text-[10px] text-slate-500">{station.brand} • {station.address}</div>
+                  </div>
+                  <Badge 
+                    className={`text-[9px] h-4 px-1.5 ${
+                      station.status === 'verified' 
+                        ? 'bg-emerald-100 text-emerald-700' 
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {station.status === 'verified' ? 'Master' : 'Unverified'}
+                  </Badge>
+                </button>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsMergeDialogOpen(false)}>Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

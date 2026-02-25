@@ -1,11 +1,11 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { Button } from "../../ui/button";
-import { CreditCard, Banknote } from "lucide-react";
+import { CreditCard, Banknote, Car } from "lucide-react";
 import { Label } from "../../ui/label";
 
 interface PaymentMethodSelectorProps {
-  onSelect: (method: 'gas_card' | 'personal_cash') => void;
+  onSelect: (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => void;
 }
 
 export function PaymentMethodSelector({ onSelect }: PaymentMethodSelectorProps) {
@@ -22,6 +22,18 @@ export function PaymentMethodSelector({ onSelect }: PaymentMethodSelectorProps) 
           <div className="text-center">
             <p className="font-bold">Gas Card</p>
             <p className="text-[10px] text-slate-500">I used the GoRide company fuel card</p>
+          </div>
+        </Button>
+
+        <Button 
+          variant="outline" 
+          className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-amber-500 hover:bg-amber-50 group transition-all"
+          onClick={() => onSelect('rideshare_cash')}
+        >
+          <Car className="h-6 w-6 text-amber-500 group-hover:scale-110 transition-transform" />
+          <div className="text-center">
+            <p className="font-bold">RideShare Cash</p>
+            <p className="text-[10px] text-slate-500">I used cash collected from customers / fares</p>
           </div>
         </Button>
 

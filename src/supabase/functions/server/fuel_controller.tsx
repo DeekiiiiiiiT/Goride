@@ -2853,6 +2853,42 @@ app.post(`${BASE_PATH}/learnt-locations/:id/reject`, async (c) => {
     }
 });
 
+// DELETE learnt location — full purge (no anomaly copy), also deletes linked held transaction
+app.delete(`${BASE_PATH}/learnt-locations/:id`, async (c) => {
+    try {
+        const id = c.req.param("id");
+        const learnt = await kv.get(`learnt_location:${id}`);
+        if (!learnt) return c.json({ error: "Learnt location not found" }, 404);
+
+        // Delete the learnt location record
+        await kv.del(`learnt_location:${id}`);
+        console.log(`[DeleteLearnt] Deleted learnt_location:${id}`);
+
+        // If there's a linked transaction, delete it too
+        const txId = learnt.transactionId;
+        let transactionDeleted = false;
+        if (txId) {
+            const tx = await kv.get(`transaction:${txId}`);
+            if (tx) {
+                await kv.del(`transaction:${txId}`);
+                console.log(`[DeleteLearnt] Deleted linked transaction:${txId}`);
+                transactionDeleted = true;
+
+                // Also clean up any fuel_entry that may exist (shouldn't for gate-held, but just in case)
+                if (tx.metadata?.fuelEntryId) {
+                    await kv.del(`fuel_entry:${tx.metadata.fuelEntryId}`);
+                    console.log(`[DeleteLearnt] Deleted linked fuel_entry:${tx.metadata.fuelEntryId}`);
+                }
+            }
+        }
+
+        return c.json({ success: true, transactionDeleted, deletedTransactionId: txId || null });
+    } catch (e: any) {
+        console.log(`[DeleteLearnt] Error: ${e.message}`);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
     try {
         const { id, targetStationId, updateMasterPin = false } = await c.req.json();
