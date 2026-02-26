@@ -5939,6 +5939,291 @@ app.post("/make-server-37f42386/notifications/acknowledge", async (c) => {
 app.route("/", fuelApp);
 
 // ---------------------------------------------------------------------------
+// Admin Diagnostic: Scan for entries corrupted by the type-overwrite bug
+// ---------------------------------------------------------------------------
+app.get("/make-server-37f42386/admin/scan-corrupted-types", async (c) => {
+  try {
+    const { data, error } = await supabase
+      .from("kv_store_37f42386")
+      .select("key, value")
+      .like("key", "fuel_entry:%");
+
+    if (error) throw error;
+
+    const suspects: any[] = [];
+    for (const row of (data || [])) {
+      const entry = row.value;
+      if (!entry) continue;
+
+      // Only look at entries whose type is NOT Reimbursement
+      if (entry.type === 'Reimbursement') continue;
+
+      const signals: string[] = [];
+
+      // Signal 1: paymentSource says RideShare_Cash but type isn't Reimbursement
+      if (entry.paymentSource === 'RideShare_Cash') {
+        signals.push('paymentSource is RideShare_Cash');
+      }
+
+      // Signal 2: has anchorPeriodId (was part of anchor cycle tracking)
+      if (entry.anchorPeriodId) {
+        signals.push(`anchorPeriodId: ${entry.anchorPeriodId}`);
+      }
+
+      // Signal 3: entryMode is Anchor but type is Manual
+      if (entry.entryMode === 'Anchor' && (entry.type === 'Fuel_Manual_Entry' || entry.type === 'Manual_Entry')) {
+        signals.push(`entryMode is Anchor but type is ${entry.type}`);
+      }
+
+      // Signal 4: metadata contains cycle or anchor references
+      if (entry.metadata?.cycleId) {
+        signals.push(`metadata.cycleId: ${entry.metadata.cycleId}`);
+      }
+      if (entry.metadata?.portal_type === 'Reimbursement') {
+        signals.push('metadata.portal_type is Reimbursement');
+      }
+
+      // Signal 5: has a linked transactionId (manual entries that went through settlement)
+      if (entry.transactionId && (entry.type === 'Fuel_Manual_Entry' || entry.type === 'Manual_Entry')) {
+        signals.push(`has transactionId: ${entry.transactionId}`);
+      }
+
+      if (signals.length > 0) {
+        suspects.push({
+          key: row.key,
+          id: entry.id,
+          date: entry.date,
+          time: entry.time,
+          location: entry.location || entry.vendor || '(no station)',
+          amount: entry.amount,
+          odometer: entry.odometer,
+          currentType: entry.type,
+          paymentSource: entry.paymentSource,
+          entryMode: entry.entryMode,
+          driverId: entry.driverId,
+          vehicleId: entry.vehicleId,
+          signals
+        });
+      }
+    }
+
+    // Sort by date descending for easy review
+    suspects.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+
+    return c.json({
+      totalEntriesScanned: (data || []).length,
+      suspectsFound: suspects.length,
+      suspects
+    });
+  } catch (e: any) {
+    console.log(`Error in scan-corrupted-types: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Admin Diagnostic: Fix corrupted types — PATCH selected entries back to Reimbursement
+app.post("/make-server-37f42386/admin/fix-corrupted-types", async (c) => {
+  try {
+    const body = await c.req.json();
+    const entryIds: string[] = body.entryIds;
+
+    if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
+      return c.json({ error: 'entryIds array is required' }, 400);
+    }
+
+    const results: any[] = [];
+
+    for (const entryId of entryIds) {
+      const kvKey = `fuel_entry:${entryId}`;
+      const { data, error: fetchErr } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .eq("key", kvKey)
+        .single();
+
+      if (fetchErr || !data) {
+        results.push({ id: entryId, status: 'not_found', error: fetchErr?.message });
+        continue;
+      }
+
+      const entry = data.value;
+      const oldType = entry.type;
+
+      entry.type = 'Reimbursement';
+
+      if (!entry.metadata) entry.metadata = {};
+      entry.metadata.typeCorrectedAt = new Date().toISOString();
+      entry.metadata.typeCorrectedFrom = oldType;
+      entry.metadata.typeCorrectionReason = 'type-overwrite bug fix (admin diagnostic)';
+
+      const { error: updateErr } = await supabase
+        .from("kv_store_37f42386")
+        .update({ value: entry })
+        .eq("key", kvKey);
+
+      if (updateErr) {
+        results.push({ id: entryId, status: 'error', error: updateErr.message });
+      } else {
+        results.push({ id: entryId, status: 'fixed', oldType, newType: 'Reimbursement' });
+      }
+    }
+
+    return c.json({
+      totalRequested: entryIds.length,
+      results
+    });
+  } catch (e: any) {
+    console.log(`Error in fix-corrupted-types: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin Diagnostic: Scan for entries with stale integrityStatus flags
+// ---------------------------------------------------------------------------
+app.get("/make-server-37f42386/admin/scan-anomaly-flags", async (c) => {
+  try {
+    const { data, error } = await supabase
+      .from("kv_store_37f42386")
+      .select("key, value")
+      .like("key", "fuel_entry:%");
+
+    if (error) throw error;
+
+    const allEntries = (data || []).map((row: any) => row.value).filter(Boolean);
+    const byVehicle: Record<string, any[]> = {};
+    for (const e of allEntries) {
+      const vid = e.vehicleId || 'unknown';
+      if (!byVehicle[vid]) byVehicle[vid] = [];
+      byVehicle[vid].push(e);
+    }
+    for (const vid of Object.keys(byVehicle)) {
+      byVehicle[vid].sort((a: any, b: any) => {
+        const dc = (a.date || '').localeCompare(b.date || '');
+        if (dc !== 0) return dc;
+        return (a.odometer || 0) - (b.odometer || 0);
+      });
+    }
+
+    const flagged: any[] = [];
+    for (const row of (data || [])) {
+      const entry = row.value;
+      if (!entry) continue;
+
+      const integrityStatus = entry.metadata?.integrityStatus;
+      if (integrityStatus !== 'critical' && integrityStatus !== 'warning') continue;
+
+      let prevOdometer: number | null = null;
+      let prevDate: string | null = null;
+      const vid = entry.vehicleId || 'unknown';
+      const timeline = byVehicle[vid] || [];
+      const idx = timeline.findIndex((e: any) => e.id === entry.id);
+      if (idx > 0) {
+        prevOdometer = timeline[idx - 1].odometer ?? null;
+        prevDate = timeline[idx - 1].date ?? null;
+      }
+
+      flagged.push({
+        key: row.key,
+        id: entry.id,
+        date: entry.date,
+        time: entry.time,
+        location: entry.location || entry.vendor || '(no station)',
+        amount: entry.amount,
+        liters: entry.liters,
+        odometer: entry.odometer,
+        prevOdometer,
+        prevDate,
+        type: entry.type,
+        paymentSource: entry.paymentSource,
+        entryMode: entry.entryMode,
+        driverId: entry.driverId,
+        vehicleId: entry.vehicleId,
+        integrityStatus,
+        anomalyReason: entry.metadata?.anomalyReason || '(no reason recorded)',
+        auditStatus: entry.auditStatus || entry.metadata?.auditStatus || 'Unknown',
+        isFlagged: entry.isFlagged,
+        cycleId: entry.metadata?.cycleId,
+      });
+    }
+
+    flagged.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+
+    return c.json({
+      totalEntriesScanned: (data || []).length,
+      flaggedCount: flagged.length,
+      flagged
+    });
+  } catch (e: any) {
+    console.log(`Error in scan-anomaly-flags: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Admin Diagnostic: Clear anomaly flags — PATCH selected entries to valid/Clear
+app.post("/make-server-37f42386/admin/fix-anomaly-flags", async (c) => {
+  try {
+    const body = await c.req.json();
+    const entryIds: string[] = body.entryIds;
+
+    if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
+      return c.json({ error: 'entryIds array is required' }, 400);
+    }
+
+    const results: any[] = [];
+
+    for (const entryId of entryIds) {
+      const kvKey = `fuel_entry:${entryId}`;
+      const { data, error: fetchErr } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .eq("key", kvKey)
+        .single();
+
+      if (fetchErr || !data) {
+        results.push({ id: entryId, status: 'not_found', error: fetchErr?.message });
+        continue;
+      }
+
+      const entry = data.value;
+      const oldStatus = entry.metadata?.integrityStatus;
+      const oldReason = entry.metadata?.anomalyReason;
+      const oldAudit = entry.auditStatus;
+
+      if (!entry.metadata) entry.metadata = {};
+      entry.metadata.integrityStatus = 'valid';
+      entry.metadata.anomalyReason = undefined;
+      entry.metadata.auditStatus = 'Clear';
+      entry.isFlagged = false;
+      entry.auditStatus = 'Clear';
+
+      entry.metadata.anomalyClearedAt = new Date().toISOString();
+      entry.metadata.anomalyClearedFrom = { integrityStatus: oldStatus, anomalyReason: oldReason, auditStatus: oldAudit };
+      entry.metadata.anomalyClearReason = 'admin anomaly scanner — false positive cleared';
+
+      const { error: updateErr } = await supabase
+        .from("kv_store_37f42386")
+        .update({ value: entry })
+        .eq("key", kvKey);
+
+      if (updateErr) {
+        results.push({ id: entryId, status: 'error', error: updateErr.message });
+      } else {
+        results.push({ id: entryId, status: 'fixed', oldStatus, oldReason });
+      }
+    }
+
+    return c.json({
+      totalRequested: entryIds.length,
+      results
+    });
+  } catch (e: any) {
+    console.log(`Error in fix-anomaly-flags: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Global handler for unhandled promise rejections caused by client disconnects.
 // Deno.serve's `onError` only catches errors thrown INSIDE the handler.
 // Broken-pipe errors during response body streaming (`respondWith`) surface as

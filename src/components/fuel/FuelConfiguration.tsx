@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Info, RefreshCw, ShieldCheck, Database, Trash2, AlertTriangle } from 'lucide-react';
 import { ScenarioList } from './ScenarioList';
+import { TypeCorruptionScanner } from './TypeCorruptionScanner';
+import { AnomalyScanner } from './AnomalyScanner';
 import { Button } from "../ui/button";
 import { api } from '../../services/api';
 import { toast } from "sonner@2.0.3";
@@ -103,6 +105,14 @@ export function FuelConfiguration() {
                     <h3 className="text-lg font-bold text-slate-900 mb-2">System Maintenance</h3>
                     <p className="text-sm text-slate-500 mb-6">Tools for ensuring data integrity and reconciling historical records with current logic.</p>
                     
+                    <TypeCorruptionScanner />
+
+                    <div className="mt-4" />
+
+                    <AnomalyScanner />
+
+                    <div className="mt-4" />
+
                     <Card className="border-amber-100 bg-amber-50/30">
                         <CardContent className="p-4 flex items-center justify-between">
                             <div className="flex items-center gap-4">

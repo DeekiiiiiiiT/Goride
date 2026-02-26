@@ -320,7 +320,9 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             id: initialData?.id || crypto.randomUUID(),
             date: dateWithTime as string,
             time: finalTime,
-            type: formData.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry',
+            type: initialData?.type
+                ? initialData.type   // Preserve original type on edits — never overwrite
+                : (formData.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry'),
             amount: Number(formData.amount),
             liters: Number(formData.liters),
             pricePerLiter: Number(formData.pricePerLiter),

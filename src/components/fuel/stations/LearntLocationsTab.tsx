@@ -451,7 +451,7 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
                   <TableCell>
                     <div className="flex items-center gap-2 text-slate-600 font-mono text-xs">
                       <MapPin className="h-3 w-3 text-slate-400" />
-                      {loc.location.lat.toFixed(6)}, {loc.location.lng.toFixed(6)}
+                      {(loc.location.lat ?? 0).toFixed(6)}, {(loc.location.lng ?? 0).toFixed(6)}
                     </div>
                   </TableCell>
                   <TableCell>

@@ -2,12 +2,30 @@ import { UnifiedOdometerEntry } from '../types/vehicle';
 import { formatDateJM } from './csv-helper';
 
 /**
+ * Normalizes a date string so that date-only ("2026-02-25") and date+time
+ * ("2026-02-25T07:56:00") are both parsed in local time consistently.
+ * Without this, Date parses date-only as UTC midnight but date+time as local,
+ * causing same-day entries to mis-sort.
+ */
+const normalizeDate = (raw: string): number => {
+    if (!raw) return 0;
+    // Date-only string (no "T") — append T00:00:00 so it parses as local time
+    if (!raw.includes('T')) return new Date(`${raw}T00:00:00`).getTime();
+    return new Date(raw).getTime();
+};
+
+/**
  * Sorts odometer entries by date descending (newest first).
+ * Tiebreaker: when two entries share the same date, sort by odometer descending
+ * so higher-odo (later in the day) appears first — matching newest-first intent.
  */
 export const sortOdometerEntries = (entries: UnifiedOdometerEntry[]): UnifiedOdometerEntry[] => {
-    return [...entries].sort((a, b) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+    return [...entries].sort((a, b) => {
+        const diff = normalizeDate(b.date) - normalizeDate(a.date);
+        if (diff !== 0) return diff;
+        // Same date — higher odometer = later in the day → should appear first (descending)
+        return (b.value || 0) - (a.value || 0);
+    });
 };
 
 /**
@@ -20,7 +38,7 @@ export const deduplicateEntries = (entries: UnifiedOdometerEntry[]): UnifiedOdom
     const PRIORITY = { 'fuel': 4, 'service': 3, 'checkin': 2, 'manual': 1 };
 
     entries.forEach(entry => {
-        const time = new Date(entry.date).getTime();
+        const time = normalizeDate(entry.date);
         const key = `${time}-${entry.value}`;
 
         if (uniqueMap.has(key)) {

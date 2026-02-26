@@ -36,19 +36,11 @@ export function PaymentMethodSelector({ onSelect }: PaymentMethodSelectorProps) 
             <p className="text-[10px] text-slate-500">I used cash collected from customers / fares</p>
           </div>
         </Button>
-
-        <Button 
-          variant="outline" 
-          className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-emerald-500 hover:bg-emerald-50 group transition-all"
-          onClick={() => onSelect('personal_cash')}
-        >
-          <Banknote className="h-6 w-6 text-emerald-500 group-hover:scale-110 transition-transform" />
-          <div className="text-center">
-            <p className="font-bold">Cash / Personal Card</p>
-            <p className="text-[10px] text-slate-500">I paid myself and need reimbursement</p>
-          </div>
-        </Button>
       </div>
+
+      <p className="text-[11px] text-slate-400 text-center italic mt-2">
+        If you paid with personal cash, select RideShare Cash above. Fleet admin will review and reclassify if needed.
+      </p>
     </div>
   );
 }

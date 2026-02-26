@@ -171,6 +171,17 @@ export function FuelLogTable({
             entry.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             entry.vendor?.toLowerCase().includes(searchTerm.toLowerCase())
         );
+    }).sort((a, b) => {
+        // Normalize dates: date-only strings parse as UTC, date+time as local — force both to local
+        const normDate = (raw: string): number => {
+            if (!raw) return 0;
+            if (!raw.includes('T')) return new Date(`${raw}T00:00:00`).getTime();
+            return new Date(raw).getTime();
+        };
+        const diff = normDate(b.date) - normDate(a.date);
+        if (diff !== 0) return diff;
+        // Same date — higher odometer = later in the day → should appear first (descending)
+        return ((b.odometer as number) || 0) - ((a.odometer as number) || 0);
     });
 
     const ledgerIntegrity = useMemo(() => {
@@ -230,6 +241,36 @@ export function FuelLogTable({
             activeCycles: cycleScope.filter(c => c.status === 'Active').length
         };
     }, [entries, validAnchorIds, dateRange, ledgerIntegrity, allCycles]);
+
+    // Build per-vehicle timeline to compute previous odometer for each entry
+    const prevOdometerMap = useMemo(() => {
+        const map = new Map<string, { prevOdo: number | null; prevDate: string | null }>();
+        const byVehicle: Record<string, FuelEntry[]> = {};
+        for (const e of entries) {
+            const vid = e.vehicleId || 'unknown';
+            if (!byVehicle[vid]) byVehicle[vid] = [];
+            byVehicle[vid].push(e);
+        }
+        for (const vid of Object.keys(byVehicle)) {
+            byVehicle[vid].sort((a, b) => {
+                const dc = (a.date || '').localeCompare(b.date || '');
+                if (dc !== 0) return dc;
+                return ((a.odometer as number) || 0) - ((b.odometer as number) || 0);
+            });
+            for (let i = 0; i < byVehicle[vid].length; i++) {
+                const entry = byVehicle[vid][i];
+                if (i > 0) {
+                    map.set(entry.id, {
+                        prevOdo: byVehicle[vid][i - 1].odometer ?? null,
+                        prevDate: byVehicle[vid][i - 1].date ?? null,
+                    });
+                } else {
+                    map.set(entry.id, { prevOdo: null, prevDate: null });
+                }
+            }
+        }
+        return map;
+    }, [entries]);
 
     const filteredCycles = useMemo(() => {
         return allCycles.filter(c => {
@@ -460,14 +501,15 @@ export function FuelLogTable({
                                 <TableHead>Station</TableHead>
                                 <TableHead>Vehicle</TableHead>
                                 <TableHead>Driver</TableHead>
-                                <TableHead>Volume (L)</TableHead>
+                                <TableHead>Vol (L)</TableHead>
+                                <TableHead>Prev Odo</TableHead>
                                 <TableHead>Cost ($)</TableHead>
                                 <TableHead className="text-center">Audit</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={9} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
+                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={10} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
                             filteredEntries.map(entry => {
                                 const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
                                 const confidenceScore = entry.metadata?.auditConfidenceScore;
@@ -562,11 +604,11 @@ export function FuelLogTable({
                                             const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
                                             const fillPct = Math.min(100, ((entry.liters || 0) / tankCap) * 100);
                                             return (
-                                                <div className="flex flex-col gap-1 min-w-[70px]">
+                                                <div className="flex flex-col gap-1 min-w-[50px]">
                                                     <span className="text-xs font-medium">{entry.liters?.toFixed(1)} L</span>
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 cursor-help">
+                                                            <div className="h-1.5 w-12 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 cursor-help">
                                                                 <div 
                                                                     className={cn(
                                                                         "h-full rounded-full transition-all duration-300",
@@ -587,7 +629,24 @@ export function FuelLogTable({
                                             );
                                         })()}
                                     </TableCell>
-                                    <TableCell className="font-bold text-xs">${entry.amount.toFixed(2)}</TableCell>
+                                    <TableCell>
+                                        {(() => {
+                                            const prev = prevOdometerMap.get(entry.id);
+                                            if (!prev || prev.prevOdo == null) return <span className="text-xs text-slate-300">—</span>;
+                                            const curOdo = (entry.odometer as number) || 0;
+                                            const isRegression = curOdo < prev.prevOdo;
+                                            const delta = Math.abs(curOdo - prev.prevOdo);
+                                            return (
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-medium">{prev.prevOdo.toLocaleString()}</span>
+                                                    <span className={`text-[10px] font-medium ${isRegression ? 'text-red-600' : 'text-green-600'}`}>
+                                                        {isRegression ? `▼ ${delta.toLocaleString()}` : `▲ +${delta.toLocaleString()}`}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </TableCell>
+                                    <TableCell className="font-bold text-xs">${(entry.amount ?? 0).toFixed(2)}</TableCell>
                                     <TableCell>
                                         <div className="flex justify-center">
                                             <Tooltip>
