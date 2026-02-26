@@ -287,6 +287,11 @@ export function FuelLogTable({
 
     const formatDate = (dateString: string) => {
         if (!dateString) return '-';
+        // If date-only string (YYYY-MM-DD), parse as local date to avoid UTC timezone shift
+        if (dateString.includes('-') && dateString.length === 10) {
+            const [y, m, d] = dateString.split('-').map(Number);
+            return new Date(y, m - 1, d).toLocaleDateString();
+        }
         return new Date(dateString).toLocaleDateString();
     };
 

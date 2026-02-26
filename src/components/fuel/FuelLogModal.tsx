@@ -312,11 +312,13 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
 
         const fullDate = formData.date;
         const finalTime = time ? (time.length === 5 ? `${time}:00` : time) : initialData?.time;
+        // Preserve time component in date field to prevent timezone-shift on re-display
+        const dateWithTime = finalTime ? `${fullDate}T${finalTime}` : fullDate;
 
         const entry: any = {
             ...initialData,
             id: initialData?.id || crypto.randomUUID(),
-            date: fullDate as string,
+            date: dateWithTime as string,
             time: finalTime,
             type: formData.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry',
             amount: Number(formData.amount),
