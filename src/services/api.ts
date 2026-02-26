@@ -1029,6 +1029,15 @@ export const api = {
     return response.json();
   },
 
+  async runPaymentSourceBackfill() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-payment-sources`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Payment source backfill failed");
+    return response.json();
+  },
+
   async runEvidenceBridgeStressTest(vehicleId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/stress-test-evidence-bridge`, {
         method: 'POST',

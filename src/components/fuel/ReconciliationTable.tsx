@@ -74,20 +74,16 @@ export function ReconciliationTable({
 }: ReconciliationTableProps) {
     const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
 
-    // Handle invalid/loading date range
-    if (!dateRange || !dateRange.from) {
-        return <div className="p-8 text-center text-slate-500">Select a date range to view reconciliation reports.</div>;
-    }
+    const weekStart = dateRange?.from;
+    const weekEnd = dateRange?.to || dateRange?.from;
 
-    const weekStart = dateRange.from;
-    const weekEnd = dateRange.to || dateRange.from; // Fallback to single day
-
-    // Calculate Data
+    // Calculate Data — hooks must always run (React rules of hooks)
     const reports = useMemo(() => {
+        if (!weekStart) return [];
         return FuelCalculationService.generateFleetReport(
             vehicles, 
             weekStart, 
-            weekEnd, 
+            weekEnd!, 
             trips, 
             fuelEntries, 
             adjustments,
@@ -116,6 +112,11 @@ export function ReconciliationTable({
             driver: 0 
         });
     }, [reports]);
+
+    // Handle invalid/loading date range — early return AFTER all hooks
+    if (!dateRange || !dateRange.from) {
+        return <div className="p-8 text-center text-slate-500">Select a date range to view reconciliation reports.</div>;
+    }
 
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
@@ -433,7 +434,77 @@ export function ReconciliationTable({
 
                                         {/* Breakdown Columns */}
                                         <TableCell className="text-right text-slate-600 text-sm">
-                                            {formatCurrency(report.rideShareCost)}
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <span className={`cursor-help ${report.metadata?.rideShareCalc ? 'underline decoration-dotted decoration-slate-300 underline-offset-2' : ''}`}>
+                                                            {formatCurrency(report.rideShareCost)}
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    {report.metadata?.rideShareCalc && (
+                                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                                            <div className="p-3 space-y-2 text-xs">
+                                                                <div className="font-semibold text-slate-900 border-b border-slate-200 pb-1.5">
+                                                                    Ride Share Calculation
+                                                                </div>
+                                                                <div className="space-y-1 text-slate-600">
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Total Rideshare km</span>
+                                                                        <span className="font-medium text-slate-900">
+                                                                            {report.metadata.rideShareCalc.totalRideshareKm?.toFixed(1)} km
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Efficiency</span>
+                                                                        <span className="font-medium text-slate-900">
+                                                                            {report.metadata.rideShareCalc.observedEfficiency} km/L
+                                                                            <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
+                                                                                report.metadata.rideShareCalc.efficiencySource === 'odometer' 
+                                                                                    ? 'bg-emerald-100 text-emerald-700' 
+                                                                                    : report.metadata.rideShareCalc.efficiencySource === 'vehicle_settings'
+                                                                                    ? 'bg-blue-100 text-blue-700'
+                                                                                    : 'bg-amber-100 text-amber-700'
+                                                                            }`}>
+                                                                                {report.metadata.rideShareCalc.efficiencySource === 'odometer' 
+                                                                                    ? 'ODO' 
+                                                                                    : report.metadata.rideShareCalc.efficiencySource === 'vehicle_settings'
+                                                                                    ? 'SETTINGS'
+                                                                                    : 'DEFAULT'}
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Price / Liter</span>
+                                                                        <span className="font-medium text-slate-900">
+                                                                            ${report.metadata.rideShareCalc.actualPricePerLiter}
+                                                                            <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
+                                                                                report.metadata.rideShareCalc.priceSource === 'fuel_entries' 
+                                                                                    ? 'bg-emerald-100 text-emerald-700' 
+                                                                                    : 'bg-amber-100 text-amber-700'
+                                                                            }`}>
+                                                                                {report.metadata.rideShareCalc.priceSource === 'fuel_entries' ? 'ACTUAL' : 'DEFAULT'}
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="border-t border-slate-200 pt-1.5 space-y-1 text-slate-500">
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Liters in period</span>
+                                                                        <span className="text-slate-700">{report.metadata.rideShareCalc.totalLitersInPeriod} L</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Trips counted</span>
+                                                                        <span className="text-slate-700">
+                                                                            {report.metadata.rideShareCalc.tripsIncluded}
+                                                                            {' '}({report.metadata.rideShareCalc.completedTrips} done, {report.metadata.rideShareCalc.cancelledTrips} cx)
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </TooltipContent>
+                                                    )}
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         </TableCell>
                                         <TableCell className="text-right text-slate-600 text-sm">
                                             {formatCurrency(report.companyUsageCost)}

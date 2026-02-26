@@ -246,13 +246,42 @@ export function FuelLogTable({
         });
     }, [allCycles, filterVehicle, filterStatus, dateRange, searchTerm, getVehicleName]);
 
-    const getTypeIcon = (type: string) => {
-        switch(type) {
-            case 'Card_Transaction': return <CreditCard className="h-4 w-4 text-indigo-500" />;
-            case 'Fuel_Manual_Entry':
-            case 'Manual_Entry': return <Banknote className="h-4 w-4 text-emerald-500" />;
-            case 'Reimbursement': return <Banknote className="h-4 w-4 text-orange-500" />;
+    const getTypeIcon = (label: string) => {
+        switch(label) {
+            case 'Gas Card': return <CreditCard className="h-4 w-4 text-indigo-500" />;
+            case 'Driver Cash': return <Banknote className="h-4 w-4 text-emerald-500" />;
+            case 'RideShare Cash': return <Banknote className="h-4 w-4 text-orange-500" />;
+            case 'Petty Cash': return <Banknote className="h-4 w-4 text-amber-500" />;
+            case 'Reimbursement': return <HelpCircle className="h-4 w-4 text-slate-400" />;
             default: return <Fuel className="h-4 w-4 text-slate-500" />;
+        }
+    };
+
+    const resolvePaymentLabel = (entry: FuelEntry): string => {
+        const source = entry.metadata?.paymentSource || (entry as any).paymentSource;
+        if (source) {
+            const labelMap: Record<string, string> = {
+                'driver_cash': 'Driver Cash',
+                'rideshare_cash': 'RideShare Cash',
+                'company_card': 'Gas Card',
+                'petty_cash': 'Petty Cash',
+                'Personal': 'Driver Cash',
+                'RideShare_Cash': 'RideShare Cash',
+                'Gas_Card': 'Gas Card',
+                'Petty_Cash': 'Petty Cash',
+                'Cash': 'Driver Cash',
+                'RideShare Cash': 'RideShare Cash',
+                'Gas Card': 'Gas Card',
+                'Other': 'Petty Cash',
+            };
+            if (labelMap[source]) return labelMap[source];
+        }
+        switch (entry.type) {
+            case 'Card_Transaction': return 'Gas Card';
+            case 'Fuel_Manual_Entry':
+            case 'Manual_Entry': return 'Driver Cash';
+            case 'Reimbursement': return 'Reimbursement';
+            default: return entry.type?.replace(/_/g, ' ') || 'Unknown';
         }
     };
 
@@ -388,8 +417,11 @@ export function FuelLogTable({
                                     try {
                                         const result = await api.runFuelBackfill();
                                         console.log('[Recalculate] Backfill result:', result);
+                                        // Phase 6: Also backfill missing paymentSource fields
+                                        const psResult = await api.runPaymentSourceBackfill();
+                                        console.log('[Recalculate] Payment source backfill result:', psResult);
                                         toast.success('Fleet-wide recalculation complete', {
-                                            description: `Processed ${result?.processed ?? '?'} entries. Click Refresh Data to see updated results.`
+                                            description: `Processed ${result?.processed ?? '?'} entries, patched ${psResult?.patched ?? 0} payment sources. Click Refresh Data to see updated results.`
                                         });
                                     } catch (err) {
                                         console.error('[Recalculate] Backfill failed:', err);
@@ -419,7 +451,7 @@ export function FuelLogTable({
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Date</TableHead>
-                                <TableHead>Type</TableHead>
+                                <TableHead>Paid By</TableHead>
                                 <TableHead>Station</TableHead>
                                 <TableHead>Vehicle</TableHead>
                                 <TableHead>Driver</TableHead>
@@ -442,8 +474,8 @@ export function FuelLogTable({
                                     <TableCell>{formatDate(entry.date)}</TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
-                                            {getTypeIcon(entry.type)}
-                                            <span className="text-xs">{entry.type.replace('_', ' ')}</span>
+                                            {getTypeIcon(resolvePaymentLabel(entry))}
+                                            <span className="text-xs">{resolvePaymentLabel(entry)}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>

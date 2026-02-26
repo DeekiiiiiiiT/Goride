@@ -2,6 +2,7 @@ import { api } from './api';
 import { odometerService } from './odometerService';
 import { OdometerReading, MileageReport } from '../types/vehicle';
 import { Trip } from '../types/data';
+import { FuelCalculationService } from './fuelCalculationService';
 
 export const mileageCalculationService = {
     /**
@@ -40,7 +41,8 @@ export const mileageCalculationService = {
                        tDate <= new Date(endAnchor.date).getTime();
             });
         }
-        return periodTrips;
+        // Ensure only Completed and Cancelled trips are included
+        return periodTrips.filter(t => t.status === 'Completed' || t.status === 'Cancelled');
     },
 
     /**
@@ -52,7 +54,7 @@ export const mileageCalculationService = {
         const periodTrips = await mileageCalculationService.getTripsForPeriod(vehicleId, startAnchor, endAnchor);
 
         const totalDistance = endAnchor.value - startAnchor.value;
-        const platformDistance = periodTrips.reduce((sum, trip) => sum + (trip.distance || 0), 0);
+        const platformDistance = periodTrips.reduce((sum, trip) => sum + FuelCalculationService.getTotalTripRideshareKm(trip), 0);
         
         // Residual Personal = (Total) - (Business/Platform)
         const personalDistance = Math.max(0, totalDistance - platformDistance);

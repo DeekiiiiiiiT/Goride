@@ -239,6 +239,35 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
     const amount = Math.abs(Number(tx.amount) || 0);
     const pricePerLiter = tx.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
 
+    // Resolve paymentSource from the original transaction
+    const rawPaymentSource = tx.metadata?.paymentSource || tx.paymentMethod;
+    const paymentSourceEnum = (() => {
+        const map: Record<string, string> = {
+            'driver_cash': 'Personal',
+            'rideshare_cash': 'RideShare_Cash',
+            'company_card': 'Gas_Card',
+            'petty_cash': 'Petty_Cash',
+            'Cash': 'Personal',
+            'RideShare Cash': 'RideShare_Cash',
+            'Gas Card': 'Gas_Card',
+            'Other': 'Petty_Cash',
+            'Personal': 'Personal',
+            'RideShare_Cash': 'RideShare_Cash',
+            'Gas_Card': 'Gas_Card',
+            'Petty_Cash': 'Petty_Cash',
+        };
+        return map[rawPaymentSource] || 'Personal';
+    })();
+    const metadataPaymentSource = (() => {
+        const map: Record<string, string> = {
+            'Personal': 'driver_cash',
+            'RideShare_Cash': 'rideshare_cash',
+            'Gas_Card': 'company_card',
+            'Petty_Cash': 'petty_cash',
+        };
+        return map[paymentSourceEnum] || 'driver_cash';
+    })();
+
     const fuelEntry: any = {
         id: crypto.randomUUID(),
         date: (tx.date && tx.time)
@@ -260,12 +289,15 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
         isVerified: true,
         source: 'Fuel Log',
         matchedStationId: resolvedStationId,
+        paymentSource: paymentSourceEnum,
+        entryMode: 'Floating',
         metadata: {
             locationStatus: 'verified',
             verificationMethod: 'station_gate_release',
             matchedStationId: resolvedStationId,
             stationName: stationName,
             originalTransactionId: tx.id,
+            paymentSource: metadataPaymentSource,
         },
     };
     fuelEntry.signature = await signRecord(fuelEntry);
@@ -876,7 +908,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
 
     // Step 7.2: Data Integrity Lock
     // Only verified stations can be linked to finalized transactions in the master audit trail.
-    if (entry.status === 'Finalized' || entry.isLocked) {
+    if ((entry.status === 'Finalized' || entry.isLocked) && !entry.bypassSignatureCheck) {
         const matchedStationId = entry.matchedStationId || entry.metadata?.matchedStationId;
         if (matchedStationId) {
             const station = await kv.get(`station:${matchedStationId}`);
@@ -887,7 +919,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     }
 
     // Step 3.1: Immutability Lockdown (Legacy)
-    if (existingEntry && !existingEntry.signature) {
+    // Bypass when admin is explicitly editing via the modal (bypassSignatureCheck flag)
+    if (existingEntry && !existingEntry.signature && !entry.bypassSignatureCheck) {
         const protectedFields = ['liters', 'amount', 'odometer', 'date', 'vehicleId'];
         const isAttemptingIllegalChange = protectedFields.some(f => existingEntry[f] !== undefined && entry[f] !== undefined && existingEntry[f] !== entry[f]);
         
@@ -1124,10 +1157,48 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     const entryLat = entryCoords?.lat || 0;
     const entryLng = entryCoords?.lng || 0;
 
-    // Phase 8 Optimization: Load all stations ONCE and reuse across handshake + geofence verification
-    const allStationsForEntry = entryCoords ? (await kv.getByPrefix("station:") || []) : [];
+    // --- MANUAL STATION OVERRIDE ---
+    // If the user explicitly selected a verified station in the modal dropdown,
+    // honor that selection and skip automatic GPS matching / gate-hold entirely.
+    let skipGpsMatching = false;
+    if (entry.matchedStationId) {
+        const manualStation = await kv.get(`station:${entry.matchedStationId}`);
+        if (manualStation && manualStation.status === 'verified') {
+            skipGpsMatching = true;
+            if (!manualStation.stats) manualStation.stats = { totalVisits: 0 };
+            manualStation.stats.totalVisits = (Number(manualStation.stats.totalVisits) || 0) + 1;
+            manualStation.stats.lastVisited = entry.date || new Date().toISOString();
+            await kv.set(`station:${manualStation.id}`, manualStation);
 
-    if (entryCoords) {
+            entry.vendor = manualStation.name;
+            entry.location = manualStation.name;
+            entry.stationAddress = manualStation.address || entry.stationAddress || '';
+            entry.metadata = {
+                ...entry.metadata,
+                locationStatus: 'verified',
+                verificationMethod: 'manual_admin_override',
+                matchedStationId: manualStation.id,
+                matchConfidence: 'manual',
+                stationGateHold: false,
+            };
+            entry.signature = await auditLogic.generateRecordHash(entry);
+            entry.signedAt = new Date().toISOString();
+
+            const confidence = fuelLogic.calculateConfidenceScore(entry, manualStation);
+            entry.metadata = {
+                ...entry.metadata,
+                auditConfidenceScore: confidence.score,
+                auditConfidenceBreakdown: confidence.breakdown,
+                isHighlyTrusted: confidence.isHighlyTrusted
+            };
+            console.log(`[ManualOverride] Entry ${entry.id} manually linked to verified station "${manualStation.name}" (${manualStation.id})`);
+        }
+    }
+
+    // Phase 8 Optimization: Load all stations ONCE and reuse across handshake + geofence verification
+    const allStationsForEntry = (!skipGpsMatching && entryCoords) ? (await kv.getByPrefix("station:") || []) : [];
+
+    if (!skipGpsMatching && entryCoords) {
         const smartResult = findMatchingStationSmart(entryLat, entryLng, allStationsForEntry, 600, 0);
 
         if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
@@ -1229,6 +1300,63 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
             };
             console.log(`[SmartGeoMatch] No match for entry ${entry.id} — created Learnt Location: ${learntId}`);
         }
+    } else if (!skipGpsMatching) {
+        // --- NO GPS COORDINATES: STATION GATE HOLD ---
+        // Core rule: ALL fuel logs that don't match a verified gas station MUST go
+        // to the Learnt tab regardless of payment method — no exceptions.
+        // Entries with no GPS cannot be matched, so they MUST be gate-held.
+        // NOTE: Skipped when admin has manually overridden with a verified station.
+        const learntId = crypto.randomUUID();
+        const learntLocation = {
+            id: learntId,
+            name: entry.vendor || entry.stationName || "Unknown Vendor",
+            location: { lat: null, lng: null },
+            status: 'learnt',
+            firstSeen: entry.date || new Date().toISOString(),
+            sourceEntryId: entry.id,
+            driverId: entry.driverId,
+            vehicleId: entry.vehicleId,
+            transactionId: entry.id,
+            gateReason: 'No GPS coordinates provided — cannot verify station',
+        };
+        await kv.set(`learnt_location:${learntId}`, learntLocation);
+
+        // Save the entry data as a gate-held transaction (NOT as a fuel_entry)
+        const heldTransaction = {
+            id: entry.id,
+            type: entry.type || 'Reimbursement',
+            date: entry.date,
+            time: entry.time || '',
+            amount: entry.amount || 0,
+            quantity: entry.liters || 0,
+            odometer: entry.odometer || 0,
+            vehicleId: entry.vehicleId,
+            driverId: entry.driverId,
+            receiptUrl: entry.receiptUrl,
+            odometerProofUrl: entry.odometerProofUrl,
+            isReconciled: false,
+            metadata: {
+                ...entry.metadata,
+                stationGateHold: true,
+                locationStatus: 'unknown',
+                verificationMethod: 'none',
+                gateReason: 'No GPS coordinates — station gate held',
+                learntLocationId: learntId,
+                pricePerLiter: entry.pricePerLiter || 0,
+                fuelVolume: entry.liters || 0,
+                stationLocation: entry.stationAddress || entry.location || '',
+                originalVendor: entry.vendor || entry.stationName || 'Unknown',
+            },
+        };
+        await kv.set(`transaction:${entry.id}`, heldTransaction);
+
+        console.log(`[StationGate-NoGPS] Entry ${entry.id} has no GPS — gate-held as transaction, Learnt Location ${learntId} created.`);
+        return c.json({ 
+            success: true, 
+            gateHeld: true, 
+            learntLocationId: learntId,
+            message: 'Fuel log has no GPS coordinates. It has been sent to the Learnt tab for admin review before it can be processed.'
+        });
     }
 
     // --- PHASE 5: SERVER-SIDE FORENSIC VERIFICATION ---
@@ -1360,6 +1488,69 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
 
             return c.json({ success: true, processed: processedCount, message: "System Hardening Backfill Complete" });
         } catch (e: any) {
+            return c.json({ error: e.message }, 500);
+        }
+    });
+
+    // --- PAYMENT SOURCE BACKFILL (Phase 6) ---
+    app.post(`${BASE_PATH}/admin/backfill-payment-sources`, async (c) => {
+        try {
+            console.log(`[PaymentBackfill] Starting payment source backfill...`);
+            const allEntries = await kv.getByPrefix("fuel_entry:");
+            if (!allEntries || allEntries.length === 0) {
+                return c.json({ success: true, patched: 0, message: "No fuel entries found." });
+            }
+
+            const metaToEnum: Record<string, string> = {
+                'driver_cash': 'Personal',
+                'rideshare_cash': 'RideShare_Cash',
+                'company_card': 'Gas_Card',
+                'petty_cash': 'Petty_Cash',
+                'Cash': 'Personal',
+                'RideShare Cash': 'RideShare_Cash',
+                'Gas Card': 'Gas_Card',
+                'Other': 'Petty_Cash',
+                'Personal': 'Personal',
+                'RideShare_Cash': 'RideShare_Cash',
+                'Gas_Card': 'Gas_Card',
+                'Petty_Cash': 'Petty_Cash',
+            };
+            const enumToDropdown: Record<string, string> = {
+                'Personal': 'driver_cash',
+                'RideShare_Cash': 'rideshare_cash',
+                'Gas_Card': 'company_card',
+                'Petty_Cash': 'petty_cash',
+            };
+
+            let patched = 0;
+            for (const entry of allEntries) {
+                if (entry.paymentSource) continue; // Already has a value, skip
+
+                let inferredEnum: string;
+                const rawMeta = entry.metadata?.paymentSource;
+                if (rawMeta && metaToEnum[rawMeta]) {
+                    inferredEnum = metaToEnum[rawMeta];
+                } else if (entry.type === 'Card_Transaction') {
+                    inferredEnum = 'Gas_Card';
+                } else {
+                    // Reimbursement, Fuel_Manual_Entry, Manual_Entry, etc.
+                    inferredEnum = 'Personal';
+                }
+
+                entry.paymentSource = inferredEnum;
+                entry.metadata = {
+                    ...(entry.metadata || {}),
+                    paymentSource: enumToDropdown[inferredEnum] || 'driver_cash',
+                };
+
+                await kv.set(`fuel_entry:${entry.id}`, entry);
+                patched++;
+            }
+
+            console.log(`[PaymentBackfill] Patched ${patched} of ${allEntries.length} entries.`);
+            return c.json({ success: true, patched, total: allEntries.length, message: `Payment source backfill complete.` });
+        } catch (e: any) {
+            console.log(`[PaymentBackfill] Error: ${e.message}`);
             return c.json({ error: e.message }, 500);
         }
     });

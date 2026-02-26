@@ -80,8 +80,17 @@ export const fuelService = {
       },
       body: JSON.stringify(entry)
     });
-    if (!response.ok) throw new Error("Failed to save fuel entry");
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      console.error('[FuelService] Save fuel entry failed:', response.status, errorBody);
+      throw new Error(errorBody.error || `Failed to save fuel entry (${response.status})`);
+    }
     const result = await response.json();
+    // If the server gate-held the entry (no GPS + no manual station override),
+    // return the original entry with gateHeld flag so the UI can handle it
+    if (result.gateHeld) {
+      return { ...entry, gateHeld: true, learntLocationId: result.learntLocationId } as FuelEntry;
+    }
     return result.data || result;
   },
 

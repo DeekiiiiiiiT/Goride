@@ -132,6 +132,16 @@ export interface WeeklyFuelReport {
   healthStatus?: 'Emerald' | 'Amber' | 'Red';
   healthScore?: number; // 0-100
   finalizedAt?: string;
+  // metadata.rideShareCalc contains:
+  //   totalRideshareKm: number - All distance segments summed (On Trip + Enroute + Open + Unavailable)
+  //   observedEfficiency: number - km/L from odometer or fallback
+  //   actualPricePerLiter: number - $/L from fuel entries or fallback
+  //   efficiencySource: 'odometer' | 'vehicle_settings' | 'default_fallback'
+  //   priceSource: 'fuel_entries' | 'default_fallback'
+  //   totalLitersInPeriod: number
+  //   tripsIncluded: number - Total trips counted
+  //   completedTrips: number
+  //   cancelledTrips: number
   metadata?: any;
   
   // Phase 3: Staged Reconciliation
@@ -140,6 +150,12 @@ export interface WeeklyFuelReport {
   // Phase 6: Cryptographic Integrity
   signature?: string;
   signedAt?: string;
+
+  // Cached OdometerBucket[] from calculateOdometerBuckets().
+  // Available after calculateReconciliation() runs. Used by Stop-to-Stop sidebar and health status.
+  // These buckets use fuel-entry-only anchors. For unified anchors, BucketReconciliationView
+  // fetches its own via odometerService.getUnifiedHistory().
+  odometerBuckets?: OdometerBucket[];
 }
 
 export interface OdometerBucket {

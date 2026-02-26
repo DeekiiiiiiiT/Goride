@@ -60,6 +60,8 @@ import { Trip } from '../../../types/data';
 import { odometerService } from '../../../services/odometerService';
 import { mileageCalculationService } from '../../../services/mileageCalculationService';
 import { api } from '../../../services/api';
+import { FuelCalculationService } from '../../../services/fuelCalculationService';
+import { fuelService } from '../../../services/fuelService';
 import { TripManifestSheet } from './TripManifestSheet';
 import { SourceEvidenceModal } from './SourceEvidenceModal';
 import { AuditTrailModal } from './AuditTrailModal';
@@ -142,6 +144,15 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
       });
       const allTrips = allTripsResponse.data || [];
 
+      // Fetch adjustments for 3-way attribution
+      let allAdjustments: any[] = [];
+      try {
+          const adjResponse = await fuelService.getMileageAdjustments();
+          allAdjustments = (adjResponse || []).filter((a: any) => a.vehicleId === vehicleId);
+      } catch (e) {
+          console.error("Failed to fetch adjustments for 3-way attribution", e);
+      }
+
       const newReports: Record<string, MileageReport> = {};
       
       for (let i = 0; i < verifiedOnly.length - 1; i++) {
@@ -153,6 +164,9 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
         const endTime = new Date(end.date).getTime();
         
         const periodTrips = allTrips.filter((t: Trip) => {
+            // Only include Completed and Cancelled trips (Processing trips are unverified)
+            if (t.status !== 'Completed' && t.status !== 'Cancelled') return false;
+            
             const tTime = new Date(t.date).getTime();
             // Prioritize anchorPeriodId tag if available (from Phase 6 logic)
             if (t.metadata?.anchorPeriodId) {
@@ -162,9 +176,23 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
         });
 
         const totalDistance = end.value - start.value;
-        const platformDistance = periodTrips.reduce((sum: number, trip: Trip) => sum + (trip.distance || 0), 0);
+        const platformDistance = periodTrips.reduce((sum: number, trip: Trip) => sum + FuelCalculationService.getTotalTripRideshareKm(trip), 0);
         const personalDistance = Math.max(0, totalDistance - platformDistance);
         const personalPercentage = totalDistance > 0 ? (personalDistance / totalDistance) * 100 : 0;
+
+        // 3-way attribution: match adjustments to this anchor period by date
+        const periodAdjustments = allAdjustments.filter((a: any) => {
+            const aTime = new Date(a.date).getTime();
+            return aTime >= startTime && aTime <= endTime;
+        });
+
+        const adjustedPersonalDistance = periodAdjustments
+            .filter((a: any) => a.type === 'Personal')
+            .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
+        const companyMiscDistance = periodAdjustments
+            .filter((a: any) => a.type === 'Company_Misc' || a.type === 'Maintenance')
+            .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
+        const unaccountedDistance = Math.max(0, totalDistance - platformDistance - adjustedPersonalDistance - companyMiscDistance);
 
         let anomalyDetected = false;
         let anomalyReason = undefined;
@@ -189,7 +217,11 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
             personalPercentage,
             anomalyDetected,
             anomalyReason,
-            tripCount: periodTrips.length
+            tripCount: periodTrips.length,
+            rideShareDistance: platformDistance,
+            adjustedPersonalDistance,
+            companyMiscDistance,
+            unaccountedDistance
         };
       }
       setReports(newReports);

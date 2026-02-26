@@ -21,7 +21,7 @@ export function FuelTracker({ transactions, onAddTransaction, vehicles }: FuelTr
   
   // Form State
   const [formData, setFormData] = useState({
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: new Date().toISOString().split('T')[0],
     time: '12:00',
     vehicleId: '',
     odometer: '',
@@ -76,7 +76,7 @@ export function FuelTracker({ transactions, onAddTransaction, vehicles }: FuelTr
     onAddTransaction(newTxn);
     setIsOpen(false);
     setFormData({
-        date: format(new Date(), 'yyyy-MM-dd'),
+        date: new Date().toISOString().split('T')[0],
         time: '12:00',
         vehicleId: '',
         odometer: '',

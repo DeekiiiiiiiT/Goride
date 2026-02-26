@@ -1,585 +1,1048 @@
-# IDEA 1: Ambiguity-Aware GPS Station Matching ("Unknown Vendor" Fix)
+# IDEA 1: Consumption Reconciliation Architecture Consolidation
 
-## Problem Summary
+## Executive Summary
 
-Live Driver Portal fuel submissions show **"Unknown Vendor"** in Transaction Logs even when the station is verified. Three compounding bugs in the Transaction POST handler (`/supabase/functions/server/index.tsx`):
+There are **two parallel systems** that match trips to odometer gaps, but they were built independently and have drifted apart in 7 critical ways. This plan consolidates them into one canonical engine so every view in the app shows the same numbers.
 
-1. **Bug 1 -- Tight Radius:** GPS matching at line ~1696 uses a 150m radius. Phone GPS drift (typically 50-200m in Jamaica) causes misses even when the driver is at the station.
-2. **Bug 2 -- Missing `vendor` Field:** The `fuel_entry` object (lines ~1918-1946) never sets a `vendor` field. The station name goes into `location`, but `FuelLogTable` reads `entry.vendor` (line 452).
-3. **Bug 3 -- `locationStatus` in Wrong Place:** `locationStatus` is stored at the **top level** of fuel_entry (line 1938) instead of inside `metadata` where `FuelLogTable` checks for it (`entry.metadata?.locationStatus` at line 454).
+### The Two Systems
 
-**Bonus Bug (discovered during audit):** The Transaction POST handler **never calls `calculateConfidenceScore()`**. This is why the Audit Confidence column shows `0/0/0/0/0` or `??` for all Driver Portal entries. The fuel_controller's POST handler DOES call it (line 1077), but the Transaction handler does not.
+| | System A: "Unified Timeline" | System B: "Stop-to-Stop Reconciliation" |
+|---|---|---|
+| **UI Location** | Vehicle Detail > Odometer > Unified Timeline tab | Fuel Management > Reconciliation > History icon sidebar |
+| **UI Files** | `MasterLogTimeline.tsx`, `TripManifestSheet.tsx` | `BucketReconciliationView.tsx` |
+| **Calc Engine** | `mileageCalculationService.ts` + inline in MasterLogTimeline | `fuelCalculationService.ts` > `calculateOdometerBuckets()` |
+| **Anchor Source** | ALL sources (fuel, check-ins, service, manual) via `odometerService.getUnifiedHistory()` | Fuel entries only (entries with odometer readings) |
+| **Trip Distance** | `trip.distance \|\| 0` (On Trip only) | `getTotalTripRideshareKm(t)` (On Trip + Enroute + Open + Unavailable) |
+| **Trip Filter** | No explicit status filter | No explicit status filter |
+| **Trip Matching** | `anchorPeriodId` tag, date range fallback | `startOdometer`/`endOdometer`, date range fallback |
+| **Attribution** | 2-way: Business vs Personal | 3-way: RideShare + Personal + Company Misc + Unaccounted |
+| **Efficiency** | N/A (no fuel calc) | `vehicle.fuelSettings?.efficiencyCity \|\| 10` (raw, no fallback chain) |
 
-## Why NOT Simply Widen to 600m
+### The 7 Issues
 
-Blindly increasing the radius to 600m would cause **wrong matches** when two stations are close together (e.g., Total and a neighbouring station whose geofence circles overlap). A wrong match is worse than no match -- it silently corrupts data.
-
-## Solution: Ambiguity-Aware Matching
-
-The system searches at a wide radius (up to 600m) but **checks for ambiguity** before accepting a match:
-
-- **1 station in range** -> match it (no ambiguity, safe)
-- **Multiple stations in range, but one is clearly closest** -> match the closest (distance ratio proves it's unambiguous)
-- **Multiple stations roughly equidistant** -> refuse to match, flag for admin review (honest "I don't know" rather than a guess)
-
-The driver workflow does NOT change. The driver only enters amount and price. The system figures out the station purely from GPS intelligence.
-
-## Per-Station Regional Efficiency Values
-
-Each station has a `geofenceRadius` property (set from Plus Code precision or manually in the admin panel). These values should **NOT** be changed to 600m. They represent the station's tight "home zone" and are used as the high-confidence matching threshold. The 600m is only the outer search boundary.
-
----
-
-## Phase 1: Code Audit & Current-State Documentation
-
-**Goal:** Confirm exact line numbers, data shapes, and all call sites before touching any code. No code changes in this phase.
-
-### Step 1.1 -- Map the Transaction POST Handler GPS Matching (index.tsx)
-- **File:** `/supabase/functions/server/index.tsx`
-- **Lines ~1684-1758:** The geolocation matching block
-- Confirm: `findMatchingStation()` is called twice -- once for verified stations at 150m (line 1696), once for unverified at 150m (line 1710)
-- Confirm: If no match, a Learnt Location is created (lines 1737-1752)
-- **Document:** What fields are set on `transaction.metadata`: `matchedStationId`, `locationStatus`, `verificationMethod`
-
-### Step 1.2 -- Map the fuel_entry Object (index.tsx)
-- **Lines ~1918-1946:** The fuel_entry creation block
-- Confirm: `vendor` is NEVER set (only `location` at line 1928)
-- Confirm: `locationStatus` is at TOP LEVEL (line 1938) -- NOT inside `metadata`
-- Confirm: `matchedStationId` is at TOP LEVEL (line 1939) -- NOT inside `metadata`
-- Confirm: `metadata` object (lines 1940-1946) does NOT include `locationStatus`, `matchedStationId`, or `auditConfidenceScore`
-- **Document:** What FuelLogTable expects vs what it actually gets
-
-### Step 1.3 -- Map the Fuel Controller POST Handler (fuel_controller.tsx)
-- **Line ~1049:** Uses `findMatchingStation()` with 600m -- this ALSO has the overlap risk
-- Confirm: It DOES correctly set `entry.vendor = matchedStation.name` (line 1060)
-- Confirm: It DOES correctly nest `locationStatus` inside `metadata` (line 1063)
-- Confirm: It DOES call `calculateConfidenceScore()` (line 1077)
-- **Document:** This handler does things RIGHT -- the transaction handler needs to match this pattern
-
-### Step 1.4 -- Map Sync Orphans (fuel_controller.tsx)
-- **Line ~1299:** Uses `findMatchingStation()` with 600m blindly
-- Confirm: It correctly sets `entry.vendor`, `entry.metadata.locationStatus` etc. (lines 1308-1320)
-- **Document:** Same overlap risk as the fuel_controller POST handler
-
-### Step 1.5 -- Map All `findMatchingStation()` Call Sites
-
-| File | Line | Radius | Purpose | Change? |
-|------|------|--------|---------|---------|
-| `index.tsx` | ~1696 | 150m | Transaction POST -- verified stations | YES |
-| `index.tsx` | ~1710 | 150m | Transaction POST -- unverified stations | YES |
-| `fuel_controller.tsx` | ~1049 | 600m | Fuel entry POST -- Evidence Bridge | YES |
-| `fuel_controller.tsx` | ~1128 | 1000m | Forensic geofence verification | NO (different purpose) |
-| `fuel_controller.tsx` | ~1299 | 600m | Sync Orphans reconciliation | YES |
-| `fuel_controller.tsx` | ~681 | per-station | Learnt Location auto-cleanup | NO (leave for now) |
-
-### Step 1.6 -- Confirm Station Data Shape
-- Each station object has a `geofenceRadius` property (set from Plus Code precision or manually)
-- Default values: `fuel_controller.tsx` line 346 uses `station.geofenceRadius || 150`
-- The existing `findMatchingStation()` in `geo_matcher.ts` does NOT use per-station geofenceRadius -- it takes a single flat `radiusMeters` parameter
-- The new smart function will use each station's own `geofenceRadius` as the "high confidence" zone
-
-**Deliverable:** No code changes. Confirmed map of the current state. Report findings before moving to Phase 2.
+1. **Different Anchor Sources** -- Stop-to-Stop misses check-in/service/manual anchors, creating coarser buckets
+2. **Different Distance Calculations** -- Unified Timeline undercounts by ignoring Enroute/Open/Unavailable km
+3. **Different Trip Matching** -- Odometer-based vs tag-based matching can produce different trip sets
+4. **No Consistent Trip Status Filter** -- Neither system explicitly filters to Completed + Cancelled
+5. **Different Gap Definitions** -- "Personal" in Timeline vs "Unaccounted/Leakage" in Stop-to-Stop
+6. **Different Efficiency Baselines** -- Stop-to-Stop doesn't use the Phase 3 observed efficiency chain
+7. **Redundant Computation** -- Buckets computed twice (once in `calculateReconciliation` for health, once in sidebar)
 
 ---
 
-## Phase 2: Build the Smart Matching Function in `geo_matcher.ts`
+## Phase 1: Standardize Trip Distance in `mileageCalculationService`
 
-**Goal:** Create a new `findMatchingStationSmart()` function that detects ambiguity. Keep existing `findMatchingStation()` completely untouched for backward compatibility.
+**Goal:** Make `mileageCalculationService.ts` use `getTotalTripRideshareKm()` instead of `trip.distance || 0`, so the Unified Timeline and Trip Manifest use the same corrected distance as Stop-to-Stop.
 
-### Step 2.1 -- Define the Return Type
+**Risk:** Low -- additive import + one line change per function
+**Files Changed:** `/services/mileageCalculationService.ts`
+**Files NOT Changed:** Everything else (UI components, types, fuelCalculationService)
 
-Create a new interface `SmartMatchResult`:
-```typescript
-interface SmartMatchResult {
-  station: StationProfile | null;    // The matched station (or null if no match / ambiguous)
-  confidence: 'high' | 'medium' | 'ambiguous' | 'none';
-  distance: number;                  // Distance to matched station in metres
-  candidatesInRange: number;         // How many stations were within the max radius
-  secondClosestDistance: number;     // Distance to 2nd-closest station (Infinity if only 1)
-  ambiguityReason?: string;          // Human-readable reason if ambiguous
-}
-```
+### Step 1.1: Add import for FuelCalculationService
 
-### Step 2.2 -- Implement `findMatchingStationSmart()`
-
-**Function signature:**
-```typescript
-export const findMatchingStationSmart = (
-    lat: number,
-    lng: number,
-    stations: StationProfile[],
-    maxRadiusMeters: number = 600,
-    gpsAccuracy: number = 0
-): SmartMatchResult
-```
-
-**Algorithm (in plain language):**
-1. Calculate distance from the GPS point to EVERY station (including gpsAliases). For each station, use the shortest distance across its primary location + all aliases. Store as an array of `{station, distance}` pairs.
-2. Filter to only those within `maxRadiusMeters + gpsAccuracy`.
-3. Sort by distance ascending (closest first).
-4. **Decision logic:**
-   - **0 candidates:** Return `{ station: null, confidence: 'none' }`.
-   - **1 candidate:** Return `{ station, confidence: 'high' }` -- no ambiguity possible.
-   - **2+ candidates:** Let `d1` = distance to closest, `d2` = distance to second-closest.
-     - If `d1` is within the closest station's own `geofenceRadius` (its tight zone): `confidence: 'high'`. The driver is inside that station's defined perimeter -- safe match even if another station is nearby.
-     - Else if `d1 < d2 * 0.5` (closest is less than half the distance of second-closest): `confidence: 'medium'`. Clearly closer to one station even though outside its tight zone.
-     - Else: `confidence: 'ambiguous'`. Distances are too similar to tell. Do NOT match -- return `station: null`.
-
-### Step 2.3 -- Handle GPS Aliases in Distance Calculation
-
-When calculating distance to a station, check BOTH the primary `station.location` AND all `station.gpsAliases[]`. Use the SHORTEST distance across all points as that station's effective distance. This is the same logic already used in the existing `findMatchingStation()` function.
-
-### Step 2.4 -- Add Detailed Logging
-
-Log every decision:
-```
-[SmartMatch] 3 stations within 600m. Closest: "Total Mandeville" at 89m. Second: "Rubis May Pen" at 412m. Ratio: 0.22. Decision: high (within geofence 150m)
-```
-```
-[SmartMatch] 2 stations within 600m. Closest: "Total Mandeville" at 320m. Second: "Rubis May Pen" at 350m. Ratio: 0.91. Decision: ambiguous (equidistant)
-```
-
-### Step 2.5 -- Export Alongside Existing Function
-
-- Add the new function and interface to the file's exports
-- Do NOT modify the existing `findMatchingStation()` in any way
-- Existing callers continue working unchanged
-- New callers opt-in to `findMatchingStationSmart()`
-
-**Deliverable:** Updated `/supabase/functions/server/geo_matcher.ts` with the new function. No other files changed.
-
----
-
-## Phase 3: Fix Transaction POST Handler -- GPS Matching (index.tsx)
-
-**Goal:** Replace the two 150m `findMatchingStation()` calls with the new smart matching function. Handle all confidence levels correctly.
-
-### Step 3.1 -- Add Import for New Function
-
-At the top of `index.tsx`, add `findMatchingStationSmart` to the existing import from `./geo_matcher.ts`.
-
-### Step 3.2 -- Add a Variable to Track the Matched Station Name
-
-Before the geolocation matching block (before line ~1684), declare:
-```javascript
-let matchedStationName = '';
-```
-This variable will be used later in Phase 4 when building the fuel_entry object. It must be declared here so it's in scope for both the matching block and the fuel_entry block.
-
-### Step 3.3 -- Replace Verified Station Matching (lines ~1695-1707)
-
-**Current code:**
-```javascript
-const matchedVerified = findMatchingStation(
-    locationMetadata.lat, locationMetadata.lng, verifiedStations, 150
-);
-if (matchedVerified) { ... }
-```
-
-**New code:**
-- Call `findMatchingStationSmart(locationMetadata.lat, locationMetadata.lng, verifiedStations, 600)`
-- If `confidence === 'high'` or `confidence === 'medium'`:
-  - Accept the match
-  - Set `transaction.metadata.matchedStationId`, `locationStatus = 'verified'`, `verificationMethod = 'gps_matching'`
-  - Set `matchedStationName = matchedVerified.station.name`
-  - Log with the confidence level and distance
-- If `confidence === 'ambiguous'` or `'none'`:
-  - Fall through to unverified check (same as before)
-
-### Step 3.4 -- Replace Unverified Station Matching (lines ~1709-1732)
-
-**Current code:**
-```javascript
-const matchedUnverified = findMatchingStation(
-    locationMetadata.lat, locationMetadata.lng, unverifiedStations, 150
-);
-if (matchedUnverified) { /* auto-promote */ }
-```
-
-**New code:**
-- Call `findMatchingStationSmart(locationMetadata.lat, locationMetadata.lng, unverifiedStations, 600)`
-- If `confidence === 'high'`:
-  - Auto-promote (same as current behaviour)
-  - Set `matchedStationName = result.station.name`
-- If `confidence === 'medium'`:
-  - Match but do NOT auto-promote (the match isn't confident enough to promote)
-  - Set `locationStatus = 'review_required'`
-  - Set `matchedStationName = result.station.name`
-- If `confidence === 'ambiguous'` or `'none'`:
-  - Fall through to Learnt Location creation
-
-### Step 3.5 -- Handle the Ambiguous Case in Learnt Location Creation
-
-When the matching is ambiguous (both verified and unverified checks failed or were ambiguous):
-- Create the Learnt Location as before (lines 1737-1752)
-- BUT add extra metadata: `ambiguityFlag: true`, `nearbyStationCount: N`
-- Set `transaction.metadata.locationStatus = 'review_required'` instead of `'unverified'`
-- Log: `[GeoMatch] Ambiguous match -- N stations within range, distances too close to call. Flagged for review.`
-
-**Deliverable:** Updated `/supabase/functions/server/index.tsx` -- GPS matching block only. The fuel_entry block is NOT changed yet (that's Phase 4).
-
----
-
-## Phase 4: Fix Transaction POST Handler -- fuel_entry Object (index.tsx)
-
-**Goal:** Fix the three missing/misplaced fields on the fuel_entry object AND add confidence score calculation.
-
-### Step 4.1 -- Add `vendor` Field to fuel_entry
-
-**Current (line ~1928):**
-```javascript
-location: transaction.vendor || transaction.description || 'Reimbursement',
-```
-(No `vendor` field exists.)
-
-**Fix -- add a new line above or below:**
-```javascript
-vendor: matchedStationName || transaction.vendor || transaction.description || 'Unknown Vendor',
-location: transaction.vendor || transaction.description || 'Reimbursement',
-```
-The `matchedStationName` variable was declared in Phase 3 (Step 3.2) and set during matching.
-
-### Step 4.2 -- Move `locationStatus` and `matchedStationId` Inside `metadata`
-
-**Current (lines ~1938-1946):**
-```javascript
-locationStatus: transaction.metadata?.locationStatus,       // TOP LEVEL -- WRONG
-matchedStationId: transaction.metadata?.matchedStationId,   // TOP LEVEL only
-metadata: {
-    receiptUrl: ...,
-    odometerProofUrl: ...,
-    originalTransactionId: ...,
-    locationMetadata: ...,
-    parentCompany: ...
-}
-```
-
-**Fix:**
-- Keep `matchedStationId` at top level for backward compatibility (other code reads it there)
-- REMOVE `locationStatus` from the top level
-- ADD `locationStatus`, `matchedStationId`, and `verificationMethod` INSIDE the `metadata` object:
-```javascript
-matchedStationId: transaction.metadata?.matchedStationId,   // Keep at top level
-metadata: {
-    receiptUrl: ...,
-    odometerProofUrl: ...,
-    originalTransactionId: ...,
-    locationMetadata: ...,
-    parentCompany: ...,
-    locationStatus: transaction.metadata?.locationStatus,           // ADDED
-    matchedStationId: transaction.metadata?.matchedStationId,       // ADDED
-    verificationMethod: transaction.metadata?.verificationMethod,   // ADDED
-}
-```
-
-### Step 4.3 -- Add Confidence Score Calculation
-
-**The problem:** The Transaction handler NEVER calls `calculateConfidenceScore()`. This is why Audit Confidence shows `0/0/0/0/0` for Driver Portal entries.
-
-**Fix -- add after fuel_entry creation (after line ~1947), before saving to KV:**
-```javascript
-// Import at top of file (or add to existing import)
-import * as fuelLogic from "./fuel_logic.ts";
-
-// After creating fuelEntry, before kv.set:
-if (fuelEntry.matchedStationId) {
-    const matchedStation = allStations.find(s => s.id === fuelEntry.matchedStationId);
-    if (matchedStation) {
-        const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, matchedStation);
-        fuelEntry.metadata = {
-            ...fuelEntry.metadata,
-            auditConfidenceScore: confidence.score,
-            auditConfidenceBreakdown: confidence.breakdown,
-            isHighlyTrusted: confidence.isHighlyTrusted
-        };
-    }
-}
-```
-Note: `allStations` is already loaded at line 1690. We need to make sure it's still in scope here. It's declared inside the `try` block that starts at line 1688, but the fuel_entry creation is inside a DIFFERENT `if` block that starts at line 1897. We may need to hoist the `allStations` variable to a wider scope, or re-fetch it. The exact approach will be determined during implementation.
-
-### Step 4.4 -- Verify the Full fuel_entry Object Shape After Changes
-
-After all fixes, the fuel_entry should look like:
-```javascript
-{
-    id: 'uuid',
-    date: '2026-02-22T14:30:00',
-    type: 'Reimbursement',
-    amount: 5000,
-    liters: 33.5,
-    pricePerLiter: 149.25,
-    odometer: 45000,
-    vendor: 'Total Mandeville',                // NEW -- from matched station
-    location: 'Total Mandeville',              // Existing -- kept for backward compat
-    stationAddress: '...',
-    vehicleId: 'v-123',
-    driverId: 'd-456',
-    transactionId: 't-789',
-    receiptUrl: '...',
-    odometerProofUrl: '...',
-    isVerified: true,
-    source: 'Fuel Log',
-    matchedStationId: 'station-uuid',          // TOP LEVEL -- kept for backward compat
-    metadata: {
-        receiptUrl: '...',
-        odometerProofUrl: '...',
-        originalTransactionId: 't-789',
-        locationMetadata: { lat: 18.04, lng: -77.50, accuracy: 25 },
-        parentCompany: 'Total Energies',
-        locationStatus: 'verified',            // MOVED inside metadata
-        matchedStationId: 'station-uuid',      // DUPLICATED inside metadata
-        verificationMethod: 'gps_matching',    // ADDED
-        auditConfidenceScore: 85,              // NEW -- from calculateConfidenceScore
-        auditConfidenceBreakdown: {            // NEW
-            gps: 30,
-            gps_bonus: 5,
-            crypto: 0,
-            physical: 15,
-            behavioral: 20
-        },
-        isHighlyTrusted: false                 // NEW
-    }
-}
-```
-
-**Deliverable:** Updated `/supabase/functions/server/index.tsx` with corrected fuel_entry object. All three original bugs fixed for new entries, plus the bonus confidence score bug.
-
----
-
-## Phase 5: Upgrade Fuel Controller & Sync Orphans to Smart Matching
-
-**Goal:** Replace blind 600m matching in `fuel_controller.tsx` with the same ambiguity-aware logic for consistency and data accuracy.
-
-### Step 5.1 -- Add Import for New Function
-
-At the top of `fuel_controller.tsx`, add `findMatchingStationSmart` to the existing import from `./geo_matcher.ts`.
-
-### Step 5.2 -- Fix Fuel Controller POST Handler (line ~1049)
+**File:** `/services/mileageCalculationService.ts`
+**Location:** Line 1 (imports section)
 
 **Current:**
-```javascript
-const matchedStation = findMatchingStation(entryLat, entryLng, allStationsForEntry, 600);
+```ts
+import { api } from './api';
+import { odometerService } from './odometerService';
+import { OdometerReading, MileageReport } from '../types/vehicle';
+import { Trip } from '../types/data';
 ```
 
-**New:**
-- Replace with `findMatchingStationSmart(entryLat, entryLng, allStationsForEntry, 600)`
-- If `confidence === 'high'` or `'medium'`:
-  - Proceed exactly as before (set vendor, metadata, sign, lock, confidence score)
-  - Everything after the match (lines 1051-1092) stays the same
-- If `confidence === 'ambiguous'`:
-  - Still create the entry (don't reject it -- the driver legitimately bought fuel)
-  - Set `entry.vendor = result.station.name` (best guess, but flagged)
-  - Set `locationStatus: 'review_required'` instead of `'verified'`
-  - Do NOT sign or auto-lock (don't give cryptographic stamp to an uncertain match)
-  - Still calculate confidence score (it will naturally be lower without a firm GPS match)
-  - Log: `[GeoMatch] Ambiguous match for entry {id}. Closest: {name} at {d1}m, Second: {name2} at {d2}m.`
-- If `confidence === 'none'`:
-  - Fall through to Learnt Location funnel (existing behaviour at lines 1093-1113)
-
-### Step 5.3 -- Fix Sync Orphans Reconciliation (line ~1299)
-
-**Current:**
-```javascript
-const matchedStation = findMatchingStation(entryLat, entryLng, allStations, 600);
+**Add after line 4:**
+```ts
+import { FuelCalculationService } from './fuelCalculationService';
 ```
 
-**New:**
-- Replace with `findMatchingStationSmart(entryLat, entryLng, allStations, 600)`
-- If `confidence === 'high'` or `'medium'`:
-  - Proceed exactly as before (update vendor, metadata, sign, save)
-  - Everything in the `if (matchedStation)` block stays the same
-- If `confidence === 'ambiguous'`:
-  - Do NOT reconcile this entry -- skip it
-  - Increment a new counter: `skippedAmbiguous++`
-  - Log: `[Reconcile] Skipped ambiguous entry {id}. {N} stations within range.`
-- If `confidence === 'none'`:
-  - Increment `skippedNoMatch` as before
+**Why:** We need access to `getTotalTripRideshareKm()` which lives on `FuelCalculationService`.
 
-### Step 5.4 -- Update Sync Orphans Response to Include Ambiguous Count
+**Risk check:** Circular dependency? `fuelCalculationService.ts` does NOT import from `mileageCalculationService.ts`, so no circular dependency.
 
-Add `ambiguousCount` to the response JSON so the admin can see how many entries were skipped due to ambiguity:
-```javascript
-return c.json({
-    success: true,
-    matchesFound: matchCount,
-    skippedNoCoords,
-    skippedNoMatch,
-    skippedAmbiguous,     // NEW
-    totalOrphans: orphans.length
+### Step 1.2: Update `calculatePeriodMileage()` distance calculation
+
+**File:** `/services/mileageCalculationService.ts`
+**Location:** Line 55
+
+**Current (line 55):**
+```ts
+const platformDistance = periodTrips.reduce((sum, trip) => sum + (trip.distance || 0), 0);
+```
+
+**Change to:**
+```ts
+const platformDistance = periodTrips.reduce((sum, trip) => sum + FuelCalculationService.getTotalTripRideshareKm(trip), 0);
+```
+
+**What this does:** Instead of only counting On Trip distance, it now sums On Trip + Enroute + Open + Unavailable for each trip. This matches what `calculateOdometerBuckets()` does (line 348 of fuelCalculationService.ts).
+
+**Impact analysis:**
+- `personalDistance` (line 58) = `totalDistance - platformDistance` -- with more km attributed to platform, personal shrinks. This is correct: those km were rideshare activity, not personal.
+- `personalPercentage` (line 59) -- automatically corrected.
+- `anomalyDetected` check (line 68) -- `totalDistance - platformDistance < -1` -- with more platform distance, it's slightly more likely to trigger if platform exceeds odometer. This is a VALID anomaly flag (GPS over-reporting vs odometer).
+- `MileageReport.platformDistance` -- downstream consumers (MasterLogTimeline, TripManifestSheet) read this. They'll now show the corrected value.
+
+### Step 1.3: Verify no other `trip.distance` usages in this file
+
+Confirm there are no other places in `mileageCalculationService.ts` that sum trip distances. The file has:
+- `calculatePeriodMileage()` -- fixed in Step 1.2
+- `getTripsForPeriod()` -- returns raw trips, doesn't sum distances (OK)
+- `generateFullHistoryReport()` -- calls `calculatePeriodMileage()`, so inherits the fix (OK)
+
+### Acceptance Criteria
+
+- [ ] `FuelCalculationService` imported at top of file
+- [ ] `calculatePeriodMileage()` uses `getTotalTripRideshareKm()` for `platformDistance`
+- [ ] No circular dependency introduced
+- [ ] File compiles without errors
+- [ ] `generateFullHistoryReport()` inherits the corrected distance (no additional changes needed)
+
+---
+
+## Phase 2: Standardize Trip Distance in `MasterLogTimeline`
+
+**Goal:** The MasterLogTimeline has its own inline distance calculation (line 165) that duplicates `mileageCalculationService` logic. Fix it to use `getTotalTripRideshareKm()`.
+
+**Risk:** Low -- one line change
+**Files Changed:** `/components/vehicles/odometer/MasterLogTimeline.tsx`
+**Files NOT Changed:** Everything else
+
+### Step 2.1: Add import for FuelCalculationService
+
+**File:** `/components/vehicles/odometer/MasterLogTimeline.tsx`
+**Location:** Imports section (after line 62, near other service imports)
+
+**Current imports (lines 60-62):**
+```ts
+import { odometerService } from '../../../services/odometerService';
+import { mileageCalculationService } from '../../../services/mileageCalculationService';
+import { api } from '../../../services/api';
+```
+
+**Add after line 62:**
+```ts
+import { FuelCalculationService } from '../../../services/fuelCalculationService';
+```
+
+### Step 2.2: Update the inline `platformDistance` calculation
+
+**File:** `/components/vehicles/odometer/MasterLogTimeline.tsx`
+**Location:** Line 165 (inside `fetchTimelineData`, the `for` loop that builds reports)
+
+**Current (line 165):**
+```ts
+const platformDistance = periodTrips.reduce((sum: number, trip: Trip) => sum + (trip.distance || 0), 0);
+```
+
+**Change to:**
+```ts
+const platformDistance = periodTrips.reduce((sum: number, trip: Trip) => sum + FuelCalculationService.getTotalTripRideshareKm(trip), 0);
+```
+
+**Why inline and not using mileageCalculationService?** MasterLogTimeline intentionally does NOT call `mileageCalculationService.calculatePeriodMileage()` because of the Phase 8 optimization: it batch-fetches all trips once (line 139-143) and filters locally, instead of making N separate API calls. So the distance calculation is inline by design. We just need to fix the formula.
+
+### Step 2.3: Verify the report object structure
+
+The inline code builds a `MileageReport`-shaped object (lines 180-193) with:
+- `totalDistance` -- from odometer span (unchanged, correct)
+- `platformDistance` -- now fixed to use full rideshare km
+- `personalDistance` -- `totalDistance - platformDistance` (auto-corrected)
+- `personalPercentage` -- auto-corrected
+- `anomalyDetected` -- auto-corrected (same reasoning as Phase 1, Step 1.2)
+- `tripCount` -- count of trips (unchanged)
+
+No additional changes needed to the report structure.
+
+### Step 2.4: Verify downstream UI consumers
+
+The `reports` state feeds into the timeline rendering. Specifically:
+- Line 551: `report.totalDistance` -- unchanged
+- Line 555: `report.platformDistance` -- now shows corrected full rideshare km
+- Line 559: `report.totalDistance - report.platformDistance` -- gap shrinks (correct)
+- Line 192: `report.tripCount` -- unchanged
+
+The Trip Manifest sidebar (`TripManifestSheet`) does NOT read from `reports` state -- it makes its own API call via `mileageCalculationService.getTripsForPeriod()`. So it's handled separately in Phase 3.
+
+### Acceptance Criteria
+
+- [ ] `FuelCalculationService` imported
+- [ ] `platformDistance` calculation uses `getTotalTripRideshareKm()`
+- [ ] File compiles without errors
+- [ ] Timeline gap cards show corrected distances
+- [ ] No changes to TripManifestSheet (handled in Phase 3)
+
+---
+
+## Phase 3: Standardize Trip Distance in `TripManifestSheet`
+
+**Goal:** The Trip Manifest sidebar (the "View Trip Manifest" sheet from the Unified Timeline) calculates `platformDistance` locally using `trip.distance || 0`. Fix it.
+
+**Risk:** Low -- one line change
+**Files Changed:** `/components/vehicles/odometer/TripManifestSheet.tsx`
+**Files NOT Changed:** Everything else
+
+### Step 3.1: Add import for FuelCalculationService
+
+**File:** `/components/vehicles/odometer/TripManifestSheet.tsx`
+**Location:** Imports section (after line 16, near other service imports)
+
+**Current imports (line 16):**
+```ts
+import { mileageCalculationService } from '../../../services/mileageCalculationService';
+```
+
+**Add after line 16:**
+```ts
+import { FuelCalculationService } from '../../../services/fuelCalculationService';
+```
+
+### Step 3.2: Update the `platformDistance` calculation
+
+**File:** `/components/vehicles/odometer/TripManifestSheet.tsx`
+**Location:** Line 79
+
+**Current (line 79):**
+```ts
+const platformDistance = trips.reduce((acc, trip) => acc + (trip.distance || 0), 0);
+```
+
+**Change to:**
+```ts
+const platformDistance = trips.reduce((acc, trip) => acc + FuelCalculationService.getTotalTripRideshareKm(trip), 0);
+```
+
+### Step 3.3: Verify downstream UI impact
+
+The `platformDistance` variable feeds into:
+- Line 80: `personalDistance = totalDistance - platformDistance` -- auto-corrected
+- Line 81: `coveragePercent = platformDistance / totalDistance * 100` -- auto-corrected
+- Line 149: Displayed as "Business: XX.X km" -- now shows full rideshare km
+- Line 158: "Unverified / Personal: XX.X km" -- now smaller (correct)
+- Line 162: Percentage display -- auto-corrected
+
+### Step 3.4: Note on individual trip row display
+
+Line 199 in TripManifestSheet displays each trip's distance as:
+```ts
+{(trip.distance || 0).toFixed(1)} km
+```
+
+This shows only the On Trip distance per row. Should we change it to show `getTotalTripRideshareKm(trip)`?
+
+**Decision: NO, leave it.** The individual trip row should show On Trip distance because that's the trip-specific value. The total at the top already accounts for all segments. If we showed the full distance per row, the sum wouldn't match the total because enroute/open/unavailable are normalized across trips, not per-trip values.
+
+### Acceptance Criteria
+
+- [ ] `FuelCalculationService` imported
+- [ ] `platformDistance` uses `getTotalTripRideshareKm()`
+- [ ] Individual trip rows still show `trip.distance` (unchanged)
+- [ ] File compiles without errors
+- [ ] Business/Personal km totals at top of sheet show corrected values
+
+---
+
+## Phase 4: Standardize Trip Status Filter Everywhere
+
+**Goal:** Ensure all trip-to-bucket matching uses `Completed + Cancelled` filter consistently. Currently `calculateReconciliation()` is the only place that filters correctly.
+
+**Risk:** Low -- adding filters to existing queries
+**Files Changed:** `/services/fuelCalculationService.ts` (calculateOdometerBuckets), `/components/vehicles/odometer/MasterLogTimeline.tsx`, `/services/mileageCalculationService.ts`
+
+### Step 4.1: Add status filter to `calculateOdometerBuckets()`
+
+**File:** `/services/fuelCalculationService.ts`
+**Location:** Lines 332-340 (the `bucketTrips` filter inside the for loop)
+
+**Current (lines 332-340):**
+```ts
+const bucketTrips = trips.filter(t => {
+    const tripStart = t.startOdometer || 0;
+    const tripEnd = t.endOdometer || 0;
+    // If trip has odometers, use them. If not, use date range as fallback
+    if (t.startOdometer && t.endOdometer) {
+        return t.vehicleId === vehicle.id && tripStart >= startOdo && tripEnd <= endOdo;
+    }
+    return t.vehicleId === vehicle.id && t.date >= startAnchor.date && t.date <= endAnchor.date;
 });
 ```
 
-### Step 5.5 -- Leave These Call Sites Untouched
+**Change to:**
+```ts
+const bucketTrips = trips.filter(t => {
+    // Only include Completed and Cancelled trips (Processing trips are unverified)
+    if (t.status !== 'Completed' && t.status !== 'Cancelled') return false;
+    
+    const tripStart = t.startOdometer || 0;
+    const tripEnd = t.endOdometer || 0;
+    // If trip has odometers, use them. If not, use date range as fallback
+    if (t.startOdometer && t.endOdometer) {
+        return t.vehicleId === vehicle.id && tripStart >= startOdo && tripEnd <= endOdo;
+    }
+    return t.vehicleId === vehicle.id && t.date >= startAnchor.date && t.date <= endAnchor.date;
+});
+```
 
-Do NOT change these calls in this phase:
-- **Forensic verification** (line ~1128, 1000m radius) -- different purpose, verifying proximity not matching
-- **Learnt Location auto-cleanup** (line ~681) -- uses per-station geofenceRadius, different logic
-- **Duplicate detection** (line ~346) -- uses per-station geofenceRadius, different logic
+**Why:** Processing trips are incomplete/unverified data. They shouldn't count toward distance attribution. `calculateReconciliation()` already does this (line 133).
 
-**Deliverable:** Updated `/supabase/functions/server/fuel_controller.tsx` with smart matching at the two critical points. All other logic untouched.
+**Impact:** If any `Processing` trips were previously included, they'll now be excluded. This could slightly increase the unaccounted distance for those buckets. This is correct behavior -- we shouldn't attribute distance from unverified data.
+
+### Step 4.2: Add status filter to `MasterLogTimeline` inline trip filter
+
+**File:** `/components/vehicles/odometer/MasterLogTimeline.tsx`
+**Location:** Lines 155-162 (inside `fetchTimelineData`)
+
+**Current (lines 155-162):**
+```ts
+const periodTrips = allTrips.filter((t: Trip) => {
+    const tTime = new Date(t.date).getTime();
+    // Prioritize anchorPeriodId tag if available (from Phase 6 logic)
+    if (t.metadata?.anchorPeriodId) {
+        return t.metadata.anchorPeriodId === start.id;
+    }
+    return tTime >= startTime && tTime <= endTime;
+});
+```
+
+**Change to:**
+```ts
+const periodTrips = allTrips.filter((t: Trip) => {
+    // Only include Completed and Cancelled trips (Processing trips are unverified)
+    if (t.status !== 'Completed' && t.status !== 'Cancelled') return false;
+    
+    const tTime = new Date(t.date).getTime();
+    // Prioritize anchorPeriodId tag if available (from Phase 6 logic)
+    if (t.metadata?.anchorPeriodId) {
+        return t.metadata.anchorPeriodId === start.id;
+    }
+    return tTime >= startTime && tTime <= endTime;
+});
+```
+
+### Step 4.3: Add status filter to `mileageCalculationService.getTripsForPeriod()`
+
+**File:** `/services/mileageCalculationService.ts`
+**Location:** After line 21 (after `periodTrips = response.data`)
+
+This one is trickier because the trips come from an API call that may or may not filter by status server-side. To be safe, we add a client-side filter after fetching.
+
+**Current pattern (simplified):**
+```ts
+const response = await api.getTripsFiltered({ vehicleId, anchorPeriodId: startAnchor.id, limit: 1000 });
+periodTrips = response.data;
+```
+
+**Change to add post-fetch filter at the end of the function (before the return on line 43):**
+
+**Current (line 43):**
+```ts
+return periodTrips;
+```
+
+**Change to:**
+```ts
+// Ensure only Completed and Cancelled trips are included
+return periodTrips.filter(t => t.status === 'Completed' || t.status === 'Cancelled');
+```
+
+**Why at the end?** There are 3 code paths that set `periodTrips` (tag search, date fallback, and catch-all fallback). By filtering at the single return point, we cover all paths with one line.
+
+### Acceptance Criteria
+
+- [ ] `calculateOdometerBuckets()` bucket trip filter includes status check
+- [ ] `MasterLogTimeline` inline filter includes status check
+- [ ] `mileageCalculationService.getTripsForPeriod()` returns only Completed + Cancelled
+- [ ] All 3 files compile without errors
+- [ ] Processing trips are excluded from distance attribution everywhere
 
 ---
 
-## Phase 6: FuelLogTable Display Fixes & Cleanup
+## Phase 5: Upgrade `calculateOdometerBuckets()` to Accept Unified Anchors
 
-**Goal:** Ensure the frontend renders correctly for both old entries (pre-fix) and new entries (post-fix), and remove debug artifacts.
+**Goal:** Currently `calculateOdometerBuckets()` uses only fuel entries with odometer readings as anchors. Upgrade it to accept the full unified history (fuel + check-ins + service + manual readings) so it produces the same fine-grained buckets as the Unified Timeline.
 
-### Step 6.1 -- Add Backward-Compatible locationStatus Fallback
+**Risk:** Medium -- changes the function signature and anchor source, which affects bucket granularity
+**Files Changed:** `/services/fuelCalculationService.ts`, `/components/fuel/BucketReconciliationView.tsx`, `/pages/FuelManagement.tsx`
 
-**Current (line ~454):**
-```jsx
-{entry.metadata?.locationStatus === 'verified' && ( ... green shield ... )}
+### Step 5.1: Define a minimal Anchor type
+
+We need `calculateOdometerBuckets()` to accept either fuel entries (current) or unified odometer entries (new). The minimal fields needed from an anchor are:
+
+- `id: string`
+- `date: string`
+- `odometer: number` (or `value: number` for unified entries)
+
+Rather than changing the function signature drastically, we'll add an **optional** `anchors` parameter. If provided, it replaces the internal fuel-entry-based anchor extraction.
+
+**File:** `/services/fuelCalculationService.ts`
+**Location:** Lines 288-293 (function signature)
+
+**Current:**
+```ts
+calculateOdometerBuckets: (
+    vehicle: Vehicle,
+    fuelEntries: FuelEntry[],
+    trips: Trip[],
+    adjustments: MileageAdjustment[] = []
+): OdometerBucket[] => {
 ```
 
-**Fix:** Add a local variable at the top of the row render function that checks both locations:
-```javascript
-const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
+**Change to:**
+```ts
+calculateOdometerBuckets: (
+    vehicle: Vehicle,
+    fuelEntries: FuelEntry[],
+    trips: Trip[],
+    adjustments: MileageAdjustment[] = [],
+    externalAnchors?: { id: string; date: string; odometer: number }[]
+): OdometerBucket[] => {
 ```
-Then use `locationStatus` instead of `entry.metadata?.locationStatus` in all the conditional checks. This ensures old entries that have `locationStatus` at the top level (Bug 3 from before the fix) still display correctly.
 
-### Step 6.2 -- Add `review_required` Status Display
+**Why optional?** Backward compatibility. Existing callers (calculateReconciliation line 208, BucketReconciliationView line 58) don't pass anchors, so they continue to work with the old fuel-entry-only behavior until we wire them up.
 
-The new ambiguity logic introduces `locationStatus: 'review_required'`. FuelLogTable currently only handles `'verified'` and `'unknown'`.
+### Step 5.2: Use externalAnchors when provided
 
-**Add a new condition between the verified (green) and unknown (grey) blocks:**
-```jsx
-{locationStatus === 'review_required' && (
-    <Tooltip>
-        <TooltipTrigger asChild>
-            <AlertTriangle className="h-3 w-3 text-amber-500" />
-        </TooltipTrigger>
-        <TooltipContent>
-            GPS match requires admin review -- multiple nearby stations detected
-        </TooltipContent>
-    </Tooltip>
+**File:** `/services/fuelCalculationService.ts`
+**Location:** Lines 294-303 (anchor extraction logic)
+
+**Current (lines 294-303):**
+```ts
+// 1. Separate entries into Anchors (Verified Odo) and Floating (Legacy/Cash)
+const anchors = fuelEntries
+    .filter(e => e.vehicleId === vehicle.id && e.odometer !== undefined && e.odometer !== null)
+    .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+
+const floating = fuelEntries
+    .filter(e => e.vehicleId === vehicle.id && (e.odometer === undefined || e.odometer === null));
+
+if (anchors.length < 2) return [];
+```
+
+**Change to:**
+```ts
+// 1. Determine anchors: use external unified anchors if provided, otherwise extract from fuel entries
+let anchors: { id: string; date: string; odometer: number }[];
+
+if (externalAnchors && externalAnchors.length >= 2) {
+    anchors = [...externalAnchors].sort((a, b) => a.odometer - b.odometer);
+} else {
+    anchors = fuelEntries
+        .filter(e => e.vehicleId === vehicle.id && e.odometer !== undefined && e.odometer !== null)
+        .map(e => ({ id: e.id, date: e.date, odometer: e.odometer! }))
+        .sort((a, b) => a.odometer - b.odometer);
+}
+
+const floating = fuelEntries
+    .filter(e => e.vehicleId === vehicle.id && (e.odometer === undefined || e.odometer === null));
+
+if (anchors.length < 2) return [];
+```
+
+### Step 5.3: Update internal anchor references
+
+The loop body (lines 308-403) references `startAnchor` and `endAnchor` as `FuelEntry` objects. After the change, they are `{ id, date, odometer }` objects. We need to update:
+
+**Line 309-310 (current):**
+```ts
+const startAnchor = anchors[i];
+const endAnchor = anchors[i + 1];
+```
+These remain the same but the type changes from FuelEntry to the minimal anchor type. All subsequent usages of `startAnchor` and `endAnchor` in the loop body are:
+
+- `startAnchor.odometer || 0` -> becomes `startAnchor.odometer` (always defined now)
+- `endAnchor.odometer || 0` -> becomes `endAnchor.odometer`
+- `startAnchor.date` -> still works
+- `endAnchor.date` -> still works
+- `endAnchor.liters` (line 326) -> **PROBLEM**: unified anchors don't have liters
+- `endAnchor.amount` (line 327) -> **PROBLEM**: unified anchors don't have amount
+- `endAnchor.id` (line 329) -> still works
+
+**Lines 326-327 need special handling.** When the closing anchor is a fuel entry, we want its liters and amount. When it's a non-fuel anchor (check-in, service), those fields don't exist.
+
+**Fix:** Look up the closing anchor in `fuelEntries` by date proximity. If the anchor IS a fuel entry, use it. If not, the fuel data for the bucket comes entirely from floating receipts.
+
+**Replace lines 324-329:**
+
+**Current:**
+```ts
+// 3. Accumulate Volume & Cost
+const totalLiters = (endAnchor.liters || 0) + windowReceipts.reduce((sum, r) => sum + (r.liters || 0), 0);
+const totalCost = (endAnchor.amount || 0) + windowReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+
+const associatedReceipts = [endAnchor.id, ...windowReceipts.map(r => r.id)];
+```
+
+**Change to:**
+```ts
+// 3. Accumulate Volume & Cost
+// Check if the closing anchor corresponds to a fuel entry (it might be a check-in or service record)
+const closingFuelEntry = fuelEntries.find(e => e.id === endAnchor.id || (e.odometer === endAnchor.odometer && e.date === endAnchor.date));
+const closingLiters = closingFuelEntry?.liters || 0;
+const closingCost = closingFuelEntry?.amount || 0;
+
+// Also find any fuel entries that fall WITHIN the bucket window (between anchors, with odometer readings)
+// These are fuel entries whose odometer is between startOdo and endOdo, excluding the anchors themselves
+const midBucketFuelEntries = fuelEntries.filter(e =>
+    e.vehicleId === vehicle.id &&
+    e.odometer !== undefined && e.odometer !== null &&
+    e.odometer > startOdo && e.odometer < endOdo &&
+    e.id !== startAnchor.id && e.id !== endAnchor.id
+);
+
+const totalLiters = closingLiters 
+    + windowReceipts.reduce((sum, r) => sum + (r.liters || 0), 0)
+    + midBucketFuelEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+const totalCost = closingCost 
+    + windowReceipts.reduce((sum, r) => sum + (r.amount || 0), 0)
+    + midBucketFuelEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+const associatedReceipts = [
+    ...(closingFuelEntry ? [closingFuelEntry.id] : []),
+    ...windowReceipts.map(r => r.id),
+    ...midBucketFuelEntries.map(e => e.id)
+];
+```
+
+**Why `midBucketFuelEntries`?** When unified anchors include check-ins or service records, a fuel entry with an odometer reading might fall BETWEEN two non-fuel anchors. Previously this wouldn't happen because every anchor WAS a fuel entry. Now we need to capture fuel entries that sit inside a bucket defined by non-fuel anchors.
+
+### Step 5.4: Update the closingEntryId in the bucket output
+
+**Current (implicit in the push, line 389):**
+The bucket object uses `endAnchor.id` as the closingEntryId. With unified anchors, this should be the closing fuel entry if one exists.
+
+**In the bucket push (around line 389), update:**
+```ts
+closingEntryId: closingFuelEntry?.id || endAnchor.id,
+```
+
+### Step 5.5: Verify no other FuelEntry-specific field accesses on anchors
+
+Search the loop body for any other references to FuelEntry-specific fields on `startAnchor` or `endAnchor`:
+- `startAnchor.liters` -- NOT used (only endAnchor's fuel is counted)
+- `startAnchor.amount` -- NOT used
+- `startAnchor.vehicleId` -- NOT used (we use `vehicle.id`)
+- `endAnchor.vehicleId` -- NOT used
+
+All clear. The only FuelEntry-specific accesses were `liters`, `amount`, and `id` (which is handled).
+
+### Step 5.6: DO NOT wire up the externalAnchors parameter yet
+
+This phase only changes the function signature and internal logic. The callers still use the default (no externalAnchors). Wiring up the callers to pass unified anchors happens in Phase 6.
+
+### Acceptance Criteria
+
+- [ ] `calculateOdometerBuckets()` accepts optional `externalAnchors` parameter
+- [ ] When `externalAnchors` is provided, they are used as the anchor set
+- [ ] When `externalAnchors` is NOT provided, fuel-entry-only behavior is preserved (backward compat)
+- [ ] Closing fuel entry is looked up properly for non-fuel anchors
+- [ ] Mid-bucket fuel entries are captured for non-fuel-anchored buckets
+- [ ] `closingEntryId` correctly references the fuel entry (if any) or the anchor ID
+- [ ] File compiles without errors
+- [ ] Existing callers (calculateReconciliation, BucketReconciliationView) are NOT changed yet
+
+---
+
+## Phase 6: Wire Up Unified Anchors to `BucketReconciliationView`
+
+**Goal:** Make the Stop-to-Stop Reconciliation sidebar pass unified anchors (from `odometerService.getUnifiedHistory()`) to `calculateOdometerBuckets()`, so it produces the same fine-grained buckets as the Unified Timeline.
+
+**Risk:** Medium -- changes the sidebar's data source, which changes the buckets displayed
+**Files Changed:** `/components/fuel/BucketReconciliationView.tsx`
+**Files NOT Changed:** `fuelCalculationService.ts` (already prepared in Phase 5), `FuelManagement.tsx` (props pass-through)
+
+### Step 6.1: Add import for odometerService
+
+**File:** `/components/fuel/BucketReconciliationView.tsx`
+**Location:** Imports section (after line 34)
+
+**Add:**
+```ts
+import { odometerService } from '../../services/odometerService';
+```
+
+### Step 6.2: Add state and effect to fetch unified anchors
+
+**File:** `/components/fuel/BucketReconciliationView.tsx`
+**Location:** Inside the component, after the `isPosting` state (line 55)
+
+**Add:**
+```ts
+const [unifiedAnchors, setUnifiedAnchors] = React.useState<{ id: string; date: string; odometer: number }[] | null>(null);
+
+React.useEffect(() => {
+    const loadAnchors = async () => {
+        try {
+            const history = await odometerService.getUnifiedHistory(vehicle.id);
+            // Filter to verified anchors only and map to minimal shape
+            const anchors = history
+                .filter(h => h.isVerified && h.isAnchorPoint)
+                .map(h => ({ id: h.id, date: h.date, odometer: h.value }));
+            setUnifiedAnchors(anchors);
+        } catch (err) {
+            console.error("Failed to load unified anchors for bucket view:", err);
+            // Fall back to fuel-entry-only anchors (null means "use default")
+            setUnifiedAnchors(null);
+        }
+    };
+    loadAnchors();
+}, [vehicle.id]);
+```
+
+### Step 6.3: Pass unified anchors to `calculateOdometerBuckets()`
+
+**File:** `/components/fuel/BucketReconciliationView.tsx`
+**Location:** Lines 57-63 (the `useMemo` that computes buckets)
+
+**Current:**
+```ts
+const buckets = useMemo(() => {
+    const rawBuckets = FuelCalculationService.calculateOdometerBuckets(
+        vehicle,
+        fuelEntries,
+        trips,
+        adjustments
+    );
+```
+
+**Change to:**
+```ts
+const buckets = useMemo(() => {
+    const rawBuckets = FuelCalculationService.calculateOdometerBuckets(
+        vehicle,
+        fuelEntries,
+        trips,
+        adjustments,
+        unifiedAnchors || undefined
+    );
+```
+
+**Also update the dependency array (line 77):**
+
+**Current:**
+```ts
+}, [vehicle, fuelEntries, trips, adjustments, transactions]);
+```
+
+**Change to:**
+```ts
+}, [vehicle, fuelEntries, trips, adjustments, transactions, unifiedAnchors]);
+```
+
+### Step 6.4: Handle loading state
+
+While `unifiedAnchors` is being fetched (initial `null` state before the effect fires), the buckets will compute using the default fuel-entry-only mode. Once anchors load, the memo will recompute. This is acceptable UX -- the sidebar shows data immediately and refines when unified anchors arrive.
+
+Optionally, add a subtle loading indicator:
+```ts
+{unifiedAnchors === null && (
+    <div className="text-xs text-blue-500 mb-2">Loading unified anchor data...</div>
 )}
 ```
 
-### Step 6.3 -- Remove [TankCap Debug] Console Log
+### Step 6.5: Update the "Efficiency Profile" card to indicate anchor source
 
-**File:** `/components/fuel/FuelLogTable.tsx`
-**Lines ~506-516:** Remove the entire debug block:
-```javascript
-// DELETE THIS BLOCK:
-if (entry === filteredEntries[0]) {
-    console.log('[TankCap Debug]', {
-        vehicleId: entry.vehicleId,
-        'specs.tankCapacity': vehicle?.specifications?.tankCapacity,
-        'specs.asNumber': Number(vehicle?.specifications?.tankCapacity),
-        'fuelSettings.tankCapacity': vehicle?.fuelSettings?.tankCapacity,
-        resolvedTankCap: tankCap,
-        hasSpecs: !!vehicle?.specifications,
-        vehicleKeys: vehicle ? Object.keys(vehicle) : 'NO_VEHICLE'
-    });
+**File:** `/components/fuel/BucketReconciliationView.tsx`
+**Location:** Line 143 (the description text in the Efficiency Profile card)
+
+**Current:**
+```ts
+<p className="text-xs text-slate-500 mt-1">Based on vehicle configuration</p>
+```
+
+**Change to:**
+```ts
+<p className="text-xs text-slate-500 mt-1">
+    {unifiedAnchors ? `${unifiedAnchors.length} unified anchors` : 'Fuel entries only'}
+</p>
+```
+
+### Step 6.6: Update the "Total Distance" card to show anchor count correctly
+
+**File:** `/components/fuel/BucketReconciliationView.tsx`
+**Location:** Line 156
+
+**Current:**
+```ts
+<p className="text-xs text-slate-500 mt-1">Spanning {buckets.length} fuel stops</p>
+```
+
+**Change to:**
+```ts
+<p className="text-xs text-slate-500 mt-1">Spanning {buckets.length + 1} anchor points</p>
+```
+
+**Why +1?** N buckets are formed from N+1 anchors (each bucket spans two consecutive anchors).
+
+### Acceptance Criteria
+
+- [ ] `odometerService` imported
+- [ ] Unified anchors fetched on mount, filtered to verified + anchor points
+- [ ] `calculateOdometerBuckets()` called with unified anchors when available
+- [ ] Memo dependency array updated to include `unifiedAnchors`
+- [ ] Graceful fallback to fuel-entry-only mode if fetch fails
+- [ ] Summary cards updated to reflect unified anchor source
+- [ ] File compiles without errors
+
+---
+
+## Phase 7: Unify Efficiency Calculation in `calculateOdometerBuckets()`
+
+**Goal:** The Stop-to-Stop sidebar's "Expected Fuel" and "Variance" columns use `vehicle.fuelSettings?.efficiencyCity || 10` as a raw L/100km value. Upgrade it to use the same 3-tier fallback chain (observed efficiency from odometer span > vehicle settings > default) that `calculateReconciliation()` uses.
+
+**Risk:** Low -- changes the expected fuel calculation, not the actual fuel or distance numbers
+**Files Changed:** `/services/fuelCalculationService.ts` (calculateOdometerBuckets function only)
+
+### Step 7.1: Compute observed efficiency inside `calculateOdometerBuckets()`
+
+**File:** `/services/fuelCalculationService.ts`
+**Location:** After the `if (anchors.length < 2) return [];` guard (around line 303), before the `for` loop
+
+**Current (line 306):**
+```ts
+const avgEfficiency = vehicle.fuelSettings?.efficiencyCity || 10;
+```
+
+**Replace with:**
+```ts
+// Compute observed efficiency using the same 3-tier fallback chain as calculateReconciliation
+const allVehicleEntries = fuelEntries.filter(e => e.vehicleId === vehicle.id);
+const allLiters = allVehicleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+const odoEntries = allVehicleEntries
+    .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0)
+    .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+
+let bucketEfficiencyKmL = 0; // km/L
+if (odoEntries.length >= 2 && allLiters > 0) {
+    const odoSpan = (odoEntries[odoEntries.length - 1].odometer || 0) - (odoEntries[0].odometer || 0);
+    if (odoSpan > 0) {
+        bucketEfficiencyKmL = odoSpan / allLiters;
+    }
+}
+if (bucketEfficiencyKmL <= 0) {
+    const cityEff = vehicle.fuelSettings?.efficiencyCity;
+    if (cityEff && cityEff > 0) {
+        bucketEfficiencyKmL = 100 / cityEff; // L/100km -> km/L
+    } else {
+        bucketEfficiencyKmL = 10; // 10 km/L default
+    }
+}
+
+// Convert km/L to L/100km for expected fuel calculation
+const avgEfficiency = 100 / bucketEfficiencyKmL; // L/100km
+```
+
+**Why keep `avgEfficiency` as L/100km?** Because it's used on line 360 as:
+```ts
+const expectedFuelLiters = (bucketDistance / 100) * avgEfficiency;
+```
+This formula expects L/100km. So we compute in km/L (matching calculateReconciliation's chain) then convert back.
+
+### Step 7.2: Verify the expected fuel formula is correct
+
+**Line 360 (unchanged):**
+```ts
+const expectedFuelLiters = (bucketDistance / 100) * avgEfficiency;
+```
+
+With `avgEfficiency` now = `100 / bucketEfficiencyKmL`:
+- If observed efficiency = 13.2 km/L, then `avgEfficiency` = 100/13.2 = 7.58 L/100km
+- For a 500km bucket: `(500/100) * 7.58 = 37.9 L expected`
+- Previously with hardcoded 10 L/100km: `(500/100) * 10 = 50 L expected`
+- The corrected value is more accurate, leading to smaller/more-realistic variances
+
+### Step 7.3: Verify no other uses of `avgEfficiency` in the function
+
+Search the function body: `avgEfficiency` is used ONLY on line 360. Confirmed.
+
+### Acceptance Criteria
+
+- [ ] `avgEfficiency` computed using 3-tier fallback chain: observed > vehicle settings > default
+- [ ] Conversion from km/L to L/100km is correct
+- [ ] Expected fuel calculation formula unchanged (still `(bucketDistance / 100) * avgEfficiency`)
+- [ ] Variance calculations auto-correct (they use `expectedFuelLiters` downstream)
+- [ ] File compiles without errors
+- [ ] No changes to any other files
+
+---
+
+## Phase 8: Eliminate Redundant Bucket Computation
+
+**Goal:** `calculateReconciliation()` calls `calculateOdometerBuckets()` on line 208 solely to derive health status, then discards the buckets. `BucketReconciliationView` computes them again. Fix this by returning the buckets as part of the `WeeklyFuelReport` so the sidebar can reuse them.
+
+**Risk:** Low -- additive type change + one extra field on the return object
+**Files Changed:** `/types/fuel.ts`, `/services/fuelCalculationService.ts`, `/components/fuel/BucketReconciliationView.tsx`
+
+### Step 8.1: Add `odometerBuckets` field to `WeeklyFuelReport`
+
+**File:** `/types/fuel.ts`
+**Location:** After line 152 (after `signedAt`), before the closing `}`
+
+**Add:**
+```ts
+  // Phase: Architecture Consolidation - cached bucket data for sidebar reuse
+  odometerBuckets?: OdometerBucket[];
+```
+
+**Note:** The `OdometerBucket` type is already defined in the same file (line 155), so no import needed. The `?` makes it optional so existing code that constructs `WeeklyFuelReport` objects without this field still compiles.
+
+### Step 8.2: Return buckets from `calculateReconciliation()`
+
+**File:** `/services/fuelCalculationService.ts`
+**Location:** Inside the return statement (around line 225-262)
+
+**Current (line 208):**
+```ts
+const buckets = FuelCalculationService.calculateOdometerBuckets(vehicle, vehicleEntries, vehicleTrips, vehicleAdjustments);
+```
+
+This line already computes the buckets. We just need to add them to the return object.
+
+**Add to the return object (after line 261, before the closing `}`):**
+```ts
+            odometerBuckets: buckets,
+```
+
+### Step 8.3: Use cached buckets in `BucketReconciliationView`
+
+This step is DEFERRED. The BucketReconciliationView currently receives `vehicle`, `fuelEntries`, `trips`, `adjustments` as separate props and computes buckets itself. Changing it to receive pre-computed buckets would require:
+
+1. The parent (`FuelManagement.tsx`) to pass the relevant `WeeklyFuelReport` to the sidebar
+2. BucketReconciliationView to accept an optional `precomputedBuckets` prop
+
+**Why defer?** Phase 6 already changed BucketReconciliationView to use unified anchors, which makes the pre-computed buckets (from calculateReconciliation, which doesn't use unified anchors yet) potentially stale. The full consolidation would require calculateReconciliation to also use unified anchors, which is a larger change better suited for a follow-up.
+
+For now, the benefit of Step 8.2 is that the `odometerBuckets` field is available for future consumers (e.g., export, API responses, downstream dashboards) without recomputation.
+
+### Step 8.4: Document the new field
+
+**File:** `/types/fuel.ts`
+**Location:** Add a comment above the new field
+
+```ts
+  // Cached OdometerBucket[] from calculateOdometerBuckets().
+  // Available after calculateReconciliation() runs. Used by Stop-to-Stop sidebar and health status.
+  // These buckets use fuel-entry-only anchors. For unified anchors, BucketReconciliationView
+  // fetches its own via odometerService.getUnifiedHistory().
+  odometerBuckets?: OdometerBucket[];
+```
+
+### Acceptance Criteria
+
+- [ ] `WeeklyFuelReport` type has optional `odometerBuckets` field
+- [ ] `calculateReconciliation()` includes `odometerBuckets: buckets` in return
+- [ ] BucketReconciliationView NOT changed in this phase (it uses its own unified anchors from Phase 6)
+- [ ] All files compile without errors
+- [ ] Existing consumers of `WeeklyFuelReport` are unaffected (field is optional)
+
+---
+
+## Phase 9: Upgrade `MileageReport` to 3-Way Attribution
+
+**Goal:** The `MileageReport` type (used by the Unified Timeline) only tracks `platformDistance` and `personalDistance` (2-way). Upgrade it to support the same 3-way attribution as Stop-to-Stop: RideShare, Personal (from adjustments), Company Misc, and Unaccounted.
+
+**Risk:** Medium -- type change affects MasterLogTimeline UI rendering
+**Files Changed:** `/types/vehicle.ts`, `/services/mileageCalculationService.ts`, `/components/vehicles/odometer/MasterLogTimeline.tsx`
+
+### Step 9.1: Extend `MileageReport` interface
+
+**File:** `/types/vehicle.ts`
+**Location:** Lines 160-173 (MileageReport interface)
+
+**Current:**
+```ts
+export interface MileageReport {
+    vehicleId: string;
+    periodStart: string;
+    periodEnd: string;
+    startOdometer: number;
+    endOdometer: number;
+    totalDistance: number;
+    platformDistance: number;
+    personalDistance: number;
+    personalPercentage: number;
+    anomalyDetected: boolean;
+    anomalyReason?: string;
+    tripCount: number;
 }
 ```
 
-### Step 6.4 -- Verify Vendor Display (No Change Needed)
-
-**Current (line ~452):**
-```jsx
-{entry.vendor || entry.metadata?.stationName || "Unknown Vendor"}
+**Change to:**
+```ts
+export interface MileageReport {
+    vehicleId: string;
+    periodStart: string;
+    periodEnd: string;
+    startOdometer: number;
+    endOdometer: number;
+    totalDistance: number;
+    platformDistance: number;      // RideShare km (full: On Trip + Enroute + Open + Unavailable)
+    personalDistance: number;      // Legacy: totalDistance - platformDistance (kept for backward compat)
+    personalPercentage: number;   // Legacy: kept for backward compat
+    anomalyDetected: boolean;
+    anomalyReason?: string;
+    tripCount: number;
+    // 3-way attribution (new fields, all optional for backward compat)
+    rideShareDistance?: number;    // Same as platformDistance (explicit name)
+    adjustedPersonalDistance?: number;  // From MileageAdjustments with type='Personal'
+    companyMiscDistance?: number;  // From MileageAdjustments with type='Company_Misc' or 'Maintenance'
+    unaccountedDistance?: number;  // totalDistance - (rideShare + adjustedPersonal + companyMisc)
+}
 ```
 
-This is already correct:
-- New entries (post-fix): `entry.vendor` will be populated -> shows station name
-- Old entries (post Sync Orphans): `entry.vendor` will be populated -> shows station name
-- Old entries (pre Sync Orphans): `entry.vendor` is missing -> falls through to "Unknown Vendor"
-- No code change needed here.
+**Why keep `personalDistance`?** Backward compatibility. Existing UI code reads `personalDistance` as `totalDistance - platformDistance`. The new `adjustedPersonalDistance` is specifically from logged Personal adjustments.
 
-### Step 6.5 -- Verify Audit Confidence Display (No Change Needed)
+### Step 9.2: Update `MasterLogTimeline` to compute 3-way attribution
 
-**Current (line ~435):**
-```jsx
-const confidenceScore = entry.metadata?.auditConfidenceScore;
+**File:** `/components/vehicles/odometer/MasterLogTimeline.tsx`
+**Location:** Lines 164-167 (inside the report-building loop in `fetchTimelineData`)
+
+This requires the component to have access to `MileageAdjustment` data. Currently it does NOT receive adjustments as a prop.
+
+**Option A:** Add an `adjustments` prop to MasterLogTimeline.
+**Option B:** Fetch adjustments inside the component (another API call).
+**Option C:** Compute 3-way attribution only in the report-building loop, by fetching adjustments once with the batch.
+
+**Decision: Option C** -- fetch adjustments in the batch alongside trips. This is the least invasive.
+
+**Step 9.2a: Add adjustment fetch to the batch**
+
+**Current (lines 138-143):**
+```ts
+const allTripsResponse = await api.getTripsFiltered({ 
+    vehicleId, 
+    limit: 5000
+});
+const allTrips = allTripsResponse.data || [];
 ```
 
-This is already correct:
-- New entries (post Phase 4): will have `auditConfidenceScore` in metadata -> shows real score
-- Old entries: missing score -> shows `??` (existing fallback at line 558)
-- No code change needed here.
+**Add after line 143:**
+```ts
+// Fetch adjustments for 3-way attribution
+let allAdjustments: any[] = [];
+try {
+    const adjResponse = await api.getMileageAdjustments(vehicleId);
+    allAdjustments = adjResponse || [];
+} catch (e) {
+    console.error("Failed to fetch adjustments for 3-way attribution", e);
+}
+```
 
-### Step 6.6 -- Ensure AlertTriangle Icon is Imported
+**Step 9.2b: Compute 3-way attribution in the loop**
 
-Check the existing icon imports at the top of FuelLogTable.tsx. If `AlertTriangle` is not already imported from `lucide-react`, add it.
+**After line 167 (after `personalPercentage`):**
 
-**Deliverable:** Updated `/components/fuel/FuelLogTable.tsx` with backward-compatible display fixes, new `review_required` status indicator, and debug cleanup.
+**Add:**
+```ts
+// 3-way attribution: match adjustments to this anchor period by date
+const periodAdjustments = allAdjustments.filter((a: any) => {
+    const aTime = new Date(a.date).getTime();
+    return aTime >= startTime && aTime <= endTime;
+});
+
+const adjustedPersonalDistance = periodAdjustments
+    .filter((a: any) => a.type === 'Personal')
+    .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
+const companyMiscDistance = periodAdjustments
+    .filter((a: any) => a.type === 'Company_Misc' || a.type === 'Maintenance')
+    .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
+const unaccountedDistance = Math.max(0, totalDistance - platformDistance - adjustedPersonalDistance - companyMiscDistance);
+```
+
+**Step 9.2c: Add new fields to the report object**
+
+**Current report object (lines 180-193):**
+```ts
+newReports[`${start.id}_${end.id}`] = {
+    vehicleId,
+    periodStart: start.date,
+    periodEnd: end.date,
+    startOdometer: start.value,
+    endOdometer: end.value,
+    totalDistance,
+    platformDistance,
+    personalDistance,
+    personalPercentage,
+    anomalyDetected,
+    anomalyReason,
+    tripCount: periodTrips.length
+};
+```
+
+**Change to:**
+```ts
+newReports[`${start.id}_${end.id}`] = {
+    vehicleId,
+    periodStart: start.date,
+    periodEnd: end.date,
+    startOdometer: start.value,
+    endOdometer: end.value,
+    totalDistance,
+    platformDistance,
+    personalDistance,
+    personalPercentage,
+    anomalyDetected,
+    anomalyReason,
+    tripCount: periodTrips.length,
+    rideShareDistance: platformDistance,
+    adjustedPersonalDistance,
+    companyMiscDistance,
+    unaccountedDistance
+};
+```
+
+### Step 9.3: Verify API exists for adjustments
+
+Check that `api.getMileageAdjustments(vehicleId)` exists. If not, we may need to use a different method or add one.
+
+**Action:** Before implementing, search for `getMileageAdjustments` in the API service. If it doesn't exist, use `api.getAdjustments()` and filter client-side, or whatever method the FuelManagement page uses to fetch adjustments.
+
+### Step 9.4: DO NOT change the MasterLogTimeline UI rendering yet
+
+The UI changes (showing 3-way attribution in the gap cards) are visual and can be done as a follow-up. This phase only adds the data to the report objects. The existing UI reads `report.platformDistance` and `report.personalDistance` which are unchanged.
+
+### Acceptance Criteria
+
+- [ ] `MileageReport` type has new optional fields: `rideShareDistance`, `adjustedPersonalDistance`, `companyMiscDistance`, `unaccountedDistance`
+- [ ] `MasterLogTimeline` fetches adjustments in batch
+- [ ] 3-way attribution computed per anchor period
+- [ ] New fields included in report objects
+- [ ] Existing UI rendering unchanged (reads same fields as before)
+- [ ] All files compile without errors
+- [ ] No breaking changes to existing consumers of `MileageReport`
 
 ---
 
-## Phase 7: Historical Backfill & End-to-End Verification
+## Implementation Order & Risk Assessment
 
-**Goal:** Fix existing broken entries using Sync Orphans and verify the complete flow works. No code changes in this phase -- testing only.
+| Phase | Description | Risk | Rollback | Dependencies |
+|-------|-------------|------|----------|--------------|
+| 1 | Standardize trip distance in mileageCalculationService | Low | Revert one line | None |
+| 2 | Standardize trip distance in MasterLogTimeline | Low | Revert one line | None (parallel with 1) |
+| 3 | Standardize trip distance in TripManifestSheet | Low | Revert one line | None (parallel with 1,2) |
+| 4 | Standardize trip status filter everywhere | Low | Revert 3 filter additions | None (parallel with 1-3) |
+| 5 | Upgrade calculateOdometerBuckets to accept unified anchors | Medium | Revert function signature | None |
+| 6 | Wire up unified anchors in BucketReconciliationView | Medium | Remove effect + revert memo | Phase 5 |
+| 7 | Unify efficiency calculation in calculateOdometerBuckets | Low | Revert efficiency block | None (parallel with 5-6) |
+| 8 | Eliminate redundant bucket computation | Low | Remove one field | None |
+| 9 | Upgrade MileageReport to 3-way attribution | Medium | Remove new fields | Phases 1-2 (uses corrected distance) |
 
-### Step 7.1 -- Run Sync Orphans to Backfill Old Entries
-
-After all code changes from Phases 2-6 are deployed:
-1. Go to the Verified Stations tab
-2. Click "Sync Orphans"
-3. The upgraded Sync Orphans (Phase 5) will re-process all entries with missing vendor, unknown locationStatus, or missing confidence scores
-4. It will now use smart matching -- entries in overlap zones won't get wrong matches (they'll be skipped as ambiguous)
-
-### Step 7.2 -- Check the Response
-
-The response should show:
-- `matchesFound`: How many orphan entries were linked to a station
-- `skippedNoCoords`: How many entries had no GPS data at all
-- `skippedNoMatch`: How many entries were too far from any station
-- `skippedAmbiguous`: **NEW** -- How many entries were in overlap zones
-
-### Step 7.3 -- Verify Test Scenarios
-
-| Scenario | Expected Behaviour |
-|----------|-------------------|
-| Driver fuels at an **isolated** verified station (no other station within 600m) | Matched at up to 600m. Vendor shown. Green shield. Confidence score populated. |
-| Driver fuels at a station with a **nearby neighbour** but clearly closer to one | Matched to the closest. Vendor shown. Green or amber icon depending on confidence. |
-| Driver fuels **exactly between** two stations (ambiguous GPS) | NOT matched. Flagged as `review_required`. Amber triangle icon. Admin can manually resolve. |
-| Driver fuels at a station with **no GPS data** at all | Falls through to Learnt Location. Shows "Unknown Vendor" with grey question mark. Normal. |
-| **Old entries** created before this fix | Show "Unknown Vendor" until Sync Orphans re-processes them. After sync, correctly display vendor + shield. |
-| **Old entries in overlap zones** | Sync Orphans skips them (ambiguous). They remain as "Unknown Vendor" until admin manually resolves. |
-
-### Step 7.4 -- Verify No Regressions
-
-Check these are all working as before:
-- Fuel Controller POST (manual entry from admin) -- should work as before but with ambiguity protection
-- Forensic geofence verification -- untouched, should work exactly as before
-- Learnt Location cleanup -- untouched, should work exactly as before
-- Station duplicate detection -- untouched, uses its own logic
-- Station merging -- untouched
-
-### Step 7.5 -- Monitor Server Logs
-
-After deploying, watch for these log lines in the server console:
-- `[SmartMatch]` -- confirms the new function is being called with decisions
-- `[GeoMatch] Ambiguous match` -- shows when ambiguity detection triggers during transaction creation
-- `[Reconcile] Skipped N ambiguous entries` -- shows during Sync Orphans
-
-### Step 7.6 -- Clean Up Any Remaining Issues
-
-If some old entries still show "Unknown Vendor" after Sync Orphans:
-- These are entries with no GPS coordinates at all (the driver submitted without location data)
-- OR entries in overlap zones that were correctly skipped as ambiguous
-- Both are expected and correct behaviour -- they need admin manual review, not an automatic guess
-
-**Deliverable:** Verification that all scenarios work correctly. Document any edge cases found.
+**Phases 1-4 can be done in any order** (they're independent fixes).
+**Phase 6 depends on Phase 5** (uses the new parameter).
+**Phase 9 depends on Phases 1-2** (assumes corrected platform distance).
+**Total files changed:** ~6 files across all phases.
+**No new files created.**
 
 ---
 
-## Summary of Files Changed Per Phase
+## Post-Consolidation State
 
-| Phase | Files Modified | Type |
-|-------|---------------|------|
-| 1 | None | Audit only |
-| 2 | `/supabase/functions/server/geo_matcher.ts` | New function added |
-| 3 | `/supabase/functions/server/index.tsx` | GPS matching block rewritten |
-| 4 | `/supabase/functions/server/index.tsx` | fuel_entry object fixed + confidence score added |
-| 5 | `/supabase/functions/server/fuel_controller.tsx` | Two call sites upgraded to smart matching |
-| 6 | `/components/fuel/FuelLogTable.tsx` | Display fixes + debug cleanup |
-| 7 | None | Testing only |
+After all 9 phases, the architecture will be:
 
-## Standing Reminders
-- The driver workflow does NOT change. Driver enters amount + price only.
-- Per-station Regional Efficiency (`geofenceRadius`) values stay as-is. Do NOT change them to 600m.
-- The original `findMatchingStation()` function is preserved untouched. Only new callers use `findMatchingStationSmart()`.
-- Jamaica DD/MM/YYYY date format is unaffected by these changes.
-- After all phases, the two older audit items (Manual Resolve bug and Audit Confidence 0/0/0/0/0) will also be addressed: the confidence score fix is built into Phase 4, and Manual Resolve is a separate issue outside this IDEA.
+| Aspect | Before (Fragmented) | After (Consolidated) |
+|--------|---------------------|---------------------|
+| **Anchor Source** | Fuel-only (Stop-to-Stop) vs All sources (Timeline) | All sources everywhere |
+| **Trip Distance** | `trip.distance` (Timeline) vs `getTotalTripRideshareKm` (Stop-to-Stop) | `getTotalTripRideshareKm` everywhere |
+| **Trip Filter** | Inconsistent | Completed + Cancelled everywhere |
+| **Attribution** | 2-way (Timeline) vs 3-way (Stop-to-Stop) | 3-way everywhere |
+| **Efficiency** | Raw vehicle setting (Stop-to-Stop) vs 3-tier chain (Reconciliation) | 3-tier chain everywhere |
+| **Computation** | Buckets computed twice | Buckets computed once, cached on report |

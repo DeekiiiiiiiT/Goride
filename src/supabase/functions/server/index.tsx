@@ -5938,6 +5938,37 @@ app.post("/make-server-37f42386/notifications/acknowledge", async (c) => {
 // Mount Fuel Controller for missing endpoints
 app.route("/", fuelApp);
 
+// ---------------------------------------------------------------------------
+// Global handler for unhandled promise rejections caused by client disconnects.
+// Deno.serve's `onError` only catches errors thrown INSIDE the handler.
+// Broken-pipe errors during response body streaming (`respondWith`) surface as
+// unhandled rejections at the runtime level — suppress them here so they don't
+// pollute the logs.
+// ---------------------------------------------------------------------------
+globalThis.addEventListener("unhandledrejection", (e) => {
+  const err = e.reason;
+  const msg = err instanceof Error ? err.message : String(err);
+  const name = (err as any)?.name || "";
+  const code = (err as any)?.code || "";
+
+  const isConnectionError =
+    msg.includes("broken pipe") ||
+    msg.includes("connection closed") ||
+    msg.includes("connection reset") ||
+    msg.includes("message completed") ||
+    name === "Http" ||
+    name === "BrokenPipe" ||
+    name === "BadResource" ||
+    code === "EPIPE" ||
+    code === "ECONNRESET";
+
+  if (isConnectionError) {
+    e.preventDefault(); // Suppress — client simply disconnected
+    return;
+  }
+  // Let other unhandled rejections propagate normally
+});
+
 Deno.serve({
   onError: (e) => {
     const msg = e instanceof Error ? e.message : String(e);

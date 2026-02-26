@@ -33,6 +33,7 @@ import { Trip, FinancialTransaction } from '../../types/data';
 import { FuelEntry, MileageAdjustment, OdometerBucket } from '../../types/fuel';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { settlementService } from '../../services/settlementService';
+import { odometerService } from '../../services/odometerService';
 
 interface BucketReconciliationViewProps {
     vehicle: Vehicle;
@@ -53,13 +54,58 @@ export function BucketReconciliationView({
     onRefresh
 }: BucketReconciliationViewProps) {
     const [isPosting, setIsPosting] = React.useState<string | null>(null);
+    const [unifiedAnchors, setUnifiedAnchors] = React.useState<{ id: string; date: string; odometer: number }[] | null>(null);
+    const [bucketTrips, setBucketTrips] = React.useState<Trip[] | null>(null);
+
+    React.useEffect(() => {
+        const loadAnchors = async () => {
+            try {
+                const history = await odometerService.getUnifiedHistory(vehicle.id);
+                // Filter to verified anchors only and map to minimal shape
+                const anchors = history
+                    .filter(h => h.isVerified && h.isAnchorPoint)
+                    .map(h => ({ id: h.id, date: h.date, odometer: h.value }));
+                setUnifiedAnchors(anchors);
+
+                // Fetch trips for the FULL anchor date range, not just the week
+                if (anchors.length >= 2) {
+                    const sorted = [...anchors].sort((a, b) => a.date.localeCompare(b.date));
+                    const startDate = sorted[0].date;
+                    const endDate = sorted[sorted.length - 1].date;
+                    try {
+                        const response = await api.getTripsFiltered({
+                            startDate,
+                            endDate,
+                            limit: 5000
+                        });
+                        // Filter to this vehicle only
+                        const vehicleTrips = (response.data || []).filter(t => t.vehicleId === vehicle.id);
+                        setBucketTrips(vehicleTrips);
+                    } catch (tripErr) {
+                        console.error("Failed to fetch trips for bucket date range:", tripErr);
+                        // Fall back to the parent-provided trips
+                        setBucketTrips(null);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load unified anchors for bucket view:", err);
+                // Fall back to fuel-entry-only anchors (null means "use default")
+                setUnifiedAnchors(null);
+            }
+        };
+        loadAnchors();
+    }, [vehicle.id]);
     
+    // Use locally-fetched trips (full anchor range) if available, otherwise fall back to parent trips
+    const effectiveTrips = bucketTrips ?? trips;
+
     const buckets = useMemo(() => {
         const rawBuckets = FuelCalculationService.calculateOdometerBuckets(
             vehicle,
             fuelEntries,
-            trips,
-            adjustments
+            effectiveTrips,
+            adjustments,
+            unifiedAnchors || undefined
         );
 
         // Check for existing deductions
@@ -74,7 +120,7 @@ export function BucketReconciliationView({
                 deductionTransactionId: deductionTx?.id
             };
         });
-    }, [vehicle, fuelEntries, trips, adjustments, transactions]);
+    }, [vehicle, fuelEntries, effectiveTrips, adjustments, transactions, unifiedAnchors]);
 
     const handlePostDeduction = async (bucket: OdometerBucket) => {
         setIsPosting(bucket.id);
@@ -140,7 +186,9 @@ export function BucketReconciliationView({
                         <p className="text-2xl font-bold text-slate-900">
                             {vehicle.fuelSettings?.efficiencyCity || '10.0'} <span className="text-sm font-normal text-slate-500">L/100km</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">Based on vehicle configuration</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            {unifiedAnchors ? `${unifiedAnchors.length} unified anchors` : 'Fuel entries only'}
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -153,7 +201,7 @@ export function BucketReconciliationView({
                         <p className="text-2xl font-bold text-slate-900">
                             {(buckets[buckets.length - 1].endOdometer - buckets[0].startOdometer).toLocaleString()} <span className="text-sm font-normal text-slate-500">km</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">Spanning {buckets.length} fuel stops</p>
+                        <p className="text-xs text-slate-500 mt-1">Spanning {buckets.length + 1} anchor points</p>
                     </CardContent>
                 </Card>
 

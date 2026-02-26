@@ -13,7 +13,31 @@ import { Plus, X, History, Loader2, MapPin, Building2, Fuel } from 'lucide-react
 import { toast } from "sonner@2.0.3";
 import { fuelService } from '../../services/fuelService';
 
-const OTHER_BRAND = '__other__';
+const PAYMENT_SOURCE_MAP: Record<string, string> = {
+    'driver_cash': 'Personal',
+    'rideshare_cash': 'RideShare_Cash',
+    'company_card': 'Gas_Card',
+    'petty_cash': 'Petty_Cash',
+};
+
+// Reverse-map: resolve ANY stored paymentSource value back to a dropdown key
+const PAYMENT_SOURCE_TO_DROPDOWN: Record<string, string> = {
+    // Dropdown keys (identity — already correct)
+    'driver_cash': 'driver_cash',
+    'rideshare_cash': 'rideshare_cash',
+    'company_card': 'company_card',
+    'petty_cash': 'petty_cash',
+    // Enum values (top-level paymentSource written by Phase 2+)
+    'Personal': 'driver_cash',
+    'RideShare_Cash': 'rideshare_cash',
+    'Gas_Card': 'company_card',
+    'Petty_Cash': 'petty_cash',
+    // Legacy human-readable values (pre-Phase 2)
+    'Cash': 'driver_cash',
+    'RideShare Cash': 'rideshare_cash',
+    'Gas Card': 'company_card',
+    'Other': 'petty_cash',
+};
 
 interface FuelLogModalProps {
     isOpen: boolean;
@@ -44,7 +68,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
     // Single Entry State
     const [formData, setFormData] = useState<Record<string, any>>({
         date: new Date().toISOString().split('T')[0],
-        type: 'Card_Transaction',
+        type: 'company_card',
         amount: 0,
         liters: 0,
         pricePerLiter: 0,
@@ -61,7 +85,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
     const [bulkCommon, setBulkCommon] = useState({
         driverId: '',
         vehicleId: '',
-        type: 'Manual_Entry' as const
+        type: 'company_card' as const
     });
 
     const [bulkEntries, setBulkEntries] = useState<Array<{
@@ -83,12 +107,12 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
     }, [parentCompanies]);
 
     const stationsForBrand: StationProfile[] = useMemo(() => {
-        if (!selectedBrand || selectedBrand === OTHER_BRAND) return [];
+        if (!selectedBrand) return [];
         return verifiedStations.filter(s => s.brand === selectedBrand);
     }, [verifiedStations, selectedBrand]);
 
     const bulkFilteredStations: StationProfile[] = useMemo(() => {
-        if (!bulkSelectedBrand || bulkSelectedBrand === OTHER_BRAND) return [];
+        if (!bulkSelectedBrand) return [];
         return verifiedStations.filter(s => s.brand === bulkSelectedBrand);
     }, [verifiedStations, bulkSelectedBrand]);
 
@@ -104,7 +128,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                     fuelService.getStations(),
                     fuelService.getParentCompanies()
                 ]);
-                setVerifiedStations(stations || []);
+                setVerifiedStations((stations || []).filter((s: any) => s.status === 'verified'));
                 // Extract sorted company names, add "Independent / Other" at the end
                 const companyNames = (companies || [])
                     .map((c: any) => c.name)
@@ -122,15 +146,35 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         if (initialData) {
             setActiveTab('single');
             const priceFromMetadata = initialData.metadata?.pricePerLiter;
+            // Map legacy type values to new "Paid By" dropdown values
+            const legacyTypeMap: Record<string, string> = {
+                'Card_Transaction': 'company_card',
+                'Manual_Entry': 'driver_cash',
+                'Fuel_Manual_Entry': 'driver_cash',
+                'Reimbursement': 'driver_cash',
+            };
+            // Priority: metadata.paymentSource (most accurate) → top-level paymentSource → legacy type fallback
+            const rawMeta = initialData.metadata?.paymentSource;
+            const rawTop = (initialData as any).paymentSource;
+            const mappedType =
+                (rawMeta && PAYMENT_SOURCE_TO_DROPDOWN[rawMeta]) ||
+                (rawTop && PAYMENT_SOURCE_TO_DROPDOWN[rawTop]) ||
+                legacyTypeMap[initialData.type] ||
+                'company_card';
             setFormData({
                 ...initialData,
                 date: initialData.date.split('T')[0],
+                type: mappedType,
                 pricePerLiter: initialData.pricePerLiter || (typeof priceFromMetadata === 'number' ? priceFromMetadata : 0),
                 editReason: initialData.metadata?.editReason || '',
             });
 
             if (initialData.time) {
                 setTime(initialData.time.substring(0, 5));
+            } else if (initialData.date && initialData.date.includes('T')) {
+                const timePart = initialData.date.split('T')[1];
+                if (timePart) setTime(timePart.substring(0, 5));
+                else setTime('');
             } else {
                 setTime('');
             }
@@ -144,7 +188,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         } else {
             setFormData({
                 date: new Date().toISOString().split('T')[0],
-                type: 'Card_Transaction',
+                type: 'company_card',
                 amount: 0,
                 liters: 0,
                 pricePerLiter: 0,
@@ -169,7 +213,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 setSelectedBrand(match.brand);
                 setSelectedStationId(match.id);
             } else {
-                setSelectedBrand(OTHER_BRAND);
+                setSelectedBrand('');
                 setSelectedStationId('');
             }
         }
@@ -274,7 +318,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             id: initialData?.id || crypto.randomUUID(),
             date: fullDate as string,
             time: finalTime,
-            type: formData.type === 'Manual_Entry' ? 'Fuel_Manual_Entry' : formData.type,
+            type: formData.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry',
             amount: Number(formData.amount),
             liters: Number(formData.liters),
             pricePerLiter: Number(formData.pricePerLiter),
@@ -283,9 +327,12 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             stationAddress: formData.stationAddress || '',
             vehicleId: formData.vehicleId as string,
             driverId: formData.driverId as string,
-            cardId: formData.type === 'Card_Transaction' ? formData.cardId : undefined,
-            paymentSource: formData.type === 'Card_Transaction' ? 'Gas_Card' : 'RideShare_Cash',
+            cardId: formData.type === 'company_card' ? formData.cardId : undefined,
+            paymentSource: PAYMENT_SOURCE_MAP[formData.type] || 'Personal',
             matchedStationId: formData.matchedStationId || undefined,
+            // When editing, bypass server-side integrity guardrails that block
+            // admin corrections (signature check, immutability lockdown, data lock)
+            bypassSignatureCheck: !!initialData,
             metadata: {
                 ...(initialData?.metadata || {}),
                 pricePerLiter: Number(formData.pricePerLiter),
@@ -293,9 +340,19 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 source: 'Fuel Log',
                 portal_type: 'Manual_Entry',
                 isManual: true,
+                paymentSource: formData.type,
                 matchedStationId: formData.matchedStationId || undefined,
             }
         };
+
+        // When editing, strip stale lock/signature from the spread of initialData
+        // so server guardrails don't reject the admin's correction
+        if (initialData) {
+            delete entry.signature;
+            delete entry.signedAt;
+            delete entry.isLocked;
+            delete entry.lockedAt;
+        }
 
         onSave(entry);
         onClose();
@@ -311,7 +368,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         const entries: any[] = validEntries.map(row => ({
             id: row.id,
             date: row.date,
-            type: bulkCommon.type === 'Manual_Entry' ? 'Fuel_Manual_Entry' : bulkCommon.type,
+            type: bulkCommon.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry',
             amount: row.amount,
             liters: row.liters,
             pricePerLiter: row.pricePerLiter,
@@ -321,13 +378,14 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             vehicleId: bulkCommon.vehicleId,
             driverId: bulkCommon.driverId,
             cardId: undefined,
-            paymentSource: bulkCommon.type === 'Card_Transaction' ? 'Gas_Card' : 'RideShare_Cash',
+            paymentSource: PAYMENT_SOURCE_MAP[bulkCommon.type] || 'Personal',
             matchedStationId: row.matchedStationId || undefined,
             metadata: {
                 pricePerLiter: row.pricePerLiter,
                 source: 'Bulk Log',
                 portal_type: 'Manual_Entry',
                 isManual: true,
+                paymentSource: bulkCommon.type,
                 matchedStationId: row.matchedStationId || undefined,
             }
         }));
@@ -382,16 +440,37 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="type">Transaction Type</Label>
+                                    <Label htmlFor="type">Paid By</Label>
                                     <Select
                                         value={formData.type}
                                         onValueChange={(val) => setFormData(prev => ({ ...prev, type: val as any }))}
                                     >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Card_Transaction">Fuel Card</SelectItem>
-                                            <SelectItem value="Manual_Entry">Cash / Out of Pocket</SelectItem>
-                                            <SelectItem value="Reimbursement">Reimbursement</SelectItem>
+                                        <SelectContent className="w-72">
+                                            <SelectItem value="driver_cash">
+                                                <div>
+                                                    <span className="font-medium">Driver Cash</span>
+                                                    <p className="text-[10px] text-slate-400 leading-tight">Driver paid out of pocket — needs reimbursement</p>
+                                                </div>
+                                            </SelectItem>
+                                            <SelectItem value="rideshare_cash">
+                                                <div>
+                                                    <span className="font-medium">RideShare Cash</span>
+                                                    <p className="text-[10px] text-slate-400 leading-tight">Paid with cash collected from customers / fares</p>
+                                                </div>
+                                            </SelectItem>
+                                            <SelectItem value="company_card">
+                                                <div>
+                                                    <span className="font-medium">Gas Card</span>
+                                                    <p className="text-[10px] text-slate-400 leading-tight">Used the company-issued fuel card</p>
+                                                </div>
+                                            </SelectItem>
+                                            <SelectItem value="petty_cash">
+                                                <div>
+                                                    <span className="font-medium">Petty Cash</span>
+                                                    <p className="text-[10px] text-slate-400 leading-tight">Paid from office petty cash — already company funds</p>
+                                                </div>
+                                            </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -428,7 +507,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                 </div>
                             </div>
 
-                            {formData.type === 'Card_Transaction' && (
+                            {formData.type === 'company_card' && (
                                 <div className="space-y-2">
                                     <Label htmlFor="card">Fuel Card</Label>
                                     <Select
@@ -512,58 +591,45 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                         </SelectItem>
                                                     );
                                                 })}
-                                                <SelectItem value={OTHER_BRAND}>
-                                                    <span className="flex items-center gap-2 text-slate-500 italic">
-                                                        Independent / Other
-                                                    </span>
-                                                </SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs text-slate-500">Station</Label>
-                                        {selectedBrand === OTHER_BRAND ? (
-                                            <Input
-                                                placeholder="Type station name"
-                                                value={formData.location || ''}
-                                                onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value, matchedStationId: undefined }))}
-                                            />
-                                        ) : (
-                                            <Select
-                                                value={selectedStationId}
-                                                onValueChange={handleStationSelect}
-                                                disabled={!selectedBrand || stationsForBrand.length === 0}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder={
-                                                        !selectedBrand
-                                                            ? "Pick a brand first"
-                                                            : stationsForBrand.length === 0
-                                                                ? "No stations found"
-                                                                : "Select Station"
-                                                    } />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {stationsForBrand.map(s => (
-                                                        <SelectItem key={s.id} value={s.id}>
-                                                            <span className="flex flex-col">
-                                                                <span className="font-medium text-sm">{s.name}</span>
-                                                                {s.address && (
-                                                                    <span className="text-[11px] text-slate-400 truncate max-w-[250px]">{s.address}</span>
-                                                                )}
-                                                            </span>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        )}
+                                        <Select
+                                            value={selectedStationId}
+                                            onValueChange={handleStationSelect}
+                                            disabled={!selectedBrand || stationsForBrand.length === 0}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={
+                                                    !selectedBrand
+                                                        ? "Pick a brand first"
+                                                        : stationsForBrand.length === 0
+                                                            ? "No stations found"
+                                                            : "Select Station"
+                                                } />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {stationsForBrand.map(s => (
+                                                    <SelectItem key={s.id} value={s.id}>
+                                                        <span className="flex flex-col">
+                                                            <span className="font-medium text-sm">{s.name}</span>
+                                                            {s.address && (
+                                                                <span className="text-[11px] text-slate-400 truncate max-w-[250px]">{s.address}</span>
+                                                            )}
+                                                        </span>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs text-slate-500">Station Address</Label>
-                                    {selectedBrand === OTHER_BRAND || !selectedStationId ? (
+                                    {!selectedStationId ? (
                                         <LocationInput
                                             id="stationAddress"
                                             placeholder="Enter address (e.g. 123 Main St)"
@@ -636,16 +702,37 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Type</Label>
+                                        <Label>Paid By</Label>
                                         <Select
                                             value={bulkCommon.type}
                                             onValueChange={(val) => setBulkCommon(prev => ({ ...prev, type: val as any }))}
                                         >
                                             <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Card_Transaction">Fuel Card</SelectItem>
-                                                <SelectItem value="Manual_Entry">Cash / Out of Pocket</SelectItem>
-                                                <SelectItem value="Reimbursement">Reimbursement</SelectItem>
+                                            <SelectContent className="w-72">
+                                                <SelectItem value="driver_cash">
+                                                    <div>
+                                                        <span className="font-medium">Driver Cash</span>
+                                                        <p className="text-[10px] text-slate-400 leading-tight">Driver paid out of pocket</p>
+                                                    </div>
+                                                </SelectItem>
+                                                <SelectItem value="rideshare_cash">
+                                                    <div>
+                                                        <span className="font-medium">RideShare Cash</span>
+                                                        <p className="text-[10px] text-slate-400 leading-tight">Cash from fares</p>
+                                                    </div>
+                                                </SelectItem>
+                                                <SelectItem value="company_card">
+                                                    <div>
+                                                        <span className="font-medium">Gas Card</span>
+                                                        <p className="text-[10px] text-slate-400 leading-tight">Company fuel card</p>
+                                                    </div>
+                                                </SelectItem>
+                                                <SelectItem value="petty_cash">
+                                                    <div>
+                                                        <span className="font-medium">Petty Cash</span>
+                                                        <p className="text-[10px] text-slate-400 leading-tight">Office petty cash</p>
+                                                    </div>
+                                                </SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -670,9 +757,6 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                 {uniqueBrands.map(brand => (
                                                     <SelectItem key={brand} value={brand}>{brand}</SelectItem>
                                                 ))}
-                                                <SelectItem value={OTHER_BRAND}>
-                                                    <span className="italic text-slate-500">Other / Unlisted</span>
-                                                </SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -721,32 +805,25 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                                 />
                                             </div>
                                             <div className="col-span-3">
-                                                {bulkSelectedBrand === OTHER_BRAND ? (
-                                                    <Input placeholder="Station name" value={entry.location}
-                                                        onChange={(e) => updateBulkEntry(entry.id, 'location', e.target.value)}
-                                                        className="h-9 text-sm px-2"
-                                                    />
-                                                ) : (
-                                                    <Select
-                                                        value={entry.matchedStationId}
-                                                        onValueChange={(val) => handleBulkStationSelect(entry.id, val)}
-                                                        disabled={!bulkSelectedBrand || bulkFilteredStations.length === 0}
-                                                    >
-                                                        <SelectTrigger className="h-9 text-sm px-2">
-                                                            <SelectValue placeholder={!bulkSelectedBrand ? "Pick brand first" : "Select Station"} />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {bulkFilteredStations.map(s => (
-                                                                <SelectItem key={s.id} value={s.id}>
-                                                                    {stationDisplayName(s)}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                )}
+                                                <Select
+                                                    value={entry.matchedStationId}
+                                                    onValueChange={(val) => handleBulkStationSelect(entry.id, val)}
+                                                    disabled={!bulkSelectedBrand || bulkFilteredStations.length === 0}
+                                                >
+                                                    <SelectTrigger className="h-9 text-sm px-2">
+                                                        <SelectValue placeholder={!bulkSelectedBrand ? "Pick brand first" : "Select Station"} />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {bulkFilteredStations.map(s => (
+                                                            <SelectItem key={s.id} value={s.id}>
+                                                                {stationDisplayName(s)}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                             <div className="col-span-3">
-                                                {bulkSelectedBrand === OTHER_BRAND || !entry.matchedStationId ? (
+                                                {!entry.matchedStationId ? (
                                                     <LocationInput
                                                         placeholder="Address"
                                                         value={entry.stationAddress || ''}

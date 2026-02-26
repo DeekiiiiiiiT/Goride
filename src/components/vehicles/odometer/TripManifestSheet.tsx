@@ -14,6 +14,7 @@ import { toast } from "sonner@2.0.3";
 import { OdometerReading } from '../../../types/vehicle';
 import { Trip } from '../../../types/data';
 import { mileageCalculationService } from '../../../services/mileageCalculationService';
+import { FuelCalculationService } from '../../../services/fuelCalculationService';
 import { formatDateJM } from '../../../utils/csv-helper';
 
 interface TripManifestSheetProps {
@@ -76,7 +77,7 @@ export const TripManifestSheet: React.FC<TripManifestSheetProps> = ({
   };
 
   const totalDistance = (endAnchor?.value || 0) - (startAnchor?.value || 0);
-  const platformDistance = trips.reduce((acc, trip) => acc + (trip.distance || 0), 0);
+  const platformDistance = trips.reduce((acc, trip) => acc + FuelCalculationService.getTotalTripRideshareKm(trip), 0);
   const personalDistance = Math.max(0, totalDistance - platformDistance);
   const coveragePercent = totalDistance > 0 ? (platformDistance / totalDistance) * 100 : 0;
 

@@ -449,6 +449,8 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     vendor: entry.stationName,
                     matchedStationId: entry.matchedStationId || undefined,
                     metadata: {
+                        // Preserve all existing metadata (GPS coords, AI scores, etc.) on edit
+                        ...(initialData?.metadata || {}),
                         stationLocation: entry.stationLocation,
                         pricePerLiter: entry.pricePerLiter ? parseFloat(entry.pricePerLiter) : undefined,
                         source: entries.length > 1 ? 'Bulk Manual' : 'Manual',

@@ -277,7 +277,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                               ...existingTx,
                               // Preserve the sign of the original transaction while updating the magnitude
                               amount: existingTx.amount < 0 ? -Math.abs(savedLog.amount) : Math.abs(savedLog.amount),
-                              date: savedLog.date.split('T')[0],
+                              date: (savedLog.date || entry.date || '').split('T')[0],
                               description: `Fuel: ${savedLog.location || 'Unknown Station'} - ${savedLog.liters}L @ $${(savedLog.amount / (savedLog.liters || 1)).toFixed(3)}/L`,
                               driverId: savedLog.driverId,
                               vehicleId: savedLog.vehicleId,
@@ -311,7 +311,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           loadData(true); // Full reload to refresh ledger balances
       } catch (e) {
           console.error(e);
-          toast.error("Failed to save transaction(s)");
+          toast.error(e instanceof Error ? e.message : "Failed to save transaction(s)");
       } finally {
           setIsSyncing(false);
       }

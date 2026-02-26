@@ -164,12 +164,17 @@ export interface MileageReport {
     startOdometer: number;
     endOdometer: number;
     totalDistance: number;
-    platformDistance: number;
-    personalDistance: number;
-    personalPercentage: number;
+    platformDistance: number;      // RideShare km (full: On Trip + Enroute + Open + Unavailable)
+    personalDistance: number;      // Legacy: totalDistance - platformDistance (kept for backward compat)
+    personalPercentage: number;   // Legacy: kept for backward compat
     anomalyDetected: boolean;
     anomalyReason?: string;
     tripCount: number;
+    // 3-way attribution (new fields, all optional for backward compat)
+    rideShareDistance?: number;    // Same as platformDistance (explicit name)
+    adjustedPersonalDistance?: number;  // From MileageAdjustments with type='Personal'
+    companyMiscDistance?: number;  // From MileageAdjustments with type='Company_Misc' or 'Maintenance'
+    unaccountedDistance?: number;  // totalDistance - (rideShare + adjustedPersonal + companyMisc)
 }
 
 // Phase 1: Unified Restoration Types

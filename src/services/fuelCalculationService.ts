@@ -57,6 +57,19 @@ export const FuelCalculationService = {
     },
 
     /**
+     * Calculates the total rideshare km contribution of a single trip.
+     * Includes ALL distance segments: On Trip, Enroute, Open, Unavailable.
+     * For cancelled trips, only trip.distance may be available (normalized fields default to 0).
+     */
+    getTotalTripRideshareKm: (trip: Trip): number => {
+        const onTrip = trip.distance || 0;
+        const enroute = trip.normalizedEnrouteDistance || 0;
+        const open = trip.normalizedOpenDistance || 0;
+        const unavailable = trip.normalizedUnavailableDistance || 0;
+        return onTrip + enroute + open + unavailable;
+    },
+
+    /**
      * Generates a reconciliation report for a single vehicle.
      */
     calculateReconciliation: (
@@ -117,7 +130,7 @@ export const FuelCalculationService = {
             t.vehicleId === vehicle.id && 
             t.date >= startStr && 
             t.date <= endStr &&
-            t.status === 'Completed'
+            (t.status === 'Completed' || t.status === 'Cancelled')
         );
 
         const vehicleAdjustments = adjustments.filter(a => 
@@ -128,9 +141,45 @@ export const FuelCalculationService = {
 
         // 3. Aggregate Costs
         const totalGasCardCost = vehicleEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const totalLiters = vehicleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+
+        // 3b. Compute observed efficiency (km/L) from fuel entries with odometer readings
+        const entriesWithOdo = vehicleEntries
+            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0)
+            .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+
+        let observedEfficiency = 0;
+        if (entriesWithOdo.length >= 2 && totalLiters > 0) {
+            const odoDistance = (entriesWithOdo[entriesWithOdo.length - 1].odometer || 0) - (entriesWithOdo[0].odometer || 0);
+            if (odoDistance > 0) {
+                observedEfficiency = odoDistance / totalLiters;
+            }
+        }
+
+        // Fallback chain: vehicle.fuelSettings.efficiencyCity (L/100km -> km/L) -> 10 km/L default
+        if (observedEfficiency <= 0) {
+            const cityEfficiency = vehicle.fuelSettings?.efficiencyCity;
+            if (cityEfficiency && cityEfficiency > 0) {
+                // efficiencyCity is L/100km, convert to km/L
+                observedEfficiency = 100 / cityEfficiency;
+            } else {
+                observedEfficiency = 10; // Last resort fallback
+            }
+        }
+
+        // 3c. Compute actual price per liter from fuel entries in the period
+        let actualPricePerLiter = 0;
+        if (totalLiters > 0 && totalGasCardCost > 0) {
+            actualPricePerLiter = totalGasCardCost / totalLiters;
+        }
+        if (actualPricePerLiter <= 0) {
+            actualPricePerLiter = 1.50; // Fallback if no fuel entries exist
+        }
         
         // 4. Aggregate Distances
-        const totalTripDistance = vehicleTrips.reduce((sum, t) => sum + (t.distance || 0), 0);
+        const totalTripDistance = vehicleTrips.reduce(
+            (sum, t) => sum + FuelCalculationService.getTotalTripRideshareKm(t), 0
+        );
         const companyMiscDistance = vehicleAdjustments
             .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
             .reduce((sum, a) => sum + (a.distance || 0), 0);
@@ -138,14 +187,10 @@ export const FuelCalculationService = {
             .filter(a => a.type === 'Personal')
             .reduce((sum, a) => sum + (a.distance || 0), 0);
 
-        // 5. Calculate Costs (Simple estimation logic)
-        // In a real system, this would use vehicle MPG. Using a default 10km/L and $1.50/L for estimation.
-        const estKmL = 10; 
-        const estPrice = 1.50;
-        
-        const rideShareCost = (totalTripDistance / estKmL) * estPrice;
-        const companyUsageCost = (companyMiscDistance / estKmL) * estPrice;
-        const personalUsageCost = (personalDistance / estKmL) * estPrice;
+        // 5. Calculate Costs using observed efficiency and actual fuel price
+        const rideShareCost = (totalTripDistance / observedEfficiency) * actualPricePerLiter;
+        const companyUsageCost = (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
+        const personalUsageCost = (personalDistance / observedEfficiency) * actualPricePerLiter;
 
         // 6. Calculate Leakage (Miscellaneous)
         const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + personalUsageCost);
@@ -197,9 +242,23 @@ export const FuelCalculationService = {
             pendingCount,
             healthStatus,
             healthScore,
+            odometerBuckets: buckets,
             metadata: {
                 scenarioName: activeScenario?.name || 'Standard (Fallback)',
-                scenarioId: activeScenario?.id
+                scenarioId: activeScenario?.id,
+                // Ride Share calculation transparency
+                rideShareCalc: {
+                    totalRideshareKm: totalTripDistance,
+                    observedEfficiency: Number(observedEfficiency.toFixed(2)),
+                    actualPricePerLiter: Number(actualPricePerLiter.toFixed(3)),
+                    efficiencySource: entriesWithOdo.length >= 2 ? 'odometer' : 
+                                      (vehicle.fuelSettings?.efficiencyCity ? 'vehicle_settings' : 'default_fallback'),
+                    priceSource: (totalLiters > 0 && totalGasCardCost > 0) ? 'fuel_entries' : 'default_fallback',
+                    totalLitersInPeriod: Number(totalLiters.toFixed(2)),
+                    tripsIncluded: vehicleTrips.length,
+                    completedTrips: vehicleTrips.filter(t => t.status === 'Completed').length,
+                    cancelledTrips: vehicleTrips.filter(t => t.status === 'Cancelled').length,
+                }
             }
         };
     },
@@ -231,13 +290,20 @@ export const FuelCalculationService = {
         vehicle: Vehicle,
         fuelEntries: FuelEntry[],
         trips: Trip[],
-        adjustments: MileageAdjustment[] = []
+        adjustments: MileageAdjustment[] = [],
+        externalAnchors?: { id: string; date: string; odometer: number }[]
     ): OdometerBucket[] => {
-        // 1. Separate entries into Anchors (Verified Odo) and Floating (Legacy/Cash)
-        // We consider an entry an "Anchor" if it has a valid odometer reading.
-        const anchors = fuelEntries
-            .filter(e => e.vehicleId === vehicle.id && e.odometer !== undefined && e.odometer !== null)
-            .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+        // 1. Determine anchors: use external unified anchors if provided, otherwise extract from fuel entries
+        let anchors: { id: string; date: string; odometer: number }[];
+
+        if (externalAnchors && externalAnchors.length >= 2) {
+            anchors = [...externalAnchors].sort((a, b) => a.odometer - b.odometer);
+        } else {
+            anchors = fuelEntries
+                .filter(e => e.vehicleId === vehicle.id && e.odometer !== undefined && e.odometer !== null)
+                .map(e => ({ id: e.id, date: e.date, odometer: e.odometer! }))
+                .sort((a, b) => a.odometer - b.odometer);
+        }
 
         const floating = fuelEntries
             .filter(e => e.vehicleId === vehicle.id && (e.odometer === undefined || e.odometer === null));
@@ -245,14 +311,38 @@ export const FuelCalculationService = {
         if (anchors.length < 2) return [];
 
         const buckets: OdometerBucket[] = [];
-        const avgEfficiency = vehicle.fuelSettings?.efficiencyCity || 10; 
+        // Compute observed efficiency using the same 3-tier fallback chain as calculateReconciliation
+        const allVehicleEntries = fuelEntries.filter(e => e.vehicleId === vehicle.id);
+        const allLiters = allVehicleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+        const odoEntries = allVehicleEntries
+            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0)
+            .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+
+        let bucketEfficiencyKmL = 0; // km/L
+        if (odoEntries.length >= 2 && allLiters > 0) {
+            const odoSpan = (odoEntries[odoEntries.length - 1].odometer || 0) - (odoEntries[0].odometer || 0);
+            if (odoSpan > 0) {
+                bucketEfficiencyKmL = odoSpan / allLiters;
+            }
+        }
+        if (bucketEfficiencyKmL <= 0) {
+            const cityEff = vehicle.fuelSettings?.efficiencyCity;
+            if (cityEff && cityEff > 0) {
+                bucketEfficiencyKmL = 100 / cityEff; // L/100km -> km/L
+            } else {
+                bucketEfficiencyKmL = 10; // 10 km/L default
+            }
+        }
+
+        // Convert km/L to L/100km for expected fuel calculation
+        const avgEfficiency = 100 / bucketEfficiencyKmL; // L/100km
 
         for (let i = 0; i < anchors.length - 1; i++) {
             const startAnchor = anchors[i];
             const endAnchor = anchors[i + 1];
 
-            const startOdo = startAnchor.odometer || 0;
-            const endOdo = endAnchor.odometer || 0;
+            const startOdo = startAnchor.odometer;
+            const endOdo = endAnchor.odometer;
             const bucketDistance = endOdo - startOdo;
 
             if (bucketDistance <= 0) continue;
@@ -264,14 +354,38 @@ export const FuelCalculationService = {
             );
 
             // 3. Accumulate Volume & Cost
-            // The fuel that "filled" this distance includes all mid-window receipts PLUS the closing anchor's fuel.
-            const totalLiters = (endAnchor.liters || 0) + windowReceipts.reduce((sum, r) => sum + (r.liters || 0), 0);
-            const totalCost = (endAnchor.amount || 0) + windowReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
-            
-            const associatedReceipts = [endAnchor.id, ...windowReceipts.map(r => r.id)];
+            // Check if the closing anchor corresponds to a fuel entry (it might be a check-in or service record)
+            const closingFuelEntry = fuelEntries.find(e => e.id === endAnchor.id || (e.odometer === endAnchor.odometer && e.date === endAnchor.date));
+            const closingLiters = closingFuelEntry?.liters || 0;
+            const closingCost = closingFuelEntry?.amount || 0;
+
+            // Also find any fuel entries that fall WITHIN the bucket window (between anchors, with odometer readings)
+            // These are fuel entries whose odometer is between startOdo and endOdo, excluding the anchors themselves
+            const midBucketFuelEntries = fuelEntries.filter(e =>
+                e.vehicleId === vehicle.id &&
+                e.odometer !== undefined && e.odometer !== null &&
+                e.odometer > startOdo && e.odometer < endOdo &&
+                e.id !== startAnchor.id && e.id !== endAnchor.id
+            );
+
+            const totalLiters = closingLiters 
+                + windowReceipts.reduce((sum, r) => sum + (r.liters || 0), 0)
+                + midBucketFuelEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+            const totalCost = closingCost 
+                + windowReceipts.reduce((sum, r) => sum + (r.amount || 0), 0)
+                + midBucketFuelEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+            const associatedReceipts = [
+                ...(closingFuelEntry ? [closingFuelEntry.id] : []),
+                ...windowReceipts.map(r => r.id),
+                ...midBucketFuelEntries.map(e => e.id)
+            ];
 
             // 4. Find trips that belong to this bucket
             const bucketTrips = trips.filter(t => {
+                // Only include Completed and Cancelled trips (Processing trips are unverified)
+                if (t.status !== 'Completed' && t.status !== 'Cancelled') return false;
+                
                 const tripStart = t.startOdometer || 0;
                 const tripEnd = t.endOdometer || 0;
                 // If trip has odometers, use them. If not, use date range as fallback
@@ -287,7 +401,7 @@ export const FuelCalculationService = {
             });
 
             // 6. Calculate Distances
-            const rideShareDistance = bucketTrips.reduce((sum, t) => sum + (t.distance || 0), 0);
+            const rideShareDistance = bucketTrips.reduce((sum, t) => sum + FuelCalculationService.getTotalTripRideshareKm(t), 0);
             const personalDistance = bucketAdjustments
                 .filter(a => a.type === 'Personal')
                 .reduce((sum, a) => sum + (a.distance || 0), 0);
@@ -328,7 +442,7 @@ export const FuelCalculationService = {
                 actualFuelLiters: totalLiters,
                 actualFuelCost: totalCost,
                 associatedReceipts,
-                closingEntryId: endAnchor.id,
+                closingEntryId: closingFuelEntry?.id || endAnchor.id,
                 totalTripDistance: rideShareDistance,
                 tripsCount: bucketTrips.length,
                 expectedFuelLiters,

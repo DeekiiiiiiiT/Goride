@@ -21,7 +21,7 @@ export function MaintenanceTracker({ transactions, onAddTransaction, vehicles }:
   
   // Form State
   const [formData, setFormData] = useState({
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: new Date().toISOString().split('T')[0],
     vehicleId: '',
     serviceType: 'Oil Change',
     odometer: '',
@@ -74,7 +74,7 @@ export function MaintenanceTracker({ transactions, onAddTransaction, vehicles }:
     onAddTransaction(newTxn);
     setIsOpen(false);
     setFormData({
-        date: format(new Date(), 'yyyy-MM-dd'),
+        date: new Date().toISOString().split('T')[0],
         vehicleId: '',
         serviceType: 'Oil Change',
         odometer: '',

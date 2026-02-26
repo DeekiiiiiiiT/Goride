@@ -4886,6 +4886,10 @@
     padding-top: calc(var(--spacing) * 1);
   }
 
+  .pt-1\.5 {
+    padding-top: calc(var(--spacing) * 1.5);
+  }
+
   .pt-2 {
     padding-top: calc(var(--spacing) * 2);
   }
@@ -4952,6 +4956,10 @@
 
   .pb-1 {
     padding-bottom: calc(var(--spacing) * 1);
+  }
+
+  .pb-1\.5 {
+    padding-bottom: calc(var(--spacing) * 1.5);
   }
 
   .pb-2 {
@@ -5858,6 +5866,11 @@
       -webkit-text-decoration-color: color-mix(in oklab, var(--color-red-400) 50%, transparent);
       text-decoration-color: color-mix(in oklab, var(--color-red-400) 50%, transparent);
     }
+  }
+
+  .decoration-slate-300 {
+    -webkit-text-decoration-color: var(--color-slate-300);
+    text-decoration-color: var(--color-slate-300);
   }
 
   .decoration-slate-400 {
