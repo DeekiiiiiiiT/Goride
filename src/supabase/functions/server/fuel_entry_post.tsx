@@ -23,8 +23,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     if (entry.vehicleId) {
         const vehicle = await kv.get(`vehicle:${entry.vehicleId}`);
         if (vehicle) {
-            const { tankCapacity, baselineEfficiency, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
-            const profileKmPerLiter = baselineEfficiency;
+            const { tankCapacity, baselineEfficiencyL100km, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
+            // Convert L/100km → km/L for all downstream comparisons
+            const profileKmPerLiter = baselineEfficiencyL100km > 0 ? (100 / baselineEfficiencyL100km) : 0;
 
             // Phase 22: compute rolling average efficiency for this vehicle as of this entry's date
             const rollingAvg = await fuelLogic.calculateRollingEfficiency(entry.vehicleId, entry.date);

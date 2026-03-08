@@ -50,7 +50,9 @@ export const odometerService = {
         fuelEntries.forEach((entry: any) => {
           if (entry.odometer && entry.odometer > 0) {
             // Priority: top-level urls, then metadata urls (support both camelCase and snake_case)
-            const url = entry.imageUrl || entry.photoUrl || 
+            // Odometer photo takes priority over receipt for evidence display
+            const url = entry.odometerImageUrl || entry.metadata?.odometerImageUrl ||
+                        entry.imageUrl || entry.photoUrl || 
                         entry.odometerProofUrl || entry.metadata?.odometerProofUrl || 
                         entry.receiptUrl || entry.receipt_url || entry.metadata?.receiptUrl || entry.metadata?.receipt_url ||
                         entry.metadata?.photoUrl;

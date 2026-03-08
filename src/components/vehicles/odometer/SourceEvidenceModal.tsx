@@ -18,7 +18,8 @@ import {
     Fuel, 
     Wrench,
     ClipboardCheck,
-    Hash
+    Hash,
+    UserCog
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from "../../ui/utils";
@@ -59,11 +60,20 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
 
     // Forensic Evidence Selection: No demo fallbacks allowed.
     // If no real evidence URL is provided by the system, we display an "Empty Evidence" state.
-    const displayImage = evidence.imageUrl || 
-                       evidence.metadata?.odometerProofUrl || 
+    const odometerProofImage = evidence.metadata?.odometerProofUrl || 
+                               evidence.metadata?.odometerImageUrl;
+    const receiptImage = evidence.metadata?.receiptUrl;
+
+    // Primary display: odometer proof takes priority, then any other image
+    const displayImage = odometerProofImage ||
+                       evidence.imageUrl || 
                        evidence.metadata?.photoUrl ||
-                       evidence.metadata?.receiptUrl || 
+                       receiptImage || 
                        evidence.metadata?.invoiceUrl;
+
+    // Secondary: show receipt separately if odometer proof is the primary
+    const secondaryImage = odometerProofImage && receiptImage && odometerProofImage !== receiptImage
+                         ? receiptImage : null;
 
     const formatKey = (key: string) => {
         const labels: Record<string, string> = {
@@ -104,6 +114,32 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                 </div>
 
                 <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                    {/* Entry Source Banner */}
+                    {(() => {
+                        const src = evidence.metadata?.entrySource;
+                        if (src === 'admin-manual') return (
+                            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
+                                <UserCog className="h-4 w-4 flex-shrink-0" />
+                                <span className="font-semibold">Admin Entry</span>
+                                <span className="text-amber-600">— This record was manually created by an admin, not submitted live from the driver portal.</span>
+                            </div>
+                        );
+                        if (src === 'admin-edit') return (
+                            <div className="flex items-center gap-2 p-3 bg-violet-50 border border-violet-200 rounded-lg text-violet-800 text-xs">
+                                <UserCog className="h-4 w-4 flex-shrink-0" />
+                                <span className="font-semibold">Admin Edit</span>
+                                <span className="text-violet-600">— Originally submitted by the driver via the portal. An admin subsequently edited this record.</span>
+                            </div>
+                        );
+                        if (src === 'bulk-import') return (
+                            <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-xs">
+                                <FileText className="h-4 w-4 flex-shrink-0" />
+                                <span className="font-semibold">Bulk Import</span>
+                                <span className="text-slate-500">— This record was imported via CSV / bulk data upload.</span>
+                            </div>
+                        );
+                        return null;
+                    })()}
                     <div className="grid grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <div className="space-y-1">
@@ -176,6 +212,29 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                         </div>
                     )}
 
+                    {secondaryImage && (
+                        <div className="space-y-3">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Receipt Image</p>
+                            <div className="relative group border rounded-xl overflow-hidden bg-slate-50 shadow-inner">
+                                <ImageWithFallback 
+                                    src={secondaryImage} 
+                                    alt="Receipt Evidence" 
+                                    className="w-full h-auto max-h-[400px] object-contain transition-transform duration-500 group-hover:scale-[1.02]" 
+                                />
+                                <div className="absolute inset-0 bg-indigo-500/0 group-hover:bg-indigo-500/5 transition-colors pointer-events-none"></div>
+                                <Button 
+                                    size="sm" 
+                                    variant="secondary" 
+                                    className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md shadow-lg"
+                                    onClick={() => window.open(secondaryImage, '_blank')}
+                                >
+                                    <ExternalLink className="h-3 w-3 mr-2" />
+                                    View Full Resolution
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     {evidence.notes && (
                         <div className="space-y-2">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Auditor Notes</p>
@@ -195,7 +254,8 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                                         'cycleId', 'backfilledAt', 'isFragmented', 'integrityStatus', 
                                         'isHighFrequency', 'actualKmPerLiter', 'profileKmPerLiter', 
                                         'volumeContributed', 'distanceSinceAnchor', 'cumulativeLitersAtEntry', 
-                                        'odometerMethod', 'method', 'prevReadingId', 'receiptUrl', 'odometerProofUrl'
+                                        'odometerMethod', 'method', 'prevReadingId', 'receiptUrl', 'odometerProofUrl',
+                                        'odometerImageUrl'
                                     ];
                                     
                                     if (excludedKeys.includes(key)) return null;

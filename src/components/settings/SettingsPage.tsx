@@ -16,7 +16,9 @@ import {
   DialogTrigger 
 } from "../ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { AlertRule } from '../../types/data';
+import { AlertRule, BusinessType } from '../../types/data';
+import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE, isValidBusinessType } from '../../utils/businessTypes';
+import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { api } from '../../services/api';
 import { 
   Trash2, 
@@ -35,7 +37,12 @@ import {
   FileJson,
   BookOpen,
   HelpCircle,
-  Database
+  Database,
+  Car,
+  Package,
+  Navigation as NavIcon,
+  Truck,
+  Ship
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner@2.0.3';
@@ -120,7 +127,9 @@ function GeneralPanel() {
   const [currency, setCurrency] = useState('jmd');
   const [timezone, setTimezone] = useState('est-jam');
   const [darkMode, setDarkMode] = useState(false);
-
+  const [businessType, setBusinessType] = useState<BusinessType>(DEFAULT_BUSINESS_TYPE);
+  const businessConfig = useBusinessConfig();
+  
   useEffect(() => {
     loadPreferences();
   }, []);
@@ -163,6 +172,16 @@ function GeneralPanel() {
               applyTheme(isDark);
           }
 
+          // BusinessType Strategy: API -> LocalStorage -> Default ('rideshare')
+          if (prefs?.businessType && isValidBusinessType(prefs.businessType)) {
+              setBusinessType(prefs.businessType);
+          } else {
+              const localBusinessType = localStorage.getItem('preference_business_type');
+              if (localBusinessType && isValidBusinessType(localBusinessType)) {
+                  setBusinessType(localBusinessType);
+              }
+          }
+
       } catch (err) {
           console.error("Failed to load preferences", err);
           // On API error, try to load from local storage
@@ -177,6 +196,11 @@ function GeneralPanel() {
               setDarkMode(isDark);
               if (isDark) document.documentElement.classList.add('dark');
           }
+
+          const savedBusinessType = localStorage.getItem('preference_business_type');
+          if (savedBusinessType && isValidBusinessType(savedBusinessType)) {
+              setBusinessType(savedBusinessType);
+          }
       }
   };
 
@@ -186,13 +210,18 @@ function GeneralPanel() {
         await api.savePreferences({
             currency,
             timezone,
-            darkMode
+            darkMode,
+            businessType
         });
         
         // Also update local storage for redundancy/speed
         localStorage.setItem('preference_currency', currency);
         localStorage.setItem('preference_timezone', timezone);
         localStorage.setItem('preference_dark_mode', String(darkMode));
+        localStorage.setItem('preference_business_type', businessType);
+
+        // Update the app-wide business config context immediately
+        businessConfig.setBusinessType(businessType);
 
         toast.success("Preferences saved successfully");
     } catch (err) {
@@ -222,6 +251,42 @@ function GeneralPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+           {/* Business Type Selector */}
+           <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Business Type</Label>
+                <p className="text-sm text-slate-500">
+                  Select the type of fleet operation. This affects terminology, metrics, and available features across the platform.
+                </p>
+              </div>
+              <Select value={businessType} onValueChange={(v) => setBusinessType(v as BusinessType)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select business type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BUSINESS_TYPES.map((bt) => {
+                    const IconComp = bt.icon === 'Car' ? Car : bt.icon === 'Package' ? Package : bt.icon === 'Navigation' ? NavIcon : bt.icon === 'Ship' ? Ship : Truck;
+                    return (
+                      <SelectItem key={bt.key} value={bt.key}>
+                        <span className="flex items-center gap-2">
+                          <IconComp className="h-4 w-4 text-slate-500" />
+                          <span>{bt.label}</span>
+                          <span className="text-xs text-slate-400 ml-1 hidden sm:inline">— {bt.description}</span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-2 pt-1">
+                <Badge variant="secondary" className="text-xs">
+                  Current mode: {BUSINESS_TYPES.find(bt => bt.key === businessType)?.label ?? 'Rideshare'}
+                </Badge>
+              </div>
+           </div>
+
+           <Separator />
+
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="space-y-2">
                 <Label>Currency</Label>
@@ -737,11 +802,11 @@ function MaintenancePanel() {
     setIsExporting(true);
     setTimeout(() => {
         // Mock export
-        const blob = new Blob([JSON.stringify({ timestamp: Date.now(), system: 'GoRide', version: '1.0' }, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify({ timestamp: Date.now(), system: 'Roam', version: '1.0' }, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `goride_backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `roam_backup_${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -806,7 +871,7 @@ function HelpPanel() {
       <Card className="md:col-span-2">
          <CardHeader>
            <CardTitle>Documentation & Training</CardTitle>
-           <CardDescription>Resources to help you get the most out of GoRide Fleet Management.</CardDescription>
+           <CardDescription>Resources to help you get the most out of Roam Fleet Management.</CardDescription>
          </CardHeader>
          <CardContent className="grid gap-4 md:grid-cols-3">
             <a href="#" className="block p-6 border rounded-lg hover:bg-slate-50 transition-colors group">

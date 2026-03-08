@@ -259,7 +259,9 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
   }, [cycles]);
 
   const tankCapacity = Number(vehicle?.fuelSettings?.tankCapacity) || Number(vehicle?.specifications?.tankCapacity) || 0;
-  const profileKmL = Number(vehicle?.specifications?.fuelEconomy) || Number(vehicle?.fuelSettings?.efficiencyCity) || 0;
+  // efficiencyCity and fuelEconomy are stored as L/100km — convert to km/L for display
+  const rawEfficiencyL100km = Number(vehicle?.specifications?.fuelEconomy) || Number(vehicle?.fuelSettings?.efficiencyCity) || 0;
+  const profileKmL = rawEfficiencyL100km > 0 ? Number((100 / rawEfficiencyL100km).toFixed(2)) : 0;
 
   function toggleSort(field: 'date' | 'kmL' | 'variance') {
     if (sortField === field) {

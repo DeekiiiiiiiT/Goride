@@ -1,12 +1,13 @@
-import { csvToJson } from '../utils/csv-helper';
+import { csvToJson, CsvColumn } from '../utils/csv-helper';
 import { FuelEntry } from '../types/fuel';
-import { ServiceRequest } from '../types/data';
+import { ServiceRequest, Trip } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
-import { FUEL_CSV_COLUMNS, SERVICE_CSV_COLUMNS, ODOMETER_CSV_COLUMNS, CHECKIN_CSV_COLUMNS, CsvColumn } from '../types/csv-schemas';
+import { FUEL_CSV_COLUMNS, SERVICE_CSV_COLUMNS, ODOMETER_CSV_COLUMNS, CHECKIN_CSV_COLUMNS, TRIP_CSV_COLUMNS } from '../types/csv-schemas';
+import { normalizePlatform } from '../utils/normalizePlatform';
 
 // --- Types ---
 
-export type ImportType = 'fuel' | 'service' | 'odometer' | 'checkin';
+export type ImportType = 'fuel' | 'service' | 'odometer' | 'checkin' | 'trip' | 'driver' | 'vehicle' | 'transaction' | 'tollTag' | 'tollPlaza' | 'station' | 'equipment' | 'inventory' | 'claim';
 
 export interface ValidationResult<T> {
     validRecords: T[];
@@ -37,11 +38,69 @@ export function validateImportFile(content: string, type: ImportType): Validatio
         case 'service': columns = SERVICE_CSV_COLUMNS; break;
         case 'odometer': columns = ODOMETER_CSV_COLUMNS; break;
         case 'checkin': columns = CHECKIN_CSV_COLUMNS; break;
+        case 'trip': columns = TRIP_CSV_COLUMNS; break;
+        // Phase 5 types use dedicated validators — columns unused but needed for switch
+        case 'driver': columns = []; break;
+        case 'vehicle': columns = []; break;
+        case 'transaction': columns = []; break;
+        // Phase 6 types use dedicated validators
+        case 'tollTag': columns = []; break;
+        case 'tollPlaza': columns = []; break;
+        case 'station': columns = []; break;
+        case 'equipment': columns = []; break;
+        case 'inventory': columns = []; break;
+        case 'claim': columns = []; break;
         default: return { validRecords: [], errors: [{ row: 0, message: 'Invalid import type', rawRecord: {} }], totalProcessed: 0 };
     }
 
     rawRecords.forEach((record, index) => {
         const rowNum = index + 2; // +1 for 0-index, +1 for header row
+
+        // Trip type uses its own dedicated validator
+        if (type === 'trip') {
+            const validation = validateTripRecord(record, rowNum);
+            if (validation.isValid) {
+                validRecords.push(validation.record);
+            } else {
+                errors.push({ row: rowNum, message: validation.error || 'Unknown error', rawRecord: record });
+            }
+            return;
+        }
+
+        // Phase 5: Driver, Vehicle, Transaction use dedicated validators
+        if (type === 'driver' || type === 'vehicle' || type === 'transaction') {
+            const validation =
+                type === 'driver' ? validateDriverRecord(record) :
+                type === 'vehicle' ? validateVehicleRecord(record) :
+                validateTransactionRecord(record);
+            if (validation.isValid) {
+                validRecords.push(validation.record);
+            } else {
+                errors.push({ row: rowNum, message: validation.error || 'Unknown error', rawRecord: record });
+            }
+            return;
+        }
+
+        // Phase 6: Infrastructure entity validators
+        const phase6Types: ImportType[] = ['tollTag', 'tollPlaza', 'station', 'equipment', 'inventory', 'claim'];
+        if (phase6Types.includes(type)) {
+            const validatorMap: Record<string, (r: Record<string, string>) => { isValid: boolean; record?: any; error?: string }> = {
+                tollTag: validateTollTagRecord,
+                tollPlaza: validateTollPlazaRecord,
+                station: validateStationRecord,
+                equipment: validateEquipmentRecord,
+                inventory: validateInventoryRecord,
+                claim: validateClaimRecord,
+            };
+            const validation = validatorMap[type](record);
+            if (validation.isValid) {
+                validRecords.push(validation.record);
+            } else {
+                errors.push({ row: rowNum, message: validation.error || 'Unknown error', rawRecord: record });
+            }
+            return;
+        }
+
         const validation = validateRecord(record, columns, type);
 
         if (validation.isValid) {
@@ -55,11 +114,146 @@ export function validateImportFile(content: string, type: ImportType): Validatio
         }
     });
 
+    // For trips: flag duplicate IDs within the file
+    if (type === 'trip') {
+        const idSet = new Set<string>();
+        const dupeRows: number[] = [];
+        validRecords.forEach((r, i) => {
+            if (r.id && idSet.has(r.id)) {
+                dupeRows.push(i + 2);
+            }
+            if (r.id) idSet.add(r.id);
+        });
+        if (dupeRows.length > 0) {
+            errors.push({
+                row: 0,
+                message: `${dupeRows.length} duplicate IDs detected within this file (rows: ${dupeRows.slice(0, 10).join(', ')}${dupeRows.length > 10 ? '...' : ''})`,
+                rawRecord: {}
+            });
+        }
+    }
+
     return {
         validRecords,
         errors,
         totalProcessed: rawRecords.length
     };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Trip-specific validation (Phase 4)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Flexible date parser: DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, ISO 8601 */
+function parseFlexibleDate(value: string | undefined | null): string | null {
+    if (!value || value.trim() === '') return null;
+    const v = value.trim();
+
+    // Try ISO / YYYY-MM-DD first
+    const isoTs = Date.parse(v);
+    if (!isNaN(isoTs) && (v.includes('-') || v.includes('T'))) {
+        return new Date(isoTs).toISOString();
+    }
+
+    // Try DD/MM/YYYY (Jamaica standard)
+    const ddMmYyyy = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (ddMmYyyy) {
+        const [, d, m, y] = ddMmYyyy;
+        const dt = new Date(Number(y), Number(m) - 1, Number(d));
+        if (!isNaN(dt.getTime())) return dt.toISOString();
+    }
+
+    // Fallback: let Date.parse try
+    const fallback = Date.parse(v);
+    if (!isNaN(fallback)) return new Date(fallback).toISOString();
+
+    return null;
+}
+
+/** Clean a numeric string: strip $, commas, spaces */
+function cleanNumeric(value: string | undefined | null): number | undefined {
+    if (!value || value.trim() === '') return undefined;
+    const cleaned = value.replace(/[$,\s]/g, '');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? undefined : num;
+}
+
+function validateTripRecord(
+    raw: Record<string, string>,
+    _rowNum: number,
+): { isValid: boolean; record?: Partial<Trip>; error?: string } {
+    const result: any = {};
+
+    // --- Required: date ---
+    const parsedDate = parseFlexibleDate(raw['date']);
+    if (!parsedDate) {
+        return { isValid: false, error: `Missing or invalid date: "${raw['date'] || ''}"` };
+    }
+    result.date = parsedDate;
+
+    // --- Required: driverId OR driverName ---
+    const driverId = (raw['driverId'] || '').trim();
+    const driverName = (raw['driverName'] || '').trim();
+    if (!driverId && !driverName) {
+        return { isValid: false, error: 'Missing both driverId and driverName — at least one is required' };
+    }
+    if (driverId) result.driverId = driverId;
+    if (driverName) result.driverName = driverName;
+
+    // --- Required: amount (earnings) ---
+    const amount = cleanNumeric(raw['amount']);
+    if (amount === undefined) {
+        return { isValid: false, error: `Missing or invalid amount: "${raw['amount'] || ''}"` };
+    }
+    result.amount = amount;
+
+    // --- Optional string fields ---
+    const stringFields = ['id', 'requestTime', 'dropoffTime', 'vehicleId', 'platform',
+        'serviceType', 'status', 'pickupLocation', 'dropoffLocation',
+        'pickupArea', 'dropoffArea', 'batchId', 'paymentMethod'];
+    for (const field of stringFields) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Optional date fields ---
+    if (raw['requestTime']) {
+        const rt = parseFlexibleDate(raw['requestTime']);
+        if (rt) result.requestTime = rt;
+    }
+    if (raw['dropoffTime']) {
+        const dt = parseFlexibleDate(raw['dropoffTime']);
+        if (dt) result.dropoffTime = dt;
+    }
+
+    // --- Optional numeric fields ---
+    const numericFields = ['grossEarnings', 'netToDriver', 'cashCollected',
+        'tollCharges', 'distance', 'duration'];
+    for (const field of numericFields) {
+        const num = cleanNumeric(raw[field]);
+        if (num !== undefined) result[field] = num;
+    }
+
+    // --- Fare breakdown columns (baseFare, tips, surge, waitTime, airportFees, taxes) ---
+    const breakdownFields = ['baseFare', 'tips', 'surge', 'waitTime', 'airportFees', 'taxes'];
+    const hasBreakdown = breakdownFields.some(f => raw[f] && raw[f].trim() !== '');
+    if (hasBreakdown) {
+        result.fareBreakdown = {};
+        for (const f of breakdownFields) {
+            const num = cleanNumeric(raw[f]);
+            if (num !== undefined) result.fareBreakdown[f] = num;
+        }
+    }
+
+    // --- Platform normalization (GoRide → Roam) ---
+    if (result.platform) {
+        result.platform = normalizePlatform(result.platform);
+    }
+
+    // --- Status default ---
+    if (!result.status) result.status = 'Completed';
+
+    return { isValid: true, record: result };
 }
 
 /**
@@ -117,6 +311,324 @@ function validateRecord(
         if (entry.liters && entry.liters <= 0) return { isValid: false, error: 'Liters must be positive' };
         if (entry.amount && entry.amount < 0) return { isValid: false, error: 'Amount cannot be negative' }; // Zero allowed for corrections?
     }
+
+    return { isValid: true, record: result };
+}
+
+// Phase 5: Driver, Vehicle, Transaction validators
+
+/** Email regex for basic format validation */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateDriverRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: name ---
+    const name = (raw['name'] || '').trim();
+    if (!name) {
+        return { isValid: false, error: 'Missing required field: name' };
+    }
+    result.name = name;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- email: validate format if provided ---
+    const email = (raw['email'] || '').trim();
+    if (email) {
+        if (!EMAIL_RE.test(email)) {
+            return { isValid: false, error: `Invalid email format: "${email}"` };
+        }
+        result.email = email;
+    }
+
+    // --- phone: normalize (strip spaces, dashes, parens) ---
+    const phone = (raw['phone'] || '').trim();
+    if (phone) {
+        result.phone = phone.replace(/[\s\-()]/g, '');
+    }
+
+    // --- Optional string fields ---
+    for (const field of ['licenseNumber', 'status', 'assignedVehicleId', 'emergencyContact']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Optional date fields ---
+    for (const field of ['licenseExpiry', 'hireDate']) {
+        const val = parseFlexibleDate(raw[field]);
+        if (val) result[field] = val;
+    }
+
+    // --- Default status ---
+    if (!result.status) result.status = 'Active';
+
+    return { isValid: true, record: result };
+}
+
+function validateVehicleRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: licensePlate ---
+    const plate = (raw['licensePlate'] || '').trim();
+    if (!plate) {
+        return { isValid: false, error: 'Missing required field: licensePlate' };
+    }
+    // Normalize: uppercase, strip spaces
+    result.licensePlate = plate.toUpperCase().replace(/\s/g, '');
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['make', 'model', 'year', 'color', 'vin', 'status', 'currentDriverId', 'currentDriverName']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Optional date fields ---
+    for (const field of ['insuranceExpiry', 'fitnessExpiry', 'registrationExpiry']) {
+        const val = parseFlexibleDate(raw[field]);
+        if (val) result[field] = val;
+    }
+
+    // --- Default status ---
+    if (!result.status) result.status = 'Active';
+
+    return { isValid: true, record: result };
+}
+
+function validateTransactionRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: date ---
+    const parsedDate = parseFlexibleDate(raw['date']);
+    if (!parsedDate) {
+        return { isValid: false, error: `Missing or invalid date: "${raw['date'] || ''}"` };
+    }
+    result.date = parsedDate;
+
+    // --- Required: amount ---
+    const amount = cleanNumeric(raw['amount']);
+    if (amount === undefined) {
+        return { isValid: false, error: `Missing or invalid amount: "${raw['amount'] || ''}"` };
+    }
+    result.amount = amount;
+
+    // --- Required: category ---
+    const category = (raw['category'] || '').trim();
+    if (!category) {
+        return { isValid: false, error: 'Missing required field: category' };
+    }
+    result.category = category;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['type', 'description', 'driverId', 'driverName', 'vehicleId', 'vehiclePlate', 'paymentMethod', 'status', 'tripId', 'receiptUrl']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- isReconciled ---
+    const reconciled = (raw['isReconciled'] || '').trim().toLowerCase();
+    result.isReconciled = reconciled === 'true' || reconciled === '1' || reconciled === 'yes';
+
+    // --- Default type and status ---
+    if (!result.type) result.type = 'Expense';
+    if (!result.status) result.status = 'Completed';
+    if (!result.paymentMethod) result.paymentMethod = 'Cash';
+
+    return { isValid: true, record: result };
+}
+
+// Phase 6: Infrastructure entity validators
+
+function validateTollTagRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: tagNumber ---
+    const tagNumber = (raw['tagNumber'] || '').trim();
+    if (!tagNumber) {
+        return { isValid: false, error: 'Missing required field: tagNumber' };
+    }
+    result.tagNumber = tagNumber;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['status', 'vehicleId', 'driverId']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Default status ---
+    if (!result.status) result.status = 'Active';
+
+    return { isValid: true, record: result };
+}
+
+function validateTollPlazaRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: name ---
+    const name = (raw['name'] || '').trim();
+    if (!name) {
+        return { isValid: false, error: 'Missing required field: name' };
+    }
+    result.name = name;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['location', 'status']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Default status ---
+    if (!result.status) result.status = 'Active';
+
+    return { isValid: true, record: result };
+}
+
+function validateStationRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: name ---
+    const name = (raw['name'] || '').trim();
+    if (!name) {
+        return { isValid: false, error: 'Missing required field: name' };
+    }
+    result.name = name;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['location', 'status']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Default status ---
+    if (!result.status) result.status = 'Active';
+
+    return { isValid: true, record: result };
+}
+
+function validateEquipmentRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: name ---
+    const name = (raw['name'] || '').trim();
+    if (!name) {
+        return { isValid: false, error: 'Missing required field: name' };
+    }
+    result.name = name;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['description', 'status']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Default status ---
+    if (!result.status) result.status = 'Active';
+
+    return { isValid: true, record: result };
+}
+
+function validateInventoryRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: name ---
+    const name = (raw['name'] || '').trim();
+    if (!name) {
+        return { isValid: false, error: 'Missing required field: name' };
+    }
+    result.name = name;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['description', 'status']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- Default status ---
+    if (!result.status) result.status = 'Active';
+
+    return { isValid: true, record: result };
+}
+
+function validateClaimRecord(
+    raw: Record<string, string>,
+): { isValid: boolean; record?: any; error?: string } {
+    const result: any = {};
+
+    // --- Required: date ---
+    const parsedDate = parseFlexibleDate(raw['date']);
+    if (!parsedDate) {
+        return { isValid: false, error: `Missing or invalid date: "${raw['date'] || ''}"` };
+    }
+    result.date = parsedDate;
+
+    // --- Required: amount ---
+    const amount = cleanNumeric(raw['amount']);
+    if (amount === undefined) {
+        return { isValid: false, error: `Missing or invalid amount: "${raw['amount'] || ''}"` };
+    }
+    result.amount = amount;
+
+    // --- Required: category ---
+    const category = (raw['category'] || '').trim();
+    if (!category) {
+        return { isValid: false, error: 'Missing required field: category' };
+    }
+    result.category = category;
+
+    // --- id: auto-generate if missing ---
+    result.id = (raw['id'] || '').trim() || crypto.randomUUID();
+
+    // --- Optional string fields ---
+    for (const field of ['type', 'description', 'driverId', 'driverName', 'vehicleId', 'vehiclePlate', 'paymentMethod', 'status', 'tripId', 'receiptUrl']) {
+        const val = (raw[field] || '').trim();
+        if (val) result[field] = val;
+    }
+
+    // --- isReconciled ---
+    const reconciled = (raw['isReconciled'] || '').trim().toLowerCase();
+    result.isReconciled = reconciled === 'true' || reconciled === '1' || reconciled === 'yes';
+
+    // --- Default type and status ---
+    if (!result.type) result.type = 'Expense';
+    if (!result.status) result.status = 'Completed';
+    if (!result.paymentMethod) result.paymentMethod = 'Cash';
 
     return { isValid: true, record: result };
 }

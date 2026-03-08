@@ -68,7 +68,7 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMe
       }`}>
         <div className="flex items-center gap-2">
           <Car className={`h-6 w-6 ${isOnline ? 'text-indigo-100' : 'text-amber-500'}`} />
-          <span className="font-bold text-lg">GoRide Driver</span>
+          <span className="font-bold text-lg">Roam Driver</span>
         </div>
         <div className="flex items-center gap-3">
           <OfflineStatusIndicator />

@@ -280,7 +280,7 @@ export function IntegrityGapDashboard() {
                                 </div>
                                 <div className="h-[120px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={entries.slice(-20).map((e, i) => ({ val: e.metadata?.serverSideDistance || 0, i }))}>
+                                        <AreaChart data={entries.slice(-20).map((e, i) => ({ val: e.metadata?.serverSideDistance || 0, name: `point-${i}` }))}>
                                             <defs>
                                                 <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
                                                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>

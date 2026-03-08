@@ -19,6 +19,7 @@ import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { api, TripFilterParams } from '../../services/api';
 import { Trip } from '../../types/data';
+import { useVocab } from '../../utils/vocabulary';
 import { TripStatsCard } from './TripStatsCard';
 import { ManualTripForm } from './ManualTripForm';
 import { TripFilters, TripFilterState } from './TripFilters';
@@ -43,6 +44,7 @@ const parseLocalDate = (dateStr: string) => {
 
 export function TripLogsPage() {
   const queryClient = useQueryClient();
+  const { v } = useVocab();
   const [viewMode, setViewMode] = useState<'details' | 'map' | 'issue' | null>(null);
   const [isManualTripOpen, setIsManualTripOpen] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
@@ -256,9 +258,9 @@ export function TripLogsPage() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-2">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Trip Analytics</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900">{v('tripsPageTitle')}</h2>
           <p className="text-slate-500">
-            Real-time trip analytics, cancellation insights, and fleet performance.
+            {v('tripsPageSubtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -428,7 +430,7 @@ export function TripLogsPage() {
                               <TableCell className="align-top text-right">
                                 <div className="flex flex-col items-end">
                                     <div className="flex items-center justify-end gap-2">
-                                        {(trip.paymentMethod === 'Cash' || trip.cashCollected! > 0 || ['GoRide', 'Cash', 'Private'].includes(trip.platform)) && (
+                                        {(trip.paymentMethod === 'Cash' || trip.cashCollected! > 0 || ['Roam', 'GoRide', 'Cash', 'Private'].includes(trip.platform)) && (
                                             <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal bg-emerald-50 text-emerald-700 border-emerald-200">
                                                 Cash
                                             </Badge>
@@ -447,6 +449,16 @@ export function TripLogsPage() {
                                             +${trip.fareBreakdown.tips.toFixed(2)} Tip
                                         </span>
                                     ) : null}
+                                    {trip.status === 'Cancelled' && trip.cancellationFee !== undefined && trip.cancellationFee > 0 && (
+                                        <span className="text-[10px] text-amber-600 block">
+                                            Cancel fee: ${trip.cancellationFee.toFixed(2)}
+                                        </span>
+                                    )}
+                                    {trip.estimatedLoss !== undefined && trip.estimatedLoss > 0 && (
+                                        <span className="text-[10px] text-rose-500 block">
+                                            Est. loss: ${trip.estimatedLoss.toFixed(2)}
+                                        </span>
+                                    )}
                                 </div>
                               </TableCell>
 
@@ -477,6 +489,11 @@ export function TripLogsPage() {
                                 >
                                   {trip.status}
                                 </Badge>
+                                {trip.status === 'Cancelled' && trip.cancelledBy && (
+                                  <p className="text-[10px] text-rose-500 mt-0.5 capitalize">
+                                    by {trip.cancelledBy}
+                                  </p>
+                                )}
                               </TableCell>
 
                               <TableCell>

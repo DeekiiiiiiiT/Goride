@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // Build stability ping: 2026-02-10 03:45
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
+import { BusinessConfigProvider } from './components/auth/BusinessConfigContext';
 import { LoginPage } from './components/auth/LoginPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
@@ -19,9 +20,7 @@ import { UserManagementPage } from './components/users/UserManagementPage';
 import { TierConfigPage } from './components/tiers/TierConfigPage';
 import { PerformanceDashboard } from './components/performance/PerformanceDashboard';
 import { FuelManagement } from './pages/FuelManagement';
-import { TollDatabaseView } from './components/toll/TollDatabaseView';
 import { TollLogsPage } from './pages/TollLogs';
-import { TollInfoPage } from './components/toll/TollInfoPage';
 import { TollAnalytics } from './components/toll/TollAnalytics';
 
 // Driver Portal Components
@@ -38,6 +37,11 @@ import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+
+// Super Admin Portal Components
+import { AdminLoginPage } from './components/admin/AdminLoginPage';
+import { AdminUnauthorized } from './components/admin/AdminUnauthorized';
+import { AdminPortal } from './components/admin/AdminPortal';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,6 +109,17 @@ function AppContent() {
       return <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-500">Loading application...</div>;
   }
 
+  // ---------------------------------------------------------------------------
+  // Super Admin Portal — /admin path detection
+  // Completely separate rendering branch. The regular fleet app at "/" is untouched.
+  // ---------------------------------------------------------------------------
+  const isAdminPath = window.location.pathname.startsWith('/admin');
+  if (isAdminPath) {
+    if (!user) return <AdminLoginPage />;
+    if (role !== 'superadmin') return <AdminUnauthorized />;
+    return <AdminPortal />;
+  }
+
   if (!user) {
     return <LoginPage />;
   }
@@ -152,14 +167,12 @@ function AppContent() {
         {currentPage === 'toll-tags' && <TollReconciliation />}
         {currentPage === 'tag-inventory' && <TagInventory />}
         {currentPage === 'claimable-loss' && <ClaimableLoss />}
-        {currentPage === 'toll-database' && <TollDatabaseView />}
         {currentPage === 'toll-logs' && <TollLogsPage />}
-        {currentPage === 'toll-info' && <TollInfoPage />}
         {currentPage === 'toll-analytics' && <TollAnalytics />}
-        {currentPage === 'tier-config' && <TierConfigPage />}
         {currentPage === 'performance' && <PerformanceDashboard />}
+        {currentPage === 'tier-config' && <TierConfigPage />}
         
-        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap', 'fuel-stations', 'fuel-database'].includes(currentPage) && (
+        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage) && (
           <FuelManagement 
               defaultTab={
                   currentPage === 'fuel-reconciliation' ? 'reconciliation' :
@@ -170,8 +183,6 @@ function AppContent() {
                   currentPage === 'fuel-logs' ? 'logs' :
                   currentPage === 'fuel-reports' ? 'reports' :
                   currentPage === 'fuel-configuration' ? 'configuration' :
-                  currentPage === 'fuel-stations' ? 'stations' :
-                  currentPage === 'fuel-database' ? 'database' :
                   'dashboard'
               }
               onTabChange={(t) => {
@@ -197,7 +208,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <OfflineProvider>
-          <AppContent />
+          <BusinessConfigProvider>
+            <AppContent />
+          </BusinessConfigProvider>
         </OfflineProvider>
       </AuthProvider>
     </QueryClientProvider>

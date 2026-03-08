@@ -35,7 +35,7 @@ export interface TripFilterState {
   hasTip?: string; // 'yes', 'no', 'all'
   hasSurge?: string; // 'yes', 'no', 'all'
   tripType?: string; // 'all', 'manual', 'platform'
-  platform?: string; // 'all', 'Uber', 'InDrive', 'GoRide'
+  platform?: string; // 'all', 'Uber', 'InDrive', 'Roam'
 }
 
 interface TripFiltersProps {
@@ -162,7 +162,7 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
                 <SelectItem value="Lyft">Lyft</SelectItem>
                 <SelectItem value="Bolt">Bolt</SelectItem>
                 <SelectItem value="InDrive">InDrive</SelectItem>
-                <SelectItem value="GoRide">GoRide</SelectItem>
+                <SelectItem value="Roam">Roam</SelectItem>
                 <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>

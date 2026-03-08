@@ -4,6 +4,7 @@ import { Badge } from "../../ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { format } from "date-fns";
 import { Trip } from "../../../types/data";
+import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { AlertTriangle } from "lucide-react";
 
 interface UnclaimedRefundsListProps {
@@ -63,7 +64,7 @@ export function UnclaimedRefundsList({ trips }: UnclaimedRefundsListProps) {
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <Badge variant="outline">{trip.platform}</Badge>
+                                    <Badge variant="outline">{normalizePlatform(trip.platform)}</Badge>
                                 </TableCell>
                                 <TableCell>
                                     {trip.driverName || <span className="text-slate-400">-</span>}

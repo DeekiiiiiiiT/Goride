@@ -15,7 +15,7 @@ export function DesignSystem() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Design System & Foundation</h1>
         <p className="text-lg text-slate-500 dark:text-slate-400">
-          Visual identity, typography, and core components for GoRide Fleet Management.
+          Visual identity, typography, and core components for Roam Fleet Management.
         </p>
       </div>
 
@@ -58,7 +58,7 @@ export function DesignSystem() {
             <div>
               <p className="leading-7 [&:not(:first-child)]:mt-6">
                 The quick brown fox jumps over the lazy dog. This is the standard body text used for descriptions and general content.
-                GoRide aims to provide <span className="font-semibold text-indigo-600">clarity and control</span> for fleet managers.
+                Roam aims to provide <span className="font-semibold text-indigo-600">clarity and control</span> for fleet managers.
               </p>
               <span className="text-xs text-slate-400">text-base leading-7 (Body)</span>
             </div>

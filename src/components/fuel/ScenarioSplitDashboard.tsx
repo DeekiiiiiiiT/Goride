@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Card, CardContent } from "../ui/card";
 import { WeeklyFuelReport, FuelScenario } from '../../types/fuel';
 import { Vehicle } from '../../types/vehicle';
-import { Car, Building2, User, AlertCircle, Info } from 'lucide-react';
+import { Car, Building2, User, Info, Navigation } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 interface ScenarioSplitDashboardProps {
@@ -16,6 +16,7 @@ interface SplitBreakdown {
         total: number;
         rideShare: number;
         companyOps: number;
+        deadhead: number;
         personal: number;
         misc: number;
     };
@@ -23,6 +24,7 @@ interface SplitBreakdown {
         total: number;
         rideShare: number;
         companyOps: number;
+        deadhead: number;
         personal: number;
         misc: number;
     };
@@ -37,19 +39,21 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
         const costs = {
             rideShare: report.rideShareCost,
             companyOps: report.companyUsageCost,
+            deadhead: report.deadheadCost || 0,
             personal: report.personalUsageCost,
             misc: report.miscellaneousCost
         };
 
         const result: SplitBreakdown = {
-            company: { total: 0, rideShare: 0, companyOps: 0, personal: 0, misc: 0 },
-            driver: { total: 0, rideShare: 0, companyOps: 0, personal: 0, misc: 0 }
+            company: { total: 0, rideShare: 0, companyOps: 0, deadhead: 0, personal: 0, misc: 0 },
+            driver: { total: 0, rideShare: 0, companyOps: 0, deadhead: 0, personal: 0, misc: 0 }
         };
 
         if (!fuelRule) {
-            // Default Logic
+            // Default Logic — deadhead is company-authorized, fully covered
             result.company.rideShare = costs.rideShare;
             result.company.companyOps = costs.companyOps;
+            result.company.deadhead = costs.deadhead;
             result.company.misc = costs.misc * 0.5;
             
             result.driver.personal = costs.personal;
@@ -57,6 +61,7 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
         } else if (fuelRule.coverageType === 'Full') {
             result.company.rideShare = costs.rideShare;
             result.company.companyOps = costs.companyOps;
+            result.company.deadhead = costs.deadhead;
             result.company.misc = costs.misc;
             result.driver.personal = costs.personal;
         } else if (fuelRule.coverageType === 'Percentage') {
@@ -64,19 +69,24 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
              const companyOpsPct = (fuelRule.companyUsageCoverage ?? 100) / 100;
              const personalPct = (fuelRule.personalCoverage ?? 0) / 100;
              const miscPct = (fuelRule.miscCoverage ?? fuelRule.coverageValue ?? 50) / 100;
+             // Deadhead follows its own coverage rule, falling back to companyOps coverage
+             const deadheadPct = (fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? 100) / 100;
 
              result.company.rideShare = costs.rideShare * rideSharePct;
              result.company.companyOps = costs.companyOps * companyOpsPct;
+             result.company.deadhead = costs.deadhead * deadheadPct;
              result.company.personal = costs.personal * personalPct;
              result.company.misc = costs.misc * miscPct;
 
              result.driver.rideShare = costs.rideShare * (1 - rideSharePct);
              result.driver.companyOps = costs.companyOps * (1 - companyOpsPct);
+             result.driver.deadhead = costs.deadhead * (1 - deadheadPct);
              result.driver.personal = costs.personal * (1 - personalPct);
              result.driver.misc = costs.misc * (1 - miscPct);
         } else if (fuelRule.coverageType === 'Fixed_Amount') {
-            // Approximation for display
+            // Approximation for display — deadhead is company-authorized
             result.company.companyOps = costs.companyOps;
+            result.company.deadhead = costs.deadhead;
             
             const allowance = fuelRule.coverageValue || 0;
             const variable = costs.rideShare + costs.misc;
@@ -94,8 +104,8 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
         }
 
         // Sum Totals
-        result.company.total = result.company.rideShare + result.company.companyOps + result.company.personal + result.company.misc;
-        result.driver.total = result.driver.rideShare + result.driver.companyOps + result.driver.personal + result.driver.misc;
+        result.company.total = result.company.rideShare + result.company.companyOps + result.company.deadhead + result.company.personal + result.company.misc;
+        result.driver.total = result.driver.rideShare + result.driver.companyOps + result.driver.deadhead + result.driver.personal + result.driver.misc;
 
         return result;
     };
@@ -132,8 +142,8 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
                     count: 0,
                     totalSpend: 0,
                     breakdown: {
-                        company: { total: 0, rideShare: 0, companyOps: 0, personal: 0, misc: 0 },
-                        driver: { total: 0, rideShare: 0, companyOps: 0, personal: 0, misc: 0 }
+                        company: { total: 0, rideShare: 0, companyOps: 0, deadhead: 0, personal: 0, misc: 0 },
+                        driver: { total: 0, rideShare: 0, companyOps: 0, deadhead: 0, personal: 0, misc: 0 }
                     }
                 };
             }
@@ -147,12 +157,14 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
             groups[activeScenarioId].breakdown.company.total += bd.company.total;
             groups[activeScenarioId].breakdown.company.rideShare += bd.company.rideShare;
             groups[activeScenarioId].breakdown.company.companyOps += bd.company.companyOps;
+            groups[activeScenarioId].breakdown.company.deadhead += bd.company.deadhead;
             groups[activeScenarioId].breakdown.company.personal += bd.company.personal;
             groups[activeScenarioId].breakdown.company.misc += bd.company.misc;
 
             groups[activeScenarioId].breakdown.driver.total += bd.driver.total;
             groups[activeScenarioId].breakdown.driver.rideShare += bd.driver.rideShare;
             groups[activeScenarioId].breakdown.driver.companyOps += bd.driver.companyOps;
+            groups[activeScenarioId].breakdown.driver.deadhead += bd.driver.deadhead;
             groups[activeScenarioId].breakdown.driver.personal += bd.driver.personal;
             groups[activeScenarioId].breakdown.driver.misc += bd.driver.misc;
         });
@@ -176,34 +188,110 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
                         <CategoryTile 
                             title="Ride Share" 
                             icon={Car}
                             companyAmount={group.breakdown.company.rideShare}
                             driverAmount={group.breakdown.driver.rideShare}
-                            tooltip="Fuel cost for logged trips."
+                            tooltip={
+                                <div className="space-y-2 max-w-xs">
+                                    <p className="font-semibold text-slate-100">Ride Share</p>
+                                    <p>Fuel consumed during active rideshare passenger trips (Uber, InDrive, etc.).</p>
+                                    <div className="border-t border-slate-600 pt-1.5 space-y-1">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">How it's calculated</p>
+                                        <p className="font-mono text-[11px]">(Trip km ÷ efficiency km/L) × $/L</p>
+                                        <p className="text-slate-400 text-[11px]">Trip km comes from completed rideshare trip logs. Efficiency and price per liter are derived from actual fuel entries in the period.</p>
+                                    </div>
+                                    <div className="border-t border-slate-600 pt-1.5">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">Company / Driver split</p>
+                                        <p className="text-slate-400 text-[11px]">Split is determined by the Ride Share coverage % in the active fuel scenario.</p>
+                                    </div>
+                                </div>
+                            }
                         />
                         <CategoryTile 
                             title="Company Ops" 
                             icon={Building2}
                             companyAmount={group.breakdown.company.companyOps}
                             driverAmount={group.breakdown.driver.companyOps}
-                            tooltip="Authorized business errands & maintenance."
+                            tooltip={
+                                <div className="space-y-2 max-w-xs">
+                                    <p className="font-semibold text-slate-100">Company Ops</p>
+                                    <p>Fuel used for authorized company business — errands, maintenance runs, and other non-trip work driving.</p>
+                                    <div className="border-t border-slate-600 pt-1.5 space-y-1">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">How it's calculated</p>
+                                        <p className="font-mono text-[11px]">(Company ops km ÷ efficiency km/L) × $/L</p>
+                                        <p className="text-slate-400 text-[11px]">Company ops km comes from mileage adjustments tagged as "Company_Misc" or "Maintenance."</p>
+                                    </div>
+                                    <div className="border-t border-slate-600 pt-1.5">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">Company / Driver split</p>
+                                        <p className="text-slate-400 text-[11px]">Split is determined by the Company Ops coverage % in the active fuel scenario. Typically 100% company-covered.</p>
+                                    </div>
+                                </div>
+                            }
+                        />
+                        <CategoryTile 
+                            title="Deadhead" 
+                            icon={Navigation}
+                            companyAmount={group.breakdown.company.deadhead}
+                            driverAmount={group.breakdown.driver.deadhead}
+                            tooltip={
+                                <div className="space-y-2 max-w-xs">
+                                    <p className="font-semibold text-slate-100">Deadhead</p>
+                                    <p>Fuel burned while repositioning or cruising between trips — driving without a passenger that is still work-related.</p>
+                                    <div className="border-t border-slate-600 pt-1.5 space-y-1">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">How it's calculated</p>
+                                        <p className="font-mono text-[11px]">(Deadhead km ÷ efficiency km/L) × $/L</p>
+                                        <p className="text-slate-400 text-[11px]">Deadhead km is sourced from the fleet deadhead attribution API, then capped so it never exceeds the residual km (odometer delta − trip km − company ops km).</p>
+                                    </div>
+                                    <div className="border-t border-slate-600 pt-1.5">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">Company / Driver split</p>
+                                        <p className="text-slate-400 text-[11px]">Split is determined by the Deadhead coverage % in the active fuel scenario. Falls back to Company Ops % if not explicitly set.</p>
+                                    </div>
+                                </div>
+                            }
                         />
                         <CategoryTile 
                             title="Personal" 
                             icon={User}
                             companyAmount={group.breakdown.company.personal}
                             driverAmount={group.breakdown.driver.personal}
-                            tooltip="Personal usage calculated from logs + adjustments."
+                            tooltip={
+                                <div className="space-y-2 max-w-xs">
+                                    <p className="font-semibold text-slate-100">Personal</p>
+                                    <p>Fuel consumed for non-work personal driving. This is the true personal residual after all work-related categories have been subtracted.</p>
+                                    <div className="border-t border-slate-600 pt-1.5 space-y-1">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">How it's calculated</p>
+                                        <p className="font-mono text-[11px]">(Personal km ÷ efficiency km/L) × $/L</p>
+                                        <p className="text-slate-400 text-[11px]">Personal km = Total odometer delta − Trip km − Company Ops km − Deadhead km. If no odometer data exists, falls back to mileage adjustments tagged as "Personal."</p>
+                                    </div>
+                                    <div className="border-t border-slate-600 pt-1.5">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">Company / Driver split</p>
+                                        <p className="text-slate-400 text-[11px]">Split is determined by the Personal coverage % in the active fuel scenario. Typically 0% company-covered (fully driver responsibility).</p>
+                                    </div>
+                                </div>
+                            }
                         />
                         <CategoryTile 
                             title="Misc (Leakage)" 
-                            icon={AlertCircle}
                             companyAmount={group.breakdown.company.misc}
                             driverAmount={group.breakdown.driver.misc}
-                            tooltip="Unaccounted fuel usage."
+                            tooltip={
+                                <div className="space-y-2 max-w-xs">
+                                    <p className="font-semibold text-slate-100">Misc (Leakage)</p>
+                                    <p>Unaccounted fuel — the gap between what was actually spent on the gas card and what can be explained by all known usage categories.</p>
+                                    <div className="border-t border-slate-600 pt-1.5 space-y-1">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">How it's calculated</p>
+                                        <p className="font-mono text-[11px]">Total Spend − (Ride Share + Company Ops + Deadhead + Personal)</p>
+                                        <p className="text-slate-400 text-[11px]">A positive value may indicate efficiency drift between estimated and actual consumption, fuel price variance, data gaps in odometer readings, or potential misuse.</p>
+                                    </div>
+                                    <div className="border-t border-slate-600 pt-1.5">
+                                        <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">Company / Driver split</p>
+                                        <p className="text-slate-400 text-[11px]">Split is determined by the Misc coverage % in the active fuel scenario. Typically shared 50/50 unless explicitly configured.</p>
+                                    </div>
+                                </div>
+                            }
                         />
                     </div>
                 </div>
@@ -214,10 +302,10 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
 
 interface CategoryTileProps {
     title: string;
-    icon: React.ElementType;
+    icon?: React.ElementType;
     companyAmount: number;
     driverAmount: number;
-    tooltip: string;
+    tooltip: React.ReactNode;
 }
 
 function CategoryTile({ title, icon: Icon, companyAmount, driverAmount, tooltip }: CategoryTileProps) {
@@ -235,15 +323,15 @@ function CategoryTile({ title, icon: Icon, companyAmount, driverAmount, tooltip 
             <CardContent className="p-4 space-y-3">
                 <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2 text-slate-600">
-                        <Icon className="h-4 w-4" />
+                        {Icon && <Icon className="h-4 w-4" />}
                         <span className="text-sm font-medium">{title}</span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger>
                                     <Info className="h-3 w-3 text-slate-400" />
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{tooltip}</p>
+                                <TooltipContent side="bottom" className="max-w-sm p-3 text-xs">
+                                    {tooltip}
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>

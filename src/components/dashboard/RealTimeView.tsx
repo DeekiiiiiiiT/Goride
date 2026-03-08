@@ -4,6 +4,7 @@ import { Badge } from "../ui/badge";
 import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
 import { Trip } from '../../types/data';
+import { normalizePlatform } from '../../utils/normalizePlatform';
 import { 
   Activity, 
   Wifi, 
@@ -150,7 +151,7 @@ export function RealTimeView({ trips }: RealTimeViewProps) {
                               trip.platform === 'Lyft' ? 'border-pink-500 text-pink-600' : 
                               'border-indigo-500 text-indigo-600'}
                           `}>
-                            {trip.platform}
+                            {normalizePlatform(trip.platform)}
                           </Badge>
                        </div>
                        <div className="col-span-3 font-medium truncate pr-2" title={trip.driverId}>

@@ -42,7 +42,15 @@ import {
   BarChart2,
   Fuel,
   CreditCard,
-  MinusCircle
+  MinusCircle,
+  Users,
+  DollarSign,
+  Tag,
+  Building2,
+  Wrench,
+  Package,
+  ShieldAlert,
+  HardDrive
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
@@ -59,6 +67,7 @@ import { Input } from "../ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { toast } from "sonner@2.0.3";
 import { BulkImportTollTransactionsModal } from '../vehicles/BulkImportTollTransactionsModal';
+import { ExportCenter } from './ExportCenter';
 
 import { 
     detectFileType, 
@@ -84,6 +93,10 @@ import { DisasterRecoveryCard } from './DisasterRecoveryCard';
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { CalibrationReport } from './CalibrationReport';
 import { QuarantineList } from './QuarantineList';
+import { TripReImportFlow } from './TripReImportFlow';
+import { BulkEntityImportFlow } from './BulkEntityImportFlow';
+import { SystemBackupRestore } from './SystemBackupRestore';
+import { ImportExportHistory } from './ImportExportHistory';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
@@ -114,6 +127,7 @@ const CollapsibleSection = ({ title, children, defaultOpen = true, icon }: { tit
 }
 
 export function ImportsPage() {
+  const [activeTab, setActiveTab] = useState<'import' | 'export'>('import');
   const [step, setStep] = useState<Step>('select_platform');
   
   // Staging: Multiple files
@@ -153,10 +167,18 @@ export function ImportsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
   const [disabledColumns, setDisabledColumns] = useState<Record<string, string[]>>({});
   const [tollImportMode, setTollImportMode] = useState<'usage' | 'topup' | 'recovery' | null>(null);
+  const [showTripReImport, setShowTripReImport] = useState(false);
+  const [bulkImportType, setBulkImportType] = useState<'driver' | 'vehicle' | 'transaction' | 'tollTag' | 'tollPlaza' | 'station' | 'equipment' | 'inventory' | 'claim' | null>(null);
+  const [showFullRestore, setShowFullRestore] = useState(false);
+
+  // Phase 8: Onboarding banner
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return localStorage.getItem('roam_data_center_onboarded') !== 'true';
+  });
 
   // Load Fields
   useEffect(() => {
-    const saved = localStorage.getItem('goRide_fields');
+    const saved = localStorage.getItem('roam_fields');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -186,7 +208,7 @@ export function ImportsPage() {
 
   const saveFields = (fields: FieldDefinition[]) => {
     setAvailableFields(fields);
-    localStorage.setItem('goRide_fields', JSON.stringify(fields));
+    localStorage.setItem('roam_fields', JSON.stringify(fields));
   };
 
   // --- File Handling ---
@@ -297,11 +319,11 @@ export function ImportsPage() {
   const handleMerge = () => {
       // 1. Merge
       // Phase 1: Capture Organization Name
-      const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
+      const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
       const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats, driverTimeData, vehicleTimeData } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
-          localStorage.setItem('goride_fleet_name', organizationName);
+          localStorage.setItem('roam_fleet_name', organizationName);
           // Trigger update for AppLayout
           window.dispatchEvent(new Event('fleetNameUpdated'));
       }
@@ -376,11 +398,11 @@ export function ImportsPage() {
 
         // 2. Get Local Trips (for the table view)
         // This also runs the robust "Bottom-Up" financial calculation we just fixed.
-        const knownFleetName = localStorage.getItem('goride_fleet_name') || undefined;
+        const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
         const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName, fuelCards);
         
         if (localResult.organizationName) {
-            localStorage.setItem('goride_fleet_name', localResult.organizationName);
+            localStorage.setItem('roam_fleet_name', localResult.organizationName);
             window.dispatchEvent(new Event('fleetNameUpdated'));
         }
         
@@ -886,12 +908,13 @@ export function ImportsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Batch Import</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Data Center</h2>
           <p className="text-slate-500 dark:text-slate-400">
-            Upload multiple Uber reports. We'll merge them by Trip ID automatically.
+            Import and export your fleet data
           </p>
         </div>
         <div className="flex gap-2">
+           {activeTab === 'import' && (
            <Dialog open={manageFieldsOpen} onOpenChange={setManageFieldsOpen}>
                 <DialogTrigger asChild>
                     <Button variant="outline" size="sm">
@@ -949,12 +972,67 @@ export function ImportsPage() {
                     </div>
                 </DialogContent>
            </Dialog>
+           )}
 
-           {(step !== 'select_platform' && step !== 'upload' && step !== 'success') && (
+           {activeTab === 'import' && (step !== 'select_platform' && step !== 'upload' && step !== 'success') && (
                <Button variant="ghost" onClick={reset}>Cancel</Button>
            )}
         </div>
       </div>
+
+      {/* Top-Level Tab Switcher */}
+      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTab('import')}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+            activeTab === 'import'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Import
+        </button>
+        <button
+          onClick={() => setActiveTab('export')}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+            activeTab === 'export'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Export
+        </button>
+      </div>
+
+      {/* Phase 8: Onboarding Banner */}
+      {showOnboarding && (
+        <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-gradient-to-r from-indigo-50 to-emerald-50 border border-indigo-100">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-indigo-100 shrink-0 mt-0.5">
+              <HardDrive className="h-5 w-5 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Welcome to the Data Center</p>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Import your fleet data from CSV files, export reports for analysis, or create full system backups for disaster recovery.
+                Use the <strong>Import</strong> tab to upload data and the <strong>Export</strong> tab to download it.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setShowOnboarding(false); localStorage.setItem('roam_data_center_onboarded', 'true'); }}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none shrink-0 mt-1"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* ═══ EXPORT TAB ═══ */}
+      {activeTab === 'export' && <ExportCenter />}
+
+      {/* ═══ IMPORT TAB (all existing import content below) ═══ */}
+      {activeTab === 'import' && (<>
 
       {error && (
         <Alert variant="destructive">
@@ -967,8 +1045,23 @@ export function ImportsPage() {
       {/* DISASTER RECOVERY SECTION */}
       <DisasterRecoveryCard />
 
+      {/* TRIP RE-IMPORT FLOW (Phase 4) */}
+      {showTripReImport && (
+        <TripReImportFlow onBack={() => setShowTripReImport(false)} />
+      )}
+
+      {/* BULK ENTITY IMPORT FLOW (Phase 5) */}
+      {bulkImportType && (
+        <BulkEntityImportFlow entityType={bulkImportType} onBack={() => setBulkImportType(null)} />
+      )}
+
+      {/* FULL SYSTEM RESTORE (Phase 7) */}
+      {showFullRestore && (
+        <SystemBackupRestore onBack={() => setShowFullRestore(false)} />
+      )}
+
       {/* STEP 0: SELECT PLATFORM */}
-      {step === 'select_platform' && (
+      {step === 'select_platform' && !showTripReImport && !bulkImportType && !showFullRestore && (
         <div className="space-y-6">
             <div className="text-center space-y-2">
                 <h3 className="text-lg font-medium text-slate-900">Select Platform</h3>
@@ -1005,6 +1098,17 @@ export function ImportsPage() {
                     { id: 'Toll Usage', icon: <MinusCircle className="h-6 w-6" />, color: 'bg-slate-600 text-white', action: () => setTollImportMode('usage') },
                     { id: 'Disaster Recovery', icon: <CloudDownload className="h-6 w-6" />, color: 'bg-white border-2 border-slate-200 text-slate-600', subtext: 'Export Backup', action: handleTollBackup },
                     { id: 'Restore Backup', icon: <UploadCloud className="h-6 w-6" />, color: 'bg-rose-50 border-2 border-rose-100 text-rose-600', subtext: 'Import Recovery CSV', action: () => setTollImportMode('recovery') },
+                    { id: 'Trip Re-Import', icon: <MapPin className="h-6 w-6" />, color: 'bg-violet-600 text-white', subtext: 'CSV with Ledger', action: () => setShowTripReImport(true) },
+                    { id: 'Driver Import', icon: <Users className="h-6 w-6" />, color: 'bg-teal-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('driver') },
+                    { id: 'Vehicle Import', icon: <Car className="h-6 w-6" />, color: 'bg-sky-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('vehicle') },
+                    { id: 'Transaction Import', icon: <DollarSign className="h-6 w-6" />, color: 'bg-amber-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('transaction') },
+                    { id: 'Toll Tag Import', icon: <Tag className="h-6 w-6" />, color: 'bg-orange-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('tollTag') },
+                    { id: 'Toll Plaza Import', icon: <Building2 className="h-6 w-6" />, color: 'bg-stone-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('tollPlaza') },
+                    { id: 'Station Import', icon: <Fuel className="h-6 w-6" />, color: 'bg-lime-600 text-white', subtext: 'Simple CSV', action: () => setBulkImportType('station') },
+                    { id: 'Equipment Import', icon: <Wrench className="h-6 w-6" />, color: 'bg-cyan-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('equipment') },
+                    { id: 'Inventory Import', icon: <Package className="h-6 w-6" />, color: 'bg-fuchsia-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('inventory') },
+                    { id: 'Claim Import', icon: <ShieldAlert className="h-6 w-6" />, color: 'bg-red-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('claim') },
+                    { id: 'Full Restore', icon: <HardDrive className="h-6 w-6" />, color: 'bg-slate-900 text-white', subtext: 'ZIP Backup', action: () => setShowFullRestore(true) },
                 ].map((platform: any) => (
                     <Card 
                         key={platform.id}
@@ -1948,6 +2052,11 @@ export function ImportsPage() {
         mode={tollImportMode || 'usage'}
         onSuccess={() => setTollImportMode(null)}
       />
+
+      </>)}
+
+      {/* Phase 8: Activity Log */}
+      <ImportExportHistory />
     </div>
   );
 }

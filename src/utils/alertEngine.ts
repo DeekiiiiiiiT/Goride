@@ -402,7 +402,7 @@ export const AlertEngine = {
         console.log("Generating Daily Report...", metrics);
         return {
             success: true,
-            recipient: 'admin@goride.com',
+            recipient: 'admin@roam.com',
             generatedAt: new Date().toISOString(),
             summary: `Daily Report: ${metrics.totalTrips} trips, $${metrics.revenue} revenue.`
         };

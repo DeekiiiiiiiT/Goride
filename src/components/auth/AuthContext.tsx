@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../../utils/supabase/client';
 
-type UserRole = 'admin' | 'manager' | 'viewer' | 'driver';
+type UserRole = 'admin' | 'manager' | 'viewer' | 'driver' | 'superadmin';
 
 interface AuthContextType {
   session: Session | null;
@@ -30,17 +30,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // 1. Get initial session
     const initSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        // If the refresh token is stale/revoked, clear it so the error stops recurring
+        if (error) {
+          console.warn('Session init error (clearing stale tokens):', error.message);
+          await supabase.auth.signOut({ scope: 'local' });
+          setSession(null);
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+          return;
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
           const userRole = session.user.user_metadata?.role as UserRole;
-          // Default to 'driver' if role is missing but user exists, 
-          // or handle accordingly. For now, strict check.
           setRole(userRole || null);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching session:', error);
+        // Belt-and-suspenders: also clear on unexpected throw
+        try { await supabase.auth.signOut({ scope: 'local' }); } catch {}
       } finally {
         setLoading(false);
       }

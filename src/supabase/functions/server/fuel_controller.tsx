@@ -49,6 +49,58 @@ app.delete(`${BASE_PATH}/fuel-cards/:id`, async (c) => {
   }
 });
 
+// --- FINALIZED REPORTS ---
+app.get(`${BASE_PATH}/finalized-reports`, async (c) => {
+  try {
+    const reports = await kv.getByPrefix("finalized_report:");
+    return c.json(reports || []);
+  } catch (e: any) {
+    console.log(`[FinalizedReports] GET error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
+  try {
+    const reports = await c.req.json();
+    if (!Array.isArray(reports) || reports.length === 0) {
+      return c.json({ error: "Expected a non-empty array of report snapshots." }, 400);
+    }
+
+    let saved = 0;
+    for (const report of reports) {
+      if (!report.weekStart || !report.vehicleId) {
+        console.log(`[FinalizedReports] Skipping report missing weekStart or vehicleId`);
+        continue;
+      }
+      const weekKey = report.weekStart.split('T')[0];
+      const key = `finalized_report:${weekKey}:${report.vehicleId}`;
+      await kv.set(key, report);
+      saved++;
+    }
+
+    console.log(`[FinalizedReports] Saved ${saved} finalized report snapshots`);
+    return c.json({ success: true, saved });
+  } catch (e: any) {
+    console.log(`[FinalizedReports] POST error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => {
+  try {
+    const weekStart = c.req.param("weekStart");
+    const vehicleId = c.req.param("vehicleId");
+    const key = `finalized_report:${weekStart}:${vehicleId}`;
+    await kv.del(key);
+    console.log(`[FinalizedReports] Deleted ${key}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`[FinalizedReports] DELETE error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // --- SCALABILITY & PERFORMANCE (Phase 8) ---
 app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
@@ -937,8 +989,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     if (entry.vehicleId) {
         const vehicle = await kv.get(`vehicle:${entry.vehicleId}`);
         if (vehicle) {
-            const { tankCapacity, baselineEfficiency, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
-            const profileKmPerLiter = baselineEfficiency;
+            const { tankCapacity, baselineEfficiencyL100km, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
+            // Convert L/100km → km/L for all downstream comparisons
+            const profileKmPerLiter = baselineEfficiencyL100km > 0 ? (100 / baselineEfficiencyL100km) : 0;
 
             // Phase 23: compute rolling average efficiency for this vehicle as of this entry's date
             const rollingAvg = await fuelLogic.calculateRollingEfficiency(entry.vehicleId, entry.date);
@@ -1527,7 +1580,17 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 if (entry.paymentSource) continue; // Already has a value, skip
 
                 let inferredEnum: string;
-                const rawMeta = entry.metadata?.paymentSource;
+                let rawMeta = entry.metadata?.paymentSource;
+                // Fix: If no paymentSource in metadata, look up the linked transaction
+                if (!rawMeta && entry.transactionId) {
+                    try {
+                        const linkedTx = await kv.get(`transaction:${entry.transactionId}`);
+                        if (linkedTx?.metadata?.paymentSource) {
+                            rawMeta = linkedTx.metadata.paymentSource;
+                            console.log(`[PaymentBackfill] Found paymentSource '${rawMeta}' from linked transaction ${entry.transactionId} for entry ${entry.id}`);
+                        }
+                    } catch (e) { /* ignore lookup failures */ }
+                }
                 if (rawMeta && metaToEnum[rawMeta]) {
                     inferredEnum = metaToEnum[rawMeta];
                 } else if (entry.type === 'Card_Transaction') {
@@ -1947,8 +2010,39 @@ app.get(`${BASE_PATH}/fuel-audit/fleet-stats`, async (c) => {
             return fuelLogic.generateAuditSummary(allEntries, v.id);
         });
 
-        const fleetSummary = fuelLogic.generateAuditSummary(allEntries);
-        
+        // Aggregate fleet summary from per-vehicle summaries (not raw entries)
+        // This avoids the bug where mixing odometers across vehicles inflates totalDistance
+        const fleetSummary = {
+            totalLiters: 0,
+            totalCost: 0,
+            totalDistance: 0,
+            flaggedTransactions: 0,
+            criticalAnomalies: 0,
+            healedTransactions: 0,
+            avgEfficiency: 0,
+            costPerKm: 0,
+            lastOdometer: 0,
+            firstOdometer: 0,
+            vehicleId: 'fleet-wide'
+        };
+
+        vehicleSummaries.forEach((vs: any) => {
+            fleetSummary.totalLiters += vs.totalLiters || 0;
+            fleetSummary.totalCost += vs.totalCost || 0;
+            fleetSummary.totalDistance += vs.totalDistance || 0;
+            fleetSummary.flaggedTransactions += vs.flaggedTransactions || 0;
+            fleetSummary.criticalAnomalies += vs.criticalAnomalies || 0;
+            fleetSummary.healedTransactions += vs.healedTransactions || 0;
+        });
+
+        // Weighted efficiency: fleet total distance / fleet total fuel
+        if (fleetSummary.totalLiters > 0 && fleetSummary.totalDistance > 0) {
+            fleetSummary.avgEfficiency = Number((fleetSummary.totalDistance / fleetSummary.totalLiters).toFixed(2));
+        }
+        if (fleetSummary.totalDistance > 0) {
+            fleetSummary.costPerKm = Number((fleetSummary.totalCost / fleetSummary.totalDistance).toFixed(2));
+        }
+
         return c.json({
             fleet: fleetSummary,
             vehicles: vehicleSummaries
@@ -3164,5 +3258,200 @@ app.post(`${BASE_PATH}/parent-companies`, async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+
+// --- DEADHEAD ATTRIBUTION (Phase 7) ---
+
+/**
+ * Phase 7, Step 7.2: Fleet-wide deadhead attribution.
+ * MUST be registered before the :vehicleId route so Hono doesn't match "fleet" as an ID.
+ *
+ * GET /fuel-audit/deadhead/fleet?periodStart=YYYY-MM-DD&periodEnd=YYYY-MM-DD
+ * Returns { vehicles: DeadheadAttribution[], fleet: AggregatedDeadheadSummary }
+ */
+app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
+  try {
+    const startTime = Date.now(); // Phase 9 (Step 9.3): performance timing
+    const periodStart = c.req.query("periodStart") || undefined;
+    const periodEnd = c.req.query("periodEnd") || undefined;
+
+    // Load fuel entries, vehicles, and trips in parallel
+    const [entriesResult, vehiclesResult, tripsResult] = await Promise.all([
+      supabase.from("kv_store_37f42386").select("value").like("key", "fuel_entry:%"),
+      supabase.from("kv_store_37f42386").select("value").like("key", "vehicle:%"),
+      supabase.from("kv_store_37f42386").select("value").like("key", "trip:%")
+    ]);
+
+    const allEntries = (entriesResult.data || []).map((d: any) => d.value);
+    const vehicles = (vehiclesResult.data || []).map((d: any) => d.value);
+    const allTrips = (tripsResult.data || []).map((d: any) => d.value);
+
+    // Per-vehicle deadhead attribution
+    const vehicleResults: any[] = [];
+    for (const v of vehicles) {
+      if (!v.id) continue;
+
+      // Filter entries and trips for this vehicle
+      const vEntries = allEntries.filter((e: any) => e.vehicleId === v.id);
+      const vTrips = allTrips.filter((t: any) =>
+        t.vehicleId === v.id ||
+        t.vehicleId === v.licensePlate ||
+        t.vehicleId === v.plateNumber
+      );
+
+      // Also match trips via driver assignment (Step 7.3)
+      if (v.currentDriverId) {
+        const driverTrips = allTrips.filter((t: any) =>
+          t.driverId === v.currentDriverId &&
+          !vTrips.some((vt: any) => vt.id === t.id)
+        );
+        vTrips.push(...driverTrips);
+      }
+
+      // Date filtering if provided
+      const filteredEntries = deadheadFilterByDateRange(vEntries, periodStart, periodEnd);
+      const filteredTrips = deadheadFilterByDateRange(vTrips, periodStart, periodEnd);
+
+      const attribution = fuelLogic.calculateDeadheadAttribution({
+        vehicleId: v.id,
+        fuelEntries: filteredEntries,
+        trips: filteredTrips,
+        periodStart,
+        periodEnd
+      });
+
+      vehicleResults.push({
+        ...attribution,
+        vehicleName: v.name || v.licensePlate || v.plateNumber || v.id
+      });
+    }
+
+    // Aggregate fleet summary
+    const fleetSummary = {
+      vehicleCount: vehicleResults.length,
+      totalOdometerKm: 0,
+      totalTripKm: 0,
+      totalDeadheadKm: 0,
+      totalPersonalKm: 0,
+      totalUnaccountedKm: 0,
+      fleetDeadheadPct: 0,
+      fleetPersonalPct: 0,
+      avgConfidence: '' as string,
+      methodBreakdown: { A: 0, C: 0, combined: 0, fallback: 0 } as Record<string, number>
+    };
+
+    for (const vr of vehicleResults) {
+      fleetSummary.totalOdometerKm += vr.totalOdometerKm || 0;
+      fleetSummary.totalTripKm += vr.tripKm || 0;
+      fleetSummary.totalDeadheadKm += vr.deadheadKm || 0;
+      fleetSummary.totalPersonalKm += vr.personalKm || 0;
+      fleetSummary.totalUnaccountedKm += vr.unaccountedKm || 0;
+      fleetSummary.methodBreakdown[vr.method] = (fleetSummary.methodBreakdown[vr.method] || 0) + 1;
+    }
+
+    // Fleet-level percentages
+    if (fleetSummary.totalOdometerKm > 0) {
+      fleetSummary.fleetDeadheadPct = Number(((fleetSummary.totalDeadheadKm / fleetSummary.totalOdometerKm) * 100).toFixed(1));
+      fleetSummary.fleetPersonalPct = Number(((fleetSummary.totalPersonalKm / fleetSummary.totalOdometerKm) * 100).toFixed(1));
+    }
+
+    // Average confidence: majority wins
+    const confCounts = { high: 0, medium: 0, low: 0 };
+    for (const vr of vehicleResults) {
+      confCounts[vr.confidenceLevel as 'high' | 'medium' | 'low']++;
+    }
+    fleetSummary.avgConfidence = confCounts.high >= confCounts.medium && confCounts.high >= confCounts.low
+      ? 'high' : confCounts.medium >= confCounts.low ? 'medium' : 'low';
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[deadhead/fleet] Completed in ${elapsed}ms — ${vehicleResults.length} vehicles, ${allEntries.length} entries, ${allTrips.length} trips`);
+
+    return c.json({
+      fleet: fleetSummary,
+      vehicles: vehicleResults
+    });
+  } catch (e: any) {
+    console.log(`[deadhead/fleet] Error: ${e.message}`);
+    return c.json({ error: `Fleet deadhead attribution failed: ${e.message}` }, 500);
+  }
+});
+
+/**
+ * Phase 7, Step 7.1: Single-vehicle deadhead attribution.
+ *
+ * GET /fuel-audit/deadhead/:vehicleId?periodStart=YYYY-MM-DD&periodEnd=YYYY-MM-DD
+ * Returns DeadheadAttribution
+ */
+app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, async (c) => {
+  try {
+    const vehicleId = c.req.param("vehicleId");
+    const periodStart = c.req.query("periodStart") || undefined;
+    const periodEnd = c.req.query("periodEnd") || undefined;
+
+    // Load fuel entries and trips for this vehicle in parallel
+    const [entriesResult, tripsResult, vehicleResult] = await Promise.all([
+      supabase.from("kv_store_37f42386").select("value").like("key", "fuel_entry:%"),
+      supabase.from("kv_store_37f42386").select("value").like("key", "trip:%"),
+      supabase.from("kv_store_37f42386").select("value").eq("key", `vehicle:${vehicleId}`)
+    ]);
+
+    const allEntries = (entriesResult.data || []).map((d: any) => d.value);
+    const allTrips = (tripsResult.data || []).map((d: any) => d.value);
+    const vehicle = vehicleResult.data?.[0]?.value;
+
+    // Filter entries by vehicleId
+    const vEntries = allEntries.filter((e: any) => e.vehicleId === vehicleId);
+
+    // Filter trips by vehicleId (direct match) OR via driver assignment (Step 7.3)
+    const vTrips = allTrips.filter((t: any) =>
+      t.vehicleId === vehicleId ||
+      (vehicle && (t.vehicleId === vehicle.licensePlate || t.vehicleId === vehicle.plateNumber))
+    );
+
+    if (vehicle?.currentDriverId) {
+      const driverTrips = allTrips.filter((t: any) =>
+        t.driverId === vehicle.currentDriverId &&
+        !vTrips.some((vt: any) => vt.id === t.id)
+      );
+      vTrips.push(...driverTrips);
+    }
+
+    // Date filtering
+    const filteredEntries = deadheadFilterByDateRange(vEntries, periodStart, periodEnd);
+    const filteredTrips = deadheadFilterByDateRange(vTrips, periodStart, periodEnd);
+
+    const attribution = fuelLogic.calculateDeadheadAttribution({
+      vehicleId,
+      fuelEntries: filteredEntries,
+      trips: filteredTrips,
+      periodStart,
+      periodEnd
+    });
+
+    return c.json(attribution);
+  } catch (e: any) {
+    console.log(`[deadhead/${c.req.param("vehicleId")}] Error: ${e.message}`);
+    return c.json({ error: `Vehicle deadhead attribution failed: ${e.message}` }, 500);
+  }
+});
+
+/**
+ * Phase 7 helper: Filter records by date range.
+ * Checks record.date, record.timestamp, or record.requestTime fields.
+ * Returns all records if no range is specified.
+ */
+function deadheadFilterByDateRange(records: any[], periodStart?: string, periodEnd?: string): any[] {
+  if (!periodStart && !periodEnd) return records;
+
+  const startMs = periodStart ? new Date(periodStart).getTime() : 0;
+  const endMs = periodEnd ? new Date(periodEnd + 'T23:59:59.999Z').getTime() : Infinity;
+
+  return records.filter((r: any) => {
+    const dateStr = r.date || r.timestamp || r.requestTime;
+    if (!dateStr) return true; // include records without dates (don't silently drop them)
+    const ms = new Date(dateStr).getTime();
+    if (isNaN(ms)) return true;
+    return ms >= startMs && ms <= endMs;
+  });
+}
 
 export default app;

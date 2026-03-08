@@ -25,9 +25,12 @@ import {
     Search,
     Car,
     Settings2,
-    Save
+    Save,
+    Route
 } from "lucide-react";
 import { api } from "../../services/api";
+import { fuelService } from "../../services/fuelService";
+import { DeadheadAnalysisPanel } from "./DeadheadAnalysisPanel";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "../ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { format } from "date-fns";
@@ -48,11 +51,12 @@ import {
 export function FuelAuditDashboard() {
     const [summary, setSummary] = useState<any>(null);
     const [flaggedTx, setFlaggedTx] = useState<any[]>([]);
+    const [allFuelEntries, setAllFuelEntries] = useState<any[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
     const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'anomalies' | 'integrity' | 'orphans' | 'learnt' | 'report'>('anomalies');
+    const [viewMode, setViewMode] = useState<'anomalies' | 'integrity' | 'orphans' | 'learnt' | 'report' | 'deadhead'>('anomalies');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [selectedAnomalies, setSelectedAnomalies] = useState<string[]>([]);
     const [resolutionNote, setResolutionNote] = useState("");
@@ -180,7 +184,7 @@ export function FuelAuditDashboard() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [statsResponse, flaggedData, vehicleData, fleetStatsResponse, financialData, integrityData, stationsData, learntData, driverData, auditConfig] = await Promise.all([
+            const [statsResponse, flaggedData, vehicleData, fleetStatsResponse, financialData, integrityData, stationsData, learntData, driverData, auditConfig, fuelEntriesData] = await Promise.all([
             api.getFuelAuditSummary(selectedVehicleId === "all" ? undefined : selectedVehicleId), 
             api.getFlaggedTransactions(),
             api.getVehicles(),
@@ -190,7 +194,8 @@ export function FuelAuditDashboard() {
             api.getStations(),
             api.getLearntLocations().catch(() => []), // Step 6.1: Graceful fail for learnt
             api.getDrivers().catch(() => []), // Fetch drivers for name resolution
-            api.getAuditConfig().catch(() => ({ frequencyThreshold: 3, efficiencyThreshold: 0.30 }))
+            api.getAuditConfig().catch(() => ({ frequencyThreshold: 3, efficiencyThreshold: 0.30 })),
+            fuelService.getFuelEntries().catch(() => []) // Ledger Sync: fetch ALL fuel entries for orphan matching
         ]);
             
             // Load audit config
@@ -230,6 +235,7 @@ export function FuelAuditDashboard() {
                 });
             }
             setFlaggedTx(flaggedData);
+            setAllFuelEntries(fuelEntriesData || []);
         } catch (err) {
             console.error("Audit Data Error:", err);
             toast.error("Failed to load audit data");
@@ -366,13 +372,22 @@ export function FuelAuditDashboard() {
             (selectedVehicleId === 'all' || tx.vehicleId === selectedVehicleId)
         );
 
-        // Simple matching logic: find ledger entries where ID doesn't appear in any fuel log's transactionId
-        // or where the ledger entry explicitly lacks a fuel log reference
+        // Ledger Sync Fix: Match against ALL fuel entries, not just flagged anomalies.
+        // Covers all 4 linking patterns in the codebase:
+        //   1. Same ID (gate-held entries reuse entry.id for both records)
+        //   2. fuel_entry.transactionId → transaction.id (auto-created entries)
+        //   3. fuel_entry.metadata.originalTransactionId → transaction.id (redundant metadata link)
+        //   4. transaction.metadata.sourceId → fuel_entry.id (reverse link)
         return fuelLedgerEntries.filter(ltx => {
-            const hasMatch = flaggedTx.some(ftx => ftx.id === ltx.id || ftx.transactionId === ltx.id);
+            const hasMatch = allFuelEntries.some(fe =>
+                fe.id === ltx.id ||
+                fe.transactionId === ltx.id ||
+                fe.metadata?.originalTransactionId === ltx.id ||
+                ltx.metadata?.sourceId === fe.id
+            );
             return !hasMatch;
         });
-    }, [ledgerTxs, flaggedTx, selectedVehicleId]);
+    }, [ledgerTxs, allFuelEntries, selectedVehicleId]);
 
     const handleResolve = async (id: string, status: 'resolved' | 'disputed' | 'rejected') => {
         // Optimistic UI Update (Phase 3: Fuel Management & Odometer Audit Core)
@@ -1295,17 +1310,20 @@ export function FuelAuditDashboard() {
                                 {viewMode === 'anomalies' ? <BarChart3 className="w-5 h-5 text-indigo-600" /> : 
                                  viewMode === 'integrity' ? <ShieldCheck className="w-5 h-5 text-indigo-600" /> :
                                  viewMode === 'orphans' ? <Activity className="w-5 h-5 text-rose-600" /> :
+                                 viewMode === 'deadhead' ? <Route className="w-5 h-5 text-amber-600" /> :
                                  <FileSearch className="w-5 h-5 text-emerald-600" />}
                                 
                                 {viewMode === 'anomalies' ? 'Fuel Integrity Audit Feed' : 
                                  viewMode === 'integrity' ? 'Automated Odometer Audit Trail' :
                                  viewMode === 'orphans' ? 'Ledger Discrepancy Detector' :
+                                 viewMode === 'deadhead' ? 'KM Attribution — Deadhead Analysis' :
                                  'Fleet Verification Summary'}
                             </CardTitle>
                             <CardDescription>
                                 {viewMode === 'anomalies' ? 'Transactions flagged by Stop-to-Stop & Fuel Velocity algorithms' : 
                                  viewMode === 'integrity' ? 'Sequential verification log of odometer drift and system corrections' :
                                  viewMode === 'orphans' ? 'Financial transactions missing corresponding operational fuel logs' :
+                                 viewMode === 'deadhead' ? 'Breakdown of trip, deadhead (repositioning), and personal driving across the fleet' :
                                  'Comprehensive audit of fleet-wide fuel integrity and resolution performance'}
                             </CardDescription>
                         </div>
@@ -1360,6 +1378,14 @@ export function FuelAuditDashboard() {
                                     onClick={() => setViewMode('report')}
                                 >
                                     Health Report
+                                </Button>
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className={`text-[10px] font-bold uppercase tracking-wider h-7 px-3 ${viewMode === 'deadhead' ? 'bg-white shadow-sm' : ''}`}
+                                    onClick={() => setViewMode('deadhead')}
+                                >
+                                    KM Attribution
                                 </Button>
                             </div>
                             {viewMode === 'anomalies' && (
@@ -1823,6 +1849,8 @@ export function FuelAuditDashboard() {
                                 ))}
                             </div>
                         )
+                    ) : viewMode === 'deadhead' ? (
+                        <DeadheadAnalysisPanel />
                     ) : (
                         /* Phase 5: Odometer Audit Trail View */
                         <div className="p-0">

@@ -23,6 +23,7 @@ import {
     RotateCcw
 } from "lucide-react";
 import { format } from "date-fns";
+import { DateRange } from "react-day-picker";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { toast } from "sonner@2.0.3";
@@ -41,6 +42,7 @@ interface BucketReconciliationViewProps {
     fuelEntries: FuelEntry[];
     transactions?: FinancialTransaction[];
     adjustments?: MileageAdjustment[];
+    dateRange?: DateRange;
     onClose?: () => void;
     onRefresh?: () => void;
 }
@@ -51,6 +53,7 @@ export function BucketReconciliationView({
     fuelEntries, 
     transactions = [],
     adjustments = [],
+    dateRange,
     onRefresh
 }: BucketReconciliationViewProps) {
     const [isPosting, setIsPosting] = React.useState<string | null>(null);
@@ -99,6 +102,42 @@ export function BucketReconciliationView({
     // Use locally-fetched trips (full anchor range) if available, otherwise fall back to parent trips
     const effectiveTrips = bucketTrips ?? trips;
 
+    // Compute the ACTUAL efficiency being used by buildOdometerBuckets — same 3-tier fallback chain
+    const liveEfficiency = useMemo(() => {
+        const allVehicleEntries = fuelEntries.filter(e => e.vehicleId === vehicle.id);
+        const odoEntries = allVehicleEntries
+            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0 && (e.liters || 0) > 0)
+            .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+
+        const efficiencyFuel = odoEntries.length >= 2
+            ? odoEntries.slice(1).reduce((sum, e) => sum + (e.liters || 0), 0)
+            : 0;
+
+        let kmL = 0;
+        let source: 'odometer' | 'configured' | 'default' = 'default';
+
+        if (odoEntries.length >= 3 && efficiencyFuel > 0) {
+            const odoSpan = (odoEntries[odoEntries.length - 1].odometer || 0) - (odoEntries[0].odometer || 0);
+            if (odoSpan > 0) {
+                kmL = odoSpan / efficiencyFuel;
+                source = 'odometer';
+            }
+        }
+        if (kmL <= 0) {
+            const cityEff = vehicle.fuelSettings?.efficiencyCity;
+            if (cityEff && cityEff > 0) {
+                kmL = 100 / cityEff;
+                source = 'configured';
+            } else {
+                kmL = 10;
+                source = 'default';
+            }
+        }
+
+        const l100km = kmL > 0 ? Number((100 / kmL).toFixed(1)) : 0;
+        return { kmL: Number(kmL.toFixed(2)), l100km, source, odoEntries: odoEntries.length };
+    }, [vehicle, fuelEntries]);
+
     const buckets = useMemo(() => {
         const rawBuckets = FuelCalculationService.calculateOdometerBuckets(
             vehicle,
@@ -121,6 +160,27 @@ export function BucketReconciliationView({
             };
         });
     }, [vehicle, fuelEntries, effectiveTrips, adjustments, transactions, unifiedAnchors]);
+
+    // Filter buckets by date range for display (calculation uses full history for accuracy)
+    const filteredBuckets = useMemo(() => {
+        if (!dateRange?.from) return buckets;
+        
+        return buckets.filter(bucket => {
+            // A bucket overlaps the date range if its endDate >= range.from AND startDate <= range.to
+            const bucketStart = new Date(bucket.startDate);
+            const bucketEnd = new Date(bucket.endDate);
+            bucketStart.setHours(0, 0, 0, 0);
+            bucketEnd.setHours(0, 0, 0, 0);
+            
+            const rangeFrom = new Date(dateRange.from!);
+            rangeFrom.setHours(0, 0, 0, 0);
+            
+            const rangeTo = dateRange.to ? new Date(dateRange.to) : rangeFrom;
+            rangeTo.setHours(0, 0, 0, 0);
+            
+            return bucketEnd >= rangeFrom && bucketStart <= rangeTo;
+        });
+    }, [buckets, dateRange]);
 
     const handlePostDeduction = async (bucket: OdometerBucket) => {
         setIsPosting(bucket.id);
@@ -174,6 +234,19 @@ export function BucketReconciliationView({
         );
     }
 
+    if (filteredBuckets.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                <History className="h-12 w-12 text-slate-300 mb-4" />
+                <h3 className="text-lg font-medium text-slate-900">No Buckets in Selected Period</h3>
+                <p className="text-sm text-slate-500 max-w-xs mt-2">
+                    No stop-to-stop buckets overlap with the selected date range. Try expanding the calendar filter.
+                </p>
+                <p className="text-xs text-slate-400 mt-2">{buckets.length} total bucket{buckets.length !== 1 ? 's' : ''} exist across all time.</p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -184,9 +257,19 @@ export function BucketReconciliationView({
                             <span className="text-sm font-medium text-slate-500">Efficiency Profile</span>
                         </div>
                         <p className="text-2xl font-bold text-slate-900">
-                            {vehicle.fuelSettings?.efficiencyCity || '10.0'} <span className="text-sm font-normal text-slate-500">L/100km</span>
+                            {liveEfficiency.kmL} <span className="text-sm font-normal text-slate-500">km/L</span>
+                            <span className="text-sm font-normal text-slate-400 ml-1">({liveEfficiency.l100km} L/100km)</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-xs mt-1">
+                            {liveEfficiency.source === 'odometer' ? (
+                                <span className="text-emerald-600 font-medium">● Live from {liveEfficiency.odoEntries} odometer entries</span>
+                            ) : liveEfficiency.source === 'configured' ? (
+                                <span className="text-amber-600 font-medium">● Configured baseline (insufficient odo data)</span>
+                            ) : (
+                                <span className="text-red-600 font-medium">● System default (no config or odo data)</span>
+                            )}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
                             {unifiedAnchors ? `${unifiedAnchors.length} unified anchors` : 'Fuel entries only'}
                         </p>
                     </CardContent>
@@ -199,9 +282,9 @@ export function BucketReconciliationView({
                             <span className="text-sm font-medium text-slate-500">Total Distance</span>
                         </div>
                         <p className="text-2xl font-bold text-slate-900">
-                            {(buckets[buckets.length - 1].endOdometer - buckets[0].startOdometer).toLocaleString()} <span className="text-sm font-normal text-slate-500">km</span>
+                            {(filteredBuckets[filteredBuckets.length - 1].endOdometer - filteredBuckets[0].startOdometer).toLocaleString()} <span className="text-sm font-normal text-slate-500">km</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">Spanning {buckets.length + 1} anchor points</p>
+                        <p className="text-xs text-slate-500 mt-1">Spanning {filteredBuckets.length} bucket{filteredBuckets.length !== 1 ? 's' : ''}{dateRange?.from ? ' in period' : ''}</p>
                     </CardContent>
                 </Card>
 
@@ -212,9 +295,9 @@ export function BucketReconciliationView({
                             <span className="text-sm font-medium text-slate-500">Total Fuel</span>
                         </div>
                         <p className="text-2xl font-bold text-slate-900">
-                            {buckets.reduce((sum, b) => sum + b.actualFuelLiters, 0).toFixed(1)} <span className="text-sm font-normal text-slate-500">L</span>
+                            {filteredBuckets.reduce((sum, b) => sum + b.actualFuelLiters, 0).toFixed(1)} <span className="text-sm font-normal text-slate-500">L</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">Cost: {formatCurrency(buckets.reduce((sum, b) => sum + b.actualFuelCost, 0))}</p>
+                        <p className="text-xs text-slate-500 mt-1">Cost: {formatCurrency(filteredBuckets.reduce((sum, b) => sum + b.actualFuelCost, 0))}</p>
                     </CardContent>
                 </Card>
             </div>
@@ -245,7 +328,7 @@ export function BucketReconciliationView({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {buckets.map((bucket, idx) => (
+                            {filteredBuckets.map((bucket, idx) => (
                                 <TableRow key={bucket.id} className={bucket.status === 'Anomaly' ? "bg-amber-50/30" : ""}>
                                     <TableCell>
                                         <div className="flex flex-col">
@@ -296,7 +379,7 @@ export function BucketReconciliationView({
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <div className="flex items-center gap-0.5 text-[10px] px-1 bg-blue-50 text-blue-700 rounded border border-blue-100">
-                                                                RS: {bucket.rideShareDistance}
+                                                                RS: {typeof bucket.rideShareDistance === 'number' ? bucket.rideShareDistance.toFixed(2) : bucket.rideShareDistance}
                                                             </div>
                                                         </TooltipTrigger>
                                                         <TooltipContent>RideShare Distance</TooltipContent>
@@ -306,7 +389,7 @@ export function BucketReconciliationView({
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <div className="flex items-center gap-0.5 text-[10px] px-1 bg-purple-50 text-purple-700 rounded border border-purple-100">
-                                                                P: {bucket.personalDistance}
+                                                                P: {typeof bucket.personalDistance === 'number' ? bucket.personalDistance.toFixed(2) : bucket.personalDistance}
                                                             </div>
                                                         </TooltipTrigger>
                                                         <TooltipContent>Personal Distance</TooltipContent>

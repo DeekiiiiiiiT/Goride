@@ -206,6 +206,17 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData }: Scenari
                                                 </div>
                                             </div>
                                             <div className="space-y-1.5">
+                                                <Label className="text-xs font-medium text-amber-700">Deadhead</Label>
+                                                <div className="relative">
+                                                    <Input 
+                                                        type="number" min="0" max="100" className="pr-8"
+                                                        value={fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? 100}
+                                                        onChange={(e) => updateFuelRule('deadheadCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1.5">
                                                 <Label className="text-xs font-medium text-slate-700">Personal Usage</Label>
                                                 <div className="relative">
                                                     <Input 

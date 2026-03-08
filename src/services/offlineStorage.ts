@@ -1,6 +1,6 @@
 import { OfflineAction } from '../types/offline';
 
-const STORAGE_KEY = 'goride_offline_queue';
+const STORAGE_KEY = 'roam_offline_queue';
 
 export const offlineStorage = {
   getQueue: (): OfflineAction[] => {

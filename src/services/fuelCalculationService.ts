@@ -6,6 +6,17 @@ import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, OdometerB
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
 
+/** Per-vehicle deadhead attribution passed in from the API (Phase 2) */
+export interface VehicleDeadheadInput {
+    vehicleId: string;
+    deadheadKm: number;
+    personalKm: number;
+    totalOdometerKm: number;
+    method: 'A' | 'C' | 'combined' | 'fallback';
+    confidenceLevel: 'high' | 'medium' | 'low';
+    confidenceReason: string;
+}
+
 export const FuelCalculationService = {
     /**
      * Calculates volume (liters) based on total cost and price per unit.
@@ -70,6 +81,18 @@ export const FuelCalculationService = {
     },
 
     /**
+     * Converts a Date to a 'YYYY-MM-DD' string using LOCAL time (not UTC).
+     * Avoids the timezone-shift bug where .toISOString().split('T')[0]
+     * can land on the wrong calendar date in non-UTC timezones.
+     */
+    toLocalDateStr: (d: Date): string => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    },
+
+    /**
      * Generates a reconciliation report for a single vehicle.
      */
     calculateReconciliation: (
@@ -79,10 +102,11 @@ export const FuelCalculationService = {
         trips: Trip[],
         fuelEntries: FuelEntry[],
         adjustments: MileageAdjustment[],
-        scenarios: FuelScenario[] = []
+        scenarios: FuelScenario[] = [],
+        deadheadData?: VehicleDeadheadInput
     ): WeeklyFuelReport => {
-        const startStr = weekStart.toISOString().split('T')[0];
-        const endStr = weekEnd.toISOString().split('T')[0];
+        const startStr = FuelCalculationService.toLocalDateStr(weekStart);
+        const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
 
         // 1. Find the active scenario for this vehicle
         const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) || 
@@ -90,7 +114,7 @@ export const FuelCalculationService = {
                              scenarios[0];
 
         // Helper to get rule for a specific category
-        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'personal' | 'misc', amount: number) => {
+        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'deadhead' | 'personal' | 'misc', amount: number) => {
             if (!activeScenario) return { company: amount, driver: 0 }; // Default to company pays all if no scenario
 
             const rule = activeScenario.rules.find(r => r.category === 'Fuel');
@@ -100,6 +124,8 @@ export const FuelCalculationService = {
             let coveragePercent = rule.coverageValue;
             if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
             if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
+            if (category === 'deadhead' && rule.deadheadCoverage !== undefined) coveragePercent = rule.deadheadCoverage;
+            else if (category === 'deadhead' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
             if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
             if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
 
@@ -145,14 +171,21 @@ export const FuelCalculationService = {
 
         // 3b. Compute observed efficiency (km/L) from fuel entries with odometer readings
         const entriesWithOdo = vehicleEntries
-            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0)
+            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0 && (e.liters || 0) > 0)
             .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
 
+        // Step 2.3: Efficiency fuel — exclude first fill-up (standard fill-to-fill method).
+        // Floating entries (no odometer) are already excluded by entriesWithOdo filter.
+        const efficiencyFuel = entriesWithOdo.length >= 2
+            ? entriesWithOdo.slice(1).reduce((sum, e) => sum + (e.liters || 0), 0)
+            : 0;
+
         let observedEfficiency = 0;
-        if (entriesWithOdo.length >= 2 && totalLiters > 0) {
+        // Step 2.4: >= 3 entries for reliability, use efficiencyFuel (not totalLiters)
+        if (entriesWithOdo.length >= 3 && efficiencyFuel > 0) {
             const odoDistance = (entriesWithOdo[entriesWithOdo.length - 1].odometer || 0) - (entriesWithOdo[0].odometer || 0);
             if (odoDistance > 0) {
-                observedEfficiency = odoDistance / totalLiters;
+                observedEfficiency = odoDistance / efficiencyFuel;
             }
         }
 
@@ -183,29 +216,48 @@ export const FuelCalculationService = {
         const companyMiscDistance = vehicleAdjustments
             .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
             .reduce((sum, a) => sum + (a.distance || 0), 0);
-        const personalDistance = vehicleAdjustments
-            .filter(a => a.type === 'Personal')
-            .reduce((sum, a) => sum + (a.distance || 0), 0);
+
+        // 4b. Option C: Hybrid Residual — compute personal km from odometer buckets.
+        // Move bucket calculation up so we can derive personal distance from the odometer delta.
+        const buckets = FuelCalculationService.calculateOdometerBuckets(vehicle, vehicleEntries, vehicleTrips, vehicleAdjustments);
+        const totalOdometerDelta = buckets.reduce((sum, b) => sum + (b.endOdometer - b.startOdometer), 0);
+
+        // Step 2.3a: Compute raw residual (everything that isn't trip or company ops)
+        const rawResidual = totalOdometerDelta > 0
+            ? Math.max(0, totalOdometerDelta - totalTripDistance - companyMiscDistance)
+            : vehicleAdjustments.filter(a => a.type === 'Personal').reduce((sum, a) => sum + (a.distance || 0), 0);
+
+        // Step 2.3b: Split residual into deadhead + personal using server attribution
+        let deadheadDistance = 0;
+        let personalDistance = rawResidual;
+
+        if (deadheadData && totalOdometerDelta > 0) {
+            // Cap deadhead to never exceed the residual (server may have different odometer window)
+            deadheadDistance = Math.min(deadheadData.deadheadKm, rawResidual);
+            personalDistance = Math.max(0, rawResidual - deadheadDistance);
+        }
 
         // 5. Calculate Costs using observed efficiency and actual fuel price
         const rideShareCost = (totalTripDistance / observedEfficiency) * actualPricePerLiter;
         const companyUsageCost = (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
+        const deadheadCost = (deadheadDistance / observedEfficiency) * actualPricePerLiter;
         const personalUsageCost = (personalDistance / observedEfficiency) * actualPricePerLiter;
 
-        // 6. Calculate Leakage (Miscellaneous)
-        const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + personalUsageCost);
+        // 6. Calculate Leakage (Miscellaneous) — deadheadCost is now subtracted as an explained category
+        const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + deadheadCost + personalUsageCost);
 
         // 7. Split Costs dynamically using Scenario Rules
         const rideShareSplit = getCoverage('rideShare', rideShareCost);
         const companyUsageSplit = getCoverage('companyUsage', companyUsageCost);
+        const deadheadSplit = getCoverage('deadhead', deadheadCost); // Deadhead is work-related, uses companyUsage rule
         const personalSplit = getCoverage('personal', personalUsageCost);
         const miscSplit = getCoverage('misc', miscellaneousCost);
 
-        const companyShare = rideShareSplit.company + companyUsageSplit.company + personalSplit.company + miscSplit.company;
-        const driverShare = rideShareSplit.driver + companyUsageSplit.driver + personalSplit.driver + miscSplit.driver;
+        const companyShare = rideShareSplit.company + companyUsageSplit.company + deadheadSplit.company + personalSplit.company + miscSplit.company;
+        const driverShare = rideShareSplit.driver + companyUsageSplit.driver + deadheadSplit.driver + personalSplit.driver + miscSplit.driver;
 
         // 8. Calculate Health Status (Phase 4)
-        const buckets = FuelCalculationService.calculateOdometerBuckets(vehicle, vehicleEntries, vehicleTrips, vehicleAdjustments);
+        // Buckets already computed above in step 4b
         let healthStatus: 'Emerald' | 'Amber' | 'Red' = 'Emerald';
         let healthScore = 100;
 
@@ -233,6 +285,8 @@ export const FuelCalculationService = {
             rideShareCost,
             companyMiscDistance,
             companyUsageCost,
+            deadheadDistance,
+            deadheadCost,
             personalDistance,
             personalUsageCost,
             miscellaneousCost,
@@ -243,6 +297,13 @@ export const FuelCalculationService = {
             healthStatus,
             healthScore,
             odometerBuckets: buckets,
+            deadheadMeta: deadheadData ? {
+                method: deadheadData.method,
+                confidenceLevel: deadheadData.confidenceLevel,
+                confidenceReason: deadheadData.confidenceReason,
+                serverDeadheadKm: deadheadData.deadheadKm,
+                serverPersonalKm: deadheadData.personalKm,
+            } : undefined,
             metadata: {
                 scenarioName: activeScenario?.name || 'Standard (Fallback)',
                 scenarioId: activeScenario?.id,
@@ -251,7 +312,7 @@ export const FuelCalculationService = {
                     totalRideshareKm: totalTripDistance,
                     observedEfficiency: Number(observedEfficiency.toFixed(2)),
                     actualPricePerLiter: Number(actualPricePerLiter.toFixed(3)),
-                    efficiencySource: entriesWithOdo.length >= 2 ? 'odometer' : 
+                    efficiencySource: entriesWithOdo.length >= 3 ? 'odometer' : 
                                       (vehicle.fuelSettings?.efficiencyCity ? 'vehicle_settings' : 'default_fallback'),
                     priceSource: (totalLiters > 0 && totalGasCardCost > 0) ? 'fuel_entries' : 'default_fallback',
                     totalLitersInPeriod: Number(totalLiters.toFixed(2)),
@@ -274,10 +335,11 @@ export const FuelCalculationService = {
         fuelEntries: FuelEntry[],
         adjustments: MileageAdjustment[],
         checkIns: any[],
-        scenarios: FuelScenario[]
+        scenarios: FuelScenario[],
+        deadheadMap?: Map<string, VehicleDeadheadInput>
     ): WeeklyFuelReport[] => {
         return vehicles.map(v => 
-            FuelCalculationService.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, scenarios)
+            FuelCalculationService.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, scenarios, deadheadMap?.get(v.id))
         );
     },
 
@@ -313,16 +375,22 @@ export const FuelCalculationService = {
         const buckets: OdometerBucket[] = [];
         // Compute observed efficiency using the same 3-tier fallback chain as calculateReconciliation
         const allVehicleEntries = fuelEntries.filter(e => e.vehicleId === vehicle.id);
-        const allLiters = allVehicleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+        // Step 3.2: Filter to entries with BOTH valid odometer (>0) AND valid liters (>0), sorted by odometer
         const odoEntries = allVehicleEntries
-            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0)
+            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0 && (e.liters || 0) > 0)
             .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
 
+        // Step 3.3: Efficiency fuel — exclude first fill-up (standard fill-to-fill method)
+        const bucketEfficiencyFuel = odoEntries.length >= 2
+            ? odoEntries.slice(1).reduce((sum, e) => sum + (e.liters || 0), 0)
+            : 0;
+
         let bucketEfficiencyKmL = 0; // km/L
-        if (odoEntries.length >= 2 && allLiters > 0) {
+        // Step 3.4: >= 3 entries for reliability, use bucketEfficiencyFuel (not allLiters)
+        if (odoEntries.length >= 3 && bucketEfficiencyFuel > 0) {
             const odoSpan = (odoEntries[odoEntries.length - 1].odometer || 0) - (odoEntries[0].odometer || 0);
             if (odoSpan > 0) {
-                bucketEfficiencyKmL = odoSpan / allLiters;
+                bucketEfficiencyKmL = odoSpan / bucketEfficiencyFuel;
             }
         }
         if (bucketEfficiencyKmL <= 0) {
@@ -402,12 +470,13 @@ export const FuelCalculationService = {
 
             // 6. Calculate Distances
             const rideShareDistance = bucketTrips.reduce((sum, t) => sum + FuelCalculationService.getTotalTripRideshareKm(t), 0);
-            const personalDistance = bucketAdjustments
-                .filter(a => a.type === 'Personal')
-                .reduce((sum, a) => sum + (a.distance || 0), 0);
             const companyMiscDistance = bucketAdjustments
                 .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
                 .reduce((sum, a) => sum + (a.distance || 0), 0);
+
+            // Option C: Hybrid Residual — personal km is the residual after subtracting
+            // ride-share trips and known company ops from the odometer delta.
+            const personalDistance = Math.max(0, bucketDistance - rideShareDistance - companyMiscDistance);
 
             const accountedDistance = rideShareDistance + personalDistance + companyMiscDistance;
             const unaccountedDistance = Math.max(0, bucketDistance - accountedDistance);

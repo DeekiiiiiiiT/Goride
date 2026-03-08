@@ -61,8 +61,10 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { isSameDay, subDays } from "date-fns";
+import { useVocab } from '../../utils/vocabulary';
 
 export function VehiclesPage() {
+  const { v } = useVocab();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [manualVehicles, setManualVehicles] = useState<Vehicle[]>([]);
   const [vehicleMetrics, setVehicleMetrics] = useState<import('../../types/data').VehicleMetrics[]>([]);
@@ -172,8 +174,27 @@ export function VehiclesPage() {
             ...vehicle,
             status: isInactive ? 'Inactive' : 'Active',
             // Prioritize manual/current assignment over historical trip logs
-            currentDriverId: vehicle.currentDriverId || lastTrip?.driverId,
-            currentDriverName: vehicle.currentDriverName || lastTrip?.driverName,
+            // Step 3.1: Resolve lastTrip?.driverId to native Roam ID through the driver list
+            currentDriverId: vehicle.currentDriverId || (() => {
+                if (!lastTrip?.driverId) return undefined;
+                const resolvedDriver = allDrivers.find((d: any) =>
+                    d.id === lastTrip.driverId ||
+                    d.driverId === lastTrip.driverId ||
+                    d.uberDriverId === lastTrip.driverId ||
+                    d.inDriveDriverId === lastTrip.driverId
+                );
+                return resolvedDriver?.id || lastTrip.driverId;
+            })(),
+            currentDriverName: vehicle.currentDriverName || (() => {
+                if (!lastTrip?.driverName) return undefined;
+                const resolvedDriver = allDrivers.find((d: any) =>
+                    d.id === lastTrip.driverId ||
+                    d.driverId === lastTrip.driverId ||
+                    d.uberDriverId === lastTrip.driverId ||
+                    d.inDriveDriverId === lastTrip.driverId
+                );
+                return resolvedDriver?.name || resolvedDriver?.driverName || lastTrip.driverName;
+            })(),
             metrics: {
                 ...vehicle.metrics,
                 todayEarnings: todayEarnings || vehicle.metrics?.todayEarnings || 0,
@@ -187,7 +208,8 @@ export function VehiclesPage() {
             }
         };
     });
-  }, [trips, manualVehicles, vehicleMetrics]);
+  // Step 3.2: Add allDrivers to dependency array so resolution re-runs when drivers load
+  }, [trips, manualVehicles, vehicleMetrics, allDrivers]);
 
   // Apply Filters
   const filteredVehicles = useMemo(() => {
@@ -224,6 +246,11 @@ export function VehiclesPage() {
     const driver = allDrivers.find(d => (d.id === driverId) || (d.driverId === driverId));
     const driverName = driver ? (driver.name || driver.driverName) : 'Unknown Driver';
 
+    // Step 2.2: Warn if the passed ID differs from the native Roam ID
+    if (driver && driver.id !== driverId) {
+      console.warn(`[VehiclesPage] handleAssignDriver: Resolved native Roam ID "${driver.id}" from passed ID "${driverId}" — using native ID for currentDriverId`);
+    }
+
     // Find the vehicle to update
     const vehicleToUpdate = manualVehicles.find(v => v.id === vehicleId);
     if (!vehicleToUpdate) {
@@ -231,9 +258,12 @@ export function VehiclesPage() {
         return;
     }
 
+    // Step 2.1: Always use driver.id (native Roam ID) — never a rideshare UUID
+    const resolvedDriverId = driver?.id || driverId;
+
     const updatedVehicle = {
         ...vehicleToUpdate,
-        currentDriverId: driverId,
+        currentDriverId: resolvedDriverId,
         currentDriverName: driverName,
         status: 'Active' // Reactivate vehicle on assignment
     };
@@ -250,7 +280,7 @@ export function VehiclesPage() {
         // 3. Persist to API
         await api.saveVehicle(updatedVehicle);
         
-        console.log(`Assigned driver ${driverId} (${driverName}) to vehicle ${vehicleId}`);
+        console.log(`Assigned driver ${resolvedDriverId} (${driverName}) to vehicle ${vehicleId} [passed ID: ${driverId}]`);
         
         toast.success("Driver assigned successfully", {
             description: `${driverName} is now assigned to the vehicle.`
@@ -347,8 +377,8 @@ export function VehiclesPage() {
           <div className="flex flex-col gap-4">
               <div className="flex justify-between items-center">
                   <div>
-                      <h1 className="text-2xl font-bold text-slate-900">Fleet Vehicles</h1>
-                      <p className="text-slate-500">Manage and monitor your vehicle assets</p>
+                      <h1 className="text-2xl font-bold text-slate-900">{v('vehiclesPageTitle')}</h1>
+                      <p className="text-slate-500">{v('vehiclesPageSubtitle')}</p>
                   </div>
                   <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />

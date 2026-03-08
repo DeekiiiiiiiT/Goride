@@ -15,7 +15,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Search, MoreHorizontal, Download, CheckCircle2, FileText, ArrowUpRight, ArrowDownLeft, Trash2, Layers, List } from "lucide-react";
 import { Trip, FinancialTransaction, TransactionCategory, ImportBatch } from "../../types/data";
-import { generateMockTransactions } from "../../services/financialService";
+// generateMockTransactions removed — no more mock fallback (Phase 11)
 import { TransactionFilters, TransactionFilterState } from "./TransactionFilters";
 import { CashFlowDashboard } from "./CashFlowDashboard";
 import { ExpensesTab } from "./ExpensesTab";
@@ -76,78 +76,111 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
   const [batchToDelete, setBatchToDelete] = useState<{id: string, name: string} | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
-  // Initial Data Generation
-  useEffect(() => {
-    if (true) {
-      setLoading(true);
-      
-      const loadData = async () => {
-         try {
-             // Parallel fetch of all needed data
-             const [metrics, realTx, batches] = await Promise.all([
-                 api.getDriverMetrics().catch(e => { console.error("Metrics load failed", e); return []; }),
-                 api.getTransactions().catch(e => { console.error("Tx load failed", e); return []; }),
-                 api.getBatches().catch(e => { console.error("Batches load failed", e); return []; })
-             ]);
-
-             setDriverMetrics(metrics);
-             
-             // Convert Trips to Financial Transactions to unify the view
-             // This ensures Uber/Bolt imports (which are Trips) appear in the Transaction List
-             const tripTransactions: FinancialTransaction[] = trips.map(t => {
-                 const batch = batches.find((b: ImportBatch) => b.id === t.batchId);
-                 const isCash = (t.cashCollected || 0) > 0;
-                 
-                 // If this trip is already represented in realTx (e.g. via ID match), strictly speaking we should dedup.
-                 // But typically Trips and FinancialTransactions are separate tables.
-                 
-                 return {
-                     id: t.id,
-                     date: t.date,
-                     time: t.requestTime ? format(new Date(t.requestTime), 'HH:mm:ss') : '00:00:00',
-                     driverId: t.driverId,
-                     driverName: t.driverName,
-                     vehicleId: t.vehicleId,
-                     type: 'Revenue',
-                     category: 'Fare Earnings',
-                     description: `${t.platform || 'Trip'} ${isCash ? '(Cash)' : ''}: ${t.pickupLocation || 'Unknown'} -> ${t.dropoffLocation || 'Unknown'}`,
-                     amount: isCash ? t.cashCollected! : (t.netPayout || t.amount),
-                     paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
-                     status: t.status === 'Completed' ? 'Completed' : 'Pending',
-                     batchId: t.batchId,
-                     batchName: batch?.fileName || (t.batchId ? 'Imported Trip File' : undefined),
-                     isReconciled: false
-                 } as FinancialTransaction;
-             });
-
-             // Merge real transactions (expenses, manual entries) with converted Trip transactions
-             // Filter out any realTx that might duplicate a trip (unlikely but safe)
-             const tripIds = new Set(tripTransactions.map(t => t.id));
-             const uniqueRealTx = Array.isArray(realTx) ? realTx.filter((tx: FinancialTransaction) => !tripIds.has(tx.id)) : [];
-             
-             const allTransactions = [...uniqueRealTx, ...tripTransactions];
-             
-             // Sort by date desc
-             allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-             if (allTransactions.length > 0) {
-                setTransactions(allTransactions);
-             } else {
-                setTransactions(generateMockTransactions(trips));
-             }
-
-         } catch (e) {
-             console.error("Failed to load finance data", e);
-             // Fallback
-             setTransactions(generateMockTransactions(trips));
-         } finally {
-             setLoading(false);
-         }
-      };
-      
-      loadData();
+  // Compute server-side date params from the current filter state
+  // so we can ask the server for only the trips in the selected window
+  const serverDateParams = useMemo(() => {
+    const today = new Date();
+    switch (filters.dateRange) {
+      case 'today':
+        return { startDate: format(today, 'yyyy-MM-dd'), endDate: format(today, 'yyyy-MM-dd') };
+      case 'yesterday': {
+        const yesterday = subDays(today, 1);
+        return { startDate: format(yesterday, 'yyyy-MM-dd'), endDate: format(yesterday, 'yyyy-MM-dd') };
+      }
+      case 'week':
+        return { startDate: format(subDays(today, 7), 'yyyy-MM-dd'), endDate: format(today, 'yyyy-MM-dd') };
+      case 'month':
+        return { startDate: format(startOfMonth(today), 'yyyy-MM-dd'), endDate: format(today, 'yyyy-MM-dd') };
+      case 'custom':
+        if (filters.dateStart) {
+          return {
+            startDate: format(new Date(filters.dateStart), 'yyyy-MM-dd'),
+            endDate: filters.dateEnd ? format(new Date(filters.dateEnd), 'yyyy-MM-dd') : format(new Date(filters.dateStart), 'yyyy-MM-dd')
+          };
+        }
+        return {};
+      case 'all':
+      default:
+        return {};
     }
-  }, [trips]);
+  }, [filters.dateRange, filters.dateStart, filters.dateEnd]);
+
+  // Fetch data – trips are now fetched server-side with date params
+  // so historical data is always available regardless of the 200-trip cap
+  useEffect(() => {
+    setLoading(true);
+    
+    const loadData = async () => {
+       try {
+           // Parallel fetch of supporting data + date-filtered trips
+           const [metrics, realTx, batchList, tripResult] = await Promise.all([
+               api.getDriverMetrics().catch(e => { console.error("Metrics load failed", e); return []; }),
+               api.getTransactions().catch(e => { console.error("Tx load failed", e); return []; }),
+               api.getBatches().catch(e => { console.error("Batches load failed", e); return []; }),
+               api.getTripsFiltered({ ...serverDateParams, limit: 2000 })
+                 .catch(e => { console.error("Trips search failed", e); return { data: [] as Trip[], page: 0, limit: 2000, total: 0 }; })
+           ]);
+
+           setDriverMetrics(metrics);
+
+           const fetchedTrips: Trip[] = tripResult.data || [];
+           console.log(`[TransactionsTab] Server fetched ${fetchedTrips.length} trips (total: ${tripResult.total}) with date params:`, serverDateParams);
+           
+           // Convert Trips to Financial Transactions to unify the view
+           // NOTE (Phase 11): This conversion is used by Analytics mode sub-tabs
+           // (Cash Flow, Expenses, Payroll, Reconciliation, Reports).
+           // The Transaction List page now uses LedgerView instead (Phase 9).
+           const tripTransactions: FinancialTransaction[] = fetchedTrips.map(t => {
+               const batch = batchList.find((b: ImportBatch) => b.id === t.batchId);
+               const isCash = (t.cashCollected || 0) > 0;
+               
+               return {
+                   id: t.id,
+                   date: t.date,
+                   time: t.requestTime ? format(new Date(t.requestTime), 'HH:mm:ss') : '00:00:00',
+                   driverId: t.driverId,
+                   driverName: t.driverName,
+                   vehicleId: t.vehicleId,
+                   type: 'Revenue',
+                   category: 'Fare Earnings',
+                   description: `${t.platform || 'Trip'} ${isCash ? '(Cash)' : ''}: ${t.pickupLocation || 'Unknown'} -> ${t.dropoffLocation || 'Unknown'}`,
+                   amount: isCash ? t.cashCollected! : (t.netPayout || t.amount),
+                   paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
+                   status: t.status === 'Completed' ? 'Completed' : 'Pending',
+                   batchId: t.batchId,
+                   batchName: batch?.fileName || (t.batchId ? 'Imported Trip File' : undefined),
+                   isReconciled: false
+               } as FinancialTransaction;
+           });
+
+           // Merge real transactions (expenses, manual entries) with converted Trip transactions
+           // Filter out any realTx that might duplicate a trip (unlikely but safe)
+           const tripIds = new Set(tripTransactions.map(t => t.id));
+           const uniqueRealTx = Array.isArray(realTx) ? realTx.filter((tx: FinancialTransaction) => !tripIds.has(tx.id)) : [];
+           
+           const allTransactions = [...uniqueRealTx, ...tripTransactions];
+           
+           // Sort by date desc
+           allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+           if (allTransactions.length > 0) {
+              setTransactions(allTransactions);
+           } else {
+              // Phase 11: No more mock fallback — show empty state
+              setTransactions([]);
+           }
+
+       } catch (e) {
+           console.error("Failed to load finance data", e);
+           // Phase 11: No more mock fallback — show empty state
+           setTransactions([]);
+       } finally {
+           setLoading(false);
+       }
+    };
+    
+    loadData();
+  }, [serverDateParams]);
 
   const handleAddTransaction = (newTxn: FinancialTransaction) => {
     setTransactions(prev => [newTxn, ...prev]);
@@ -711,4 +744,3 @@ export function TransactionsTab({ trips, mode = 'analytics' }: TransactionsTabPr
     </div>
   );
 }
-

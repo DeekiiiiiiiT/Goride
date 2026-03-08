@@ -72,7 +72,18 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
       
       let driver = driverMap.get(trip.driverId);
       
-      // If not found by ID, try to find by Name (Deduplication Strategy)
+      // Step 3.3: If not found by direct ID, check if trip.driverId matches any driver's external IDs
+      if (!driver) {
+        for (const existingDriver of driverMap.values()) {
+          const orig = allDrivers.find((d: any) => (d.id || d.driverId) === existingDriver.id);
+          if (orig && (orig.uberDriverId === trip.driverId || orig.inDriveDriverId === trip.driverId)) {
+            driver = existingDriver;
+            break;
+          }
+        }
+      }
+
+      // If not found, try to find by Name (Deduplication Strategy)
       if (!driver) {
          // Check if any existing driver has this name (case-insensitive)
          const tripDriverName = (trip.driverName || '').toLowerCase().trim();

@@ -6,6 +6,7 @@ import { Badge } from "../../ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
 import { format } from "date-fns";
 import { Trip, FinancialTransaction } from "../../../types/data";
+import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { Search, Loader2, MapPin, User, Car } from "lucide-react";
 
 interface ManualMatchModalProps {
@@ -132,7 +133,7 @@ export function ManualMatchModal({ isOpen, onClose, transaction, allTrips, onCon
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <Badge variant="outline" className="bg-white whitespace-nowrap">{trip.platform}</Badge>
+                                    <Badge variant="outline" className="bg-white whitespace-nowrap">{normalizePlatform(trip.platform)}</Badge>
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-2">

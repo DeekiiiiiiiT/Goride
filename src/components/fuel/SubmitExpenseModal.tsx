@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2, Building2 } from 'lucide-react';
+import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2, Building2, Camera } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { api } from '../../services/api';
 import { aiVerificationService, AIReceiptResult } from '../../services/aiVerificationService';
@@ -30,6 +30,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [activeTab, setActiveTab] = useState("single");
     const [isUploading, setIsUploading] = useState(false);
+    const [isUploadingOdoPhoto, setIsUploadingOdoPhoto] = useState(false);
     
     // AI Review Workflow (Phase 2 Step 2.3)
     const [aiReviewData, setAiReviewData] = useState<{ index: number, result: AIReceiptResult, image: string } | null>(null);
@@ -108,6 +109,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         liters: '',
         notes: '',
         receiptUrl: '',
+        odometerImageUrl: '',
         stationName: '',
         stationLocation: '',
         matchedStationId: '',
@@ -127,6 +129,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             liters: '',
             notes: '',
             receiptUrl: '',
+            odometerImageUrl: '',
             stationName: entries[entries.length - 1]?.stationName || '',
             stationLocation: '',
             matchedStationId: '',
@@ -176,6 +179,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 liters: initialData.quantity ? initialData.quantity.toString() : '',
                 notes: initialData.description || '',
                 receiptUrl: initialData.receiptUrl || '',
+                odometerImageUrl: initialData.odometerImageUrl || '',
                 stationName: initialData.vendor || '',
                 stationLocation: initialData.metadata?.stationLocation || '',
                 matchedStationId: initialData.matchedStationId || initialData.metadata?.matchedStationId || '',
@@ -200,6 +204,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 liters: '',
                 notes: '',
                 receiptUrl: '',
+                odometerImageUrl: '',
                 stationName: '',
                 stationLocation: '',
                 matchedStationId: '',
@@ -305,6 +310,23 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             toast.error("Failed to upload receipt");
         } finally {
             setIsUploading(false);
+        }
+    };
+
+    // Odometer photo upload — separate from receipt, no AI scan
+    const handleOdometerPhotoUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploadingOdoPhoto(true);
+        try {
+            const { url } = await api.uploadFile(file);
+            updateEntry(index, { odometerImageUrl: url });
+            toast.success("Odometer photo uploaded");
+        } catch (error) {
+            toast.error("Failed to upload odometer photo");
+        } finally {
+            setIsUploadingOdoPhoto(false);
         }
     };
 
@@ -438,6 +460,12 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     vehicleId: commonData.vehicleId,
                     vehiclePlate: vehicle?.licensePlate,
                     type: 'Fuel_Manual_Entry',
+                    // Tag source: new entry = admin-manual/bulk-import; editing a portal entry = admin-edit; editing an admin entry stays admin-manual
+                    entrySource: initialData
+                        ? (initialData.entrySource === 'admin-manual' || initialData.metadata?.entrySource === 'admin-manual'
+                            ? 'admin-manual'
+                            : 'admin-edit')
+                        : (entries.length > 1 ? 'bulk-import' : 'admin-manual'),
                     category: 'Fuel',
                     description: entry.notes || 'Fuel Expense Log',
                     amount: amountVal, 
@@ -445,6 +473,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     status: initialData?.status || 'Pending',
                     receiptUrl: entry.receiptUrl,
                     odometer: entry.odometer ? parseFloat(entry.odometer) : 0,
+                    odometerImageUrl: entry.odometerImageUrl || undefined,
                     quantity: entry.liters ? parseFloat(entry.liters) : undefined,
                     vendor: entry.stationName,
                     matchedStationId: entry.matchedStationId || undefined,
@@ -454,13 +483,21 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         stationLocation: entry.stationLocation,
                         pricePerLiter: entry.pricePerLiter ? parseFloat(entry.pricePerLiter) : undefined,
                         source: entries.length > 1 ? 'Bulk Manual' : 'Manual',
+                        entrySource: initialData
+                            ? (initialData.entrySource === 'admin-manual' || initialData.metadata?.entrySource === 'admin-manual'
+                                ? 'admin-manual'
+                                : 'admin-edit')
+                            : (entries.length > 1 ? 'bulk-import' : 'admin-manual'),
                         portal_type: 'Manual_Entry',
-                        isManual: true,
+                        isManual: initialData ? (initialData.metadata?.isManual ?? true) : true,
                         paymentSource: pSource,
                         totalCost: amountVal,
                         isFlagged: entry.isFlagged,
                         flagReason: entry.flagReason,
                         matchedStationId: entry.matchedStationId || undefined,
+                        // Odometer photo stored as odometerProofUrl for evidence modal
+                        odometerProofUrl: entry.odometerImageUrl || undefined,
+                        odometerMethod: entry.odometerImageUrl ? 'Admin Photo Upload' : 'Direct Entry',
                         // Preserve previous payment source so the parent can detect changes
                         previousPaymentSource: initialData?.metadata?.paymentSource || undefined,
                     },
@@ -582,8 +619,10 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                     onLocationChange={(v: string) => handleLocationChange(0, v)}
                                     onSelectAddress={(a: any) => handleSelectAddress(0, a)}
                                     onFileUpload={(e: any) => handleFileUpload(0, e)}
+                                    onOdometerPhotoUpload={(e: any) => handleOdometerPhotoUpload(0, e)}
                                     onAIVerify={() => verifyOdometerWithAI(0)}
                                     isUploading={isUploading}
+                                    isUploadingOdoPhoto={isUploadingOdoPhoto}
                                     isVerifying={isVerifying === entries[0].id}
                                     suggestions={suggestions}
                                     showSuggestions={showSuggestions}
@@ -605,6 +644,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                     onLocationChange={handleLocationChange}
                                     onSelectAddress={handleSelectAddress}
                                     onFileUpload={handleFileUpload}
+                                    onOdometerPhotoUpload={handleOdometerPhotoUpload}
                                     onAIVerify={verifyOdometerWithAI}
                                     onKeyDown={handleKeyDown}
                                     isUploading={isUploading}
@@ -632,7 +672,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     );
 }
 
-function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onAIVerify, isUploading, isVerifying, suggestions, showSuggestions }: any) {
+function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, isUploading, isUploadingOdoPhoto, isVerifying, suggestions, showSuggestions }: any) {
     // Get verified stations for the currently selected brand
     const matchingStations: StationProfile[] = entry.stationName ? getStationsForBrand(entry.stationName) : [];
     const hasVerifiedStations = matchingStations.length > 0;
@@ -774,24 +814,40 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                 </div>
             </div>
 
-            <div className="space-y-2">
-                <Label>Receipt</Label>
-                <div className="flex items-center gap-4">
-                    {entry.receiptUrl ? (
-                        <div className="relative h-20 w-full border rounded group"><img src={entry.receiptUrl} className="h-full w-full object-contain" /><Button size="icon" variant="destructive" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => onUpdate({ receiptUrl: '' })}><X className="h-3 w-3" /></Button></div>
-                    ) : (
-                        <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded cursor-pointer hover:bg-slate-50">
-                            {isUploading ? <Loader2 className="animate-spin" /> : <><Upload className="h-6 w-6 text-slate-400" /><span className="text-xs">Upload</span></>}
-                            <input type="file" className="hidden" accept="image/*" onChange={onFileUpload} disabled={isUploading} />
-                        </label>
-                    )}
+            {/* Receipt & Odometer Photo — side by side */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5"><Upload className="h-3 w-3 text-slate-400" /> Receipt</Label>
+                    <div className="flex items-center gap-4">
+                        {entry.receiptUrl ? (
+                            <div className="relative h-20 w-full border rounded group"><img src={entry.receiptUrl} className="h-full w-full object-contain" /><Button size="icon" variant="destructive" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => onUpdate({ receiptUrl: '' })}><X className="h-3 w-3" /></Button></div>
+                        ) : (
+                            <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded cursor-pointer hover:bg-slate-50">
+                                {isUploading ? <Loader2 className="animate-spin" /> : <><Upload className="h-5 w-5 text-slate-400" /><span className="text-[10px] text-slate-500">Upload Receipt</span></>}
+                                <input type="file" className="hidden" accept="image/*" onChange={onFileUpload} disabled={isUploading} />
+                            </label>
+                        )}
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5"><Camera className="h-3 w-3 text-slate-400" /> Odometer Photo</Label>
+                    <div className="flex items-center gap-4">
+                        {entry.odometerImageUrl ? (
+                            <div className="relative h-20 w-full border rounded group"><img src={entry.odometerImageUrl} className="h-full w-full object-contain" /><Button size="icon" variant="destructive" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => onUpdate({ odometerImageUrl: '' })}><X className="h-3 w-3" /></Button></div>
+                        ) : (
+                            <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded cursor-pointer hover:bg-blue-50 border-blue-200">
+                                {isUploadingOdoPhoto ? <Loader2 className="animate-spin" /> : <><Camera className="h-5 w-5 text-blue-400" /><span className="text-[10px] text-blue-500">Upload Odometer</span></>}
+                                <input type="file" className="hidden" accept="image/*" onChange={onOdometerPhotoUpload} disabled={isUploadingOdoPhoto} />
+                            </label>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
     );
 }
 
-function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAdd, onRemove, onDuplicate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
+function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAdd, onRemove, onDuplicate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
     return (
         <div className="border rounded-lg bg-white overflow-hidden">
             <div className="bg-slate-50 p-2 flex justify-between items-center"><span className="text-xs font-bold uppercase text-slate-500">Items</span><Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={onAdd}><Plus className="h-3 w-3 mr-1" />Add</Button></div>
@@ -848,7 +904,7 @@ function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUp
                                             <button className="absolute -top-3 right-0 text-[8px] text-blue-600 hover:underline" onClick={() => onAIVerify(i)}>Verify</button>
                                         </div>
                                     </td>
-                                    <td className="p-1"><div className="flex gap-1"><label className="cursor-pointer p-1 text-slate-400 hover:text-indigo-600"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onFileUpload(i, evt)} /><Upload className="h-3 w-3" /></label><Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => onRemove(i)}><Trash2 className="h-3 w-3" /></Button></div></td>
+                                    <td className="p-1"><div className="flex gap-1"><label className="cursor-pointer p-1 text-slate-400 hover:text-indigo-600" title="Upload Receipt"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onFileUpload(i, evt)} /><Upload className="h-3 w-3" /></label><label className="cursor-pointer p-1 text-blue-400 hover:text-blue-600" title="Upload Odometer Photo"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onOdometerPhotoUpload(i, evt)} /><Camera className="h-3 w-3" /></label><Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => onRemove(i)}><Trash2 className="h-3 w-3" /></Button></div></td>
                                 </tr>
                             );
                         })}

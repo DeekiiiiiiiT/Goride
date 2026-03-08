@@ -19,6 +19,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { Trip } from '../../types/data';
+import { normalizePlatform } from '../../utils/normalizePlatform';
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { Button } from "../ui/button";
@@ -275,7 +276,7 @@ export function DriverTrips() {
                                     Platform
                                 </p>
                                 <Badge variant="secondary" className="text-xs font-normal">
-                                    {selectedTrip.platform}
+                                    {normalizePlatform(selectedTrip.platform)}
                                 </Badge>
                              </div>
                         </div>
@@ -315,7 +316,7 @@ export function DriverTrips() {
                                 </div>
                             </div>
 
-                            {((Math.abs(Number(selectedTrip.cashCollected || 0)) > 0) || ['goride', 'private', 'cash'].includes((selectedTrip.platform || '').toLowerCase())) && (
+                            {((Math.abs(Number(selectedTrip.cashCollected || 0)) > 0) || ['goride', 'roam', 'private', 'cash'].includes((selectedTrip.platform || '').toLowerCase())) && (
                                 <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900 mt-4">
                                     <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
                                         <div className="flex items-center gap-2">
@@ -349,7 +350,7 @@ export function DriverTrips() {
 function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
    // Heuristic: If we have explicit cash collected OR the net payout is negative (implying cash collection > earnings), treat as cash trip.
    const amount = trip.netPayout || trip.amount;
-   const isCash = (Math.abs(Number(trip.cashCollected || 0)) > 0) || amount < 0 || ['goride', 'private', 'cash'].includes((trip.platform || '').toLowerCase());
+   const isCash = (Math.abs(Number(trip.cashCollected || 0)) > 0) || amount < 0 || ['goride', 'roam', 'private', 'cash'].includes((trip.platform || '').toLowerCase());
    const date = new Date(trip.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 
    const isResolving = (loc: string | undefined, lat: number | undefined) => {
@@ -374,7 +375,7 @@ function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
                           </Badge>
                       ) : (
                           <Badge variant="outline" className="text-xs font-normal text-slate-500 border-slate-200">
-                             {trip.platform}
+                             {normalizePlatform(trip.platform)}
                           </Badge>
                       )}
                       {isCash && (

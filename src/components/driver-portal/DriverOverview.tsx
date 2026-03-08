@@ -26,6 +26,7 @@ export interface DriverOverviewProps {
       uber: number;
       indrive: number;
       goride: number;
+      roam: number;
     };
   };
   goals: DriverGoals | null;
@@ -149,8 +150,8 @@ export function DriverOverview({
       <div className="flex-1 flex flex-col justify-center">
         <div className="grid grid-cols-3 gap-3 w-full">
             <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-                <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mb-1">GoRide</span>
-                <span className="text-lg font-bold text-indigo-900">${(todayEarnings?.breakdown?.goride || 0).toFixed(2)}</span>
+                <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mb-1">Roam</span>
+                <span className="text-lg font-bold text-indigo-900">${(todayEarnings?.breakdown?.roam || todayEarnings?.breakdown?.goride || 0).toFixed(2)}</span>
             </div>
             <div className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Uber</span>

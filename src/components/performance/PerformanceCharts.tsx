@@ -27,6 +27,7 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
     drivers.forEach(d => {
       if (d.history) {
         d.history.forEach(day => {
+          if (!day.date) return; // Skip entries with null/undefined dates
           if (!stats[day.date]) {
             stats[day.date] = { date: day.date, earnings: 0, trips: 0, count: 0 };
           }
@@ -47,12 +48,16 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
   }, [drivers]);
 
   const topDrivers = useMemo(() => {
-    return getTopPerformers(drivers, 10).map(d => ({
-      name: d.driverName.split(' ')[0], // First name only for chart
-      fullName: d.driverName,
-      successRate: d.successRate,
-      earnings: d.totalEarnings
-    }));
+    return getTopPerformers(drivers, 10).map((d, idx) => {
+      const firstName = (d.driverName || `Driver ${idx + 1}`).split(' ')[0];
+      return {
+        uniqueName: `${d.driverName || `Driver ${idx + 1}`}_${idx}`,
+        displayName: firstName,
+        fullName: d.driverName || `Driver ${idx + 1}`,
+        successRate: d.successRate,
+        earnings: d.totalEarnings
+      };
+    });
   }, [drivers]);
 
   if (drivers.length === 0) return null;
@@ -70,12 +75,15 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
               <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={300}>
                 <BarChart data={dailyStats}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="dateShort" fontSize={12} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: string) => {
+                    try { return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); } catch { return value; }
+                  }} />
                   <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
                   <Tooltip 
                     cursor={{ fill: '#f4f4f5' }}
                     content={({ active, payload, label }) => {
                        if (active && payload && payload.length) {
+                        const displayDate = (() => { try { return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); } catch { return label; } })();
                         return (
                           <div className="rounded-lg border bg-background p-2 shadow-sm">
                             <div className="grid grid-cols-2 gap-2">
@@ -84,7 +92,7 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
                                   Date
                                 </span>
                                 <span className="font-bold text-muted-foreground">
-                                  {label}
+                                  {displayDate}
                                 </span>
                               </div>
                               <div className="flex flex-col">
@@ -126,7 +134,7 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
               <BarChart data={topDrivers} layout="vertical" margin={{ left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                 <XAxis type="number" domain={[0, 100]} unit="%" hide />
-                <YAxis dataKey="name" type="category" width={80} fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis dataKey="uniqueName" type="category" width={80} fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: string) => value.split('_')[0].split(' ')[0]} />
                 <Tooltip 
                   cursor={{ fill: '#f4f4f5' }}
                   content={({ active, payload }) => {

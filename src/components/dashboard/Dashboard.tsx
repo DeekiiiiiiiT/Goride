@@ -11,6 +11,7 @@ import {
   FileText
 } from "lucide-react";
 import { startOfWeek } from "date-fns";
+import { useVocab } from '../../utils/vocabulary';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -52,6 +53,7 @@ import { toast } from "sonner@2.0.3";
 
 export function Dashboard() {
   const queryClient = useQueryClient();
+  const { v } = useVocab();
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState('operations'); // Phase 6.4
   
@@ -299,9 +301,9 @@ export function Dashboard() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">FLEET ANALYTICS DASHBOARD</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{v('dashboardTitle').toUpperCase()}</h2>
           <p className="text-slate-500 dark:text-slate-400">
-            Overview of your fleet's performance and financial health.
+            {v('dashboardSubtitle')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

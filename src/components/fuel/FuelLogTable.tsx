@@ -45,7 +45,7 @@ import {
 } from "../ui/accordion";
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
-import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, AlertTriangle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2, Link2 } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, AlertTriangle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2, Link2, Eye, MapPin, Clock, Hash, FileText } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { FuelEntry, FuelCard, FuelCycle } from '../../types/fuel';
@@ -92,8 +92,10 @@ export function FuelLogTable({
     const [filterDriver, setFilterDriver] = useState<string>('all');
     const [filterAnchor, setFilterAnchor] = useState<string>('all');
     const [filterStatus, setFilterStatus] = useState<string>('all');
+    const [filterSource, setFilterSource] = useState<string>('all');
     const [activeView, setActiveView] = useState<'transactions' | 'cycles'>('transactions');
     const [isRecalculating, setIsRecalculating] = useState(false);
+    const [viewingEntry, setViewingEntry] = useState<FuelEntry | null>(null);
 
     // Phase 2: Cycle Mapping
     const allCycles = useFuelCycles(entries, vehicles);
@@ -116,7 +118,8 @@ export function FuelLogTable({
         filterVehicle !== 'all',
         filterDriver !== 'all',
         filterAnchor !== 'all',
-        filterStatus !== 'all'
+        filterStatus !== 'all',
+        filterSource !== 'all'
     ].filter(Boolean).length;
 
     const clearFilters = () => {
@@ -125,6 +128,7 @@ export function FuelLogTable({
         setFilterDriver('all');
         setFilterAnchor('all');
         setFilterStatus('all');
+        setFilterSource('all');
     };
 
     const isManualEntry = (entry: FuelEntry) => {
@@ -139,6 +143,41 @@ export function FuelLogTable({
         return isManualType || hasManualPortalType || hasManualSource;
     };
 
+    // Resolve entry source: explicit field → metadata fallback → heuristic for legacy
+    const resolveEntrySource = (entry: FuelEntry): 'driver-portal' | 'admin-manual' | 'admin-edit' | 'bulk-import' | 'fuel-card' => {
+        // 1. Explicit tag (new system) — always trust first
+        if (entry.entrySource) return entry.entrySource;
+        if (entry.metadata?.entrySource) return entry.metadata.entrySource;
+        // 2. Legacy bulk import marker
+        if (entry.metadata?.source === 'Bulk Manual') return 'bulk-import';
+        // 3. Driver Portal origin detection (multiple signals):
+        //    - DriverDashboard stamps top-level source: 'Driver Portal'
+        //    - DriverDashboard creates with type 'Manual_Entry' (NOT 'Fuel_Manual_Entry')
+        //    - Portal entries may have geofenceMetadata from GPS
+        const topSource = (entry as any).source;
+        const isFromPortal = topSource === 'Driver Portal' || entry.type === 'Manual_Entry' || entry.geofenceMetadata != null;
+        if (isFromPortal) {
+            // If admin later touched it (FuelLogModal stamps isManual, handleSaveLog stamps isEdited)
+            const wasAdminEdited = entry.metadata?.isManual || entry.metadata?.isEdited || entry.metadata?.previousPaymentSource;
+            return wasAdminEdited ? 'admin-edit' : 'driver-portal';
+        }
+        // 4. No portal markers — admin created from scratch (SubmitExpenseModal sets type 'Fuel_Manual_Entry')
+        if (entry.metadata?.isManual || entry.metadata?.portal_type === 'Manual_Entry') return 'admin-manual';
+        if (entry.type === 'Card_Transaction') return 'fuel-card';
+        return 'driver-portal';
+    };
+
+    const entrySourceLabel = (src: string): { label: string; color: string } => {
+        switch (src) {
+            case 'admin-manual': return { label: 'Admin Entry', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+            case 'admin-edit': return { label: 'Admin Edit', color: 'bg-violet-50 text-violet-700 border-violet-200' };
+            case 'bulk-import': return { label: 'Imported', color: 'bg-slate-100 text-slate-600 border-slate-200' };
+            case 'fuel-card': return { label: 'Fuel Card', color: 'bg-blue-50 text-blue-600 border-blue-200' };
+            case 'driver-portal': return { label: 'Portal', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
+            default: return { label: src, color: 'bg-slate-50 text-slate-500 border-slate-200' };
+        }
+    };
+
     const filteredEntries = entries.filter(entry => {
         if (filterType !== 'all') {
             if (filterType === 'Fuel_Manual_Entry') {
@@ -149,6 +188,9 @@ export function FuelLogTable({
         if (filterDriver !== 'all' && entry.driverId !== filterDriver) return false;
         if (filterAnchor === 'valid' && !validAnchorIds.has(entry.id)) return false;
         if (filterAnchor === 'invalid' && (entry.type !== 'Reimbursement' || validAnchorIds.has(entry.id))) return false;
+        if (filterSource !== 'all') {
+            if (resolveEntrySource(entry) !== filterSource) return false;
+        }
         if (filterStatus !== 'all') {
             const status = entry.reconciliationStatus || 'Pending';
             if (status !== filterStatus) return false;
@@ -230,8 +272,12 @@ export function FuelLogTable({
             if (toDate && cycleDate > toDate) return false;
             return true;
         });
+        const adminEntries = auditScopeEntries.filter(e => resolveEntrySource(e) === 'admin-manual');
+        const adminEdits = auditScopeEntries.filter(e => resolveEntrySource(e) === 'admin-edit');
         return {
             manualCount: manualEntries.length,
+            adminCount: adminEntries.length,
+            adminEditCount: adminEdits.length,
             anchorCount: anchorEntries.length,
             totalSpend: auditScopeEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
             anchorTotalSpent: anchorEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
@@ -349,6 +395,10 @@ export function FuelLogTable({
                             <div><p className="text-xl font-bold text-slate-700">{stats.manualCount}</p><p className="text-[10px] text-slate-500">Manual</p></div>
                             <div className="h-8 w-px bg-slate-100 mx-1"></div>
                             <div><p className="text-xl font-bold text-emerald-600">{stats.anchorCount}</p><p className="text-[10px] text-slate-500">Anchors</p></div>
+                            {(stats.adminCount + stats.adminEditCount) > 0 && (<>
+                                <div className="h-8 w-px bg-slate-100 mx-1"></div>
+                                <div><p className="text-xl font-bold text-amber-600">{stats.adminCount + stats.adminEditCount}</p><p className="text-[10px] text-slate-500">Admin</p></div>
+                            </>)}
                         </div>
                     </div>
                 </div>
@@ -443,6 +493,18 @@ export function FuelLogTable({
                                     <SelectTrigger><SelectValue placeholder="All Vehicles" /></SelectTrigger>
                                     <SelectContent><SelectItem value="all">All Vehicles</SelectItem>{uniqueVehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}</SelectContent>
                                 </Select>
+                                <Label>Entry Source</Label>
+                                <Select value={filterSource} onValueChange={setFilterSource}>
+                                    <SelectTrigger><SelectValue placeholder="All Sources" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Sources</SelectItem>
+                                        <SelectItem value="driver-portal">Driver Portal</SelectItem>
+                                        <SelectItem value="admin-manual">Admin Entry</SelectItem>
+                                        <SelectItem value="admin-edit">Admin Edit</SelectItem>
+                                        <SelectItem value="bulk-import">Bulk Import</SelectItem>
+                                        <SelectItem value="fuel-card">Fuel Card</SelectItem>
+                                    </SelectContent>
+                                </Select>
                                 <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2 text-xs">Clear Filters</Button>
                             </div></PopoverContent>
                         </Popover>
@@ -518,7 +580,19 @@ export function FuelLogTable({
 
                                 return (
                                 <TableRow key={entry.id} className={cn(isLocked && "bg-slate-50/50")}>
-                                    <TableCell>{formatDate(entry.date)}</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span>{formatDate(entry.date)}</span>
+                                            {resolveEntrySource(entry) !== 'driver-portal' && (() => {
+                                                const src = entrySourceLabel(resolveEntrySource(entry));
+                                                return (
+                                                    <Badge variant="outline" className={cn("text-[8px] font-bold px-1 py-0 h-4 w-fit", src.color)}>
+                                                        {src.label}
+                                                    </Badge>
+                                                );
+                                            })()}
+                                        </div>
+                                    </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             {getTypeIcon(resolvePaymentLabel(entry))}
@@ -702,25 +776,31 @@ export function FuelLogTable({
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <div className="flex justify-end gap-1">
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-8 w-8 text-slate-400 hover:text-slate-600"
-                                                onClick={() => onEdit(entry)}
-                                                disabled={isLocked}
-                                            >
-                                                <Pencil className="h-3.5 w-3.5" />
-                                            </Button>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-8 w-8 text-slate-400 hover:text-red-600"
-                                                onClick={() => onDelete(entry.id)}
-                                                disabled={isLocked}
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </Button>
+                                        <div className="flex justify-end">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" title="Actions">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-40">
+                                                    <DropdownMenuLabel className="text-[10px] text-slate-400 uppercase tracking-wider">Log Actions</DropdownMenuLabel>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem onClick={() => setViewingEntry(entry)} className="gap-2 text-xs cursor-pointer">
+                                                        <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                                        View Details
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={isLocked} className="gap-2 text-xs cursor-pointer">
+                                                        <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                                                        Edit Log
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem onClick={() => onDelete(entry.id)} disabled={isLocked} className="gap-2 text-xs cursor-pointer text-red-600 focus:text-red-600">
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                        Delete Log
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -864,6 +944,203 @@ export function FuelLogTable({
                     </div>
                 )}
             </div>
+
+            {/* Detail View Overlay */}
+            {viewingEntry && (() => {
+                const entry = viewingEntry;
+                const prev = prevOdometerMap.get(entry.id);
+                const vehicle = vehicles.find(v => v.id === entry.vehicleId);
+                const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
+                const fillPct = Math.min(100, ((entry.liters || 0) / tankCap) * 100);
+                const confidenceScore = entry.metadata?.auditConfidenceScore;
+                const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
+                const src = resolveEntrySource(entry);
+                const srcLabel = entrySourceLabel(src);
+                const curOdo = (entry.odometer as number) || 0;
+                const delta = prev?.prevOdo != null ? Math.abs(curOdo - prev.prevOdo) : null;
+                const isRegression = prev?.prevOdo != null ? curOdo < prev.prevOdo : false;
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewingEntry(null)}>
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-5 text-white">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white/15 rounded-lg p-2">
+                                            <Fuel className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-base">Fuel Log Details</h3>
+                                            <p className="text-slate-300 text-xs">{formatDate(entry.date)}{entry.time ? ` at ${entry.time}` : ''}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {src !== 'driver-portal' && (
+                                            <Badge variant="outline" className={cn("text-[9px] font-bold border", srcLabel.color)}>{srcLabel.label}</Badge>
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-white/70 hover:text-white hover:bg-white/10" onClick={() => setViewingEntry(null)}>
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Content */}
+                            <div className="p-5 space-y-5 max-h-[65vh] overflow-y-auto">
+                                {/* Key Metrics Row */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="bg-emerald-50 rounded-lg p-3 text-center border border-emerald-100">
+                                        <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Amount</p>
+                                        <p className="text-lg font-bold text-emerald-700">${(entry.amount ?? 0).toFixed(2)}</p>
+                                    </div>
+                                    <div className="bg-blue-50 rounded-lg p-3 text-center border border-blue-100">
+                                        <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider">Volume</p>
+                                        <p className="text-lg font-bold text-blue-700">{entry.liters?.toFixed(1) || '0'} L</p>
+                                        <p className="text-[9px] text-blue-500">{fillPct.toFixed(0)}% of tank</p>
+                                    </div>
+                                    <div className="bg-violet-50 rounded-lg p-3 text-center border border-violet-100">
+                                        <p className="text-[10px] text-violet-600 font-semibold uppercase tracking-wider">Price/L</p>
+                                        <p className="text-lg font-bold text-violet-700">${(entry.pricePerLiter || (entry.amount && entry.liters ? entry.amount / entry.liters : 0)).toFixed(3)}</p>
+                                    </div>
+                                </div>
+
+                                {/* Detail Rows */}
+                                <div className="space-y-1 divide-y divide-slate-100">
+                                    <DetailRow icon={<MapPin className="h-3.5 w-3.5 text-slate-400" />} label="Station" value={
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-medium text-slate-800">{entry.vendor || entry.metadata?.stationName || 'Unknown'}</span>
+                                            {locationStatus === 'verified' && <ShieldCheck className="h-3 w-3 text-blue-500" />}
+                                            {locationStatus === 'learnt' && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                                        </div>
+                                    } />
+                                    {entry.location && (
+                                        <DetailRow icon={<MapPin className="h-3.5 w-3.5 text-slate-400" />} label="Address" value={
+                                            <span className="text-slate-600 text-xs">{entry.location}</span>
+                                        } />
+                                    )}
+                                    <DetailRow icon={<Fuel className="h-3.5 w-3.5 text-slate-400" />} label="Vehicle" value={
+                                        <span className="font-medium">{getVehicleName(entry.vehicleId)}</span>
+                                    } />
+                                    <DetailRow icon={<Hash className="h-3.5 w-3.5 text-slate-400" />} label="Driver" value={
+                                        <span className="font-medium">{getDriverName(entry.driverId)}</span>
+                                    } />
+                                    <DetailRow icon={<CreditCard className="h-3.5 w-3.5 text-slate-400" />} label="Paid By" value={
+                                        <div className="flex items-center gap-2">
+                                            {getTypeIcon(resolvePaymentLabel(entry))}
+                                            <span className="text-xs">{resolvePaymentLabel(entry)}</span>
+                                        </div>
+                                    } />
+                                    <DetailRow icon={<Gauge className="h-3.5 w-3.5 text-slate-400" />} label="Odometer" value={
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono font-bold text-sm">{curOdo > 0 ? curOdo.toLocaleString() : '—'} km</span>
+                                            {delta != null && (
+                                                <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", isRegression ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600')}>
+                                                    {isRegression ? `▼ ${delta.toLocaleString()}` : `▲ +${delta.toLocaleString()}`}
+                                                </span>
+                                            )}
+                                        </div>
+                                    } />
+                                    {prev?.prevOdo != null && (
+                                        <DetailRow icon={<History className="h-3.5 w-3.5 text-slate-400" />} label="Prev Odo" value={
+                                            <span className="font-mono text-xs text-slate-500">{prev.prevOdo.toLocaleString()} km</span>
+                                        } />
+                                    )}
+                                    <DetailRow icon={<Clock className="h-3.5 w-3.5 text-slate-400" />} label="Entry Type" value={
+                                        <span className="text-xs">{entry.type || 'Unknown'}</span>
+                                    } />
+                                    {entry.entryMode && (
+                                        <DetailRow icon={<Link2 className="h-3.5 w-3.5 text-slate-400" />} label="Entry Mode" value={
+                                            <Badge variant="outline" className="text-[9px]">{entry.entryMode}</Badge>
+                                        } />
+                                    )}
+                                </div>
+
+                                {/* Audit Confidence */}
+                                {confidenceScore !== undefined && (
+                                    <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Audit Confidence</span>
+                                            <Badge className={cn(
+                                                "text-[9px] border-none",
+                                                confidenceScore >= 90 ? "bg-emerald-500 text-white" :
+                                                confidenceScore >= 70 ? "bg-blue-500 text-white" :
+                                                "bg-amber-500 text-white"
+                                            )}>{confidenceScore}%</Badge>
+                                        </div>
+                                        <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                                            <div className={cn(
+                                                "h-full rounded-full transition-all",
+                                                confidenceScore >= 90 ? "bg-emerald-500" :
+                                                confidenceScore >= 70 ? "bg-blue-500" :
+                                                "bg-amber-500"
+                                            )} style={{ width: `${confidenceScore}%` }} />
+                                        </div>
+                                        {entry.metadata?.auditConfidenceBreakdown && (
+                                            <div className="grid grid-cols-5 gap-2 mt-2 text-center">
+                                                {[
+                                                    { label: 'GPS', val: entry.metadata.auditConfidenceBreakdown.gps, max: 30 },
+                                                    { label: 'Prox', val: entry.metadata.auditConfidenceBreakdown.gps_bonus, max: 5 },
+                                                    { label: 'Crypto', val: entry.metadata.auditConfidenceBreakdown.crypto, max: 25 },
+                                                    { label: 'Phys', val: entry.metadata.auditConfidenceBreakdown.physical, max: 25 },
+                                                    { label: 'Behav', val: entry.metadata.auditConfidenceBreakdown.behavioral, max: 20 },
+                                                ].map(b => (
+                                                    <div key={b.label} className="text-[9px]">
+                                                        <span className="text-slate-400">{b.label}</span>
+                                                        <p className="font-bold text-slate-700">{b.val ?? 0}/{b.max}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Notes */}
+                                {entry.notes && (
+                                    <div className="bg-amber-50/50 rounded-lg p-3 border border-amber-100">
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                            <FileText className="h-3 w-3 text-amber-500" />
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Notes</span>
+                                        </div>
+                                        <p className="text-xs text-slate-700">{entry.notes}</p>
+                                    </div>
+                                )}
+
+                                {/* Metadata footer */}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                    <span className="text-[9px] text-slate-400 font-mono truncate max-w-[240px]">ID: {entry.id}</span>
+                                    {entry.isLocked && (
+                                        <div className="flex items-center gap-1 text-emerald-600">
+                                            <ShieldCheck className="h-3 w-3" />
+                                            <span className="text-[9px] font-bold">LOCKED</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="border-t border-slate-100 p-4 flex justify-between items-center bg-slate-50/50">
+                                <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => { setViewingEntry(null); onEdit(entry); }}>
+                                    <Pencil className="h-3 w-3" /> Edit This Log
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-xs" onClick={() => setViewingEntry(null)}>
+                                    Close
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+        </div>
+    );
+}
+
+function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+    return (
+        <div className="flex items-center py-2.5 gap-3">
+            {icon}
+            <span className="text-xs text-slate-500 w-20 shrink-0">{label}</span>
+            <div className="flex-1 text-sm">{value}</div>
         </div>
     );
 }

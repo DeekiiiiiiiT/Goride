@@ -3,6 +3,7 @@ import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { Loader2 } from 'lucide-react';
 import { TransactionsTab } from '../finance/TransactionsTab';
+import { LedgerView } from '../finance/LedgerView';
 import { toast } from "sonner@2.0.3";
 
 export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 'list' }) {
@@ -10,6 +11,11 @@ export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (mode === 'list') {
+      // LedgerView handles its own data fetching — no trips needed
+      setLoading(false);
+      return;
+    }
     const fetchTrips = async () => {
       try {
         setLoading(true);
@@ -23,8 +29,22 @@ export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 
       }
     };
     fetchTrips();
-  }, []);
+  }, [mode]);
 
+  // ── List mode: render the new LedgerView ──
+  if (mode === 'list') {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Transaction List</h2>
+          <p className="text-slate-500">View and manage your complete transaction history.</p>
+        </div>
+        <LedgerView />
+      </div>
+    );
+  }
+
+  // ── Analytics mode: keep existing TransactionsTab ──
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -36,16 +56,9 @@ export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-slate-900">
-          {mode === 'list' ? 'Transaction List' : 'Financial Analytics'}
-        </h2>
-        <p className="text-slate-500">
-          {mode === 'list' 
-            ? 'View and manage your complete transaction history.' 
-            : 'Manage cash flow, expenses, payroll, and generate financial reports.'}
-        </p>
+        <h2 className="text-3xl font-bold tracking-tight text-slate-900">Financial Analytics</h2>
+        <p className="text-slate-500">Manage cash flow, expenses, payroll, and generate financial reports.</p>
       </div>
-
       <TransactionsTab trips={trips} mode={mode} />
     </div>
   );

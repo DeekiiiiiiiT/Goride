@@ -4,6 +4,7 @@ import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
+import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { MatchResult } from "../../../utils/tollReconciliation";
 
@@ -167,7 +168,7 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
             <div className="flex-1 min-w-0 text-right lg:text-left">
                 <div className="flex items-center justify-end lg:justify-start space-x-2 mb-2">
                     <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-700">
-                        {trip.platform} Trip
+                        {normalizePlatform(trip.platform)} Trip
                     </Badge>
                     <span className="text-sm text-slate-500">
                         {format(new Date(trip.date), 'h:mm a')}

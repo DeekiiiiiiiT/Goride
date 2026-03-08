@@ -2,7 +2,7 @@ import { RoutePoint, TripStop } from './tripSession';
 
 export interface Trip {
   id: string;
-  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'GoRide' | 'Private' | 'Cash' | 'Other';
+  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Roam' | 'GoRide' | 'Private' | 'Cash' | 'Other';
   paymentMethod?: 'Cash' | 'Card'; // Phase 1: New field for decoupled payment
   date: string; // ISO date string
   requestTime?: string; // ISO date string
@@ -92,6 +92,9 @@ export interface Trip {
   indriveServiceFee?: number;         // Auto-calculated: amount - indriveNetIncome
   indriveServiceFeePercent?: number;  // Auto-calculated: (fee / amount) * 100
   indriveBalanceDeduction?: number;   // Fee deducted from driver's InDrive Balance (cash trips only)
+
+  // Multi-stop trips (e.g. InDrive)
+  intermediateStops?: { id: string; address: string; coords?: { lat: number; lon: number } }[];
 
   [key: string]: any; // Allow dynamic properties
 }
@@ -219,12 +222,15 @@ export interface TeamMember {
   avatarUrl?: string;
 }
 
+export type BusinessType = 'rideshare' | 'delivery' | 'taxi' | 'trucking' | 'shipping';
+
 export interface FleetConfig {
   fleetName: string;
   serviceArea: string;
   vehicleTypes: string[];
   currency: string;
   timezone: string;
+  businessType?: BusinessType;
 }
 
 // --- Phase 1: New Data Architecture for Uber Reporting ---
@@ -442,6 +448,134 @@ export type TransactionCategory =
 export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card' | 'Mobile Money' | 'Check' | 'Other' | 'Gas Card';
 
 export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled' | 'Void' | 'Verified' | 'Approved' | 'Rejected' | 'Flagged';
+
+// ─── Write-Time Ledger Types ──────────────────────────────────────────
+
+export type LedgerEventType =
+  | 'fare_earning'
+  | 'tip'
+  | 'surge_bonus'
+  | 'fuel_expense'
+  | 'fuel_reimbursement'
+  | 'toll_charge'
+  | 'toll_refund'
+  | 'maintenance'
+  | 'insurance'
+  | 'driver_payout'
+  | 'cash_collection'
+  | 'platform_fee'
+  | 'wallet_credit'
+  | 'wallet_debit'
+  | 'cancelled_trip_loss'
+  | 'adjustment'
+  | 'other';
+
+export type LedgerDirection = 'inflow' | 'outflow';
+
+export type LedgerSourceType = 'trip' | 'transaction' | 'manual' | 'system';
+
+export interface LedgerEntry {
+  id: string;
+  date: string;                     // ISO date YYYY-MM-DD
+  time?: string;                    // HH:mm:ss
+  createdAt: string;                // ISO datetime
+
+  // WHO
+  driverId: string;                 // Canonical Roam UUID (resolved at write time)
+  driverName?: string;
+  vehicleId?: string;
+  vehiclePlate?: string;
+
+  // WHAT
+  eventType: LedgerEventType;
+  category: string;
+  description: string;
+  platform?: string;
+
+  // MONEY
+  grossAmount: number;
+  netAmount: number;
+  currency: string;
+  paymentMethod?: string;
+
+  // ACCOUNTING
+  direction: LedgerDirection;
+  isReconciled: boolean;
+  reconciledAt?: string;
+  reconciledBy?: string;
+
+  // SOURCE LINKAGE
+  sourceType: LedgerSourceType;
+  sourceId: string;
+  batchId?: string;
+  batchName?: string;
+
+  // FLEXIBLE METADATA
+  metadata?: Record<string, any>;
+}
+
+export interface LedgerFilterParams {
+  driverId?: string;
+  driverIds?: string[];
+  vehicleId?: string;
+  startDate?: string;
+  endDate?: string;
+  eventType?: LedgerEventType;
+  eventTypes?: LedgerEventType[];
+  direction?: LedgerDirection;
+  platform?: string;
+  isReconciled?: boolean;
+  batchId?: string;
+  sourceType?: LedgerSourceType;
+  minAmount?: number;
+  maxAmount?: number;
+  searchTerm?: string;
+  limit?: number;
+  offset?: number;
+  sortBy?: 'date' | 'amount' | 'createdAt';
+  sortDir?: 'asc' | 'desc';
+}
+
+export interface PaginatedLedgerResponse {
+  data: LedgerEntry[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface LedgerDriverOverview {
+  period: {
+    earnings: number;
+    cashCollected: number;
+    tolls: number;
+    tips: number;
+    baseFare: number;
+    platformFees: number;
+    tripCount: number;
+    cancelledCount: number;
+  };
+  prevPeriod: {
+    earnings: number;
+  };
+  lifetime: {
+    earnings: number;
+    tripCount: number;
+    cashCollected: number;
+    tolls: number;
+  };
+  platformStats: Record<string, {
+    earnings: number;
+    tripCount: number;
+    cashCollected: number;
+    tolls: number;
+  }>;
+  dailyEarnings: Array<{
+    date: string;
+    total: number;
+    byPlatform: Record<string, number>;
+  }>;
+}
 
 export interface FinancialTransaction {
   id: string; // Transaction UUID

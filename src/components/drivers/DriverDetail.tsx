@@ -69,7 +69,7 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  PieChart,
+  PieChart as RawPieChart,
   Pie,
   Cell,
   LineChart,
@@ -79,7 +79,7 @@ import {
   Label as RechartsLabel
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { Trip, DriverMetrics, FinancialTransaction, QuotaConfig } from '../../types/data';
+import { Trip, DriverMetrics, FinancialTransaction, QuotaConfig, LedgerDriverOverview } from '../../types/data';
 import { classifyTollTransaction } from '../../utils/tollTransactionUtils';
 import { format, subDays, isWithinInterval, startOfDay, endOfDay, eachDayOfInterval, differenceInDays } from "date-fns";
 import { DateRange } from "react-day-picker";
@@ -92,6 +92,11 @@ import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
+import { DriverPayoutHistory } from './DriverPayoutHistory';
+// fetchDriverTrips.ts deleted in Phase 11 — logic inlined in the useEffect below
+import { DistanceByPlatform } from './DistanceByPlatform';
+import { FinancialSubTabs } from './FinancialSubTabs';
+import { OverviewMetricsGrid, MetricCard as ExtractedMetricCard, PLATFORM_COLORS as EXTRACTED_PLATFORM_COLORS, getPlatformColor as extractedGetPlatformColor } from './OverviewMetricsGrid';
 import { FuelWalletView } from './FuelWalletView';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
@@ -99,6 +104,7 @@ import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
+import { normalizePlatform } from '../../utils/normalizePlatform';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
@@ -114,10 +120,21 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 
+// Wrapper to auto-add keys to PieChart children, fixing recharts null-key warning
+const PieChart = ({ children, ...props }: React.ComponentProps<typeof RawPieChart>) => {
+  const keyedChildren = React.Children.map(children, (child, i) => {
+    if (React.isValidElement(child) && child.key == null) {
+      return React.cloneElement(child as React.ReactElement<any>, { key: `pc-child-${i}` });
+    }
+    return child;
+  });
+  return <RawPieChart {...props}>{keyedChildren}</RawPieChart>;
+};
+
 const PLATFORM_COLORS: Record<string, string> = {
   Uber: '#3b82f6',
   InDrive: '#10b981',
-  GoRide: '#6366f1',
+  Roam: '#6366f1',
   Bolt: '#22c55e',
   Lyft: '#ec4899',
   Private: '#f59e0b',
@@ -253,34 +270,41 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['All']));
   const [timeFilter, setTimeFilter] = useState<TimeFilterValue>({ preset: 'all' });
 
+  // Date Range State (Default: Last 7 Days) — declared early so all hooks below can reference it
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 7),
+    to: new Date(),
+  });
+
   // ────────────────────────────────────────────────────────────
   // Server-side trip fetching: load ALL trips for this driver
   // so we aren't limited by the initial 1,000-trip page load.
   // ────────────────────────────────────────────────────────────
   const [serverTrips, setServerTrips] = useState<Trip[]>([]);
   const [serverTripsLoaded, setServerTripsLoaded] = useState(false);
+  const [ledgerSummary, setLedgerSummary] = useState<any>(null);
+  const [ledgerSummaryLoaded, setLedgerSummaryLoaded] = useState(false);
+  const [ledgerOverview, setLedgerOverview] = useState<LedgerDriverOverview | null>(null);
+  const [ledgerOverviewLoaded, setLedgerOverviewLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const fetchAllDriverTrips = async () => {
+      // === SINGLE OR QUERY: search all IDs + name at once ===
       try {
-        const idsToSearch = new Set<string>();
-        idsToSearch.add(driverId);
-        if (driver?.uberDriverId) idsToSearch.add(driver.uberDriverId);
-        if (driver?.inDriveDriverId) idsToSearch.add(driver.inDriveDriverId);
-        const fetches = Array.from(idsToSearch).map(id =>
-          api.getTripsFiltered({ driverId: id, limit: 2000 }).catch(() => ({ data: [] as Trip[], total: 0 }))
-        );
-        const results = await Promise.all(fetches);
+        const allIds: string[] = [driverId];
+        if (driver?.uberDriverId) allIds.push(driver.uberDriverId);
+        if (driver?.inDriveDriverId) allIds.push(driver.inDriveDriverId);
+        const resolvedName = driver?.name || (driver?.firstName ? [driver.firstName, driver.lastName].filter(Boolean).join(' ') : '') || driverName || '';
+
+        const result = await api.getTripsFiltered({ driverIds: allIds, driverName: resolvedName || undefined, limit: 2000 }).catch(() => ({ data: [] as Trip[], total: 0 }));
         if (cancelled) return;
         const seen = new Set<string>();
         const merged: Trip[] = [];
-        for (const result of results) {
-          for (const trip of (result.data || [])) {
-            if (trip.id && !seen.has(trip.id)) { seen.add(trip.id); merged.push(trip); }
-          }
+        for (const trip of (result.data || [])) {
+          if (trip.id && !seen.has(trip.id)) { seen.add(trip.id); merged.push(trip); }
         }
-        console.log(`[DriverDetail] Server fetched ${merged.length} trips for driver ${driverId} (searched ${idsToSearch.size} IDs)`);
+
         setServerTrips(merged);
       } catch (err) {
         console.error('[DriverDetail] Failed to fetch server trips:', err);
@@ -290,7 +314,29 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     };
     fetchAllDriverTrips();
     return () => { cancelled = true; };
-  }, [driverId, driver?.uberDriverId, driver?.inDriveDriverId]);
+  }, [driverId]);
+
+  // ── Ledger summary fetch (Phase 10) ──
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLedgerSummary = async () => {
+      try {
+        const result = await api.getLedgerSummary({ driverId });
+        if (!cancelled) {
+          setLedgerSummary(result.summary || null);
+          console.log(`[DriverDetail] Ledger summary for ${driverId}:`, result);
+        }
+      } catch (err) {
+        console.error('[DriverDetail] Ledger summary fetch failed:', err);
+      } finally {
+        if (!cancelled) setLedgerSummaryLoaded(true);
+      }
+    };
+    fetchLedgerSummary();
+    return () => { cancelled = true; };
+  }, [driverId]);
+
+
 
   const allTrips = useMemo(() => {
     const seen = new Set<string>();
@@ -977,11 +1023,30 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      return docs;
   }, [driver]);
   
-  // Date Range State (Default: Last 7 Days)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 7),
-    to: new Date(),
-  });
+  // ── Ledger driver-overview fetch (Phase 14 — date-range aware) ──
+  useEffect(() => {
+    if (!dateRange?.from) return;
+    let cancelled = false;
+    const fetchLedgerOverview = async () => {
+      try {
+        const startDate = format(dateRange.from!, 'yyyy-MM-dd');
+        const endDate = format(dateRange.to || dateRange.from!, 'yyyy-MM-dd');
+        const platforms = selectedPlatforms.has('All') ? undefined : Array.from(selectedPlatforms);
+        const result = await api.getLedgerDriverOverview({ driverId, startDate, endDate, platforms });
+        if (!cancelled) {
+          setLedgerOverview(result);
+          console.log(`[DriverDetail LEDGER] Overview loaded for ${driverId} (${startDate}..${endDate}):`, result);
+        }
+      } catch (err) {
+        console.error('[DriverDetail LEDGER] Overview fetch failed (non-blocking):', err);
+      } finally {
+        if (!cancelled) setLedgerOverviewLoaded(true);
+      }
+    };
+    setLedgerOverviewLoaded(false);
+    fetchLedgerOverview();
+    return () => { cancelled = true; };
+  }, [driverId, dateRange, selectedPlatforms]);
 
   // Calculate Metrics based on Date Range
   const metrics = useMemo(() => {
@@ -1017,7 +1082,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         platformStats: {
             Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
             InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
-            GoRide: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+            Roam: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
             Bolt: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
             Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 }
         },
@@ -1044,7 +1109,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             personal: 0,
             misc: 0,
             total: 0
-        }
+        },
+        perPlatformDistance: {} as Record<string, { open: number; enroute: number; onTrip: number; unavailable: number; riderCancelled: number; driverCancelled: number; deliveryFailed: number; total: number }>
      };
 
      if (!dateRange?.from) return emptyMetrics;
@@ -1090,7 +1156,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      const platformStats: Record<string, any> = {
         Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
         InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
-        GoRide: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
+        Roam: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
         Bolt: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
         Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 }
      };
@@ -1120,9 +1186,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         const tripDateObj = new Date(trip.date);
         if (isNaN(tripDateObj.getTime())) return;
         
-        // FIX: Determine effective cash (handling GoRide/Private legacy/missing data)
+        // FIX: Determine effective cash (handling Roam/Private legacy/missing data)
         const platformName = (trip.platform || 'Other').toLowerCase();
-        const isCashPlatform = ['goride', 'private', 'cash'].includes(platformName);
+        const isCashPlatform = ['goride', 'roam', 'private', 'cash'].includes(platformName);
         const rawCash = Number(trip.cashCollected || 0);
         const effectiveCash = (Math.abs(rawCash) > 0)
            ? rawCash
@@ -1150,7 +1216,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         if (isWithinInterval(startOfDay(tripDateObj), { start, end })) {
             periodEarnings += effectiveEarnings;
             
-            const platform = trip.platform || 'Other';
+            const platform = normalizePlatform(trip.platform);
             if (!platformStats[platform]) {
                 platformStats[platform] = { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 };
             }
@@ -1240,9 +1306,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      let recRiderCancelledDist = 0; // Km
      let recDriverCancelledDist = 0; // Km
      let recDeliveryFailedDist = 0; // Km
+      const perPlatformDistanceAccum: Record<string, { open: number; enroute: number; onTrip: number; unavailable: number; riderCancelled: number; driverCancelled: number; deliveryFailed: number }> = {};
 
      sortedPeriodTrips.forEach(trip => {
-         // Only process Completed trips for "On Trip" metrics
+         // Per-platform distance accumulation
+          const tripPlatform = normalizePlatform(trip.platform);
+          if (!perPlatformDistanceAccum[tripPlatform]) { perPlatformDistanceAccum[tripPlatform] = { open: 0, enroute: 0, onTrip: 0, unavailable: 0, riderCancelled: 0, driverCancelled: 0, deliveryFailed: 0 }; }
+          // Only process Completed trips for "On Trip" metrics
          if (trip.status === 'Completed') {
              // 1. On Trip Time & Distance
              // Time: (Dropoff - Pickup) or Trip Duration Column
@@ -1261,6 +1331,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              
              recOnTripTime += tripDurationHours;
              recOnTripDist += (trip.distance || 0);
+              perPlatformDistanceAccum[tripPlatform].onTrip += (trip.distance || 0);
              
              // 2. Enroute Time & Distance
              // Time: (Pickup - Request)
@@ -1291,16 +1362,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              const enrouteDistance = trip.normalizedEnrouteDistance ?? estimateEnrouteFallback(trip);
              
              recEnrouteDist += enrouteDistance;
+              perPlatformDistanceAccum[tripPlatform].enroute += enrouteDistance;
              
              // NEW: Open Distance from Pre-Calculated Average (if available)
              // We prioritize the CSV-derived uniform average over the Gap Analysis estimate
              if (trip.normalizedOpenDistance) {
                  recOpenDist += trip.normalizedOpenDistance;
+                  perPlatformDistanceAccum[tripPlatform].open += trip.normalizedOpenDistance;
              }
              
              // NEW: Unavailable Distance from Pre-Calculated Average
              if (trip.normalizedUnavailableDistance) {
                  recUnavailableDist += trip.normalizedUnavailableDistance;
+                  perPlatformDistanceAccum[tripPlatform].unavailable += trip.normalizedUnavailableDistance;
              }
          } else if (trip.status === 'Cancelled' && (trip.distance || 0) > 0) {
              // Handle Cancellation Distance (Lost Km)
@@ -1308,19 +1382,28 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              const dist = trip.distance || 0;
              
              if (reason.includes('rider')) {
+                  perPlatformDistanceAccum[tripPlatform].riderCancelled += dist;
                  recRiderCancelledDist += dist;
              } else if (reason.includes('driver')) {
                  recDriverCancelledDist += dist;
+                  perPlatformDistanceAccum[tripPlatform].driverCancelled += dist;
              } else if (reason.includes('delivery_failed') || reason.includes('failed')) {
                  recDeliveryFailedDist += dist;
+                  perPlatformDistanceAccum[tripPlatform].deliveryFailed += dist;
              } else {
                  // Fallback if generic cancelled with distance
-                 recRiderCancelledDist += dist; 
+                  // Also count as riderCancelled per-platform
+                 recRiderCancelledDist += dist;
+                  perPlatformDistanceAccum[tripPlatform].riderCancelled += dist; 
              }
          }
      });
 
-     // Prepare Charts Data
+     // Build finalized per-platform distance metrics with totals
+      const perPlatformDistance: Record<string, { open: number; enroute: number; onTrip: number; unavailable: number; riderCancelled: number; driverCancelled: number; deliveryFailed: number; total: number }> = {};
+      for (const [plat, acc] of Object.entries(perPlatformDistanceAccum)) { perPlatformDistance[plat] = { ...acc, total: acc.open + acc.enroute + acc.onTrip + acc.unavailable + acc.riderCancelled + acc.driverCancelled + acc.deliveryFailed }; }
+
+      // Prepare Charts Data
      const weeklyEarningsData = Array.from(chartDataMap.entries()).map(([date, amounts]) => {
          const d = new Date(date);
          return {
@@ -1772,6 +1855,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         tripRatio, // New
         totalTolls,
         distanceMetrics, // Phase 2 New
+         perPlatformDistance, // Per-platform distance breakdown (Roam/Uber/InDrive)
         fuelMetrics, // New Fuel Split
         monthlyEarnings, // Added back
         currentTier, // Added back
@@ -1779,6 +1863,92 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         timeMetrics: reconstructedTimeMetrics
      };
   }, [allTrips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms, timeFilter, activeTab]);
+
+
+
+
+
+
+
+
+
+  // ── Phase 15: Resolved Financials — prefer ledger, fall back to trips ──
+  const resolvedFinancials = useMemo(() => {
+    const ledgerHasData = ledgerOverview && (ledgerOverview.period.tripCount > 0 || ledgerOverview.lifetime.tripCount > 0);
+    if (ledgerHasData) {
+      // Merge ledger financial fields with trip-computed operational fields
+      const platformStats: Record<string, any> = {};
+      // Start with trip-computed platforms (keeps distance, ratings, completed counts)
+      for (const [platform, stats] of Object.entries(metrics.platformStats)) {
+        platformStats[platform] = { ...stats };
+      }
+      // Override financial fields from ledger
+      for (const [rawPlat, stats] of Object.entries(ledgerOverview.platformStats)) {
+        const platform = normalizePlatform(rawPlat);
+        if (!platformStats[platform]) {
+          platformStats[platform] = { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 };
+        }
+        platformStats[platform].earnings = stats.earnings;
+        platformStats[platform].trips = stats.tripCount;
+        platformStats[platform].cashCollected = stats.cashCollected;
+        platformStats[platform].tolls = stats.tolls;
+      }
+
+      // Build chart data from ledger dailyEarnings
+      const weeklyEarningsData = ledgerOverview.dailyEarnings.map(d => ({
+        day: (() => { try { return format(new Date(d.date + 'T00:00:00'), 'MMM d'); } catch { return d.date; } })(),
+        fullDate: d.date,
+        ...d.byPlatform,
+      }));
+
+      const trendPercent = ledgerOverview.prevPeriod.earnings > 0
+        ? ((ledgerOverview.period.earnings - ledgerOverview.prevPeriod.earnings) / ledgerOverview.prevPeriod.earnings) * 100
+        : ledgerOverview.period.earnings > 0 ? 100 : 0;
+
+      return {
+        periodEarnings: ledgerOverview.period.earnings,
+        prevPeriodEarnings: ledgerOverview.prevPeriod.earnings,
+        trendPercent: trendPercent.toFixed(1),
+        trendUp: ledgerOverview.period.earnings >= ledgerOverview.prevPeriod.earnings,
+        cashCollected: ledgerOverview.period.cashCollected,
+        totalTolls: ledgerOverview.period.tolls,
+        totalTips: ledgerOverview.period.tips,
+        totalBaseFare: ledgerOverview.period.baseFare,
+        platformStats,
+        weeklyEarningsData,
+        tripCount: ledgerOverview.period.tripCount,
+        source: 'ledger' as const,
+        lifetimeEarnings: ledgerOverview.lifetime.earnings,
+        lifetimeTrips: ledgerOverview.lifetime.tripCount,
+        lifetimeCashCollected: ledgerOverview.lifetime.cashCollected,
+        lifetimeTolls: ledgerOverview.lifetime.tolls,
+      };
+    }
+    // Fallback to trip-computed metrics
+    return {
+      periodEarnings: metrics.periodEarnings,
+      prevPeriodEarnings: metrics.prevPeriodEarnings,
+      trendPercent: metrics.trendPercent,
+      trendUp: metrics.trendUp,
+      cashCollected: metrics.cashCollected,
+      totalTolls: metrics.totalTolls,
+      totalTips: metrics.totalTips,
+      totalBaseFare: metrics.totalBaseFare,
+      platformStats: metrics.platformStats,
+      weeklyEarningsData: metrics.weeklyEarningsData,
+      tripCount: metrics.periodCompletedTrips,
+      source: 'trips' as const,
+      lifetimeEarnings: metrics.totalEarnings,
+      lifetimeTrips: metrics.lifetimeTrips,
+      lifetimeCashCollected: metrics.totalCashCollected,
+      lifetimeTolls: metrics.lifetimeTolls,
+    };
+  }, [ledgerOverview, metrics]);
+
+
+
+
+
 
   // ────────────────────────────────────────────────────────────
   // Platform Breakdown for Earnings donut chart (Phase 6)
@@ -1789,7 +1959,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     const completed = (allTrips || []).filter(t => t.status === 'Completed');
     const platformTotals: Record<string, number> = {};
     completed.forEach(trip => {
-      const platform = trip.platform || 'Other';
+      const platform = normalizePlatform(trip.platform);
       const earnings = getEffectiveTripEarnings(trip);
       platformTotals[platform] = (platformTotals[platform] || 0) + earnings;
     });
@@ -1797,7 +1967,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       Uber: '#3b82f6',
       InDrive: '#10b981',
       Bolt: '#8b5cf6',
-      GoRide: '#f59e0b',
+      Roam: '#f59e0b',
       Private: '#ec4899',
       Cash: '#84cc16',
       Other: '#94a3b8'
@@ -2010,7 +2180,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
            </div>
            <div className="flex justify-between items-center">
               <span className="text-sm text-slate-500">Total Lifetime Trips</span>
-              <span className="font-semibold">{metrics.lifetimeTrips}</span>
+              <span className="font-semibold">{resolvedFinancials.lifetimeTrips}</span>
            </div>
            <div className="flex justify-between items-center">
               <span className="text-sm text-slate-500">Current Rating</span>
@@ -2048,12 +2218,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     </div>
                 </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+             <OverviewMetricsGrid resolvedFinancials={resolvedFinancials} metrics={metrics} localLoading={localLoading} isToday={!!isToday} />
+             {false && (<div>
                <MetricCard 
                   title={isToday ? "Today's Earnings" : "Period Earnings"} 
-                  value={`$${metrics.periodEarnings.toFixed(2)}`} 
-                  trend={`${metrics.trendPercent}% vs prev`} 
-                  trendUp={metrics.trendUp}
+                   subtext={resolvedFinancials.source === 'ledger' ? 'Ledger' : 'Trips fallback'}
+                  value={`$${resolvedFinancials.periodEarnings.toFixed(2)}`} 
+                  trend={`${resolvedFinancials.trendPercent}% vs prev`} 
+                  trendUp={resolvedFinancials.trendUp}
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   loading={localLoading}
                    breakdown={Object.entries(metrics.platformStats)
@@ -2066,12 +2239,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                />
                <MetricCard 
                   title="Cash Collected" 
-                  value={`$${metrics.cashCollected.toFixed(2)}`} 
+                  value={`$${resolvedFinancials.cashCollected.toFixed(2)}`} 
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   tooltip="Total cash collected from trips during this period"
                   loading={localLoading}
                   breakdown={[
-                      ...Object.entries(metrics.platformStats)
+                      ...Object.entries(resolvedFinancials.platformStats)
                           .filter(([_, stats]: [string, any]) => stats.cashCollected > 0)
                           .map(([label, stats]: [string, any]) => ({
                               label: label, 
@@ -2123,12 +2296,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                  endAngle={-270}
                                  stroke="none"
                               >
-                                 <Cell key="Available" fill="#1e3a8a" />
-                                 <Cell key="To Trip" fill="#fbbf24" />
-                                 <Cell key="On Trip" fill="#10b981" />
-                                 <Cell key="Unavailable" fill="#94a3b8" />
+                                 
+                                 
+                                 
+                                 
                               </Pie>
-                              <Tooltip formatter={(value: number) => [value.toFixed(2) + ' hrs', 'Duration']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
+                              <Tooltip key="tt-ts" formatter={(value: number) => [value.toFixed(2) + ' hrs', 'Duration']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
                            </PieChart>
                         </ResponsiveContainer>
                         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
@@ -2203,7 +2376,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                </Card>
                <MetricCard 
                   title="Toll Refunded"
-                  value={`$${metrics.totalTolls.toFixed(2)}`}
+                  value={`$${resolvedFinancials.totalTolls.toFixed(2)}`}
                   subtext="Added to Debt (Cash Risk)"
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   loading={localLoading}
@@ -2251,8 +2424,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                        endAngle={-270}
                                        stroke="none"
                                     >
-                                       {/* Colors will be taken from data 'fill' prop automatically by Pie if Cell is not used, 
-                                           but since we used Cells before, let's map them dynamically to support the filter. */}
+                                       
+                                           
                                        {[
                                           { name: 'Open Dist', value: metrics.distanceMetrics.open, fill: '#1e3a8a' },
                                           { name: 'Enroute Dist', value: metrics.distanceMetrics.enroute, fill: '#fbbf24' },
@@ -2261,11 +2434,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                           { name: 'Rider Cancelled', value: metrics.distanceMetrics.riderCancelled || 0, fill: '#f97316' },
                                           { name: 'Driver Cancelled', value: metrics.distanceMetrics.driverCancelled || 0, fill: '#ef4444' },
                                           { name: 'Delivery Failed', value: metrics.distanceMetrics.deliveryFailed || 0, fill: '#475569' }
-                                       ].filter(d => d.value > 0).map((entry, index) => (
-                                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                                       ].filter(d => d.value > 0).map((d, i) => (<Cell key={`di-${i}`} fill={d.fill} />
+                                          
                                        ))}
                                     </Pie>
-                                    <Tooltip formatter={(value: number) => [value.toFixed(2) + ' km', 'Distance']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
+                                    <Tooltip key="tt-dist" formatter={(value: number) => [value.toFixed(2) + ' km', 'Distance']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
                                  </PieChart>
                               </ResponsiveContainer>
                               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
@@ -2426,12 +2599,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                        endAngle={-270}
                                        stroke="none"
                                     >
-                                       <Cell key="Ride Share" fill="#10b981" />
-                                       <Cell key="Company Ops" fill="#fbbf24" />
-                                       <Cell key="Personal" fill="#ef4444" />
-                                       <Cell key="Misc" fill="#94a3b8" />
+                                       
+                                       
+                                       
+                                       
                                     </Pie>
-                                    <Tooltip formatter={(value: number) => [value.toFixed(1) + ' L', 'Fuel']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
+                                    <Tooltip key="tt-fuel" formatter={(value: number) => [value.toFixed(1) + ' L', 'Fuel']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
                                  </PieChart>
                               </ResponsiveContainer>
                               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
@@ -2514,7 +2687,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                </Card>
             </div>
 
-            {/* Benchmarking Section */}
+            )}
+             {/* Benchmarking Section */}
+            <DistanceByPlatform perPlatformDistance={metrics.perPlatformDistance} loading={localLoading} />
+
             {fleetStats && (
                 <Card>
                     <CardHeader>
@@ -2531,7 +2707,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 <div className="flex justify-between items-end">
                                     <span className="text-sm font-medium text-slate-700">Earnings per Trip</span>
                                     <div className="text-right">
-                                        <span className="text-lg font-bold">${(metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)).toFixed(2)}</span>
+                                        <span className="text-lg font-bold">${(resolvedFinancials.periodEarnings / Math.max(1, resolvedFinancials.tripCount)).toFixed(2)}</span>
                                         <span className="text-xs text-slate-500 ml-2">vs ${fleetStats.avgEarningsPerTrip.toFixed(2)} avg</span>
                                     </div>
                                 </div>
@@ -2544,15 +2720,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     {/* Driver Bar */}
                                     <div 
                                         className={cn("h-full rounded-full", 
-                                            (metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)) >= fleetStats.avgEarningsPerTrip 
+                                            (resolvedFinancials.periodEarnings / Math.max(1, resolvedFinancials.tripCount)) >= fleetStats.avgEarningsPerTrip 
                                                 ? "bg-emerald-500" 
                                                 : "bg-amber-500"
                                         )}
-                                        style={{ width: `${Math.min(100, ((metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)) / (fleetStats.avgEarningsPerTrip * 1.5)) * 100)}%` }}
+                                        style={{ width: `${Math.min(100, ((resolvedFinancials.periodEarnings / Math.max(1, resolvedFinancials.tripCount)) / (fleetStats.avgEarningsPerTrip * 1.5)) * 100)}%` }}
                                     />
                                 </div>
                                 <p className="text-xs text-slate-500">
-                                    {(metrics.periodEarnings / Math.max(1, metrics.periodCompletedTrips)) >= fleetStats.avgEarningsPerTrip 
+                                    {(resolvedFinancials.periodEarnings / Math.max(1, resolvedFinancials.tripCount)) >= fleetStats.avgEarningsPerTrip 
                                         ? "Performing above fleet average." 
                                         : "Performing below fleet average."}
                                 </p>
@@ -2601,10 +2777,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardHeader>
                   <CardContent>
                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={metrics.weeklyEarningsData}>
+                        <BarChart data={resolvedFinancials.weeklyEarningsData}>
                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                            <XAxis 
-                              dataKey="day" 
+                              dataKey="fullDate" tickFormatter={(val: string) => { try { return new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); } catch { return val; } }}
                               axisLine={false} 
                               tickLine={false} 
                               interval={metrics.daysDiff > 14 ? 'preserveStartEnd' : 0}
@@ -2615,9 +2791,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                               cursor={{fill: '#f1f5f9'}}
                               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
                            />
-                           <Bar dataKey="Uber" stackId="a" fill="#3b82f6" />
-                           <Bar dataKey="InDrive" stackId="a" fill="#10b981" />
-                           <Bar dataKey="Other" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                           <Bar key="bar-uber" dataKey="Uber" stackId="a" fill="#3b82f6" />
+                           <Bar key="bar-indrive" dataKey="InDrive" stackId="a" fill="#10b981" />
+                           <Bar key="bar-other" dataKey="Other" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} />
                         </BarChart>
                      </ResponsiveContainer>
                   </CardContent>
@@ -2647,10 +2823,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          </TabsContent>
 
          <TabsContent value="financial" className="space-y-6">
-           <Tabs defaultValue="earnings" className="space-y-4">
-             <TabsList className="grid w-full grid-cols-2 max-w-[300px]">
+           <FinancialSubTabs driverId={driverId} transactions={transactions} allTrips={allTrips} quotaConfig={quotaConfig} platformBreakdownData={platformBreakdownData} platformTotalEarnings={platformTotalEarnings} />
+            {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_1___ <Tabs defaultValue="earnings" className="space-y-4">
+             <TabsList className="grid w-full grid-cols-3 max-w-[450px]">
                <TabsTrigger value="earnings">Earnings</TabsTrigger>
                <TabsTrigger value="expenses">Expenses</TabsTrigger>
+                <TabsTrigger value="payout">Payout</TabsTrigger>
              </TabsList>
 
              <TabsContent value="earnings" className="space-y-6">
@@ -2667,7 +2845,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                            <ResponsiveContainer width="100%" height={260}>
                               <PieChart>
                                  <Pie
-                                    data={platformBreakdownData}
+                                    key="pie-plat-brk"
+                                     data={platformBreakdownData}
                                     cx="50%"
                                     cy="50%"
                                     innerRadius={65}
@@ -2696,7 +2875,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     />
                                  </Pie>
                                  <Tooltip
-                                   formatter={(value: number) => [`$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Earnings']}
+                                   key="tt-plat-brk"
+                                    formatter={(value: number) => [`$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Earnings']}
                                  />
                               </PieChart>
                            </ResponsiveContainer>
@@ -2747,6 +2927,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             </Tabs>
           </TabsContent>
 
+              ___OLD_FINANCIAL_SUBTABS_BLOCK_1_END___ */}
+          </TabsContent>
+          {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_2___
+                <DriverPayoutHistory driverId={driverId} transactions={transactions} trips={allTrips} />
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          <TabsContent value="wallet" className="space-y-6">
+             ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
              {/* Summary Cards Row (Phase 5) */}
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2986,7 +3179,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                                 </TooltipProvider>
                                                                                 <div className="flex items-center gap-2 mt-0.5">
                                                                                     <Badge variant="outline" className="text-[10px] h-4 px-1 py-0 border-slate-300 text-slate-500">
-                                                                                        {trip.platform}
+                                                                                        {normalizePlatform(trip.platform)}
                                                                                     </Badge>
                                                                                     <span className="text-xs text-slate-400 font-mono">
                                                                                         {format(parseTripDate(trip.date) || new Date(), 'HH:mm')}
@@ -3463,26 +3656,26 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                              <div className="space-y-2">
                                 <div className="flex justify-between text-sm">
                                    <span className="text-slate-500">Cash Collected</span>
-                                   <span className="font-medium">${metrics.cashCollected.toFixed(2)}</span>
+                                   <span className="font-medium">${resolvedFinancials.cashCollected.toFixed(2)}</span>
                                 </div>
                                 <Progress 
-                                    value={metrics.periodEarnings > 0 ? (metrics.cashCollected / metrics.periodEarnings) * 100 : 0} 
+                                    value={resolvedFinancials.periodEarnings > 0 ? (resolvedFinancials.cashCollected / resolvedFinancials.periodEarnings) * 100 : 0} 
                                     className="h-2 bg-slate-100" 
                                     indicatorClassName="bg-amber-500" 
                                 />
                                 <p className="text-xs text-amber-600 font-medium">
-                                    {metrics.periodEarnings > 0 ? ((metrics.cashCollected / metrics.periodEarnings) * 100).toFixed(1) : 0}% of earnings
+                                    {resolvedFinancials.periodEarnings > 0 ? ((resolvedFinancials.cashCollected / resolvedFinancials.periodEarnings) * 100).toFixed(1) : 0}% of earnings
                                 </p>
                              </div>
                              <div className="pt-2">
                                 <div className="p-3 bg-slate-50 rounded-lg space-y-1">
                                     <p className="text-xs text-slate-500">Total Period Earnings</p>
-                                    <p className="text-sm font-semibold">${metrics.periodEarnings.toFixed(2)}</p>
+                                    <p className="text-sm font-semibold">${resolvedFinancials.periodEarnings.toFixed(2)}</p>
                                 </div>
                              </div>
                              <Separator />
                              <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setPaymentModalState({ isOpen: true })}>
-                                 Log Cash Payment
+                                 Log Cash Payment</Button></CardContent></Card></div></div></TabsContent>{/* __DEAD_EXPENSES_WRAP_START__
                              </Button>
                         </CardContent>
                     </Card>
@@ -3492,7 +3685,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
              <TabsContent value="expenses" className="space-y-6">
                <Card>
-                 <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={allTrips} />{null}</Card></TabsContent>{/* DEAD_BLOCK_NEUTRALIZED<CardContent className="hidden">
+                 <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={allTrips} />
+               </TabsContent>
+               <TabsContent value="payout" className="space-y-6">
+                 <DriverPayoutHistory driverId={driverId} transactions={transactions} trips={allTrips} />
+               </TabsContent>
+             </Tabs>
+           </TabsContent>
+          <TabsContent value="wallet" className="space-y-6">__DEAD_EXPENSES_WRAP_END__ */}{/* DEAD_BLOCK_NEUTRALIZED<CardContent className="hidden">
                    {null}
                    {null}
                    {null}
@@ -3766,7 +3966,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     // Cash Filter
                                     const matchesCash = !filterCashOnly || 
                                         (Math.abs(Number(t.cashCollected || 0)) > 0) || 
-                                        (t.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(t.platform.toLowerCase())) ||
+                                        (t.platform && ['indrive', 'bolt', 'goride', 'roam', 'private', 'cash'].includes(t.platform.toLowerCase())) ||
                                         (t as any).paymentMethod === 'Cash';
 
                                     return matchesSearch && matchesPlatform && matchesStatus && matchesCash;
@@ -3787,7 +3987,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                             trip.platform === 'InDrive' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                             'bg-slate-50 text-slate-700'
                                         }>
-                                            {trip.platform || 'Other'}
+                                            {normalizePlatform(trip.platform)}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
@@ -3803,7 +4003,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     <TableCell>{trip.duration ? `${trip.duration.toFixed(0)} min` : '-'}</TableCell>
                                     <TableCell className="font-medium text-amber-600">
                                         {Math.abs(Number(trip.cashCollected || 0)) > 0 ? `$${Math.abs(Number(trip.cashCollected)).toFixed(2)}` : 
-                                        (trip.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(trip.platform.toLowerCase()) ? `$${(trip.amount ?? 0).toFixed(2)}` : '-')}
+                                        (trip.platform && ['indrive', 'bolt', 'goride', 'roam', 'private', 'cash'].includes(trip.platform.toLowerCase()) ? `$${(trip.amount ?? 0).toFixed(2)}` : '-')}
                                     </TableCell>
                                     <TableCell className="font-medium">${(trip.amount ?? 0).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
@@ -4168,7 +4368,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                           <div className="font-bold text-lg text-amber-600">
                             {Math.abs(Number(selectedTrip.cashCollected || 0)) > 0 
                                 ? `$${Math.abs(Number(selectedTrip.cashCollected)).toFixed(2)}` 
-                                : (selectedTrip.platform && ['indrive', 'bolt', 'goride', 'private', 'cash'].includes(selectedTrip.platform.toLowerCase()) 
+                                : (selectedTrip.platform && ['indrive', 'bolt', 'goride', 'roam', 'private', 'cash'].includes(selectedTrip.platform.toLowerCase()) 
                                     ? `$${(selectedTrip.amount ?? 0).toFixed(2)}` 
                                     : '-')}
                           </div>

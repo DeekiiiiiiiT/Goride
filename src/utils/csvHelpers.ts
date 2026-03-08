@@ -233,11 +233,15 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
     const hasOrgId = has('Organization UUID') || has('OrganizationUUID');
     // We check for specific ledger columns. Note: 'End of period balance' matches the user's screenshot.
     const hasLedger = has('End Of Period Balance') || has('Balance End') || has('Start Of Period Balance') || has('Balance Start') || has('NetFare') || has('Net Fare') || has('Net Earnings');
+    // Guard: Files with Driver UUID are driver-level, not org-level
+    const hasDriverId = has('Driver UUID') || has('Driver ID');
 
     if (
-        (hasOrgId && hasLedger) || // Strongest Signal: Org ID + Ledger Data
-        (hasLedger && !has('Trip UUID')) || // Ledger Data without Trip Data (avoids Trip Activity confusion)
-        name.includes('payment_organisation') || name.includes('payment_organization')
+        !hasDriverId && ( // Exclude driver-level files from org classification
+            (hasOrgId && hasLedger) || // Strongest Signal: Org ID + Ledger Data
+            (hasLedger && !has('Trip UUID')) || // Ledger Data without Trip Data (avoids Trip Activity confusion)
+            name.includes('payment_organisation') || name.includes('payment_organization')
+        )
     ) return 'uber_payment_org';
 
     // 4. Driver Payments (Financials - Driver Level)
@@ -1632,7 +1636,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                  const balanceStart = parseFloat(String(getValue(['Start Of Period Balance', 'Balance Start'])).replace(/[^0-9.-]/g, '')) || 0;
                  const balanceEnd = parseFloat(String(getValue(['End Of Period Balance', 'Balance End'])).replace(/[^0-9.-]/g, '')) || 0;
                  const bankTransfer = parseFloat(String(getValue(['Transferred To Bank Account', 'Bank Transfer'])).replace(/[^0-9.-]/g, '')) || 0;
-                 const totalEarnings = parseFloat(String(getValue(['Total Earnings'])).replace(/[^0-9.-]/g, '')) || 0;
+                 const totalEarnings = parseFloat(String(getValue(['Total Earnings', 'Gross Fares', 'Gross Revenue', 'Gross Earnings'])).replace(/[^0-9.-]/g, '')) || 0;
                  const netFare = parseFloat(String(getValue(['NetFare', 'Net Fare'])).replace(/[^0-9.-]/g, '')) || 0;
                  
                  // IMPROVED CASH COLLECTION PARSING
@@ -2290,6 +2294,7 @@ export function processData(rows: ParsedRow[], mapping: CsvMapping, availableFie
         const p = String(trip.platform).toLowerCase();
         if (p.includes('uber')) trip.platform = 'Uber';
         else if (p.includes('lyft')) trip.platform = 'Lyft';
+        else if (p === 'goride') trip.platform = 'Roam'; // Rebrand: normalize legacy GoRide → Roam
     } else {
         trip.platform = 'Other';
     }
@@ -2345,7 +2350,7 @@ export const downloadTemplate = (fields: FieldDefinition[]) => {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', 'goride_import_template.csv');
+    link.setAttribute('download', 'roam_import_template.csv');
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();

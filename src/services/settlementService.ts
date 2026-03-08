@@ -35,7 +35,7 @@ export const settlementService = {
                                scenarios[0];
 
         // Helper for coverage (duplicated from FuelCalculationService to ensure consistency)
-        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'personal' | 'misc', amount: number) => {
+        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'deadhead' | 'personal' | 'misc', amount: number) => {
             if (!activeScenario) return { company: amount, driver: 0 };
             
             const rule = activeScenario.rules.find(r => r.category === 'Fuel');
@@ -44,6 +44,8 @@ export const settlementService = {
             let coveragePercent = rule.coverageValue;
             if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
             if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
+            if (category === 'deadhead' && rule.deadheadCoverage !== undefined) coveragePercent = rule.deadheadCoverage;
+            else if (category === 'deadhead' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
             if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
             if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
 

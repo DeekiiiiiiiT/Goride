@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Download, Target } from "lucide-react";
+import { Download, Target, CalendarDays, X } from "lucide-react";
 import { FinancialTransaction, TierConfig, Trip, QuotaConfig } from "../../types/data";
 import {
   startOfWeek, endOfWeek, format,
@@ -79,6 +79,8 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   const [tiers, setTiers] = React.useState<TierConfig[]>([]);
   const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
   const [selectedRowIdx, setSelectedRowIdx] = React.useState<number | null>(null);
+  const [dateFrom, setDateFrom] = React.useState<string>('');
+  const [dateTo, setDateTo] = React.useState<string>('');
 
   React.useEffect(() => {
     tierService.getTiers().then(setTiers);
@@ -219,12 +221,37 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
       };
     });
 
-    // 6. Only show rows that had trip earnings, sorted newest-first
+    // 6. Only show rows that had activity (trips or transactions), sorted newest-first
     return rows
-      .filter(r => r.tripCount > 0)
+      .filter(r => r.tripCount > 0 || r.transactionCount > 0)
       .reverse();
 
   }, [trips, transactions, tiers, periodType, quotaTarget]);
+
+  // ────────────────────────────────────────────────────────────
+  // Date range filter — applied AFTER aggregation
+  // ────────────────────────────────────────────────────────────
+  const filteredPeriodData = useMemo(() => {
+    if (!dateFrom && !dateTo) return periodData;
+
+    const fromTime = dateFrom ? startOfDay(new Date(dateFrom + 'T00:00:00')).getTime() : -Infinity;
+    const toTime = dateTo ? endOfDay(new Date(dateTo + 'T00:00:00')).getTime() : Infinity;
+
+    return periodData.filter(row => {
+      const rowEnd = row.periodEnd.getTime();
+      const rowStart = row.periodStart.getTime();
+      // Include row if any part of the period overlaps the filter range
+      return rowEnd >= fromTime && rowStart <= toTime;
+    });
+  }, [periodData, dateFrom, dateTo]);
+
+  const dateFilterActive = dateFrom !== '' || dateTo !== '';
+
+  const clearDateFilter = () => {
+    setDateFrom('');
+    setDateTo('');
+    setSelectedRowIdx(null);
+  };
 
   // ────────────────────────────────────────────────────────────
   // Period label formatting
@@ -258,7 +285,7 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   // CSV Export
   // ────────────────────────────────────────────────────────────
   const handleExport = () => {
-    const data = periodData.map(row => {
+    const data = filteredPeriodData.map(row => {
       const base: Record<string, string | number> = {
         [periodColumnLabel]: periodType === 'weekly'
           ? `${format(row.periodStart, 'dd/MM/yyyy')} to ${format(row.periodEnd, 'dd/MM/yyyy')}`
@@ -309,25 +336,74 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Period selector tabs */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
-          {(['daily', 'weekly', 'monthly'] as PeriodType[]).map(pt => (
-            <button
-              key={pt}
-              onClick={() => handlePeriodChange(pt)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                periodType === pt
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {pt === 'daily' ? 'Daily' : pt === 'weekly' ? 'Weekly' : 'Monthly'}
-            </button>
-          ))}
-          <span className="ml-2 text-[10px] text-slate-400">
-            {periodData.length} {periodLabel}{periodData.length !== 1 ? 's' : ''} with activity
-          </span>
+        {/* Period selector tabs + Date filter */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+            {(['daily', 'weekly', 'monthly'] as PeriodType[]).map(pt => (
+              <button
+                key={pt}
+                onClick={() => handlePeriodChange(pt)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  periodType === pt
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {pt === 'daily' ? 'Daily' : pt === 'weekly' ? 'Weekly' : 'Monthly'}
+              </button>
+            ))}
+            <span className="ml-2 text-[10px] text-slate-400">
+              {filteredPeriodData.length} {periodLabel}{filteredPeriodData.length !== 1 ? 's' : ''} with activity
+            </span>
+          </div>
+
+          {/* Date range filter */}
+          <div className={`flex items-center gap-2 px-2 py-1 rounded-lg transition-colors ${dateFilterActive ? 'bg-indigo-50 border border-indigo-200' : ''}`}>
+            <CalendarDays className={`h-4 w-4 ${dateFilterActive ? 'text-indigo-500' : 'text-slate-400'}`} />
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setSelectedRowIdx(null); }}
+                className={`h-8 px-2 text-xs border rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300 focus:border-indigo-300 ${dateFilterActive ? 'border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-700'}`}
+                placeholder="From"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setSelectedRowIdx(null); }}
+                className={`h-8 px-2 text-xs border rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300 focus:border-indigo-300 ${dateFilterActive ? 'border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-700'}`}
+                placeholder="To"
+              />
+            </div>
+            {dateFilterActive && (
+              <button
+                onClick={clearDateFilter}
+                className="flex items-center gap-0.5 px-1.5 py-1 text-[10px] font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors"
+                title="Clear date filter"
+              >
+                <X className="h-3 w-3" />
+                Clear
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Active filter banner */}
+        {dateFilterActive && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-md text-xs text-indigo-700">
+            <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Filtering: {dateFrom ? format(new Date(dateFrom + 'T00:00:00'), 'MMM d, yyyy') : 'start'}
+              {' '}{'-'}{' '}
+              {dateTo ? format(new Date(dateTo + 'T00:00:00'), 'MMM d, yyyy') : 'present'}
+            </span>
+            <span className="text-indigo-500 font-medium">
+              ({filteredPeriodData.length} of {periodData.length} {periodLabel}{periodData.length !== 1 ? 's' : ''})
+            </span>
+          </div>
+        )}
 
         {/* Quota summary card — only when quota is enabled and we have a display row */}
         {quotaEnabled && displayRow && displayRow.quotaTarget !== null && (() => {
@@ -401,7 +477,7 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
               </TableRow>
             </TableHeader>
             <TableBody>
-              {periodData.map((row, idx) => (
+              {filteredPeriodData.map((row, idx) => (
                 <TableRow
                   key={idx}
                   onClick={() => setSelectedRowIdx(selectedRowIdx === idx ? null : idx)}

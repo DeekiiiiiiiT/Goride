@@ -41,7 +41,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Badge } from "../ui/badge";
-import { UserPlus, MoreHorizontal, Loader2 } from 'lucide-react';
+import { UserPlus, MoreHorizontal, Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { TeamMember } from '../../types/data';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -64,6 +64,11 @@ export function UserManagementPage() {
   const [selectedUserForReset, setSelectedUserForReset] = useState<TeamMember | null>(null);
   const [newPassword, setNewPassword] = useState('');
 
+  // Edit User State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<TeamMember | null>(null);
+  const [editFormData, setEditFormData] = useState({ name: '', role: 'driver' as 'admin' | 'driver' });
+
   React.useEffect(() => {
     const fetchUsers = async () => {
         try {
@@ -73,7 +78,7 @@ export function UserManagementPage() {
             console.error("Failed to fetch users", e);
             // Fallback for demo if API fails
             setMembers([
-                 { id: '1', name: 'Admin User', email: 'admin@goride.com', role: 'admin', status: 'active', lastActive: 'Now' },
+                 { id: '1', name: 'Admin User', email: 'admin@roam.com', role: 'admin', status: 'active', lastActive: 'Now' },
             ]);
         }
     };
@@ -143,6 +148,28 @@ export function UserManagementPage() {
     }
   };
 
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser || !editFormData.name) return;
+    
+    setLoading(true);
+    try {
+        await api.updateUser(editingUser.id, editFormData);
+        toast.success(`User updated for ${editingUser.name}`);
+        setIsEditOpen(false);
+        setEditFormData({ name: '', role: 'driver' });
+        setEditingUser(null);
+        
+        // Update local list
+        setMembers(prev => prev.map(member => member.id === editingUser.id ? { ...member, ...editFormData } : member));
+    } catch (error: any) {
+        console.error(error);
+        toast.error(error.message || "Failed to update user");
+    } finally {
+        setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -190,7 +217,7 @@ export function UserManagementPage() {
                   <Input 
                     id="email" 
                     type="email" 
-                    placeholder="user@goride.com" 
+                    placeholder="user@roam.com" 
                     required 
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
@@ -285,6 +312,11 @@ export function UserManagementPage() {
                             setNewPassword('');
                         }}>Reset Password</DropdownMenuItem>
                         <DropdownMenuItem className="text-rose-600">Delete User</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                            setEditingUser(member);
+                            setIsEditOpen(true);
+                            setEditFormData({ name: member.name, role: member.role });
+                        }}>Edit User</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -329,6 +361,51 @@ export function UserManagementPage() {
                     <Button type="submit" disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Update Password
+                    </Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Edit User</DialogTitle>
+                <DialogDescription>
+                    Update details for {editingUser?.name}.
+                </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditUser} className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input 
+                        id="name" 
+                        placeholder="John Doe" 
+                        required 
+                        value={editFormData.name}
+                        onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="role">Role</Label>
+                    <Select 
+                        value={editFormData.role} 
+                        onValueChange={(val: 'admin' | 'driver') => setEditFormData({...editFormData, role: val})}
+                    >
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="admin">Admin (Full Access)</SelectItem>
+                            <SelectItem value="driver">Driver (App Access)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" type="button" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Update User
                     </Button>
                 </DialogFooter>
             </form>

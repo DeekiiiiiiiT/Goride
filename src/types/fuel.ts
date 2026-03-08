@@ -26,12 +26,16 @@ export interface FuelEntry {
   pricePerLiter?: number;
   
   odometer?: number | null;
+  odometerImageUrl?: string; // Photo of odometer dashboard (admin upload)
   location?: string; // Station Name/Address
   stationAddress?: string; // Specific location/address
   
   type: 'Card_Transaction' | 'Manual_Entry' | 'Fuel_Manual_Entry' | 'Reimbursement';
   entryMode: 'Anchor' | 'Floating'; // Anchor = Verified Odo, Floating = Legacy/Cash without Odo
   paymentSource: 'RideShare_Cash' | 'Gas_Card' | 'Personal' | 'Petty_Cash';
+  
+  // Entry source tagging — distinguishes live driver submissions from admin back-office entries
+  entrySource?: 'driver-portal' | 'admin-manual' | 'admin-edit' | 'bulk-import' | 'fuel-card';
   
   isFlagged?: boolean; // If capacity exceeded or outlier
   
@@ -121,6 +125,10 @@ export interface WeeklyFuelReport {
   personalDistance: number;
   personalUsageCost: number; // Previously personalCost
   
+  // 4b. Deadhead (Repositioning) -> Work-related cruising fuel
+  deadheadDistance: number;
+  deadheadCost: number;
+
   // 5. The Leakage (Remainder) -> Miscellaneous
   miscellaneousCost: number; // Previously fuelMiscCost (GasCard - RideShare - CompanyUsage - Personal)
   
@@ -144,6 +152,15 @@ export interface WeeklyFuelReport {
   //   cancelledTrips: number
   metadata?: any;
   
+  // Deadhead attribution metadata (from server-side engine)
+  deadheadMeta?: {
+    method: 'A' | 'C' | 'combined' | 'fallback';
+    confidenceLevel: 'high' | 'medium' | 'low';
+    confidenceReason: string;
+    serverDeadheadKm: number;   // raw value from server before capping
+    serverPersonalKm: number;   // raw value from server before capping
+  };
+
   // Phase 3: Staged Reconciliation
   pendingCount?: number; // Number of logs waiting to be finalized
   
@@ -256,6 +273,7 @@ export interface FuelRule {
   // If provided, these override the generic coverageValue for Percentage rules
   rideShareCoverage?: number; 
   companyUsageCoverage?: number;
+  deadheadCoverage?: number;
   personalCoverage?: number;
   miscCoverage?: number;
 

@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction } from '../types/data';
+import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
@@ -7,6 +7,8 @@ import { compressImage } from '../utils/compressImage';
 
 export interface TripFilterParams {
     driverId?: string;
+    driverName?: string;
+    driverIds?: string[];
     startDate?: string;
     endDate?: string;
     status?: string;
@@ -254,8 +256,8 @@ export const api = {
   },
 
   async getTrips(options?: { limit?: number, offset?: number }): Promise<Trip[]> {
-    // Default to a reasonable limit to prevent server crashes on large datasets
-    const limit = options?.limit ?? 500;
+    // Default to a reasonable limit to prevent connection resets on large datasets
+    const limit = options?.limit ?? 200;
     const offset = options?.offset ?? 0;
     
     let url = `${API_ENDPOINTS.fleet}/trips?limit=${limit}&offset=${offset}`;
@@ -1216,6 +1218,22 @@ export const api = {
     return response.json();
   },
 
+  async updateUser(userId: string, fields: { name?: string; role?: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/update-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ userId, ...fields })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update user");
+    }
+    return response.json();
+  },
+
   async parseTollCsvWithAI(csvContent: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-toll-csv`, {
       method: 'POST',
@@ -1572,6 +1590,31 @@ export const api = {
     return response.json();
   },
 
+  // Phase 8 (Deadhead): Fleet-wide and per-vehicle deadhead attribution
+  async getFleetDeadhead(periodStart?: string, periodEnd?: string) {
+    const params = new URLSearchParams();
+    if (periodStart) params.set('periodStart', periodStart);
+    if (periodEnd) params.set('periodEnd', periodEnd);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-audit/deadhead/fleet${qs}`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch fleet deadhead attribution");
+    return response.json();
+  },
+
+  async getVehicleDeadhead(vehicleId: string, periodStart?: string, periodEnd?: string) {
+    const params = new URLSearchParams();
+    if (periodStart) params.set('periodStart', periodStart);
+    if (periodEnd) params.set('periodEnd', periodEnd);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-audit/deadhead/${vehicleId}${qs}`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch vehicle deadhead attribution");
+    return response.json();
+  },
+
   async recalculateAllIntegrity() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/fuel-audit/recalculate-all`, {
         method: 'POST',
@@ -1579,5 +1622,233 @@ export const api = {
     });
     if (!response.ok) throw new Error("Recalculate failed");
     return response.json();
-  }
+  },
+
+  // --- Finalized Reports ---
+
+  async getFinalizedReports(): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to fetch finalized reports: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async saveFinalizedReports(reports: any[]): Promise<{ success: boolean; saved: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(reports)
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to save finalized reports: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async deleteFinalizedReport(weekStart: string, vehicleId: string): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekStart)}/${encodeURIComponent(vehicleId)}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to delete finalized report: ${errText}`);
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LEDGER API
+  // ═══════════════════════════════════════════════════════════════════
+
+  async getLedgerEntries(params: LedgerFilterParams = {}): Promise<PaginatedLedgerResponse> {
+    const qp = new URLSearchParams();
+    if (params.driverId) qp.set('driverId', params.driverId);
+    if (params.driverIds?.length) qp.set('driverIds', params.driverIds.join(','));
+    if (params.vehicleId) qp.set('vehicleId', params.vehicleId);
+    if (params.startDate) qp.set('startDate', params.startDate);
+    if (params.endDate) qp.set('endDate', params.endDate);
+    if (params.eventType) qp.set('eventType', params.eventType);
+    if (params.eventTypes?.length) qp.set('eventTypes', params.eventTypes.join(','));
+    if (params.direction) qp.set('direction', params.direction);
+    if (params.platform) qp.set('platform', params.platform);
+    if (params.isReconciled !== undefined) qp.set('isReconciled', String(params.isReconciled));
+    if (params.batchId) qp.set('batchId', params.batchId);
+    if (params.sourceType) qp.set('sourceType', params.sourceType);
+    if (params.minAmount !== undefined) qp.set('minAmount', String(params.minAmount));
+    if (params.maxAmount !== undefined) qp.set('maxAmount', String(params.maxAmount));
+    if (params.searchTerm) qp.set('searchTerm', params.searchTerm);
+    if (params.limit) qp.set('limit', String(params.limit));
+    if (params.offset) qp.set('offset', String(params.offset));
+    if (params.sortBy) qp.set('sortBy', params.sortBy);
+    if (params.sortDir) qp.set('sortDir', params.sortDir);
+
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger?${qp.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger query failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async getLedgerCount(): Promise<{ ledgerEntries: number; trips: number; transactions: number }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/count`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+    );
+    if (!response.ok) throw new Error('Failed to fetch ledger count');
+    return response.json();
+  },
+
+  async getLedgerSummary(params: Partial<LedgerFilterParams> = {}): Promise<any> {
+    const qp = new URLSearchParams();
+    if (params.driverId) qp.set('driverId', params.driverId);
+    if (params.driverIds?.length) qp.set('driverIds', params.driverIds.join(','));
+    if (params.startDate) qp.set('startDate', params.startDate);
+    if (params.endDate) qp.set('endDate', params.endDate);
+    if (params.eventType) qp.set('eventType', params.eventType);
+    if (params.direction) qp.set('direction', params.direction);
+    if (params.platform) qp.set('platform', params.platform);
+
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/summary?${qp.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger summary failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async getLedgerDriverOverview(params: {
+    driverId: string;
+    startDate: string;
+    endDate: string;
+    platforms?: string[];
+  }): Promise<LedgerDriverOverview> {
+    const qp = new URLSearchParams();
+    qp.set('driverId', params.driverId);
+    qp.set('startDate', params.startDate);
+    qp.set('endDate', params.endDate);
+    if (params.platforms?.length) qp.set('platforms', params.platforms.join(','));
+
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/driver-overview?${qp.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger driver overview failed: ${errText}`);
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async createLedgerEntry(entry: Partial<LedgerEntry>): Promise<{ success: boolean; data?: LedgerEntry; skipped?: boolean; message?: string }> {
+    console.log('[Ledger] Creating entry:', entry.eventType, entry.sourceType, entry.sourceId);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify(entry),
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger create failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async createLedgerBatch(entries: Partial<LedgerEntry>[]): Promise<{ success: boolean; created: number; skipped: number; total: number }> {
+    console.log(`[Ledger] Creating batch of ${entries.length} entries`);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/batch`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ entries }),
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger batch create failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async updateLedgerEntry(id: string, updates: Partial<LedgerEntry>): Promise<{ success: boolean; data?: LedgerEntry }> {
+    console.log('[Ledger] Updating entry:', id, Object.keys(updates));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify(updates),
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger update failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async deleteLedgerEntry(id: string): Promise<{ success: boolean }> {
+    console.log('[Ledger] Deleting entry:', id);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger delete failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async runLedgerBackfill(): Promise<{ success: boolean; stats: { tripsProcessed: number; tripsSkipped: number; txProcessed: number; txSkipped: number; ledgerCreated: number; errors: number } }> {
+    console.log('[Ledger] Starting backfill...');
+    const response = await fetch(
+      `${API_ENDPOINTS.financial}/ledger/backfill`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger backfill failed: ${errText}`);
+    }
+    const result = await response.json();
+    console.log('[Ledger] Backfill complete:', result);
+    return result;
+  },
 };

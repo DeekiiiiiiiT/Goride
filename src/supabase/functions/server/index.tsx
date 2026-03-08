@@ -75,6 +75,286 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
+// ─── Driver ID Resolution ─────────────────────────────────────────────
+// Resolves any driver identifier (Roam UUID, Uber UUID, InDrive UUID,
+// or display name) to the canonical Roam UUID. Uses an in-memory cache
+// that's refreshed every 5 minutes.
+// ───────────────────────────────────────────────────────────────────────
+let _driverCacheTimestamp = 0;
+let _driverCache: any[] = [];
+const DRIVER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function loadDriverCache(): Promise<any[]> {
+    const now = Date.now();
+    if (_driverCache.length > 0 && (now - _driverCacheTimestamp) < DRIVER_CACHE_TTL) {
+        return _driverCache;
+    }
+    try {
+        const { data } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "driver:%");
+        _driverCache = (data || []).map((d: any) => d.value).filter(Boolean);
+        _driverCacheTimestamp = now;
+        console.log(`[DriverCache] Loaded ${_driverCache.length} drivers`);
+    } catch (e) {
+        console.error("[DriverCache] Failed to load:", e);
+    }
+    return _driverCache;
+}
+
+interface ResolvedDriver {
+    canonicalId: string;
+    driverName: string;
+    resolved: boolean;
+}
+
+async function resolveCanonicalDriverId(input: string): Promise<ResolvedDriver> {
+    if (!input || !input.trim()) {
+        return { canonicalId: 'unknown', driverName: 'Unknown', resolved: false };
+    }
+
+    const trimmed = input.trim();
+    const drivers = await loadDriverCache();
+
+    // 1. Direct match: input is a Roam UUID
+    const directMatch = drivers.find((d: any) => d.id === trimmed);
+    if (directMatch) {
+        const name = directMatch.name || [directMatch.firstName, directMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
+        return { canonicalId: directMatch.id, driverName: name, resolved: true };
+    }
+
+    // 2. Uber UUID match
+    const uberMatch = drivers.find((d: any) => d.uberDriverId === trimmed);
+    if (uberMatch) {
+        const name = uberMatch.name || [uberMatch.firstName, uberMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
+        return { canonicalId: uberMatch.id, driverName: name, resolved: true };
+    }
+
+    // 3. InDrive UUID match
+    const indriveMatch = drivers.find((d: any) => d.inDriveDriverId === trimmed);
+    if (indriveMatch) {
+        const name = indriveMatch.name || [indriveMatch.firstName, indriveMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
+        return { canonicalId: indriveMatch.id, driverName: name, resolved: true };
+    }
+
+    // 4. Name match (case-insensitive)
+    const inputLower = trimmed.toLowerCase();
+    const nameMatch = drivers.find((d: any) => {
+        const fullName = d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || '';
+        return fullName.toLowerCase() === inputLower;
+    });
+    if (nameMatch) {
+        const name = nameMatch.name || [nameMatch.firstName, nameMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
+        return { canonicalId: nameMatch.id, driverName: name, resolved: true };
+    }
+
+    // 5. No match — return input as-is
+    console.log(`[DriverResolve] Could not resolve "${trimmed}" to a canonical ID`);
+    return { canonicalId: trimmed, driverName: trimmed, resolved: false };
+}
+
+function invalidateDriverCache() {
+    _driverCacheTimestamp = 0;
+    _driverCache = [];
+}
+
+// ─── Trip → Ledger Entry Generator ────────────────────────────────────
+async function generateTripLedgerEntries(trip: any): Promise<any[]> {
+    const entries: any[] = [];
+
+    // Only create ledger entries for completed trips with a positive amount
+    if (trip.status !== 'Completed' || !trip.amount || trip.amount <= 0) {
+        return entries;
+    }
+
+    // Dedup check: skip if ledger entries already exist for this trip
+    try {
+        const { data: existing } = await supabase
+            .from("kv_store_37f42386")
+            .select("key")
+            .like("key", "ledger:%")
+            .eq("value->>sourceId", trip.id)
+            .eq("value->>sourceType", "trip")
+            .limit(1);
+
+        if (existing && existing.length > 0) {
+            return entries; // Already has ledger entries — skip
+        }
+    } catch (dedupErr) {
+        console.warn('[Ledger] Dedup check failed, proceeding with creation:', dedupErr);
+    }
+
+    // Resolve driver ID to canonical Roam UUID
+    const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+
+    const baseEntry = {
+        date: trip.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        time: trip.requestTime ? new Date(trip.requestTime).toISOString().split('T')[1]?.substring(0, 8) : undefined,
+        createdAt: new Date().toISOString(),
+        driverId: resolved.canonicalId,
+        driverName: trip.driverName || resolved.driverName,
+        vehicleId: trip.vehicleId || undefined,
+        platform: trip.platform || 'Unknown',
+        sourceType: 'trip' as const,
+        sourceId: trip.id,
+        batchId: trip.batchId || undefined,
+        currency: 'JMD',
+        isReconciled: false,
+    };
+
+    const isCash = (trip.cashCollected || 0) > 0;
+    const netPayout = trip.netPayout ?? trip.amount;
+    const pickupShort = (trip.pickupLocation || 'Unknown').substring(0, 30);
+    const dropoffShort = (trip.dropoffLocation || 'Unknown').substring(0, 30);
+
+    // Entry 1: Fare Earning
+    entries.push({
+        ...baseEntry,
+        id: crypto.randomUUID(),
+        eventType: 'fare_earning',
+        category: 'Fare Earnings',
+        description: `${trip.platform || 'Trip'}${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
+        grossAmount: trip.amount,
+        netAmount: isCash ? (trip.cashCollected || trip.amount) : netPayout,
+        paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
+        direction: 'inflow',
+        metadata: {
+            distance: trip.distance,
+            duration: trip.duration,
+            serviceType: trip.serviceType || trip.productType,
+            fareBreakdown: trip.fareBreakdown || null,
+        },
+    });
+
+    // Entry 2: Tip (if tips > 0)
+    const tips = trip.fareBreakdown?.tips || 0;
+    if (tips > 0) {
+        entries.push({
+            ...baseEntry,
+            id: crypto.randomUUID(),
+            eventType: 'tip',
+            category: 'Tips',
+            description: `Tip for ${trip.platform || 'trip'}: ${pickupShort} -> ${dropoffShort}`,
+            grossAmount: tips,
+            netAmount: tips,
+            paymentMethod: 'Digital Wallet',
+            direction: 'inflow',
+        });
+    }
+
+    // Entry 3: Platform Fee (if InDrive service fee is known)
+    const platformFee = trip.indriveServiceFee || 0;
+    if (platformFee > 0) {
+        entries.push({
+            ...baseEntry,
+            id: crypto.randomUUID(),
+            eventType: 'platform_fee',
+            category: 'Platform Fees',
+            description: `${trip.platform || 'Platform'} service fee`,
+            grossAmount: platformFee,
+            netAmount: -platformFee,
+            paymentMethod: 'Digital Wallet',
+            direction: 'outflow',
+        });
+    }
+
+    // Entry 4: Toll charges (if present)
+    const tollCharges = trip.tollCharges || 0;
+    if (tollCharges > 0) {
+        entries.push({
+            ...baseEntry,
+            id: crypto.randomUUID(),
+            eventType: 'toll_charge',
+            category: 'Tolls',
+            description: `Toll charge for ${pickupShort} -> ${dropoffShort}`,
+            grossAmount: tollCharges,
+            netAmount: -tollCharges,
+            paymentMethod: 'Digital Wallet',
+            direction: 'outflow',
+        });
+    }
+
+    return entries;
+}
+
+// ─── Transaction → Ledger Entry Generator ─────────────────────────────
+async function generateTransactionLedgerEntry(transaction: any): Promise<any | null> {
+    // Skip if no meaningful amount
+    if (!transaction.amount && transaction.amount !== 0) return null;
+    // Skip wallet credit entries that are system-generated mirrors
+    if (transaction.metadata?.isWalletCredit && transaction.metadata?.autoGenerated) return null;
+
+    // Deduplication check
+    try {
+        const { data: existing } = await supabase
+            .from("kv_store_37f42386")
+            .select("key")
+            .like("key", "ledger:%")
+            .eq("value->>sourceId", transaction.id)
+            .eq("value->>sourceType", "transaction")
+            .limit(1);
+
+        if (existing && existing.length > 0) return null; // Already exists
+    } catch (dedupErr) {
+        console.warn('[Ledger] Dedup check failed for transaction, proceeding:', dedupErr);
+    }
+
+    // Resolve driver ID
+    const resolved = await resolveCanonicalDriverId(transaction.driverId || '');
+
+    // Determine event type from transaction category
+    let eventType: string = 'other';
+    const cat = (transaction.category || '').toLowerCase();
+    if (cat.includes('fuel') && cat.includes('reimbursement')) eventType = 'fuel_reimbursement';
+    else if (cat.includes('fuel')) eventType = 'fuel_expense';
+    else if (cat.includes('toll')) eventType = 'toll_charge';
+    else if (cat.includes('maintenance')) eventType = 'maintenance';
+    else if (cat.includes('insurance')) eventType = 'insurance';
+    else if (cat.includes('payout')) eventType = 'driver_payout';
+    else if (cat.includes('fare') || cat.includes('earning')) eventType = 'fare_earning';
+    else if (cat.includes('tip')) eventType = 'tip';
+    else if (cat.includes('wallet') && cat.includes('credit')) eventType = 'wallet_credit';
+    else if (cat.includes('wallet')) eventType = 'wallet_debit';
+
+    // Determine direction
+    const amount = Number(transaction.amount) || 0;
+    const isOutflow = amount < 0 || ['Expense', 'Payout'].includes(transaction.type);
+    const direction = isOutflow ? 'outflow' : 'inflow';
+
+    return {
+        id: crypto.randomUUID(),
+        date: transaction.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        time: transaction.time || undefined,
+        createdAt: new Date().toISOString(),
+        driverId: resolved.canonicalId,
+        driverName: transaction.driverName || resolved.driverName,
+        vehicleId: transaction.vehicleId || undefined,
+        vehiclePlate: transaction.vehiclePlate || undefined,
+        platform: transaction.platform || undefined,
+        eventType,
+        category: transaction.category || 'Other',
+        description: transaction.description || `${transaction.category || 'Transaction'} - ${transaction.vendor || ''}`.trim(),
+        grossAmount: Math.abs(amount),
+        netAmount: isOutflow ? -Math.abs(amount) : Math.abs(amount),
+        currency: 'JMD',
+        paymentMethod: transaction.paymentMethod || undefined,
+        direction,
+        isReconciled: transaction.isReconciled || false,
+        sourceType: 'transaction' as const,
+        sourceId: transaction.id,
+        batchId: transaction.batchId || undefined,
+        batchName: transaction.batchName || undefined,
+        metadata: {
+            originalCategory: transaction.category,
+            originalType: transaction.type,
+            vendor: transaction.vendor,
+            quantity: transaction.quantity,
+            unitPrice: transaction.unitPrice,
+            odometer: transaction.odometer,
+        },
+    };
+}
 
 // Enable logger - DISABLED to prevent OOM on large payloads
 // app.use('*', logger(console.log));
@@ -1047,7 +1327,7 @@ app.get("/make-server-37f42386/dashboard/stats", async (c) => {
 app.post("/make-server-37f42386/trips/search", async (c) => {
   try {
     let { 
-        driverId, startDate, endDate, status, limit, offset,
+        driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
         platform, tripType, vehicleId, anchorPeriodId
     } = await c.req.json();
     
@@ -1057,8 +1337,30 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
         .select("value", { count: 'exact' })
         .like("key", "trip:%");
 
-    if (driverId) {
-        query = query.eq("value->>driverId", driverId);
+    // driverIds: broad OR search across multiple IDs + optional name
+    // This ensures we find trips regardless of which ID format was stored
+    if (driverIds && Array.isArray(driverIds) && driverIds.length > 0) {
+        const orParts: string[] = [];
+        for (const id of driverIds) {
+            orParts.push(`value->>driverId.eq.${id}`);
+            orParts.push(`value->>driverName.ilike.${id}`);
+        }
+        if (driverName) {
+            orParts.push(`value->>driverName.ilike.${driverName}`);
+            // Also check if driverId field contains the name (legacy CSV imports stored names as driverId)
+            orParts.push(`value->>driverId.ilike.${driverName}`);
+        }
+        const orClause = orParts.join(',');
+
+        query = query.or(orClause);
+    } else if (driverId) {
+        if (driverName) {
+            query = query.or(`value->>driverId.eq.${driverId},value->>driverName.ilike.${driverName}`);
+        } else {
+            query = query.eq("value->>driverId", driverId);
+        }
+    } else if (driverName) {
+        query = query.ilike("value->>driverName", driverName);
     }
 
     if (anchorPeriodId) {
@@ -1294,6 +1596,27 @@ app.post("/make-server-37f42386/trips", async (c) => {
     // Store using mset
     await kv.mset(keys, processedTrips);
     
+    // ── Write-Time Ledger: Generate ledger entries for each imported trip ──
+    try {
+        const allLedgerEntries: any[] = [];
+        for (const trip of processedTrips) {
+            const tripEntries = await generateTripLedgerEntries(trip);
+            allLedgerEntries.push(...tripEntries);
+        }
+        if (allLedgerEntries.length > 0) {
+            // Batch save in chunks of 100
+            for (let i = 0; i < allLedgerEntries.length; i += 100) {
+                const chunk = allLedgerEntries.slice(i, i + 100);
+                const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
+                await kv.mset(ledgerKeys, chunk);
+            }
+            console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
+        }
+    } catch (ledgerErr) {
+        // Ledger creation failure should NOT break trip import
+        console.error('[Ledger] Failed to create ledger entries for trip import:', ledgerErr);
+    }
+
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
     await cache.invalidateCacheVersion("performance");
@@ -1310,18 +1633,30 @@ app.get("/make-server-37f42386/trips", async (c) => {
   try {
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
-    const limit = limitParam ? parseInt(limitParam) : 50; // Default limit
+    const rawLimit = limitParam ? parseInt(limitParam) : 50;
+    const limit = Math.min(rawLimit, 200); // Cap at 200 to prevent connection resets on large payloads
     const offset = offsetParam ? parseInt(offsetParam) : 0;
 
-    // Direct Supabase query with range for memory efficiency
-    const { data, error } = await supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "trip:%")
-        .order("value->>date", { ascending: false })
-        .range(offset, offset + limit - 1);
-
-    if (error) throw error;
+    // Retry wrapper for Supabase query — connection resets are transient
+    let data: any[] | null = null;
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "trip:%")
+          .order("value->>date", { ascending: false })
+          .range(offset, offset + limit - 1);
+      if (!result.error) {
+        data = result.data;
+        lastError = null;
+        break;
+      }
+      lastError = result.error;
+      console.log(`[trips GET] Supabase query attempt ${attempt + 1} failed: ${result.error.message}. Retrying...`);
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+    }
+    if (lastError) throw lastError;
     
     // Phase 8.4: Large Data Stripping + sanitize control chars
     const trips = (data || []).map((d: any) => {
@@ -1617,6 +1952,7 @@ app.post("/make-server-37f42386/drivers", async (c) => {
     };
 
     await kv.set(`driver:${finalId}`, newDriver);
+    invalidateDriverCache();
     return c.json({ success: true, data: newDriver });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -1966,6 +2302,16 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             };
             console.log(`[StationGate] Transaction ${transaction.id} held — station locationStatus="${locationStatus || 'none'}", skipping auto-approval and fuel entry creation.`);
             await kv.set(`transaction:${transaction.id}`, transaction);
+            // ── Write-Time Ledger ──
+            try {
+                const ledgerEntry = await generateTransactionLedgerEntry(transaction);
+                if (ledgerEntry) {
+                    await kv.set(`ledger:${ledgerEntry.id}`, ledgerEntry);
+                    console.log(`[Ledger] Created ledger entry ${ledgerEntry.id} for transaction ${transaction.id} (${ledgerEntry.eventType})`);
+                }
+            } catch (ledgerErr) {
+                console.error('[Ledger] Failed to create ledger entry for transaction:', ledgerErr);
+            }
             return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
         }
 
@@ -1974,6 +2320,16 @@ app.post("/make-server-37f42386/transactions", async (c) => {
         if (!isAiVerified) {
             console.log(`[StationGate] Transaction ${transaction.id} passed station gate (verified) but odometerMethod="${transaction.metadata?.odometerMethod || 'none'}" — staying Pending for admin review.`);
             await kv.set(`transaction:${transaction.id}`, transaction);
+            // ── Write-Time Ledger ──
+            try {
+                const ledgerEntry = await generateTransactionLedgerEntry(transaction);
+                if (ledgerEntry) {
+                    await kv.set(`ledger:${ledgerEntry.id}`, ledgerEntry);
+                    console.log(`[Ledger] Created ledger entry ${ledgerEntry.id} for transaction ${transaction.id} (${ledgerEntry.eventType})`);
+                }
+            } catch (ledgerErr) {
+                console.error('[Ledger] Failed to create ledger entry for transaction:', ledgerErr);
+            }
             return c.json({ success: true, data: transaction });
         }
 
@@ -2012,7 +2368,7 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             odometer: Number(transaction.odometer) || 0,
             vendor: resolvedVendor,
             location: resolvedVendor,
-            stationAddress: transaction.metadata?.stationLocation || '',
+            stationAddress: transaction.metadata?.stationAddress || transaction.metadata?.stationLocation || '',
             vehicleId: transaction.vehicleId,
             driverId: transaction.driverId,
             cardId: undefined,
@@ -2022,6 +2378,8 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             isVerified: true, // Key Requirement: Anchor
             source: 'Fuel Log',
             matchedStationId: transaction.metadata?.matchedStationId,
+            // Fix: Set paymentSource from transaction so Paid By shows correct value immediately
+            paymentSource: (() => { const m: Record<string,string> = { 'driver_cash':'Personal','rideshare_cash':'RideShare_Cash','company_card':'Gas_Card','petty_cash':'Petty_Cash' }; const r = transaction.metadata?.paymentSource || transaction.paymentSource; return r ? (m[r] || r) : 'Personal'; })(),
             metadata: {
                 receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
                 odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
@@ -2033,7 +2391,9 @@ app.post("/make-server-37f42386/transactions", async (c) => {
                 matchedStationId: transaction.metadata?.matchedStationId,
                 verificationMethod: transaction.metadata?.verificationMethod,
                 matchDistance: transaction.metadata?.matchDistance,
-                matchConfidence: transaction.metadata?.matchConfidence
+                matchConfidence: transaction.metadata?.matchConfidence,
+                // Fix: Copy paymentSource so backfill and display read it correctly
+                paymentSource: transaction.metadata?.paymentSource || transaction.paymentSource || 'driver_cash'
             }
         };
 
@@ -2055,6 +2415,16 @@ app.post("/make-server-37f42386/transactions", async (c) => {
     }
 
     await kv.set(`transaction:${transaction.id}`, transaction);
+    // ── Write-Time Ledger ──
+    try {
+        const ledgerEntry = await generateTransactionLedgerEntry(transaction);
+        if (ledgerEntry) {
+            await kv.set(`ledger:${ledgerEntry.id}`, ledgerEntry);
+            console.log(`[Ledger] Created ledger entry ${ledgerEntry.id} for transaction ${transaction.id} (${ledgerEntry.eventType})`);
+        }
+    } catch (ledgerErr) {
+        console.error('[Ledger] Failed to create ledger entry for transaction:', ledgerErr);
+    }
     return c.json({ success: true, data: transaction });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -2070,6 +2440,775 @@ app.delete("/make-server-37f42386/transactions/:id", async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// WRITE-TIME LEDGER ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════
+
+const VALID_LEDGER_EVENT_TYPES = new Set([
+  'fare_earning', 'tip', 'surge_bonus', 'fuel_expense', 'fuel_reimbursement',
+  'toll_charge', 'toll_refund', 'maintenance', 'insurance', 'driver_payout',
+  'cash_collection', 'platform_fee', 'wallet_credit', 'wallet_debit',
+  'cancelled_trip_loss', 'adjustment', 'other',
+]);
+const VALID_LEDGER_DIRECTIONS = new Set(['inflow', 'outflow']);
+
+// ─── GET /ledger — Query with filters + pagination ──────────────────
+app.get("/make-server-37f42386/ledger", async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const driverIdsParam = c.req.query("driverIds");
+    const vehicleId = c.req.query("vehicleId");
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    const eventType = c.req.query("eventType");
+    const eventTypesParam = c.req.query("eventTypes");
+    const direction = c.req.query("direction");
+    const platform = c.req.query("platform");
+    const isReconciledParam = c.req.query("isReconciled");
+    const batchId = c.req.query("batchId");
+    const sourceType = c.req.query("sourceType");
+    const minAmountParam = c.req.query("minAmount");
+    const maxAmountParam = c.req.query("maxAmount");
+    const searchTerm = c.req.query("searchTerm");
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const sortBy = c.req.query("sortBy") || "date";
+    const sortDir = c.req.query("sortDir") || "desc";
+
+    const limit = limitParam ? parseInt(limitParam) : 50;
+    const offset = offsetParam ? parseInt(offsetParam) : 0;
+    const minAmount = minAmountParam ? parseFloat(minAmountParam) : undefined;
+    const maxAmount = maxAmountParam ? parseFloat(maxAmountParam) : undefined;
+    const needsAmountFilter = minAmount !== undefined || maxAmount !== undefined;
+
+    let query = supabase
+      .from("kv_store_37f42386")
+      .select("value", { count: "exact" })
+      .like("key", "ledger:%");
+
+    if (driverId) {
+      query = query.eq("value->>driverId", driverId);
+    } else if (driverIdsParam) {
+      const ids = driverIdsParam.split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (ids.length === 1) {
+        query = query.eq("value->>driverId", ids[0]);
+      } else if (ids.length > 1) {
+        query = query.or(ids.map((id: string) => `value->>driverId.eq.${id}`).join(","));
+      }
+    }
+
+    if (vehicleId) query = query.eq("value->>vehicleId", vehicleId);
+    if (startDate) query = query.gte("value->>date", startDate);
+    if (endDate) query = query.lte("value->>date", endDate);
+
+    if (eventType) {
+      query = query.eq("value->>eventType", eventType);
+    } else if (eventTypesParam) {
+      const types = eventTypesParam.split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (types.length === 1) {
+        query = query.eq("value->>eventType", types[0]);
+      } else if (types.length > 1) {
+        query = query.or(types.map((t: string) => `value->>eventType.eq.${t}`).join(","));
+      }
+    }
+
+    if (direction) query = query.eq("value->>direction", direction);
+    if (platform) query = query.eq("value->>platform", platform);
+    if (isReconciledParam !== undefined && isReconciledParam !== null && isReconciledParam !== "") {
+      query = query.eq("value->>isReconciled", isReconciledParam);
+    }
+    if (batchId) query = query.eq("value->>batchId", batchId);
+    if (sourceType) query = query.eq("value->>sourceType", sourceType);
+    if (searchTerm) query = query.ilike("value->>description", `%${searchTerm}%`);
+
+    const sortField = sortBy === "amount" ? "value->>netAmount" : sortBy === "createdAt" ? "value->>createdAt" : "value->>date";
+    query = query.order(sortField, { ascending: sortDir === "asc" });
+
+    if (needsAmountFilter) {
+      const overfetchLimit = limit + 500;
+      query = query.range(0, overfetchLimit - 1);
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+
+      let entries = (data || []).map((d: any) => d.value).filter(Boolean);
+      if (minAmount !== undefined) {
+        entries = entries.filter((e: any) => Math.abs(Number(e.netAmount) || 0) >= minAmount);
+      }
+      if (maxAmount !== undefined) {
+        entries = entries.filter((e: any) => Math.abs(Number(e.netAmount) || 0) <= maxAmount);
+      }
+
+      const filteredTotal = entries.length;
+      const paged = entries.slice(offset, offset + limit);
+
+      return c.json({
+        data: paged,
+        total: filteredTotal,
+        page: Math.floor(offset / limit) + 1,
+        limit,
+        hasMore: (offset + limit) < filteredTotal,
+      });
+    }
+
+    query = query.range(offset, offset + limit - 1);
+    const { data, error, count } = await query;
+    if (error) throw error;
+
+    const entries = (data || []).map((d: any) => d.value).filter(Boolean);
+    const total = count || 0;
+
+    return c.json({
+      data: entries,
+      total,
+      page: Math.floor(offset / limit) + 1,
+      limit,
+      hasMore: (offset + limit) < total,
+    });
+  } catch (e: any) {
+    console.log(`[Ledger GET] Error: ${e.message}`);
+    return c.json({ error: `Ledger query failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── GET /ledger/count — Diagnostic counts ──────────────────────────
+app.get("/make-server-37f42386/ledger/count", async (c) => {
+  try {
+    const { count: ledgerCount } = await supabase
+      .from("kv_store_37f42386")
+      .select("*", { count: "exact", head: true })
+      .like("key", "ledger:%");
+
+    const { count: tripCount } = await supabase
+      .from("kv_store_37f42386")
+      .select("*", { count: "exact", head: true })
+      .like("key", "trip:%");
+
+    const { count: txCount } = await supabase
+      .from("kv_store_37f42386")
+      .select("*", { count: "exact", head: true })
+      .like("key", "transaction:%");
+
+    return c.json({
+      ledgerEntries: ledgerCount || 0,
+      trips: tripCount || 0,
+      transactions: txCount || 0,
+    });
+  } catch (e: any) {
+    console.log(`[Ledger Count] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /ledger/summary — Aggregate totals for a filter set ────────
+app.get("/make-server-37f42386/ledger/summary", async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const driverIdsParam = c.req.query("driverIds");
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    const eventType = c.req.query("eventType");
+    const direction = c.req.query("direction");
+    const platform = c.req.query("platform");
+
+    let query = supabase
+      .from("kv_store_37f42386")
+      .select("value")
+      .like("key", "ledger:%");
+
+    if (driverId) {
+      query = query.eq("value->>driverId", driverId);
+    } else if (driverIdsParam) {
+      const ids = driverIdsParam.split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (ids.length === 1) {
+        query = query.eq("value->>driverId", ids[0]);
+      } else if (ids.length > 1) {
+        query = query.or(ids.map((id: string) => `value->>driverId.eq.${id}`).join(","));
+      }
+    }
+
+    if (startDate) query = query.gte("value->>date", startDate);
+    if (endDate) query = query.lte("value->>date", endDate);
+    if (eventType) query = query.eq("value->>eventType", eventType);
+    if (direction) query = query.eq("value->>direction", direction);
+    if (platform) query = query.eq("value->>platform", platform);
+
+    const { data, error } = await query.limit(10000);
+    if (error) throw error;
+
+    const entries = (data || []).map((d: any) => d.value).filter(Boolean);
+
+    let totalInflow = 0;
+    let totalOutflow = 0;
+    let reconciledCount = 0;
+    let unreconciledCount = 0;
+    const byEventType: Record<string, { count: number; total: number }> = {};
+    const byPlatform: Record<string, { count: number; total: number }> = {};
+
+    for (const e of entries) {
+      const net = Number(e.netAmount) || 0;
+      if (e.direction === "inflow" || net > 0) {
+        totalInflow += Math.abs(net);
+      } else {
+        totalOutflow += Math.abs(net);
+      }
+
+      if (e.isReconciled === true || e.isReconciled === "true") {
+        reconciledCount++;
+      } else {
+        unreconciledCount++;
+      }
+
+      const et = e.eventType || "other";
+      if (!byEventType[et]) byEventType[et] = { count: 0, total: 0 };
+      byEventType[et].count++;
+      byEventType[et].total += net;
+
+      const pl = e.platform || "Unknown";
+      if (!byPlatform[pl]) byPlatform[pl] = { count: 0, total: 0 };
+      byPlatform[pl].count++;
+      byPlatform[pl].total += net;
+    }
+
+    return c.json({
+      success: true,
+      summary: {
+        totalInflow: Number(totalInflow.toFixed(2)),
+        totalOutflow: Number(totalOutflow.toFixed(2)),
+        netBalance: Number((totalInflow - totalOutflow).toFixed(2)),
+        totalEntries: entries.length,
+        entryCount: entries.length,
+        reconciledCount,
+        unreconciledCount,
+        byEventType,
+        byPlatform,
+      },
+    });
+  } catch (e: any) {
+    console.log(`[Ledger Summary] Error: ${e.message}`);
+    return c.json({ error: `Ledger summary failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── GET /ledger/driver-overview — Aggregated financials for Driver Detail ──
+app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    const platformsParam = c.req.query("platforms");
+
+    if (!driverId || !startDate || !endDate) {
+      return c.json({ error: "Missing required params: driverId, startDate, endDate" }, 400);
+    }
+
+    console.log(`[Ledger DriverOverview] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"}`);
+
+    // Helper: build a base query filtered by driverId (and optional platforms)
+    const baseQuery = () => {
+      let q = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "ledger:%")
+        .eq("value->>driverId", driverId);
+      if (platformsParam) {
+        const plats = platformsParam.split(",").map((s: string) => s.trim()).filter(Boolean);
+        if (plats.length === 1) {
+          q = q.eq("value->>platform", plats[0]);
+        } else if (plats.length > 1) {
+          q = q.or(plats.map((p: string) => `value->>platform.eq.${p}`).join(","));
+        }
+      }
+      return q;
+    };
+
+    // ── 1. Period data ───────────────────────────────────────────────
+    const { data: periodData, error: periodErr } = await baseQuery()
+      .gte("value->>date", startDate)
+      .lte("value->>date", endDate)
+      .limit(10000);
+
+    if (periodErr) throw new Error(`Period query failed: ${periodErr.message}`);
+
+    const periodEntries = (periodData || []).map((d: any) => d.value).filter(Boolean);
+
+    // Accumulate period metrics in a single pass
+    let pEarnings = 0;
+    let pCash = 0;
+    let pTolls = 0;
+    let pTips = 0;
+    let pBaseFare = 0;
+    let pPlatformFees = 0;
+    let pTripCount = 0;
+    let pCancelledCount = 0;
+
+    const pPlatformStats: Record<string, { earnings: number; tripCount: number; cashCollected: number; tolls: number }> = {};
+    const dailyMap: Record<string, { total: number; byPlatform: Record<string, number> }> = {};
+
+    for (const e of periodEntries) {
+      const net = Number(e.netAmount) || 0;
+      const gross = Number(e.grossAmount) || 0;
+      const plat = (e.platform === 'GoRide' ? 'Roam' : e.platform) || "Other";
+      const et = e.eventType;
+
+      if (et === "fare_earning") {
+        pEarnings += net;
+        pBaseFare += gross;
+        pTripCount += 1;
+        if (e.paymentMethod === "Cash") pCash += Math.abs(net);
+
+        // Platform stats
+        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+        pPlatformStats[plat].earnings += net;
+        pPlatformStats[plat].tripCount += 1;
+        if (e.paymentMethod === "Cash") pPlatformStats[plat].cashCollected += Math.abs(net);
+
+        // Daily chart
+        const day = e.date;
+        if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
+        dailyMap[day].total += net;
+        dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+      } else if (et === "tip") {
+        pTips += net;
+        // Add tips to platform earnings and daily chart too
+        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+        pPlatformStats[plat].earnings += net;
+        const day = e.date;
+        if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
+        dailyMap[day].total += net;
+        dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+      } else if (et === "toll_charge") {
+        pTolls += Math.abs(net);
+        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+        pPlatformStats[plat].tolls += Math.abs(net);
+      } else if (et === "platform_fee") {
+        pPlatformFees += Math.abs(net);
+      } else if (et === "cancelled_trip_loss") {
+        pCancelledCount += 1;
+      }
+    }
+
+    // Convert dailyMap to sorted array
+    const dailyEarnings = Object.entries(dailyMap)
+      .map(([date, val]) => ({ date, total: Number(val.total.toFixed(2)), byPlatform: val.byPlatform }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // ── 2. Previous period (for trend arrow) ─────────────────────────
+    const startD = new Date(startDate + "T00:00:00Z");
+    const endD = new Date(endDate + "T23:59:59Z");
+    const daysDiff = Math.round((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const prevEndD = new Date(startD);
+    prevEndD.setUTCDate(prevEndD.getUTCDate() - 1);
+    const prevStartD = new Date(prevEndD);
+    prevStartD.setUTCDate(prevStartD.getUTCDate() - daysDiff + 1);
+    const prevStart = prevStartD.toISOString().slice(0, 10);
+    const prevEnd = prevEndD.toISOString().slice(0, 10);
+
+    const { data: prevData, error: prevErr } = await baseQuery()
+      .gte("value->>date", prevStart)
+      .lte("value->>date", prevEnd)
+      .in("value->>eventType", ["fare_earning", "tip"])
+      .limit(10000);
+
+    if (prevErr) {
+      console.log(`[Ledger DriverOverview] Prev period query warning: ${prevErr.message}`);
+    }
+
+    let prevEarnings = 0;
+    if (prevData) {
+      for (const d of prevData) {
+        const v = d.value;
+        if (v) prevEarnings += Number(v.netAmount) || 0;
+      }
+    }
+
+    // ── 3. Lifetime totals (no date filter) ──────────────────────────
+    const { data: lifetimeData, error: lifeErr } = await supabase
+      .from("kv_store_37f42386")
+      .select("value")
+      .like("key", "ledger:%")
+      .eq("value->>driverId", driverId)
+      .in("value->>eventType", ["fare_earning", "tip", "toll_charge"])
+      .limit(50000);
+
+    if (lifeErr) {
+      console.log(`[Ledger DriverOverview] Lifetime query warning: ${lifeErr.message}`);
+    }
+
+    let ltEarnings = 0;
+    let ltTripCount = 0;
+    let ltCash = 0;
+    let ltTolls = 0;
+
+    if (lifetimeData) {
+      for (const d of lifetimeData) {
+        const v = d.value;
+        if (!v) continue;
+        const net = Number(v.netAmount) || 0;
+        if (v.eventType === "fare_earning") {
+          ltEarnings += net;
+          ltTripCount += 1;
+          if (v.paymentMethod === "Cash") ltCash += Math.abs(net);
+        } else if (v.eventType === "tip") {
+          ltEarnings += net;
+        } else if (v.eventType === "toll_charge") {
+          ltTolls += Math.abs(net);
+        }
+      }
+    }
+
+    // ── Assemble response ────────────────────────────────────────────
+    const result = {
+      period: {
+        earnings: Number(pEarnings.toFixed(2)),
+        cashCollected: Number(pCash.toFixed(2)),
+        tolls: Number(pTolls.toFixed(2)),
+        tips: Number(pTips.toFixed(2)),
+        baseFare: Number(pBaseFare.toFixed(2)),
+        platformFees: Number(pPlatformFees.toFixed(2)),
+        tripCount: pTripCount,
+        cancelledCount: pCancelledCount,
+      },
+      prevPeriod: {
+        earnings: Number(prevEarnings.toFixed(2)),
+      },
+      lifetime: {
+        earnings: Number(ltEarnings.toFixed(2)),
+        tripCount: ltTripCount,
+        cashCollected: Number(ltCash.toFixed(2)),
+        tolls: Number(ltTolls.toFixed(2)),
+      },
+      platformStats: Object.fromEntries(
+        Object.entries(pPlatformStats).map(([k, v]) => [k, {
+          earnings: Number(v.earnings.toFixed(2)),
+          tripCount: v.tripCount,
+          cashCollected: Number(v.cashCollected.toFixed(2)),
+          tolls: Number(v.tolls.toFixed(2)),
+        }])
+      ),
+      dailyEarnings,
+    };
+
+    console.log(`[Ledger DriverOverview] OK — period: ${pTripCount} trips, $${result.period.earnings} | lifetime: ${ltTripCount} trips, $${result.lifetime.earnings}`);
+
+    return c.json({ success: true, data: result });
+  } catch (e: any) {
+    console.log(`[Ledger DriverOverview] Error: ${e.message}`);
+    return c.json({ error: `Ledger driver overview failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── POST /ledger — Create a single ledger entry ───────────────────
+app.post("/make-server-37f42386/ledger", async (c) => {
+  try {
+    const entry = await c.req.json();
+
+    if (!entry.id) entry.id = crypto.randomUUID();
+    if (!entry.createdAt) entry.createdAt = new Date().toISOString();
+
+    const requiredFields = ["date", "driverId", "eventType", "direction", "sourceType", "sourceId"];
+    for (const field of requiredFields) {
+      if (!entry[field]) {
+        return c.json({ error: `Missing required field: ${field}` }, 400);
+      }
+    }
+    if (entry.netAmount === undefined || entry.netAmount === null) {
+      return c.json({ error: "Missing required field: netAmount" }, 400);
+    }
+
+    if (!VALID_LEDGER_EVENT_TYPES.has(entry.eventType)) {
+      return c.json({ error: `Invalid eventType: ${entry.eventType}` }, 400);
+    }
+    if (!VALID_LEDGER_DIRECTIONS.has(entry.direction)) {
+      return c.json({ error: `Invalid direction: ${entry.direction}` }, 400);
+    }
+    if (typeof entry.netAmount !== "number" || !isFinite(entry.netAmount)) {
+      return c.json({ error: `netAmount must be a finite number, got: ${entry.netAmount}` }, 400);
+    }
+    // Phase 11: date format validation
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
+      return c.json({ error: `date must be YYYY-MM-DD format, got: ${entry.date}` }, 400);
+    }
+    if (typeof entry.driverId !== "string" || entry.driverId.trim().length === 0) {
+      return c.json({ error: `driverId must be a non-empty string` }, 400);
+    }
+
+    if (!entry.currency) entry.currency = "JMD";
+    if (entry.isReconciled === undefined) entry.isReconciled = false;
+    if (!entry.category) entry.category = entry.eventType;
+    if (entry.grossAmount === undefined) entry.grossAmount = Math.abs(entry.netAmount);
+
+    // Deduplication: same sourceType + sourceId + eventType
+    const { data: existing } = await supabase
+      .from("kv_store_37f42386")
+      .select("key")
+      .like("key", "ledger:%")
+      .eq("value->>sourceId", entry.sourceId)
+      .eq("value->>sourceType", entry.sourceType)
+      .eq("value->>eventType", entry.eventType)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return c.json({ success: true, skipped: true, message: "Duplicate ledger entry — already exists for this source + eventType" });
+    }
+
+    await kv.set(`ledger:${entry.id}`, entry);
+    console.log(`[Ledger POST] Created ${entry.id} (${entry.eventType}) for driver ${entry.driverId}`);
+    return c.json({ success: true, data: entry });
+  } catch (e: any) {
+    console.log(`[Ledger POST] Error: ${e.message}`);
+    return c.json({ error: `Ledger create failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── POST /ledger/batch — Create multiple ledger entries ────────────
+app.post("/make-server-37f42386/ledger/batch", async (c) => {
+  try {
+    const body = await c.req.json();
+    const entries = body.entries;
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return c.json({ error: "entries must be a non-empty array" }, 400);
+    }
+    if (entries.length > 500) {
+      return c.json({ error: `Max 500 entries per batch, got ${entries.length}` }, 400);
+    }
+
+    const sourceIds = entries.map((e: any) => e.sourceId).filter(Boolean);
+    const existingSet = new Set<string>();
+
+    if (sourceIds.length > 0) {
+      for (let i = 0; i < sourceIds.length; i += 50) {
+        const chunk = sourceIds.slice(i, i + 50);
+        const orClause = chunk.map((id: string) => `value->>sourceId.eq.${id}`).join(",");
+        const { data: existingData } = await supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "ledger:%")
+          .or(orClause)
+          .limit(1000);
+
+        if (existingData) {
+          for (const row of existingData) {
+            const v = (row as any).value;
+            if (v?.sourceId && v?.eventType) existingSet.add(`${v.sourceId}|${v.eventType}`);
+          }
+        }
+      }
+    }
+
+    let created = 0;
+    let skipped = 0;
+    let invalid = 0;
+    const toSave: { key: string; value: any }[] = [];
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+    for (const entry of entries) {
+      // Phase 11: Per-entry validation — skip invalid entries instead of failing entire batch
+      if (!entry.date || !DATE_RE.test(entry.date) || !entry.driverId || !entry.eventType || !entry.direction || !entry.sourceType || !entry.sourceId) {
+        console.log(`[Ledger Batch] Skipping invalid entry (missing required fields): eventType=${entry.eventType}, date=${entry.date}, driverId=${entry.driverId}`);
+        invalid++;
+        continue;
+      }
+      if (!VALID_LEDGER_EVENT_TYPES.has(entry.eventType)) { invalid++; continue; }
+      if (!VALID_LEDGER_DIRECTIONS.has(entry.direction)) { invalid++; continue; }
+      const amt = Number(entry.netAmount);
+      if (isNaN(amt) || !isFinite(amt)) { invalid++; continue; }
+      entry.netAmount = amt;
+
+      if (!entry.id) entry.id = crypto.randomUUID();
+      if (!entry.createdAt) entry.createdAt = new Date().toISOString();
+      if (!entry.currency) entry.currency = "JMD";
+      if (entry.isReconciled === undefined) entry.isReconciled = false;
+      if (!entry.category) entry.category = entry.eventType;
+      if (entry.grossAmount === undefined) entry.grossAmount = Math.abs(Number(entry.netAmount) || 0);
+
+      const dedupKey = `${entry.sourceId}|${entry.eventType}`;
+      if (existingSet.has(dedupKey)) {
+        skipped++;
+        continue;
+      }
+      existingSet.add(dedupKey);
+
+      toSave.push({ key: `ledger:${entry.id}`, value: entry });
+      created++;
+    }
+
+    for (let i = 0; i < toSave.length; i += 100) {
+      const chunk = toSave.slice(i, i + 100);
+      const keys = chunk.map((item: any) => item.key);
+      const values = chunk.map((item: any) => item.value);
+      await kv.mset(keys, values);
+    }
+
+    console.log(`[Ledger Batch] Created ${created}, skipped ${skipped}, invalid ${invalid} (total input: ${entries.length})`);
+    return c.json({ success: true, created, skipped, invalid, total: entries.length });
+  } catch (e: any) {
+    console.log(`[Ledger Batch] Error: ${e.message}`);
+    return c.json({ error: `Ledger batch failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── PATCH /ledger/:id — Update a ledger entry (whitelist) ─────────
+app.patch("/make-server-37f42386/ledger/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const updates = await c.req.json();
+
+    const existing = await kv.get(`ledger:${id}`);
+    if (!existing) {
+      return c.json({ error: `Ledger entry not found: ${id}` }, 404);
+    }
+
+    const ALLOWED_UPDATE_FIELDS = new Set([
+      "isReconciled", "reconciledAt", "reconciledBy",
+      "category", "description", "metadata",
+    ]);
+
+    const sanitized: Record<string, any> = {};
+    for (const key of Object.keys(updates)) {
+      if (ALLOWED_UPDATE_FIELDS.has(key)) {
+        sanitized[key] = updates[key];
+      }
+    }
+
+    if (Object.keys(sanitized).length === 0) {
+      return c.json({ error: "No valid updatable fields provided. Allowed: " + [...ALLOWED_UPDATE_FIELDS].join(", ") }, 400);
+    }
+
+    if (sanitized.isReconciled === true && !sanitized.reconciledAt) {
+      sanitized.reconciledAt = new Date().toISOString();
+    }
+
+    const updated = { ...existing, ...sanitized };
+    await kv.set(`ledger:${id}`, updated);
+
+    console.log(`[Ledger PATCH] Updated ${id}: ${Object.keys(sanitized).join(", ")}`);
+    return c.json({ success: true, data: updated });
+  } catch (e: any) {
+    console.log(`[Ledger PATCH] Error: ${e.message}`);
+    return c.json({ error: `Ledger update failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── DELETE /ledger/:id — Delete a single ledger entry ──────────────
+app.delete("/make-server-37f42386/ledger/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    await kv.del(`ledger:${id}`);
+    console.log(`[Ledger DELETE] Deleted ${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`[Ledger DELETE] Error: ${e.message}`);
+    return c.json({ error: `Ledger delete failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── POST /ledger/backfill — One-time historical data backfill ───────
+app.post("/make-server-37f42386/ledger/backfill", async (c) => {
+    try {
+        console.log('[Ledger Backfill] Starting...');
+        const stats = { tripsProcessed: 0, tripsSkipped: 0, txProcessed: 0, txSkipped: 0, ledgerCreated: 0, errors: 0 };
+
+        // ── Step 1: Backfill from trips ──
+        let tripOffset = 0;
+        const PAGE_SIZE = 500;
+        let hasMoreTrips = true;
+
+        while (hasMoreTrips) {
+            const { data: tripData } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "trip:%")
+                .range(tripOffset, tripOffset + PAGE_SIZE - 1);
+
+            const trips = (tripData || []).map((d: any) => d.value).filter(Boolean);
+            if (trips.length < PAGE_SIZE) hasMoreTrips = false;
+            tripOffset += PAGE_SIZE;
+
+            const ledgerBatch: any[] = [];
+            for (const trip of trips) {
+                try {
+                    const entries = await generateTripLedgerEntries(trip);
+                    if (entries.length > 0) {
+                        ledgerBatch.push(...entries);
+                        stats.tripsProcessed++;
+                    } else {
+                        stats.tripsSkipped++;
+                    }
+                } catch (e) {
+                    stats.errors++;
+                    console.error(`[Ledger Backfill] Error processing trip ${trip.id}:`, e);
+                }
+            }
+
+            if (ledgerBatch.length > 0) {
+                for (let i = 0; i < ledgerBatch.length; i += 100) {
+                    const chunk = ledgerBatch.slice(i, i + 100);
+                    const keys = chunk.map((e: any) => `ledger:${e.id}`);
+                    await kv.mset(keys, chunk);
+                }
+                stats.ledgerCreated += ledgerBatch.length;
+            }
+
+            console.log(`[Ledger Backfill] Trips page done. Offset: ${tripOffset}, batch entries: ${ledgerBatch.length}`);
+        }
+
+        // ── Step 2: Backfill from transactions ──
+        let txOffset = 0;
+        let hasMoreTx = true;
+
+        while (hasMoreTx) {
+            const { data: txData } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "transaction:%")
+                .range(txOffset, txOffset + PAGE_SIZE - 1);
+
+            const transactions = (txData || []).map((d: any) => d.value).filter(Boolean);
+            if (transactions.length < PAGE_SIZE) hasMoreTx = false;
+            txOffset += PAGE_SIZE;
+
+            const ledgerBatch: any[] = [];
+            for (const tx of transactions) {
+                try {
+                    const entry = await generateTransactionLedgerEntry(tx);
+                    if (entry) {
+                        ledgerBatch.push(entry);
+                        stats.txProcessed++;
+                    } else {
+                        stats.txSkipped++;
+                    }
+                } catch (e) {
+                    stats.errors++;
+                    console.error(`[Ledger Backfill] Error processing transaction ${tx.id}:`, e);
+                }
+            }
+
+            if (ledgerBatch.length > 0) {
+                for (let i = 0; i < ledgerBatch.length; i += 100) {
+                    const chunk = ledgerBatch.slice(i, i + 100);
+                    const keys = chunk.map((e: any) => `ledger:${e.id}`);
+                    await kv.mset(keys, chunk);
+                }
+                stats.ledgerCreated += ledgerBatch.length;
+            }
+
+            console.log(`[Ledger Backfill] Transactions page done. Offset: ${txOffset}, batch entries: ${ledgerBatch.length}`);
+        }
+
+        console.log('[Ledger Backfill] Complete:', stats);
+        return c.json({ success: true, stats });
+    } catch (e: any) {
+        console.error('[Ledger Backfill] Fatal error:', e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// END OF LEDGER ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════
 
 // Claims Endpoints
 app.get("/make-server-37f42386/claims", async (c) => {
@@ -2684,7 +3823,7 @@ app.get("/make-server-37f42386/scenarios", async (c) => {
         const defaultId = crypto.randomUUID();
         const defaultScenario = {
             id: defaultId,
-            name: "Standard Fleet Rule (Auto-Generated)",
+            name: "Standard Fleet Rule",
             description: "Default granular coverage settings.",
             isDefault: true,
             rules: [{
@@ -5077,6 +6216,70 @@ app.get("/make-server-37f42386/users", async (c) => {
   }
 });
 
+// Public: Signup (Fleet Manager or Driver registration from LoginPage)
+app.post("/make-server-37f42386/signup", async (c) => {
+  try {
+    const { email, password, name, role, businessType } = await c.req.json();
+
+    if (!email || !password) {
+      return c.json({ error: "Email and password are required" }, 400);
+    }
+
+    // Build user_metadata — include businessType only if provided
+    const userMetadata: Record<string, string> = {
+      name: name || '',
+      role: role || 'admin',
+    };
+    if (businessType) {
+      userMetadata.businessType = businessType;
+    }
+
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: email,
+      password: password,
+      user_metadata: userMetadata,
+      email_confirm: true,
+    });
+
+    if (error) throw error;
+
+    // If admin picked a businessType, persist it to fleet-level preferences
+    if (role === 'admin' && businessType) {
+      try {
+        const existing = await kv.get("preferences:general") || {};
+        await kv.set("preferences:general", { ...existing, businessType });
+        console.log(`Signup: saved businessType '${businessType}' to preferences:general`);
+      } catch (prefErr: any) {
+        console.warn("Signup: failed to save businessType to preferences (non-fatal):", prefErr.message);
+      }
+    }
+
+    // If role is driver, also create a driver profile (mirrors invite-user logic)
+    if ((role === 'driver' || !role) && data.user) {
+      const driverId = data.user.id;
+      const driverProfile = {
+        id: driverId,
+        driverId: driverId,
+        driverName: name || email.split('@')[0],
+        email: email,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        acceptanceRate: 0,
+        cancellationRate: 0,
+        completionRate: 0,
+        ratingLast500: 5.0,
+        totalEarnings: 0,
+      };
+      await kv.set(`driver:${driverId}`, driverProfile);
+    }
+
+    return c.json({ success: true, data });
+  } catch (e: any) {
+    console.error("Signup Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Admin: Invite User
 app.post("/make-server-37f42386/invite-user", async (c) => {
   try {
@@ -5144,6 +6347,39 @@ app.post("/make-server-37f42386/update-password", async (c) => {
     return c.json({ success: true });
   } catch (e: any) {
     console.error("Update Password Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Admin: Update User Details (name, role, businessType)
+app.post("/make-server-37f42386/update-user", async (c) => {
+  try {
+    const { userId, name, role, businessType } = await c.req.json();
+
+    if (!userId) {
+      return c.json({ error: "User ID is required" }, 400);
+    }
+
+    const updates: Record<string, any> = {};
+    if (name !== undefined) updates.name = name;
+    if (role !== undefined) updates.role = role;
+    if (businessType !== undefined) updates.businessType = businessType;
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: "No fields to update" }, 400);
+    }
+
+    const { data, error } = await supabase.auth.admin.updateUserById(
+      userId,
+      { user_metadata: updates }
+    );
+
+    if (error) throw error;
+
+    console.log(`User updated: ${userId} — fields: ${JSON.stringify(updates)}`);
+    return c.json({ success: true, user: data.user });
+  } catch (e: any) {
+    console.error("Update User Error:", e);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -6219,6 +7455,587 @@ app.post("/make-server-37f42386/admin/fix-anomaly-flags", async (c) => {
     });
   } catch (e: any) {
     console.log(`Error in fix-anomaly-flags: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Super Admin — Seed & Check Endpoints
+// ---------------------------------------------------------------------------
+
+// POST /admin-seed — One-time creation of the super admin account
+// Self-locking: refuses to create a second superadmin if one already exists
+app.post("/make-server-37f42386/admin-seed", async (c) => {
+  try {
+    const { email, password, name } = await c.req.json();
+
+    if (!email || !password) {
+      return c.json({ error: "Email and password are required for admin seed" }, 400);
+    }
+
+    // Check if a superadmin already exists (self-locking)
+    const existing = await kv.get("platform:superadmin_created");
+    if (existing && (existing as any).created === true) {
+      return c.json({ error: "Super admin account already exists. This endpoint can only be used once." }, 400);
+    }
+
+    // Create the superadmin user via Supabase Auth
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      user_metadata: {
+        name: name || "Super Admin",
+        role: "superadmin",
+      },
+      // Automatically confirm the email since an email server hasn't been configured.
+      email_confirm: true,
+    });
+
+    if (error) {
+      console.log(`Admin seed error: ${error.message}`);
+      // If the user already exists in Supabase Auth, recover gracefully:
+      // look them up, set the KV lock, and return success (idempotent).
+      if (error.message?.includes('already been registered')) {
+        console.log(`Super admin email already registered — recovering by setting KV lock`);
+        try {
+          const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+          const existingUser = listData?.users?.find(
+            (u: any) => u.email === email && u.user_metadata?.role === 'superadmin'
+          );
+          if (existingUser) {
+            // Update password to match the submitted form so auto sign-in works
+            await supabase.auth.admin.updateUserById(existingUser.id, { password });
+            await kv.set("platform:superadmin_created", {
+              created: true,
+              userId: existingUser.id,
+              email,
+              createdAt: existingUser.created_at || new Date().toISOString(),
+            });
+            console.log(`KV lock restored for existing super admin: ${email} (${existingUser.id})`);
+            return c.json({ success: true, userId: existingUser.id, recovered: true });
+          }
+          // If the email exists but isn't a superadmin, promote them
+          const anyUser = listData?.users?.find((u: any) => u.email === email);
+          if (anyUser) {
+            await supabase.auth.admin.updateUserById(anyUser.id, {
+              password,
+              user_metadata: { ...anyUser.user_metadata, role: 'superadmin', name: name || anyUser.user_metadata?.name || 'Super Admin' },
+            });
+            await kv.set("platform:superadmin_created", {
+              created: true,
+              userId: anyUser.id,
+              email,
+              createdAt: new Date().toISOString(),
+            });
+            console.log(`Existing user promoted to super admin: ${email} (${anyUser.id})`);
+            return c.json({ success: true, userId: anyUser.id, recovered: true, promoted: true });
+          }
+        } catch (recoverErr: any) {
+          console.log(`Recovery attempt failed: ${recoverErr.message}`);
+        }
+      }
+      throw error;
+    }
+
+    // Lock the endpoint — persist the superadmin record
+    await kv.set("platform:superadmin_created", {
+      created: true,
+      userId: data.user.id,
+      email,
+      createdAt: new Date().toISOString(),
+    });
+
+    console.log(`Super admin created successfully: ${email} (${data.user.id})`);
+    return c.json({ success: true, userId: data.user.id });
+  } catch (e: any) {
+    console.log(`Admin seed fatal error: ${e.message}`);
+    return c.json({ error: `Failed to create super admin: ${e.message}` }, 500);
+  }
+});
+
+// POST /admin-login — Server-side admin login with auto-recovery
+// Returns session tokens so the frontend can call supabase.auth.setSession()
+app.post("/make-server-37f42386/admin-login", async (c) => {
+  try {
+    const { email, password } = await c.req.json();
+    if (!email || !password) {
+      return c.json({ error: "Email and password are required" }, 400);
+    }
+
+    const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
+    const anonUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const anonClient = createAnonClient(anonUrl, anonKey);
+
+    let { data, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
+
+    if (signInError) {
+      console.log(`Admin login first attempt failed for ${email}: ${signInError.message}`);
+      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const existingUser = listData?.users?.find((u: any) => u.email === email);
+
+      if (existingUser) {
+        console.log(`Found user ${existingUser.id} — resetting password and retrying sign-in`);
+        const { error: updateErr } = await supabase.auth.admin.updateUserById(existingUser.id, {
+          password,
+          email_confirm: true,
+        });
+        if (updateErr) {
+          console.log(`Password reset failed: ${updateErr.message}`);
+          return c.json({ error: `Login failed: ${signInError.message}` }, 401);
+        }
+        const retry = await anonClient.auth.signInWithPassword({ email, password });
+        if (retry.error) {
+          console.log(`Admin login retry failed: ${retry.error.message}`);
+          return c.json({ error: `Login failed after password reset: ${retry.error.message}` }, 401);
+        }
+        data = retry.data;
+      } else {
+        return c.json({ error: `No account found for ${email}. Please complete setup first.` }, 401);
+      }
+    }
+
+    if (!data?.session) {
+      return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);
+    }
+
+    const role = data.user?.user_metadata?.role;
+    if (role !== "superadmin") {
+      console.log(`User ${email} signed in but role is '${role}', not superadmin`);
+      return c.json({ error: "This account does not have super admin privileges." }, 403);
+    }
+
+    console.log(`Admin login successful: ${email}`);
+    return c.json({
+      success: true,
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.user_metadata?.name,
+        role: data.user.user_metadata?.role,
+      },
+    });
+  } catch (e: any) {
+    console.error("Admin login error:", e);
+    return c.json({ error: e.message || "Login failed" }, 500);
+  }
+});
+
+// GET /admin-check — Check whether a superadmin has been set up
+// Used by the /admin frontend to decide whether to show Setup vs Login
+app.get("/make-server-37f42386/admin-check", async (c) => {
+  try {
+    const existing = await kv.get("platform:superadmin_created");
+    const exists = !!(existing && (existing as any).created === true);
+    return c.json({ exists });
+  } catch (e: any) {
+    console.log(`Admin check error: ${e.message}`);
+    return c.json({ exists: false });
+  }
+});
+
+// GET /admin-stats — Summary counts for the admin dashboard cards
+app.get("/make-server-37f42386/admin-stats", async (c) => {
+  try {
+    // Count customer accounts (fleet managers) via Supabase Auth
+    let customerCount = 0;
+    try {
+      const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (data?.users) {
+        customerCount = data.users.filter(
+          (u: any) => u.user_metadata?.role === 'admin'
+        ).length;
+      }
+    } catch (e: any) {
+      console.log(`admin-stats: failed to count customers: ${e.message}`);
+    }
+
+    // Count fuel stations from KV (prefix: station:)
+    let fuelStationCount = 0;
+    try {
+      const stations = await kv.getByPrefix("station:");
+      fuelStationCount = stations?.length || 0;
+    } catch (e: any) {
+      console.log(`admin-stats: failed to count fuel stations: ${e.message}`);
+    }
+
+    // Count toll stations from KV (prefix: toll_plaza:)
+    let tollStationCount = 0;
+    try {
+      const tolls = await kv.getByPrefix("toll_plaza:");
+      tollStationCount = tolls?.length || 0;
+    } catch (e: any) {
+      console.log(`admin-stats: failed to count toll stations: ${e.message}`);
+    }
+
+    return c.json({ customerCount, fuelStationCount, tollStationCount });
+  } catch (e: any) {
+    console.log(`admin-stats error: ${e.message}`);
+    return c.json({ customerCount: 0, fuelStationCount: 0, tollStationCount: 0 });
+  }
+});
+
+// GET /admin/customers — List all fleet manager accounts (superadmin only)
+app.get("/make-server-37f42386/admin/customers", async (c) => {
+  try {
+    // Verify superadmin
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+    if (authErr || !reqUser) {
+      console.log(`admin/customers auth error: ${authErr?.message || "no user"}`);
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (reqUser.user_metadata?.role !== "superadmin") {
+      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    }
+
+    // List all users
+    const { data, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    if (listErr) {
+      console.log(`admin/customers listUsers error: ${listErr.message}`);
+      return c.json({ error: `Failed to list users: ${listErr.message}` }, 500);
+    }
+
+    // Filter to fleet managers (role === 'admin')
+    const customers = (data?.users || [])
+      .filter((u: any) => u.user_metadata?.role === "admin")
+      .map((u: any) => ({
+        id: u.id,
+        email: u.email || "",
+        name: u.user_metadata?.name || "",
+        businessType: u.user_metadata?.businessType || "rideshare",
+        createdAt: u.created_at || null,
+        lastSignIn: u.last_sign_in_at || null,
+        status: u.last_sign_in_at
+          ? (Date.now() - new Date(u.last_sign_in_at).getTime() < 30 * 24 * 60 * 60 * 1000
+            ? "active"
+            : "inactive")
+          : "inactive",
+        isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
+      }));
+
+    return c.json({ customers });
+  } catch (e: any) {
+    console.log(`admin/customers error: ${e.message}`);
+    return c.json({ error: `Server error: ${e.message}` }, 500);
+  }
+});
+
+// POST /admin/reset-password — Generate password recovery link (superadmin only)
+app.post("/make-server-37f42386/admin/reset-password", async (c) => {
+  try {
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+    if (authErr || !reqUser) {
+      console.log(`admin/reset-password auth error: ${authErr?.message || "no user"}`);
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (reqUser.user_metadata?.role !== "superadmin") {
+      console.log(`admin/reset-password forbidden: user ${reqUser.id} is not superadmin`);
+      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    }
+
+    const { email } = await c.req.json();
+    if (!email) {
+      return c.json({ error: "Email is required" }, 400);
+    }
+
+    const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email });
+    if (error) throw error;
+
+    console.log(`Password reset link generated for ${email}`);
+    return c.json({ success: true, message: `Password reset link generated for ${email}` });
+  } catch (e: any) {
+    console.error("admin/reset-password error:", e);
+    return c.json({ error: e.message || "Failed to generate reset link" }, 500);
+  }
+});
+
+// POST /admin/force-logout — Terminate all sessions for a user (superadmin only)
+app.post("/make-server-37f42386/admin/force-logout", async (c) => {
+  try {
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+    if (authErr || !reqUser) {
+      console.log(`admin/force-logout auth error: ${authErr?.message || "no user"}`);
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (reqUser.user_metadata?.role !== "superadmin") {
+      console.log(`admin/force-logout forbidden: user ${reqUser.id} is not superadmin`);
+      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    }
+
+    const { userId } = await c.req.json();
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    const { error } = await supabase.auth.admin.signOut(userId);
+    if (error) throw error;
+
+    console.log(`All sessions terminated for user ${userId}`);
+    return c.json({ success: true, message: `All sessions terminated for user ${userId}` });
+  } catch (e: any) {
+    console.error("admin/force-logout error:", e);
+    return c.json({ error: e.message || "Failed to force logout" }, 500);
+  }
+});
+
+// POST /admin/toggle-suspend — Ban or unban a user (superadmin only)
+app.post("/make-server-37f42386/admin/toggle-suspend", async (c) => {
+  try {
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+    if (authErr || !reqUser) {
+      console.log(`admin/toggle-suspend auth error: ${authErr?.message || "no user"}`);
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (reqUser.user_metadata?.role !== "superadmin") {
+      console.log(`admin/toggle-suspend forbidden: user ${reqUser.id} is not superadmin`);
+      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    }
+
+    const { userId, suspend } = await c.req.json();
+    if (!userId || typeof suspend !== "boolean") {
+      return c.json({ error: "userId (string) and suspend (boolean) are required" }, 400);
+    }
+
+    const ban_duration = suspend ? "876000h" : "none";
+    const { data, error } = await supabase.auth.admin.updateUserById(userId, { ban_duration });
+    if (error) throw error;
+
+    const action = suspend ? "suspended" : "reactivated";
+    console.log(`User ${userId} has been ${action}`);
+    return c.json({ success: true, message: `User ${userId} has been ${action}` });
+  } catch (e: any) {
+    console.error("admin/toggle-suspend error:", e);
+    return c.json({ error: e.message || "Failed to toggle suspend" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin Fuel Station CRUD (superadmin-only)
+// Operates on the same `station:` KV data the fleet fuel system uses.
+// ---------------------------------------------------------------------------
+
+// Helper: verify superadmin from Authorization header
+async function verifySuperadmin(c: any): Promise<{ userId: string } | Response> {
+  const accessToken = c.req.header("Authorization")?.split(" ")[1];
+  const { data: { user: reqUser }, error } = await supabase.auth.getUser(accessToken);
+  if (error || !reqUser) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  if (reqUser.user_metadata?.role !== "superadmin") {
+    return c.json({ error: "Forbidden — superadmin only" }, 403);
+  }
+  return { userId: reqUser.id };
+}
+
+// GET /admin/fuel-stations — list all fuel stations
+app.get("/make-server-37f42386/admin/fuel-stations", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const stations = await kv.getByPrefix("station:");
+    return c.json({ stations: stations || [] });
+  } catch (e: any) {
+    console.log(`admin/fuel-stations GET error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/fuel-stations — add a new fuel station
+app.post("/make-server-37f42386/admin/fuel-stations", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const station = await c.req.json();
+    if (!station.id) station.id = crypto.randomUUID();
+    if (!station.name) return c.json({ error: "Station name is required" }, 400);
+
+    // Ensure required fields have defaults
+    station.status = station.status || "verified";
+    station.brand = station.brand || "";
+    station.address = station.address || "";
+    station.location = station.location || { lat: 0, lng: 0 };
+    station.stats = station.stats || { totalVisits: 0, lastVisited: null };
+    station.amenities = station.amenities || [];
+    station.dataSource = station.dataSource || "manual";
+    station.contactInfo = station.contactInfo || {};
+    station.createdAt = station.createdAt || new Date().toISOString();
+
+    await kv.set(`station:${station.id}`, station);
+    return c.json({ success: true, data: station });
+  } catch (e: any) {
+    console.log(`admin/fuel-stations POST error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// PUT /admin/fuel-stations/:id — update a fuel station
+app.put("/make-server-37f42386/admin/fuel-stations/:id", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const id = c.req.param("id");
+    const updates = await c.req.json();
+    const existing = await kv.get(`station:${id}`);
+    if (!existing) return c.json({ error: "Station not found" }, 404);
+
+    const merged = { ...existing, ...updates, id };
+    await kv.set(`station:${id}`, merged);
+    return c.json({ success: true, data: merged });
+  } catch (e: any) {
+    console.log(`admin/fuel-stations PUT error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// DELETE /admin/fuel-stations/:id — delete a fuel station
+app.delete("/make-server-37f42386/admin/fuel-stations/:id", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const id = c.req.param("id");
+    const existing = await kv.get(`station:${id}`);
+    if (!existing) return c.json({ error: "Station not found" }, 404);
+
+    await kv.del(`station:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`admin/fuel-stations DELETE error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin Toll Plaza CRUD (superadmin-only)
+// Operates on the same `toll_plaza:` KV data the fleet toll system uses.
+// ---------------------------------------------------------------------------
+
+// GET /admin/toll-stations — list all toll plazas
+app.get("/make-server-37f42386/admin/toll-stations", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const plazas = await kv.getByPrefix("toll_plaza:");
+    return c.json({ plazas: plazas || [] });
+  } catch (e: any) {
+    console.log(`admin/toll-stations GET error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/toll-stations — add a new toll plaza
+app.post("/make-server-37f42386/admin/toll-stations", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const plaza = await c.req.json();
+    if (!plaza.id) plaza.id = crypto.randomUUID();
+    if (!plaza.name) return c.json({ error: "Plaza name is required" }, 400);
+
+    plaza.status = plaza.status || "verified";
+    plaza.highway = plaza.highway || "";
+    plaza.direction = plaza.direction || "Both";
+    plaza.operator = plaza.operator || "";
+    plaza.location = plaza.location || { lat: 0, lng: 0 };
+    plaza.dataSource = plaza.dataSource || "manual";
+    plaza.stats = plaza.stats || {
+      totalTransactions: 0,
+      totalSpend: 0,
+      lastTransactionDate: "",
+      avgAmount: 0,
+      lastUpdated: new Date().toISOString(),
+    };
+    plaza.createdAt = plaza.createdAt || new Date().toISOString();
+    plaza.updatedAt = new Date().toISOString();
+
+    await kv.set(`toll_plaza:${plaza.id}`, plaza);
+    return c.json({ success: true, data: plaza });
+  } catch (e: any) {
+    console.log(`admin/toll-stations POST error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// PUT /admin/toll-stations/:id — update a toll plaza
+app.put("/make-server-37f42386/admin/toll-stations/:id", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const id = c.req.param("id");
+    const updates = await c.req.json();
+    const existing = await kv.get(`toll_plaza:${id}`);
+    if (!existing) return c.json({ error: "Toll plaza not found" }, 404);
+
+    const merged = { ...existing, ...updates, id, updatedAt: new Date().toISOString() };
+    await kv.set(`toll_plaza:${id}`, merged);
+    return c.json({ success: true, data: merged });
+  } catch (e: any) {
+    console.log(`admin/toll-stations PUT error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// DELETE /admin/toll-stations/:id — delete a toll plaza
+app.delete("/make-server-37f42386/admin/toll-stations/:id", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const id = c.req.param("id");
+    const existing = await kv.get(`toll_plaza:${id}`);
+    if (!existing) return c.json({ error: "Toll plaza not found" }, 404);
+
+    await kv.del(`toll_plaza:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`admin/toll-stations DELETE error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin Platform Settings (superadmin-only)
+// Single KV key: "platform:settings"
+// ---------------------------------------------------------------------------
+
+// GET /admin/platform-settings
+app.get("/make-server-37f42386/admin/platform-settings", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const settings = await kv.get("platform:settings");
+    return c.json({ settings: settings || null });
+  } catch (e: any) {
+    console.log(`admin/platform-settings GET error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// PUT /admin/platform-settings
+app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const settings = await c.req.json();
+    settings.updatedAt = new Date().toISOString();
+    await kv.set("platform:settings", settings);
+    return c.json({ success: true, data: settings });
+  } catch (e: any) {
+    console.log(`admin/platform-settings PUT error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

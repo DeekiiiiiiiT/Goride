@@ -13,6 +13,7 @@ import { Gauge, ArrowRight, Download, Car, MapPin } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { OdometerReading } from '../../../types/vehicle';
 import { Trip } from '../../../types/data';
+import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { mileageCalculationService } from '../../../services/mileageCalculationService';
 import { FuelCalculationService } from '../../../services/fuelCalculationService';
 import { formatDateJM } from '../../../utils/csv-helper';
@@ -192,7 +193,7 @@ export const TripManifestSheet: React.FC<TripManifestSheetProps> = ({
                                                 </span>
                                             </div>
                                             <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded w-fit mt-1 uppercase tracking-wide">
-                                                {trip.platform}
+                                                {normalizePlatform(trip.platform)}
                                             </span>
                                         </div>
                                         <div className="text-right">

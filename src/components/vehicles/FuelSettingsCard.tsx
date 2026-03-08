@@ -30,8 +30,8 @@ export function FuelSettingsCard({ vehicle, onUpdate }: FuelSettingsCardProps) {
 
     const [formData, setFormData] = useState({
         fuelType: vehicle.fuelSettings?.fuelType || 'Gasoline_87',
-        efficiencyCity: vehicle.fuelSettings?.efficiencyCity || 12, // Default 12 km/L
-        efficiencyHighway: vehicle.fuelSettings?.efficiencyHighway || 15, // Default 15 km/L
+        efficiencyCity: vehicle.fuelSettings?.efficiencyCity || 12, // Default 12 L/100km
+        efficiencyHighway: vehicle.fuelSettings?.efficiencyHighway || 15, // Default 15 L/100km
         tankCapacity: vehicle.fuelSettings?.tankCapacity || 50, // Default 50L
     });
 
@@ -114,7 +114,7 @@ export function FuelSettingsCard({ vehicle, onUpdate }: FuelSettingsCardProps) {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-xs">City Efficiency (km/L)</Label>
+                                <Label className="text-xs">City Efficiency (L/100km)</Label>
                                 <Input 
                                     type="number" 
                                     step="0.1"
@@ -123,7 +123,7 @@ export function FuelSettingsCard({ vehicle, onUpdate }: FuelSettingsCardProps) {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-xs">Highway Efficiency (km/L)</Label>
+                                <Label className="text-xs">Highway Efficiency (L/100km)</Label>
                                 <Input 
                                     type="number" 
                                     step="0.1"
@@ -162,11 +162,11 @@ export function FuelSettingsCard({ vehicle, onUpdate }: FuelSettingsCardProps) {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label className="text-xs text-slate-500">City Efficiency</Label>
-                                <div className="text-lg font-semibold text-slate-900">{formData.efficiencyCity} <span className="text-xs text-slate-400 font-normal">km/L</span></div>
+                                <div className="text-lg font-semibold text-slate-900">{formData.efficiencyCity} <span className="text-xs text-slate-400 font-normal">L/100km</span></div>
                             </div>
                             <div>
                                 <Label className="text-xs text-slate-500">Highway Efficiency</Label>
-                                <div className="text-lg font-semibold text-slate-900">{formData.efficiencyHighway} <span className="text-xs text-slate-400 font-normal">km/L</span></div>
+                                <div className="text-lg font-semibold text-slate-900">{formData.efficiencyHighway} <span className="text-xs text-slate-400 font-normal">L/100km</span></div>
                             </div>
                             <div>
                                 <Label className="text-xs text-slate-500">Tank Capacity</Label>
@@ -175,7 +175,7 @@ export function FuelSettingsCard({ vehicle, onUpdate }: FuelSettingsCardProps) {
                             <div>
                                 <Label className="text-xs text-slate-500">Est. Range</Label>
                                 <div className="text-lg font-semibold text-slate-900">
-                                    {Math.round(formData.tankCapacity * formData.efficiencyCity)} - {Math.round(formData.tankCapacity * formData.efficiencyHighway)} <span className="text-xs text-slate-400 font-normal">km</span>
+                                    {formData.efficiencyCity > 0 ? Math.round((formData.tankCapacity / formData.efficiencyCity) * 100) : 0} - {formData.efficiencyHighway > 0 ? Math.round((formData.tankCapacity / formData.efficiencyHighway) * 100) : 0} <span className="text-xs text-slate-400 font-normal">km</span>
                                 </div>
                             </div>
                         </div>

@@ -15,7 +15,7 @@ interface DriverHeaderProps {
 }
 
 export function DriverHeader({ 
-  title = "GoRide", 
+  title = "Roam", 
   onBack, 
   showProfile = true,
   className 

@@ -147,11 +147,20 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
 
   // Generate Chart Data (Price History)
   const priceChartData = useMemo(() => {
-    return [...stationLogs]
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map(log => ({
-        date: new Date(log.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        price: log.pricePerLiter || 0
+    // Aggregate by formatted date to avoid duplicate recharts keys
+    const sorted = [...stationLogs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const grouped: Record<string, { total: number; count: number; sortKey: number }> = {};
+    sorted.forEach(log => {
+      const label = new Date(log.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      if (!grouped[label]) grouped[label] = { total: 0, count: 0, sortKey: new Date(log.date).getTime() };
+      grouped[label].total += (log.pricePerLiter || 0);
+      grouped[label].count += 1;
+    });
+    return Object.entries(grouped)
+      .sort(([, a], [, b]) => a.sortKey - b.sortKey)
+      .map(([date, { total, count }]) => ({
+        date,
+        price: Math.round((total / count) * 100) / 100,
       }));
   }, [stationLogs]);
 

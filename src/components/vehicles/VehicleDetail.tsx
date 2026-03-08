@@ -447,7 +447,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             fullDate: d,
             uber: 0,
             indrive: 0,
-            goride: 0,
+            roam: 0,
             other: 0
         };
     });
@@ -495,7 +495,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             const dist = t.distance || 0;
             if (p.includes('uber')) kmStat.uber += dist;
             else if (p.includes('indrive')) kmStat.indrive += dist;
-            else if (p.includes('goride')) kmStat.goride += dist;
+            else if (p.includes('goride') || p.includes('roam')) kmStat.roam += dist;
             else kmStat.other += dist;
         }
 
@@ -607,10 +607,10 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             profitMargin,
             roiPercentage,
             breakdown: [
-                { name: 'Fuel', value: fuelCost, color: '#f59e0b' },
-                { name: 'Maintenance', value: maintenanceCost, color: '#ef4444' },
-                { name: 'Insurance', value: insuranceCost, color: '#6366f1' },
-                { name: 'Depreciation', value: depreciationCost, color: '#94a3b8' }
+                { name: 'Fuel', value: fuelCost, color: '#f59e0b', fill: '#f59e0b' },
+                { name: 'Maintenance', value: maintenanceCost, color: '#ef4444', fill: '#ef4444' },
+                { name: 'Insurance', value: insuranceCost, color: '#6366f1', fill: '#6366f1' },
+                { name: 'Depreciation', value: depreciationCost, color: '#94a3b8', fill: '#94a3b8' }
             ]
         },
         maintenance: {
@@ -1045,10 +1045,10 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                          endAngle={-270}
                                          stroke="none"
                                       >
-                                         <Cell key="Open" fill="#1e3a8a" />
-                                         <Cell key="Enroute" fill="#fbbf24" />
-                                         <Cell key="On Trip" fill="#10b981" />
-                                         <Cell key="Unavailable" fill="#94a3b8" />
+                                         
+                                         
+                                         
+                                         
                                       </Pie>
                                       <RechartsTooltip formatter={(value: number) => [value.toFixed(1) + ' km', 'Distance']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
                                    </PieChart>
@@ -1190,8 +1190,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                         { name: 'Active Driving', value: analytics.metrics.activeHours, color: '#10b981' }, 
                                         { name: 'Idle / Waiting', value: analytics.metrics.idleHours, color: '#fbbf24' }, 
                                         { name: 'Offline', value: Math.max(0, (24 * 30) - (analytics.metrics.activeHours + analytics.metrics.idleHours)), color: '#e2e8f0' }
-                                    ].map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ].map((entry) => <Cell key={entry.name} fill={entry.color} />)}{false && ((
+                                        null
                                     ))}
                                 </Pie>
                                 <RechartsTooltip />
@@ -1268,7 +1268,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                               <PieChart>
                                   <Pie data={analytics.financials.breakdown} innerRadius={60} outerRadius={80} dataKey="value">
-                                      {analytics.financials.breakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                      
                                   </Pie>
                                   <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
                                   <Legend verticalAlign="bottom" height={36}/>
@@ -1468,7 +1468,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                           <RechartsTooltip />
                                           <Bar dataKey="uber" stackId="a" fill="#000000" name="Uber" />
                                           <Bar dataKey="indrive" stackId="a" fill="#10b981" name="InDrive" />
-                                          <Bar dataKey="goride" stackId="a" fill="#6366f1" name="GoRide" />
+                                          <Bar dataKey="roam" stackId="a" fill="#6366f1" name="Roam" />
                                           <Bar dataKey="other" stackId="a" fill="#94a3b8" name="Other" radius={[4, 4, 0, 0]} />
                                       </BarChart>
                                   </ResponsiveContainer>

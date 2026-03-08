@@ -5,6 +5,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from ".
 import { Checkbox } from "../../ui/checkbox";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip, Claim } from "../../../types/data";
+import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { calculateTollFinancials } from "../../../utils/tollReconciliation";
@@ -166,7 +167,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                         {trip ? (
                                             <div className="flex flex-col">
                                                 <Badge variant="outline" className="w-fit capitalize mb-1">
-                                                    {trip.platform}
+                                                    {normalizePlatform(trip.platform)}
                                                 </Badge>
                                                 <span className="text-xs text-slate-500">
                                                     {trip.requestTime ? format(new Date(trip.requestTime), 'MMM d, h:mm a') : 'Unknown Date'}

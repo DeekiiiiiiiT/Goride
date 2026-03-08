@@ -18,7 +18,7 @@ import {
   SelectValue 
 } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff, Info } from "lucide-react";
+import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff, Info, XCircle, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
 import { RoutePoint, TripStop } from '../../types/tripSession';
@@ -87,7 +87,11 @@ export function ManualTripForm({
     totalWaitTime: 0,
     pickupCoords: undefined,
     dropoffCoords: undefined,
-    resolutionMethod: 'manual'
+    resolutionMethod: 'manual',
+    tripStatus: 'Completed' as const,
+    cancelledBy: undefined,
+    cancellationReason: undefined,
+    cancellationFee: undefined,
   });
   
   const [selectedDriverId, setSelectedDriverId] = useState<string>(currentDriverId || '');
@@ -97,6 +101,21 @@ export function ManualTripForm({
   const [dropoffCoords, setDropoffCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
 
+  // Intermediate stops for multi-stop trips (e.g. InDrive)
+  const [intermediateStops, setIntermediateStops] = useState<{ id: string; address: string; coords?: { lat: number; lon: number } }[]>([]);
+
+  const addIntermediateStop = () => {
+    setIntermediateStops(prev => [...prev, { id: crypto.randomUUID(), address: '' }]);
+  };
+
+  const updateIntermediateStop = (id: string, address: string, coords?: { lat: number; lon: number }) => {
+    setIntermediateStops(prev => prev.map(s => s.id === id ? { ...s, address, ...(coords ? { coords } : {}) } : s));
+  };
+
+  const removeIntermediateStop = (id: string) => {
+    setIntermediateStops(prev => prev.filter(s => s.id !== id));
+  };
+  
   // Reset form when opened
   useEffect(() => {
     if (open) {
@@ -116,7 +135,7 @@ export function ManualTripForm({
           endTime: initialData.endTime,
           duration: initialData.duration,
           amount: 0,
-          platform: initialData.isLiveRecorded ? 'GoRide' : 'InDrive',
+          platform: initialData.isLiveRecorded ? 'Roam' : 'InDrive',
           paymentMethod: 'Cash',
           pickupLocation: initialData.pickupLocation || '',
           dropoffLocation: initialData.endLocation || '',
@@ -131,7 +150,11 @@ export function ManualTripForm({
           dropoffCoords: initialData.dropoffCoords,
           resolutionMethod: initialData.resolutionMethod,
           resolutionTimestamp: initialData.resolutionTimestamp,
-          geocodeError: initialData.geocodeError
+          geocodeError: initialData.geocodeError,
+          tripStatus: 'Completed' as const,
+          cancelledBy: undefined,
+          cancellationReason: undefined,
+          cancellationFee: undefined,
         });
         if (initialData.pickupCoords) {
           setPickupCoords(initialData.pickupCoords);
@@ -160,13 +183,18 @@ export function ManualTripForm({
           totalWaitTime: 0,
           pickupCoords: undefined,
           dropoffCoords: undefined,
-          resolutionMethod: 'manual'
+          resolutionMethod: 'manual',
+          tripStatus: 'Completed' as const,
+          cancelledBy: undefined,
+          cancellationReason: undefined,
+          cancellationFee: undefined,
         });
         setPickupCoords(null);
         setDropoffCoords(null);
       }
       
       if (currentDriverId) setSelectedDriverId(currentDriverId);
+      setIntermediateStops([]); // Reset intermediate stops on form open
     }
   }, [open, currentDriverId, defaultVehicleId, initialData]);
 
@@ -197,16 +225,19 @@ export function ManualTripForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.amount || formData.amount <= 0) return;
+    // Completed trips require a positive amount; cancelled trips allow $0
+    if (formData.tripStatus !== 'Cancelled' && (!formData.amount || formData.amount <= 0)) return;
     if (isAdmin && !selectedDriverId) return;
-    // InDrive trips require net income
-    if (formData.platform === 'InDrive' && !formData.isLiveRecorded) {
+    // InDrive trips require net income (skip for cancelled trips)
+    if (formData.tripStatus !== 'Cancelled' && formData.platform === 'InDrive' && !formData.isLiveRecorded) {
       if (!formData.indriveNetIncome || formData.indriveNetIncome <= 0) return;
       if (formData.indriveNetIncome > formData.amount) {
         toast.error("Net income cannot exceed the fare amount.");
         return;
       }
     }
+    // Cancelled trips require who cancelled
+    if (formData.tripStatus === 'Cancelled' && !formData.cancelledBy) return;
 
     try {
       setLoading(true);
@@ -216,7 +247,7 @@ export function ManualTripForm({
           type: 'SUBMIT_TRIP',
           payload: {
             tripData: {}, 
-            formData: formData,
+            formData: { ...formData, intermediateStops: intermediateStops.filter(s => s.address.trim()) },
             rawRoute: formData.route || [],
             calculatedDistance: formData.distance || 0
           }
@@ -225,7 +256,8 @@ export function ManualTripForm({
         toast.success("Trip saved successfully");
         onOpenChange(false);
       } else {
-        await onSubmit(formData, selectedDriverId);
+        const submissionData = { ...formData, intermediateStops: intermediateStops.filter(s => s.address.trim()) };
+        await onSubmit(submissionData, selectedDriverId);
         onOpenChange(false);
       }
     } catch (error) {
@@ -270,7 +302,9 @@ export function ManualTripForm({
         <DialogHeader>
           <DialogTitle>{initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>
           <DialogDescription>
-            {initialData ? 'Review and confirm the details of your recorded trip.' : 'Record a trip taken outside of integrated platforms (e.g. Cash, Private Client).'}
+            {initialData 
+              ? 'Review and confirm the details of your recorded trip.' 
+              : 'Record a completed trip or log a cancelled trip for tracking.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -443,7 +477,7 @@ export function ManualTripForm({
                     <SelectItem value="Uber">Uber (Manual)</SelectItem>
                     <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
                     <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
-                    <SelectItem value="GoRide">GoRide (Manual)</SelectItem>
+                    <SelectItem value="Roam">Roam (Manual)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -466,7 +500,144 @@ export function ManualTripForm({
             </div>
           </div>
 
-          {/* Amount Row */}
+          {/* Trip Status */}
+          <div className="space-y-2">
+            <Label>Trip Status</Label>
+            <Select
+              value={formData.tripStatus || 'Completed'}
+              onValueChange={(val: 'Completed' | 'Cancelled') => {
+                handleInputChange('tripStatus', val);
+                // Clear cancellation fields when switching back to Completed
+                if (val === 'Completed') {
+                  handleInputChange('cancelledBy', undefined);
+                  handleInputChange('cancellationReason', undefined);
+                  handleInputChange('cancellationFee', undefined);
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Completed">Completed</SelectItem>
+                <SelectItem value="Cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Cancellation Details — only shown when status is Cancelled */}
+          {formData.tripStatus === 'Cancelled' && (
+            <div className="space-y-3 rounded-lg border border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20 p-3">
+              <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300">
+                <XCircle className="h-4 w-4" />
+                <span className="text-sm font-semibold">Cancellation Details</span>
+              </div>
+
+              {/* Cancelled By */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Cancelled By *</Label>
+                <Select
+                  value={formData.cancelledBy || ''}
+                  onValueChange={(val: 'rider' | 'driver') => {
+                    handleInputChange('cancelledBy', val);
+                    handleInputChange('cancellationReason', undefined); // Reset reason when switching
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Who cancelled?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rider">Rider Cancelled</SelectItem>
+                    <SelectItem value="driver">Driver Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Cancellation Reason */}
+              {formData.cancelledBy && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Reason</Label>
+                  <Select
+                    value={formData.cancellationReason || ''}
+                    onValueChange={(val) => handleInputChange('cancellationReason', val)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a reason" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {formData.cancelledBy === 'rider' ? (
+                        <>
+                          <SelectItem value="Rider no-show">Rider no-show</SelectItem>
+                          <SelectItem value="Rider changed mind">Rider changed mind</SelectItem>
+                          <SelectItem value="Rider found another ride">Rider found another ride</SelectItem>
+                          <SelectItem value="Rider entered wrong pickup">Rider entered wrong pickup</SelectItem>
+                          <SelectItem value="Wait time too long">Wait time too long</SelectItem>
+                          <SelectItem value="Price disagreement">Price disagreement</SelectItem>
+                          <SelectItem value="Other (Rider)">Other</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="Cannot find rider">Cannot find rider</SelectItem>
+                          <SelectItem value="Unsafe pickup location">Unsafe pickup location</SelectItem>
+                          <SelectItem value="Vehicle issue">Vehicle issue</SelectItem>
+                          <SelectItem value="Too far from pickup">Too far from pickup</SelectItem>
+                          <SelectItem value="Rider requested cancellation">Rider asked to cancel</SelectItem>
+                          <SelectItem value="Route issue">Route/traffic issue</SelectItem>
+                          <SelectItem value="Other (Driver)">Other</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Cancellation Fee (optional) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Cancellation Fee Collected (optional)</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-rose-400" />
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="pl-9"
+                    placeholder="0.00"
+                    value={formData.cancellationFee || ''}
+                    onChange={(e) => handleInputChange('cancellationFee', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  If a cancellation fee was charged to the rider that you received, enter it here. Leave at 0 if no fee was collected.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Estimated Fare for cancelled trips — used for loss calculation */}
+          {formData.tripStatus === 'Cancelled' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Estimated Fare (optional)</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="pl-9"
+                  placeholder="0.00"
+                  value={formData.amount || ''}
+                  onChange={(e) => handleInputChange('amount', parseFloat(e.target.value) || 0)}
+                />
+              </div>
+              <p className="text-[10px] text-slate-500">
+                What the trip would have earned if completed. Used to calculate estimated revenue loss.
+              </p>
+            </div>
+          )}
+
+          {/* Amount Row — only for Completed trips */}
+          {formData.tripStatus !== 'Cancelled' && (
+          <>
           {formData.platform === 'InDrive' && !formData.isLiveRecorded ? (
             /* InDrive: Two input fields (Profit + Net Income) with auto-calculated fee breakdown */
             <div className="space-y-3">
@@ -614,12 +785,15 @@ export function ManualTripForm({
               )}
             </div>
           )}
+          </>
+          )}
 
           {/* Locations - Hidden for Live Trips */}
           {!formData.isLiveRecorded && (
             <div className="space-y-2">
               <Label>Locations (Optional)</Label>
               <div className="grid grid-cols-1 gap-2">
+                {/* Pickup Location */}
                 <div className="relative">
                    <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500 z-10" />
                    <LocationInput 
@@ -637,6 +811,44 @@ export function ManualTripForm({
                       showLocationButton={true}
                    />
                 </div>
+
+                {/* Intermediate Stops */}
+                {intermediateStops.map((stop, idx) => (
+                  <div key={stop.id} className="relative flex items-center gap-1">
+                    <div className="relative flex-1">
+                      <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-amber-500 z-10" />
+                      <LocationInput
+                        placeholder={`Stop ${idx + 1}`}
+                        className="pl-9 text-sm"
+                        value={stop.address}
+                        onChange={(e) => updateIntermediateStop(stop.id, e.target.value)}
+                        onAddressSelect={(addr, lat, lon) => {
+                          updateIntermediateStop(stop.id, addr, lat && lon ? { lat, lon } : undefined);
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeIntermediateStop(stop.id)}
+                      className="shrink-0 p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
+                      title="Remove stop"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Add Stop Button */}
+                <button
+                  type="button"
+                  onClick={addIntermediateStop}
+                  className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium py-1 px-2 rounded-md hover:bg-indigo-50 transition-colors self-start"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Stop
+                </button>
+
+                {/* Dropoff Location */}
                 <div className="relative">
                    <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-rose-500 z-10" />
                    <LocationInput 
@@ -706,10 +918,20 @@ export function ManualTripForm({
             <Button 
               type="submit" 
               className="bg-indigo-600 hover:bg-indigo-700"
-              disabled={loading || !formData.amount || (isAdmin && !selectedDriverId) || (formData.platform === 'InDrive' && !formData.isLiveRecorded && (!formData.indriveNetIncome || formData.indriveNetIncome > formData.amount))}
+              disabled={
+                loading ||
+                (isAdmin && !selectedDriverId) ||
+                (formData.tripStatus === 'Cancelled'
+                  ? !formData.cancelledBy
+                  : (
+                      !formData.amount || formData.amount <= 0 ||
+                      (formData.platform === 'InDrive' && !formData.isLiveRecorded && (!formData.indriveNetIncome || formData.indriveNetIncome > formData.amount))
+                    )
+                )
+              }
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Trip
+              {formData.tripStatus === 'Cancelled' ? 'Log Cancelled Trip' : 'Save Trip'}
             </Button>
           </DialogFooter>
         </form>

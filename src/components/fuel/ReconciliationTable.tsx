@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
     Table, 
     TableBody, 
@@ -41,9 +41,10 @@ import { Progress } from "../ui/progress";
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
 import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket } from '../../types/fuel';
-import { FuelCalculationService } from '../../services/fuelCalculationService';
+import { FuelCalculationService, VehicleDeadheadInput } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
+import { api } from '../../services/api';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -53,6 +54,7 @@ interface ReconciliationTableProps {
     disputes?: FuelDispute[];
     dateRange: DateRange | undefined;
     scenarios?: FuelScenario[];
+    drivers?: any[];
     onFinalize?: (reports: WeeklyFuelReport[]) => void;
     onAddAdjustment?: () => void;
     onResolveDispute?: (dispute: FuelDispute) => void;
@@ -67,6 +69,7 @@ export function ReconciliationTable({
     disputes = [],
     dateRange,
     scenarios = [],
+    drivers = [],
     onFinalize,
     onAddAdjustment,
     onResolveDispute,
@@ -74,23 +77,91 @@ export function ReconciliationTable({
 }: ReconciliationTableProps) {
     const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
 
+    // Phase 1 verification: confirm drivers data arrives
+    console.log(`[ReconciliationTable] Phase 1 check — received ${drivers.length} driver(s)`);
+
     const weekStart = dateRange?.from;
     const weekEnd = dateRange?.to || dateRange?.from;
 
+    // Phase 3: Deadhead attribution data from server
+    const [deadheadMap, setDeadheadMap] = useState<Map<string, VehicleDeadheadInput>>(new Map());
+    const [deadheadLoading, setDeadheadLoading] = useState(false);
+
+    // Per-period deadhead fetch: use the selected week range directly
+    // (previously used broad date range, which overcounted deadhead per week)
+    useEffect(() => {
+        if (!weekStart || !weekEnd) return;
+        let cancelled = false;
+        setDeadheadLoading(true);
+
+        const startStr = format(weekStart, 'yyyy-MM-dd');
+        const endStr = format(weekEnd, 'yyyy-MM-dd');
+
+        console.log(`[ReconciliationTable] Fetching per-period deadhead: ${startStr} to ${endStr}`);
+
+        api.getFleetDeadhead(startStr, endStr)
+            .then((data: any) => {
+                if (cancelled) return;
+                const map = new Map<string, VehicleDeadheadInput>();
+                for (const v of (data?.vehicles || [])) {
+                    map.set(v.vehicleId, {
+                        vehicleId: v.vehicleId,
+                        deadheadKm: v.deadheadKm || 0,
+                        personalKm: v.personalKm || 0,
+                        totalOdometerKm: v.totalOdometerKm || 0,
+                        method: v.method || 'fallback',
+                        confidenceLevel: v.confidenceLevel || 'low',
+                        confidenceReason: v.confidenceReason || 'No data',
+                    });
+                }
+                setDeadheadMap(map);
+            })
+            .catch((err: any) => {
+                console.error('Failed to fetch deadhead attribution:', err);
+                // Graceful degradation: reconciliation still works without deadhead
+            })
+            .finally(() => {
+                if (!cancelled) setDeadheadLoading(false);
+            });
+
+        return () => { cancelled = true; };
+    }, [weekStart, weekEnd]);
+
     // Calculate Data — hooks must always run (React rules of hooks)
+    // Phase 2: Build a map of vehicleId -> Set of all known driver IDs for that vehicle's assigned driver
+    const driverIdMap = useMemo(() => {
+        const map = new Map<string, Set<string>>();
+        for (const vehicle of vehicles) {
+            const assignedDriverId = vehicle.currentDriverId;
+            if (!assignedDriverId) continue;
+            const idSet = new Set<string>([assignedDriverId]);
+            const driverRecord = drivers.find((d: any) => d.id === assignedDriverId || d.driverId === assignedDriverId);
+            if (driverRecord) {
+                // Roam-only: only use native Roam IDs for driver-vehicle matching
+                // (Uber/InDrive UUIDs were causing 59-vs-57 trip count mismatches)
+                if (driverRecord.id) idSet.add(driverRecord.id);
+                if (driverRecord.driverId) idSet.add(driverRecord.driverId);
+            }
+            map.set(vehicle.id, idSet);
+        }
+        console.log(`[ReconciliationTable] Phase 2 — Built driver ID map for ${map.size} vehicle(s):`, Array.from(map.entries()).map(([vId, ids]) => ({ vehicleId: vId, driverIds: Array.from(ids) })));
+        return map;
+    }, [vehicles, drivers]);
+
     const reports = useMemo(() => {
         if (!weekStart) return [];
-        return FuelCalculationService.generateFleetReport(
-            vehicles, 
-            weekStart, 
-            weekEnd!, 
-            trips, 
-            fuelEntries, 
-            adjustments,
-            [], // Check-ins not passed yet
-            scenarios
-        );
-    }, [vehicles, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios]);
+        return vehicles.map(vehicle => {
+            const driverIds = driverIdMap.get(vehicle.id);
+            let driverTrips: Trip[];
+            if (driverIds && driverIds.size > 0) {
+                driverTrips = trips.filter(t => driverIds.has(t.driverId));
+            } else {
+                driverTrips = trips;
+            }
+            console.log(`[ReconciliationTable] Phase 2 — Vehicle ${vehicle.id}: driverIds=${driverIds ? Array.from(driverIds).join(',') : '(none)'}, totalTrips=${trips.length}, driverFilteredTrips=${driverTrips.length}`);
+            return FuelCalculationService.calculateReconciliation(vehicle, weekStart, weekEnd!, driverTrips, fuelEntries, adjustments, scenarios, deadheadMap?.get(vehicle.id));
+        });
+    }, [vehicles, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, driverIdMap]);
 
     // Totals
     const totals = useMemo(() => {
@@ -98,6 +169,7 @@ export function ReconciliationTable({
             gasCard: acc.gasCard + r.totalGasCardCost,
             rideShare: acc.rideShare + r.rideShareCost,
             companyUsage: acc.companyUsage + r.companyUsageCost,
+            deadhead: acc.deadhead + (r.deadheadCost || 0),
             personal: acc.personal + r.personalUsageCost,
             misc: acc.misc + r.miscellaneousCost,
             company: acc.company + r.companyShare,
@@ -106,6 +178,7 @@ export function ReconciliationTable({
             gasCard: 0, 
             rideShare: 0, 
             companyUsage: 0, 
+            deadhead: 0,
             personal: 0, 
             misc: 0, 
             company: 0, 
@@ -132,11 +205,13 @@ export function ReconciliationTable({
     const handleExport = async () => {
         const data = reports.map(report => {
             const vehicle = vehicles.find(v => v.id === report.vehicleId);
+            const rStart = report.weekStart.split('T')[0];
+            const rEnd = report.weekEnd.split('T')[0];
             const driverSpend = fuelEntries
                 .filter(e => 
                     e.vehicleId === report.vehicleId && 
-                    e.date >= report.weekStart && 
-                    e.date <= report.weekEnd &&
+                    e.date >= rStart && 
+                    e.date <= rEnd &&
                     (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
                 )
                 .reduce((sum, e) => sum + e.amount, 0);
@@ -149,6 +224,10 @@ export function ReconciliationTable({
                 TotalSpend: Number(report.totalGasCardCost.toFixed(2)),
                 RideShare: Number(report.rideShareCost.toFixed(2)),
                 CompanyUsage: Number(report.companyUsageCost.toFixed(2)),
+                DeadheadCost: Number((report.deadheadCost || 0).toFixed(2)),
+                DeadheadKm: Number((report.deadheadDistance || 0).toFixed(1)),
+                DeadheadMethod: report.deadheadMeta?.method || 'none',
+                DeadheadConfidence: report.deadheadMeta?.confidenceLevel || 'none',
                 PersonalUsage: Number(report.personalUsageCost.toFixed(2)),
                 Miscellaneous: Number(report.miscellaneousCost.toFixed(2)),
                 CompanyShare: Number(report.companyShare.toFixed(2)),
@@ -219,8 +298,22 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Total fuel cost (Cards + Reimbursements).</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Total Spend</p>
+                                                    <p className="text-slate-300">Total fuel expenditure across all payment methods for this vehicle during the statement period.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">Gas Card charges + Driver cash reimbursements + Manual entries.</p>
+                                                    <p className="text-slate-400 mt-1">Sources: fuel card transactions, approved reimbursement requests, and admin-entered manual logs.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
+                                                    <p className="text-slate-300">This column is pre-split. The breakdown into Ride Share, Company Ops, Deadhead, Personal, and Misc determines each party's share.</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -234,8 +327,22 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Cost derived from Trip Distance.</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Ride Share</p>
+                                                    <p className="text-slate-300">Fuel cost attributed to logged ride-share trips (Uber, InDrive, etc.). This is the work-related portion of fuel consumption.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">(Trip km ÷ efficiency km/L) × $/L</p>
+                                                    <p className="text-slate-400 mt-1">Efficiency sourced from odometer data, vehicle settings, or system default (12.5 km/L). Price/L from actual fuel purchases in the period.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
+                                                    <p className="text-slate-300">Split is determined by the Ride Share coverage % in the active fuel scenario. Typically 100% company-covered.</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -247,8 +354,49 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Authorized business usage (non-trip).</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Company Ops</p>
+                                                    <p className="text-slate-300">Fuel consumed for authorized business errands, maintenance trips, and other company-directed usage outside of ride-share trips.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">Sum of fuel entries tagged as "Company_Usage" or linked to company-authorized trips during the period.</p>
+                                                    <p className="text-slate-400 mt-1">Requires explicit tagging via admin entry or driver check-in. Defaults to $0 if no entries are tagged.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
+                                                    <p className="text-slate-300">100% company-covered. This is always a company expense and never charged to the driver.</p>
+                                                </div>
+                                            </div>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableHead>
+                                <TableHead className="text-right text-xs text-amber-600 font-normal">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-end gap-1 cursor-help">
+                                                Deadhead
+                                                <Info className="h-3 w-3 text-amber-400" />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Deadhead</p>
+                                                    <p className="text-slate-300">Fuel burned during repositioning, cruising for rides, and other work-related driving that doesn't have a paying passenger.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">(Deadhead km ÷ efficiency km/L) × $/L</p>
+                                                    <p className="text-slate-400 mt-1">Deadhead km = Total odometer delta − Trip km − Company Ops km. If no odometer data exists, falls back to mileage adjustments tagged as "Deadhead".</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
+                                                    <p className="text-slate-300">Split uses 3-tier fallback: deadheadCoverage → companyUsageCoverage → base coverageValue from the active scenario.</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -260,8 +408,22 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Personal usage + adjustments.</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Personal</p>
+                                                    <p className="text-slate-300">Fuel consumed for non-work personal driving. This is the true personal residual after all work-related categories have been subtracted.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">(Personal km ÷ efficiency km/L) × $/L</p>
+                                                    <p className="text-slate-400 mt-1">Personal km = Total odometer delta − Trip km − Company Ops km − Deadhead km. If no odometer data exists, falls back to mileage adjustments tagged as "Personal".</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
+                                                    <p className="text-slate-300">Split is determined by the Personal coverage % in the active fuel scenario. Typically 0% company-covered (fully driver responsibility).</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -273,8 +435,22 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Unaccounted usage (Leakage).</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Misc (Leakage)</p>
+                                                    <p className="text-slate-300">Unaccounted fuel that doesn't fit into any known category. A high value here signals potential fraud, data gaps, or untagged usage.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">Total Spend − Ride Share − Company Ops − Deadhead − Personal</p>
+                                                    <p className="text-slate-400 mt-1">This is a residual catch-all. Ideally should be $0 or close to it. Non-zero values warrant investigation.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
+                                                    <p className="text-slate-300">Split follows the Miscellaneous coverage % in the active scenario. Typically split 50/50 until the source is identified.</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -288,8 +464,22 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Amount paid out-of-pocket (Reimbursement Due).</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Paid by Driver</p>
+                                                    <p className="text-slate-300">Total amount the driver paid out-of-pocket for fuel during this period (cash purchases submitted as reimbursement requests).</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">Sum of all Reimbursement + Manual_Entry type fuel logs for this vehicle in the period.</p>
+                                                    <p className="text-slate-400 mt-1">Only includes entries where the driver used personal funds. Gas card charges are excluded — those appear in Total Spend only.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Net Pay Impact</p>
+                                                    <p className="text-slate-300">This amount is credited back to the driver. Net Pay = Paid by Driver − Deduction. Positive = company owes driver.</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -301,8 +491,22 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Driver's share of costs.</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Deduction</p>
+                                                    <p className="text-slate-300">The driver's total share of fuel costs for the period, calculated by applying the scenario split rules to each consumption category.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">(Ride Share × driver%) + (Company Ops × driver%) + (Deadhead × driver%) + (Personal × driver%) + (Misc × driver%)</p>
+                                                    <p className="text-slate-400 mt-1">Each category's driver% comes from the active fuel scenario configuration. The sum is the total amount charged to the driver.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Finalization</p>
+                                                    <p className="text-slate-300">When finalized, this amount is posted as a debit to the driver's main financial ledger.</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -314,8 +518,22 @@ export function ReconciliationTable({
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Amount to pay (or deduct from) driver.</p>
+                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                            <div className="p-3 space-y-2.5 text-xs">
+                                                <div>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">Net Pay</p>
+                                                    <p className="text-slate-300">The final settlement amount for this driver. Positive = company owes the driver. Negative = driver owes the company.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
+                                                    <p className="text-slate-300">Paid by Driver − Deduction = Net Pay</p>
+                                                    <p className="text-slate-400 mt-1">If the driver paid more out-of-pocket than their share, the company reimburses the difference. If less, the shortfall is deducted from their earnings.</p>
+                                                </div>
+                                                <div className="border-t border-slate-600 pt-2">
+                                                    <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Finalization</p>
+                                                    <p className="text-slate-300">When finalized, this net amount is posted to the driver's main ledger as either a credit (positive) or debit (negative).</p>
+                                                </div>
+                                            </div>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TableHead>
@@ -324,13 +542,19 @@ export function ReconciliationTable({
                         <TableBody>
                             {reports.map((report) => {
                                 const vehicle = vehicles.find(v => v.id === report.vehicleId);
+                                const assignedDriver = vehicle?.currentDriverId
+                                    ? drivers.find((d: any) => d.id === vehicle.currentDriverId || d.driverId === vehicle.currentDriverId)
+                                    : null;
+                                const driverName = assignedDriver?.name || vehicle?.currentDriverName || null;
                                 
                                 // Calculate "Paid by Driver" (Cash/Reimbursement)
+                                const rStart = report.weekStart.split('T')[0];
+                                const rEnd = report.weekEnd.split('T')[0];
                                 const driverSpend = fuelEntries
                                     .filter(e => 
                                         e.vehicleId === report.vehicleId && 
-                                        e.date >= report.weekStart && 
-                                        e.date <= report.weekEnd &&
+                                        e.date >= rStart && 
+                                        e.date <= rEnd &&
                                         (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
                                     )
                                     .reduce((sum, e) => sum + e.amount, 0);
@@ -354,13 +578,15 @@ export function ReconciliationTable({
                                                         <span className="font-medium text-slate-900">
                                                             {vehicle?.licensePlate || 'Unknown'} 
                                                         </span>
-                                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 border-slate-200 text-slate-500 bg-slate-50/50">
-                                                            {report.metadata?.scenarioName || 'Standard'}
-                                                        </Badge>
                                                     </div>
                                                     <span className="text-xs text-slate-500">
-                                                        {vehicle?.model} • {report.driverId || 'Unassigned'}
+                                                        {vehicle?.model}
                                                     </span>
+                                                    {driverName && (
+                                                        <span className="text-xs text-indigo-600 font-medium">
+                                                            {driverName}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 {onViewBuckets && vehicle && (
                                                     <TooltipProvider>
@@ -509,6 +735,43 @@ export function ReconciliationTable({
                                         <TableCell className="text-right text-slate-600 text-sm">
                                             {formatCurrency(report.companyUsageCost)}
                                         </TableCell>
+                                        <TableCell className="text-right text-amber-600 text-sm">
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <span className={`cursor-help ${report.deadheadMeta ? 'underline decoration-dotted decoration-amber-300 underline-offset-2' : ''}`}>
+                                                            {formatCurrency(report.deadheadCost || 0)}
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    {report.deadheadMeta && (
+                                                        <TooltipContent side="bottom" className="max-w-xs p-0">
+                                                            <div className="p-3 space-y-2 text-xs">
+                                                                <div className="font-semibold text-slate-900 border-b border-slate-200 pb-1.5">
+                                                                    Deadhead Attribution
+                                                                </div>
+                                                                <div className="space-y-1 text-slate-600">
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Deadhead km</span>
+                                                                        <span className="font-medium text-slate-900">{(report.deadheadDistance || 0).toFixed(1)} km</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Method</span>
+                                                                        <span className="font-medium text-slate-900">{report.deadheadMeta.method}</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>Confidence</span>
+                                                                        <span className={`font-medium ${
+                                                                            report.deadheadMeta.confidenceLevel === 'high' ? 'text-emerald-700' :
+                                                                            report.deadheadMeta.confidenceLevel === 'medium' ? 'text-amber-700' : 'text-rose-700'
+                                                                        }`}>{report.deadheadMeta.confidenceLevel}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </TooltipContent>
+                                                    )}
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </TableCell>
                                         <TableCell className="text-right text-slate-600 text-sm">
                                             {formatCurrency(report.personalUsageCost)}
                                         </TableCell>
@@ -532,7 +795,7 @@ export function ReconciliationTable({
                             
                             {reports.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={11} className="h-24 text-center text-slate-500">
+                                    <TableCell colSpan={12} className="h-24 text-center text-slate-500">
                                         No vehicles found.
                                     </TableCell>
                                 </TableRow>
@@ -546,6 +809,7 @@ export function ReconciliationTable({
                                 
                                 <TableCell className="text-right">{formatCurrency(totals.rideShare)}</TableCell>
                                 <TableCell className="text-right">{formatCurrency(totals.companyUsage)}</TableCell>
+                                <TableCell className="text-right text-amber-600">{formatCurrency(totals.deadhead)}</TableCell>
                                 <TableCell className="text-right">{formatCurrency(totals.personal)}</TableCell>
                                 <TableCell className={`text-right border-r border-slate-200 ${getLeakageColor(totals.misc)}`}>
                                     {formatCurrency(totals.misc)}
@@ -561,7 +825,7 @@ export function ReconciliationTable({
             </Card>
 
             {/* Explanation / Legend */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-slate-600">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm text-slate-600">
                  <div className="p-3 bg-slate-50 rounded border">
                      <span className="font-semibold block mb-1">Ride Share</span>
                      Fuel cost for logged trips.
@@ -569,6 +833,10 @@ export function ReconciliationTable({
                  <div className="p-3 bg-slate-50 rounded border">
                      <span className="font-semibold block mb-1">Company Ops</span>
                      Authorized business errands & maintenance.
+                 </div>
+                 <div className="p-3 bg-amber-50 rounded border border-amber-200">
+                     <span className="font-semibold block mb-1 text-amber-800">Deadhead</span>
+                     Repositioning & cruising fuel (work-related, non-trip).
                  </div>
                  <div className="p-3 bg-slate-50 rounded border">
                      <span className="font-semibold block mb-1">Personal</span>

@@ -15,7 +15,7 @@ export interface OCRResult {
 }
 
 export async function processFuelReceiptVision(imageBase64: string): Promise<OCRResult> {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `
         You are a specialized OCR engine for fleet management. 
@@ -68,7 +68,7 @@ export async function processFuelReceiptVision(imageBase64: string): Promise<OCR
 }
 
 export async function verifyOdometerLogic(currentOdo: number, previousOdo: number, tripsDistance: number, previousDate?: string, currentDate?: string) {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // Compute elapsed time context if dates are available
     let timeContext = "";

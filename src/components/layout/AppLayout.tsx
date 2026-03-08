@@ -47,6 +47,8 @@ import {
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
+import { useVocab } from '../../utils/vocabulary';
+import { isSidebarItemVisible } from '../../utils/businessTypes';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -69,7 +71,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-900">
-        <AppSidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <AppSidebar currentPage={currentPage} onNavigate={onNavigate} onLogout={onLogout} />
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <AppHeader onLogout={onLogout} />
           <div className="flex-1 overflow-auto p-4 md:p-8">
@@ -84,9 +86,10 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
   );
 }
 
-function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: string, onNavigate?: (page: string) => void }) {
-  const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'claimable-loss', 'toll-database', 'toll-info', 'toll-analytics'].includes(currentPage);
-  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap', 'fuel-stations', 'fuel-database'].includes(currentPage);
+function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { currentPage?: string, onNavigate?: (page: string) => void, onLogout?: () => void }) {
+  const { v, businessType } = useVocab();
+  const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'claimable-loss', 'toll-analytics'].includes(currentPage);
+  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage);
   const isDriverOpsOpen = ['drivers', 'performance', 'tier-config'].includes(currentPage);
 
   return (
@@ -94,7 +97,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
       <SidebarHeader className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2 font-bold text-xl text-indigo-600 dark:text-indigo-400">
           <Car className="h-6 w-6" />
-          <span>GoRide</span>
+          <span>Roam</span>
         </div>
       </SidebarHeader>
       
@@ -102,13 +105,13 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
         <SidebarMenu>
           <NavItem 
             icon={<LayoutDashboard className="h-4 w-4" />} 
-            label="FLEET ANALYTICS DASHBOARD" 
+            label={v('dashboardTitle').toUpperCase()} 
             active={currentPage === 'dashboard'} 
             onClick={() => onNavigate?.('dashboard')}
           />
           <NavItem 
             icon={<UploadCloud className="h-4 w-4" />} 
-            label="Import Data" 
+            label="Data Center" 
             active={currentPage === 'imports'} 
             onClick={() => onNavigate?.('imports')}
           />
@@ -126,17 +129,20 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'drivers'} onClick={() => onNavigate?.('drivers')}>
                       <button className="w-full text-left cursor-pointer">
-                        <span>Drivers</span>
+                        <span>{v('drivers')}</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
+                  {isSidebarItemVisible('performance', businessType) && (
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'performance'} onClick={() => onNavigate?.('performance')}>
                       <button className="w-full text-left cursor-pointer">
-                        <span>Performance</span>
+                        <span>{v('sidebarPerformance')}</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
+                  )}
+                  {isSidebarItemVisible('tier-config', businessType) && (
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'tier-config'} onClick={() => onNavigate?.('tier-config')}>
                       <button className="w-full text-left cursor-pointer">
@@ -144,6 +150,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
+                  )}
                 </SidebarMenuSub>
               </CollapsibleContent>
             </SidebarMenuItem>
@@ -151,7 +158,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
           
           <NavItem 
             icon={<Car className="h-4 w-4" />} 
-            label="Vehicles" 
+            label={v('vehiclesPageTitle')} 
             active={currentPage === 'vehicles'}
             onClick={() => onNavigate?.('vehicles')}
           />
@@ -208,24 +215,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reconciliation'} onClick={() => onNavigate?.('fuel-reconciliation')}>
                       <button className="w-full text-left cursor-pointer">
-                        <span>Reconciliation</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-stations'} onClick={() => onNavigate?.('fuel-stations')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span className="flex items-center gap-2">
-                           Fueling Analytics
-                           <Badge className="bg-indigo-500 text-white border-none h-4 px-1 text-[8px]">New</Badge>
-                        </span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-database'} onClick={() => onNavigate?.('fuel-database')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Station Database</span>
+                        <span>Consumption Reconciliation</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
@@ -239,7 +229,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-logs'} onClick={() => onNavigate?.('fuel-logs')}>
                       <button className="w-full text-left cursor-pointer">
-                        <span>Logs</span>
+                        <span>Transaction Logs</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
@@ -263,6 +253,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
           </Collapsible>
 
           {/* Toll Management Section */}
+          {isSidebarItemVisible('toll-management', businessType) && (
           <Collapsible defaultOpen={isTollManagementOpen} className="group/collapsible">
             <SidebarMenuItem>
               <CollapsibleTrigger asChild>
@@ -303,20 +294,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
                   <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'toll-database'} onClick={() => onNavigate?.('toll-database')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Toll Database</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'toll-info'} onClick={() => onNavigate?.('toll-info')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Toll Info</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'toll-analytics'} onClick={() => onNavigate?.('toll-analytics')}>
                       <button className="w-full text-left cursor-pointer">
                         <span className="flex items-center gap-2">
@@ -330,10 +307,11 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
               </CollapsibleContent>
             </SidebarMenuItem>
           </Collapsible>
+          )}
 
           <NavItem 
             icon={<FileText className="h-4 w-4" />} 
-            label="Trip Analytics" 
+            label={v('sidebarTrips')} 
             active={currentPage === 'trips'}
             onClick={() => onNavigate?.('trips')}
           />
@@ -382,10 +360,13 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate }: { currentPage?: s
             <AvatarImage src="https://images.unsplash.com/photo-1701463387028-3947648f1337?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBwcm9maWxlJTIwcGhvdG8lMjBhdmF0YXJ8ZW58MXx8fHwxNzY5MTM2NTYzfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral" />
             <AvatarFallback>JD</AvatarFallback>
           </Avatar>
-          <div className="flex flex-col">
+          <div className="flex flex-col flex-1 min-w-0">
             <span className="text-sm font-medium text-slate-900 dark:text-slate-100">John Doe</span>
             <span className="text-xs text-slate-500 dark:text-slate-400">Fleet Manager</span>
           </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400" onClick={onLogout} title="Log out">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </SidebarFooter>
       <SidebarRail />
@@ -414,12 +395,12 @@ function AppHeader({ onLogout }: { onLogout?: () => void }) {
 
   React.useEffect(() => {
     // Initial Load
-    const stored = localStorage.getItem('goride_fleet_name');
+    const stored = localStorage.getItem('roam_fleet_name');
     if (stored) setFleetName(stored);
 
     // Listener
     const handleUpdate = () => {
-        const updated = localStorage.getItem('goride_fleet_name');
+        const updated = localStorage.getItem('roam_fleet_name');
         if (updated) setFleetName(updated);
     };
 
@@ -443,11 +424,6 @@ function AppHeader({ onLogout }: { onLogout?: () => void }) {
 
       <div className="flex items-center gap-4">
         <NotificationCenter />
-        <Separator orientation="vertical" className="h-6" />
-        <Button variant="outline" size="sm" className="hidden md:flex" onClick={onLogout}>
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
-        </Button>
       </div>
     </header>
   );

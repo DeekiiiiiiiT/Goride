@@ -25,22 +25,15 @@ import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTabl
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { FuelAuditDashboard } from '../components/fuel/FuelAuditDashboard';
 import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard';
-
-import { GasStationAnalytics } from '../components/fuel/stations/GasStationAnalytics';
-import { StationDatabaseView } from '../components/fuel/stations/StationDatabaseView';
-import { FuelCard, FuelEntry, MileageAdjustment, FuelDispute, FuelScenario, WeeklyFuelReport } from '../types/fuel';
-import { Vehicle } from '../types/vehicle';
-import { Trip, FinancialTransaction } from '../types/data';
-import { api } from '../services/api';
+import { startOfWeek, endOfWeek } from 'date-fns';
+import { useFuelAnchors } from '../hooks/useFuelAnchors';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
-import { useFuelAnchors } from '../hooks/useFuelAnchors';
-import { toast } from "sonner@2.0.3";
-import { startOfWeek, endOfWeek } from "date-fns";
-import { DateRange } from "react-day-picker";
-import { Checkbox } from "../components/ui/checkbox";
-import { Label } from "../components/ui/label";
+import { api } from '../services/api';
+import { FinalizedReportsTab } from '../components/fuel/FinalizedReportsTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Badge } from '../components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +43,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "../components/ui/alert-dialog";
+} from '../components/ui/alert-dialog';
+import { Checkbox } from '../components/ui/checkbox';
+import { Label } from '../components/ui/label';
+import { toast } from 'sonner@2.0.3';
+import { DateRange } from 'react-day-picker';
+import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport } from '../types/fuel';
+import type { FinancialTransaction } from '../types/data';
+import type { Trip } from '../types/data';
+import type { Vehicle } from '../types/vehicle';
 
 export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: { 
     defaultTab?: string, 
@@ -118,6 +119,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
+  const [finalizedCount, setFinalizedCount] = useState(0);
 
   // Effect to reload trips when Reconciliation Date Range changes
   useEffect(() => {
@@ -169,6 +171,14 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           setAdjustments(adjsData);
           setDisputes(disputesData);
           setTransactions(txData);
+
+          // Fetch finalized report count for the badge
+          try {
+            const finalizedData = await api.getFinalizedReports();
+            setFinalizedCount(Array.isArray(finalizedData) ? finalizedData.length : 0);
+          } catch {
+            // Non-critical — badge just won't show a count
+          }
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -713,10 +723,12 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           let successCount = 0;
           for (const report of reports) {
               // Filter entries for this report period and vehicle
+              const rStart = report.weekStart.split('T')[0];
+              const rEnd = report.weekEnd.split('T')[0];
               const relevantEntries = logs.filter(entry => 
                   entry.vehicleId === report.vehicleId && 
-                  entry.date >= report.weekStart && 
-                  entry.date <= report.weekEnd &&
+                  entry.date >= rStart && 
+                  entry.date <= rEnd &&
                   entry.reconciliationStatus === 'Pending' // Only process pending items
               );
               
@@ -726,6 +738,40 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               }
           }
           
+          // Build frozen snapshots for the Finalized tab
+          const snapshots = reports.map(report => {
+            const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
+            const driver = drivers.find((d: any) => d.id === report.driverId);
+            const rStart = report.weekStart.split('T')[0];
+            const rEnd = report.weekEnd.split('T')[0];
+            const driverSpend = logs
+              .filter((e: any) =>
+                e.vehicleId === report.vehicleId &&
+                e.date >= rStart && e.date <= rEnd &&
+                (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
+              )
+              .reduce((sum: number, e: any) => sum + e.amount, 0);
+            return {
+              ...report,
+              status: 'Finalized',
+              finalizedAt: new Date().toISOString(),
+              finalizedByUser: 'admin',
+              driverSpend,
+              netPay: driverSpend - report.driverShare,
+              vehiclePlate: vehicle?.licensePlate || 'Unknown',
+              vehicleModel: vehicle?.model || '',
+              driverName: driver?.name || 'Unknown',
+            };
+          });
+
+          // Persist snapshots to server (non-blocking — settlement is already committed)
+          try {
+            await api.saveFinalizedReports(snapshots);
+          } catch (snapErr: any) {
+            console.error('[FinalizedReports] Snapshot save failed:', snapErr);
+            toast.warning('Statements finalized but snapshot save failed — finalized tab may be incomplete.');
+          }
+
           if (successCount > 0) {
               toast.success(`Successfully finalized ${successCount} statements and posted to ledger.`);
           } else {
@@ -769,12 +815,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   } else if (activeTab === 'configuration') {
       pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
-  } else if (activeTab === 'stations') {
-      pageTitle = "Refueling Analytics";
-      pageDescription = "Analyze fuel prices, station activity, and fleet refueling trends.";
-  } else if (activeTab === 'database') {
-      pageTitle = "Station Database";
-      pageDescription = "Manage approved gas stations and non-fuel locations.";
   } else if (activeTab === 'audit') {
       pageTitle = "Fleet Integrity Audit";
       pageDescription = "Audit fleet integrity using Stop-to-Stop odometer verification and behavioral anomaly detection.";
@@ -784,12 +824,12 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
     <FuelLayout 
         title={pageTitle}
         description={pageDescription}
-        onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation' || activeTab === 'stations' || activeTab === 'database') ? undefined : () => {
+        onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation') ? undefined : () => {
             setEditingLog(null);
             setIsLogModalOpen(true);
         }}
     >
-      {(activeTab !== 'configuration' && activeTab !== 'cards' && activeTab !== 'stations' && activeTab !== 'database') && (
+      {(activeTab !== 'configuration' && activeTab !== 'cards') && (
         <div className="flex justify-end items-center gap-3 mb-4">
             {isSyncing && (
                 <div className="flex items-center gap-2 text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100 animate-pulse">
@@ -885,15 +925,28 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       )}
 
       {activeTab === 'reconciliation' && (
-        <div className="space-y-4">
-             <div className="flex justify-between items-start">
-                 <div className="space-y-1">
-                </div>
-                <div className="flex items-center gap-2">
-                    <DatePickerWithRange date={reconciliationDateRange} setDate={setReconciliationDateRange} />
-                </div>
+        <Tabs defaultValue="auto-generated" className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+            <TabsList className="flex-wrap">
+              <TabsTrigger value="auto-generated">
+                <span className="hidden sm:inline">Standard Fleet Rule</span>
+                <span className="sm:hidden">Fleet Rule</span>
+              </TabsTrigger>
+              <TabsTrigger value="finalized" className="gap-1.5">
+                Finalized
+                {finalizedCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5 text-xs">
+                    {finalizedCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+            <div className="flex items-center gap-2">
+              <DatePickerWithRange date={reconciliationDateRange} setDate={setReconciliationDateRange} />
             </div>
-            
+          </div>
+
+          <TabsContent value="auto-generated" className="space-y-4">
             <ReconciliationTable  
                 vehicles={vehicles}
                 trips={trips}
@@ -902,12 +955,18 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 disputes={disputes}
                 dateRange={reconciliationDateRange}
                 scenarios={scenarios}
+                drivers={drivers}
                 onFinalize={handleFinalize}
                 onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
                 onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
                 onViewBuckets={(vehicle) => { setSelectedBucketVehicle(vehicle); setIsBucketSheetOpen(true); }}
             />
-        </div>
+          </TabsContent>
+
+          <TabsContent value="finalized">
+            <FinalizedReportsTab />
+          </TabsContent>
+        </Tabs>
       )}
 
       {activeTab === 'cards' && (
@@ -957,14 +1016,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
       {activeTab === 'configuration' && (
           <FuelConfiguration />
-      )}
-
-      {activeTab === 'stations' && (
-          <GasStationAnalytics logs={logs} loading={isRefreshing} onRequestRefresh={refreshLogs} />
-      )}
-
-      {activeTab === 'database' && (
-          <StationDatabaseView logs={logs} loading={isRefreshing} />
       )}
 
       {/* Modals - Conditionally rendered to prevent mount-time effect cascades */}
@@ -1120,6 +1171,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               trips={trips}
               transactions={transactions}
               adjustments={adjustments}
+              dateRange={reconciliationDateRange}
               onClose={() => setIsBucketSheetOpen(false)}
               onRefresh={() => loadData(true)}
             />

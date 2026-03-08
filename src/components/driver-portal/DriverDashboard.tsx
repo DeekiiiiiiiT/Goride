@@ -48,11 +48,11 @@ export function DriverDashboard() {
     breakdown: {
       uber: number;
       indrive: number;
-      goride: number;
+      roam: number;
     };
   }>({
     total: 0,
-    breakdown: { uber: 0, indrive: 0, goride: 0 }
+    breakdown: { uber: 0, indrive: 0, roam: 0 }
   });
   const [goals, setGoals] = useState<DriverGoals | null>(null);
   const [recentTrip, setRecentTrip] = useState<Trip | null>(null);
@@ -182,7 +182,7 @@ export function DriverDashboard() {
 
             // Calculate Weekly Earnings Breakdown (for Display Cards)
             const weeklyTrips = myTrips.filter(t => isSameWeek(new Date(t.date), now, { weekStartsOn: 1 }));
-            const weeklyBreakdown = { uber: 0, indrive: 0, goride: 0 };
+            const weeklyBreakdown = { uber: 0, indrive: 0, roam: 0 };
             const weeklySumForBreakdown = weeklyTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
 
             weeklyTrips.forEach(t => {
@@ -194,8 +194,8 @@ export function DriverDashboard() {
                 } else if (platform === 'indrive') {
                     weeklyBreakdown.indrive += amount;
                 } else {
-                    // GoRide includes Private, Cash, Other, and implicit app trips
-                    weeklyBreakdown.goride += amount;
+                    // Roam includes Private, Cash, Other, and implicit app trips
+                    weeklyBreakdown.roam += amount;
                 }
             });
 

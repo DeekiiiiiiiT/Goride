@@ -28,6 +28,13 @@ export interface ManualTripInput {
   indriveServiceFee?: number;   // Auto-calculated: amount - indriveNetIncome
   indriveServiceFeePercent?: number; // Auto-calculated: (fee / amount) * 100
   indriveBalanceDeduction?: number;  // Auto-calculated: fee from InDrive Balance (cash trips only)
+  // Cancellation tracking
+  tripStatus?: 'Completed' | 'Cancelled'; // Default: 'Completed'
+  cancelledBy?: 'rider' | 'driver';       // Only relevant when tripStatus === 'Cancelled'
+  cancellationReason?: string;             // Free-text or selected from common reasons
+  cancellationFee?: number;                // Fee charged to rider on cancellation (driver may or may not receive this)
+  // Intermediate stops (multi-stop trips, e.g. InDrive)
+  intermediateStops?: { id: string; address: string; coords?: { lat: number; lon: number } }[];
 }
 
 export function createManualTrip(data: ManualTripInput, driverId: string, driverName?: string): Trip {
@@ -87,6 +94,22 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     netPayout = isCashTrip ? 0 : amount;
   }
 
+  // Override financials for cancelled trips
+  const isCancelled = data.tripStatus === 'Cancelled';
+  if (isCancelled) {
+    const cancelFee = data.cancellationFee || 0;
+    // For cancelled trips, "amount" is the estimated fare (what trip would have earned)
+    // The cancellation fee (if any) is what was actually collected
+    if (data.paymentMethod === 'Cash') {
+      cashCollected = cancelFee; // Driver may have collected a cash cancellation fee
+      netPayout = 0;
+    } else {
+      cashCollected = 0;
+      netPayout = cancelFee; // Platform pays out the cancellation fee
+    }
+    balanceDeduction = 0; // No InDrive balance deduction on cancelled trips
+  }
+
   return {
     id: `manual_${crypto.randomUUID().split('-')[0]}`, // Short unique ID
     platform: data.platform,
@@ -98,7 +121,7 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     driverId: driverId,
     driverName: driverName,
     amount: amount,
-    status: 'Completed',
+    status: data.tripStatus || 'Completed',
     pickupLocation: data.pickupLocation || (data.pickupCoords ? '' : 'Manual Entry'),
     dropoffLocation: data.dropoffLocation || (data.dropoffCoords ? '' : ''),
     startLat: data.pickupCoords?.lat,
@@ -111,6 +134,7 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     route: data.route,
     stops: data.stops,
     totalWaitTime: data.totalWaitTime,
+    intermediateStops: data.intermediateStops,
     
     // Financials — InDrive-aware cash flow
     cashCollected,
@@ -139,6 +163,14 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
       indriveServiceFee: data.indriveServiceFee,
       indriveServiceFeePercent: data.indriveServiceFeePercent,
       indriveBalanceDeduction: balanceDeduction, // Calculated based on payment method
+    }),
+    
+    // Cancellation details
+    ...(data.tripStatus === 'Cancelled' && {
+      cancelledBy: data.cancelledBy,
+      cancellationReason: data.cancellationReason,
+      cancellationFee: data.cancellationFee,
+      estimatedLoss: amount > 0 ? amount - (data.cancellationFee || 0) : 0, // What was lost due to cancellation
     }),
   } as Trip;
 }

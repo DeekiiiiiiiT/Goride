@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../../services/api';
 import { Trip } from '../../types/data';
+import { useVocab } from '../../utils/vocabulary';
 import { 
   Loader2, 
   Search, 
@@ -101,6 +102,7 @@ interface DriverProfile {
 }
 
 export function DriversPage({ initialDriverId }: { initialDriverId?: string | null }) {
+  const { v } = useVocab();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [manualDrivers, setManualDrivers] = useState<DriverProfile[]>([]);
   const [importedMetrics, setImportedMetrics] = useState<import('../../types/data').DriverMetrics[]>([]);
@@ -163,7 +165,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     const fetchData = async () => {
       try {
         const [tripsData, driversData, metricsData, vehicleMetricsData, tiersData] = await Promise.all([
-             api.getTrips({ limit: 1000 }),
+             api.getTrips({ limit: 200 }),
              api.getDrivers().catch(() => []),
              api.getDriverMetrics().catch(() => []),
              api.getVehicleMetrics().catch(() => []),
@@ -568,8 +570,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
       <div className="flex flex-col gap-4">
         <div className="flex justify-between items-center">
            <div>
-               <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Drivers</h2>
-               <p className="text-slate-500 dark:text-slate-400">Manage fleet drivers, track performance, and monitor earnings.</p>
+               <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{v('driversPageTitle')}</h2>
+               <p className="text-slate-500 dark:text-slate-400">{v('driversPageSubtitle')}</p>
            </div>
            <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                <Plus className="h-4 w-4 mr-2" />

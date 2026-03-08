@@ -21,7 +21,7 @@ export function PaymentMethodSelector({ onSelect }: PaymentMethodSelectorProps) 
           <CreditCard className="h-6 w-6 text-blue-500 group-hover:scale-110 transition-transform" />
           <div className="text-center">
             <p className="font-bold">Gas Card</p>
-            <p className="text-[10px] text-slate-500">I used the GoRide company fuel card</p>
+            <p className="text-[10px] text-slate-500">I used the Roam company fuel card</p>
           </div>
         </Button>
 

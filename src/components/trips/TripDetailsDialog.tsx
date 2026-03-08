@@ -1,12 +1,13 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Trip } from "../../types/data";
+import { normalizePlatform } from '../../utils/normalizePlatform';
 import { TripStop } from "../../types/tripSession";
 import { ScrollArea } from "../ui/scroll-area";
 import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
 import { format } from "date-fns";
-import { MapPin, Calendar, Clock, CreditCard, User, Car, DollarSign, Navigation } from "lucide-react";
+import { MapPin, Calendar, Clock, CreditCard, User, Car, DollarSign, Navigation, XCircle } from "lucide-react";
 
 interface TripDetailsDialogProps {
   trip: Trip | null;
@@ -75,7 +76,7 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                   <span className="text-sm font-medium">Platform</span>
                 </div>
                 <div className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-                  {trip.platform}
+                  {normalizePlatform(trip.platform)}
                 </div>
                 {trip.paymentMethod && (
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -195,6 +196,45 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                 )}
               </div>
             </div>
+
+            {/* Cancellation Details — only shown for cancelled trips */}
+            {trip.status === 'Cancelled' && (trip.cancelledBy || trip.cancellationReason || trip.cancellationFee || trip.estimatedLoss) && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                    <XCircle className="h-4 w-4" />
+                    Cancellation Details
+                  </h3>
+                  <div className="bg-rose-50/50 dark:bg-rose-950/20 rounded-lg p-4 space-y-3 border border-rose-200 dark:border-rose-800">
+                    {trip.cancelledBy && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600 dark:text-slate-400">Cancelled By</span>
+                        <span className="font-medium text-rose-700 dark:text-rose-400 capitalize">{trip.cancelledBy}</span>
+                      </div>
+                    )}
+                    {trip.cancellationReason && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600 dark:text-slate-400">Reason</span>
+                        <span className="font-medium text-slate-900 dark:text-slate-50">{trip.cancellationReason}</span>
+                      </div>
+                    )}
+                    {trip.cancellationFee !== undefined && trip.cancellationFee > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600 dark:text-slate-400">Cancellation Fee</span>
+                        <span className="font-medium text-amber-600 dark:text-amber-400">${trip.cancellationFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {trip.estimatedLoss !== undefined && trip.estimatedLoss > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600 dark:text-slate-400">Estimated Revenue Loss</span>
+                        <span className="font-medium text-rose-600 dark:text-rose-400">${trip.estimatedLoss.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             <Separator />
 
