@@ -1,0 +1,209 @@
+{
+  "success": true,
+  "dryRun": false,
+  "filterDriverId": null,
+  "filterCanonicalId": null,
+  "startedAt": "2026-03-09T14:28:20.928Z",
+  "completedAt": "2026-03-09T14:28:30.143Z",
+  "durationMs": 9215,
+  "stats": {
+    "scanned": 1277,
+    "alreadyCorrect": 280,
+    "repaired": 995,
+    "unresolvable": 2,
+    "skippedNoDriverId": 0,
+    "skippedFilterMismatch": 0,
+    "errors": 0,
+    "byPlatform": {
+      "Unknown": {
+        "scanned": 167,
+        "repaired": 0
+      },
+      "Uber": {
+        "scanned": 995,
+        "repaired": 995
+      },
+      "Roam": {
+        "scanned": 42,
+        "repaired": 0
+      },
+      "InDrive": {
+        "scanned": 73,
+        "repaired": 0
+      }
+    },
+    "repairedSamples": [
+      {
+        "entryId": "91d2f1e3-a0e7-462a-a0b1-4af3aba7cf16",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "a70597a9-575b-4388-8e1d-8d49547ba76e",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "fa81fb85-e39c-4ee5-bcef-55cfa5def10f",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "b955d054-4c26-40f2-a941-a94a0d95bd78",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "e0796b6e-2b29-4cd1-8a6f-e670f2c3de46",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "af4a0712-0348-4e72-9b46-2fb8131e8c03",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "bdcf943e-9e76-4377-9ba6-92e67bfaeabd",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "da2cd24f-bc03-45cb-a3bd-6f85dfd8b8b9",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "dea913b7-2918-4878-8de4-186cde0800f9",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "7cb09425-4be7-4de0-a1d9-718c964dbef4",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "d3435ffd-52b9-420d-84a5-9c1469c720c4",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "5b217e46-3c9b-47d3-8fb4-3a0873d4069b",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "ca60f79c-a899-4d1e-905f-d6e4fcb1f38d",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "0aba4fc5-2bc7-42dd-ad88-b1cca01fab2b",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "04f37884-4a11-46ef-9d0f-1bba744dcb6f",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "9b7565dc-56f3-4b8d-815d-59d5b7a6cba1",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "f3fd4abc-5a17-4337-9b28-b191bd6121e5",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "b5f70df9-6b7a-46fe-bee1-383224d8812f",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "66328365-72f8-4f52-98a0-b67ff42ec637",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      },
+      {
+        "entryId": "7a8d87d3-b908-42a2-ab82-fb990d59f14e",
+        "oldDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "newDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "platform": "Uber",
+        "eventType": "fare_earning"
+      }
+    ],
+    "errorSamples": [],
+    "unresolvableSamples": [
+      {
+        "entryId": "1c7331a1-6c27-4956-84a4-7600b9767258",
+        "driverId": "fleet_general",
+        "platform": "Unknown",
+        "eventType": "fuel_expense"
+      },
+      {
+        "entryId": "b1b5b20a-85be-43b3-adf7-1afd4bb627b9",
+        "driverId": "fleet_general",
+        "platform": "Unknown",
+        "eventType": "fuel_expense"
+      }
+    ]
+  },
+  "_diagnostics": {
+    "driverRecords": [
+      {
+        "id": "73e5b1dc-01b",
+        "name": "Kenny Gregory Rattray",
+        "uberDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "inDriveDriverId": null
+      },
+      {
+        "id": "b94d7df0-c65",
+        "name": "SADIKI ABAYOMI THOMAS",
+        "uberDriverId": null,
+        "inDriveDriverId": null
+      }
+    ]
+  }
+}

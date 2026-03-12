@@ -94,22 +94,26 @@ export function ExportCategoryCard({
               </span>
               {/* Format toggle */}
               {showFormatToggle && !effectiveDisabled && (
-                <div className="flex items-center border rounded overflow-hidden text-[10px]">
+                <div className="inline-flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
                   <button
-                    className={`px-1.5 py-0.5 flex items-center gap-0.5 transition-colors ${
-                      format === 'csv' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-400 hover:bg-slate-50'
+                    className={`px-2.5 py-1 flex items-center gap-1 rounded-md text-xs font-medium transition-all duration-150 ${
+                      format === 'csv'
+                        ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200'
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                     }`}
                     onClick={(e) => { e.stopPropagation(); setFormat('csv'); }}
                   >
-                    <FileSpreadsheet className="h-2.5 w-2.5" />CSV
+                    <FileSpreadsheet className="h-3.5 w-3.5" />CSV
                   </button>
                   <button
-                    className={`px-1.5 py-0.5 flex items-center gap-0.5 transition-colors ${
-                      format === 'json' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-400 hover:bg-slate-50'
+                    className={`px-2.5 py-1 flex items-center gap-1 rounded-md text-xs font-medium transition-all duration-150 ${
+                      format === 'json'
+                        ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200'
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                     }`}
                     onClick={(e) => { e.stopPropagation(); setFormat('json'); }}
                   >
-                    <FileJson className="h-2.5 w-2.5" />JSON
+                    <FileJson className="h-3.5 w-3.5" />JSON
                   </button>
                 </div>
               )}

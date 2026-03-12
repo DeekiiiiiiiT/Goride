@@ -201,6 +201,7 @@ html {
   .text-slate-800 { color: #e2e8f0; }   /* → slate-200 */
   .text-slate-700 { color: #cbd5e1; }   /* → slate-300 */
   .text-slate-600 { color: #cbd5e1; }   /* → slate-300 */
+  .text-slate-500 { color: #94a3b8; }   /* → slate-400 (was invisible in dark mode) */
 
   /* --- Background Colors --- */
   .bg-white { background-color: #0f172a; }           /* → slate-900 */

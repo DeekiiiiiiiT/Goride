@@ -113,6 +113,42 @@ interface LedgerViewProps {
   compact?: boolean;
 }
 
+// ─── Detail Dialog Helper Components ─────────────────────────────────
+// FIX (Phase 2): Extracted from IIFE to prevent recreation on every render
+
+interface DetailRowProps {
+  icon: any;
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+  copyable?: string;
+}
+
+function DetailRow({ icon: Icon, label, value, mono, copyable }: DetailRowProps) {
+  return (
+    <div className="flex items-start gap-3 py-2.5 border-b border-slate-100 last:border-0">
+      <div className="p-1.5 rounded-md bg-slate-50 mt-0.5 flex-shrink-0">
+        <Icon className="h-3.5 w-3.5 text-slate-500" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">{label}</p>
+        <div className={cn("text-sm text-slate-800 mt-0.5 break-words", mono && "font-mono text-xs")}>
+          {value || <span className="text-slate-300 italic">Not available</span>}
+        </div>
+      </div>
+      {copyable && (
+        <button
+          onClick={() => { navigator.clipboard.writeText(copyable); toast.success('Copied to clipboard'); }}
+          className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 mt-1 flex-shrink-0"
+          title="Copy"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────
 
 function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewProps) {
@@ -121,6 +157,15 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
+
+  // Performance monitoring (Phase 5): Track render cycles to catch future regressions
+  const renderCount = useRef(0);
+  useEffect(() => {
+    renderCount.current += 1;
+    if (renderCount.current > 50) {
+      console.warn('[LedgerView] High render count detected:', renderCount.current);
+    }
+  });
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -174,9 +219,30 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
 
   // ─── Data fetching ────────────────────────────────────────────────
 
+  // Memoize filter string to prevent infinite re-renders from object reference changes
+  const filterKey = useMemo(() => {
+    return JSON.stringify(filters);
+  }, [
+    filters.driverId,
+    filters.vehicleId,
+    filters.startDate,
+    filters.endDate,
+    filters.eventType,
+    filters.direction,
+    filters.platform,
+    filters.isReconciled,
+    filters.batchId,
+    filters.sourceType,
+    filters.driverIds,
+    filters.eventTypes,
+    filters.minAmount,
+    filters.maxAmount,
+  ]);
+
   useEffect(() => {
     let cancelled = false;
     const fetchData = async () => {
+      const startTime = performance.now();
       setLoading(true);
       try {
         const result = await api.getLedgerEntries({
@@ -187,6 +253,8 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
           sortBy: 'date',
           sortDir: 'desc',
         });
+        const duration = performance.now() - startTime;
+        console.log(`[LedgerView] Data fetch completed in ${duration.toFixed(0)}ms, ${result.data?.length || 0} entries`);
         if (!cancelled) {
           setEntries(result.data || []);
           setTotal(result.total || 0);
@@ -204,7 +272,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     };
     fetchData();
     return () => { cancelled = true; };
-  }, [page, pageSize, filters, searchTerm, refreshCounter]);
+  }, [page, pageSize, filterKey, searchTerm, refreshCounter]);
 
   // Fetch summary (for the top stat cards — across all pages)
   useEffect(() => {
@@ -214,12 +282,6 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
       try {
         const result = await api.getLedgerSummary({
           ...filters,
-          driverId: filters.driverId,
-          startDate: filters.startDate,
-          endDate: filters.endDate,
-          eventType: filters.eventType,
-          direction: filters.direction,
-          platform: filters.platform,
         });
         if (!cancelled) {
           setSummary(result.summary || null);
@@ -233,7 +295,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     };
     fetchSummary();
     return () => { cancelled = true; };
-  }, [filters, refreshCounter]);
+  }, [filterKey, refreshCounter]);
 
   // ─── Backfill handler ─────────────────────────────────────────────
 
@@ -270,14 +332,18 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
       return total <= 5;
     }
     return false;
-  }, [backfillDismissed, backfillRunning, backfillResult, loading, summaryLoading, filters, total, driverId, vehicleId]);
+  }, [backfillDismissed, backfillRunning, backfillResult, loading, summaryLoading, filters.startDate, filters.endDate, filters.eventType, filters.direction, filters.platform, total, driverId, vehicleId]);
 
   // ─── Filter handlers ──────────────────────────────────────────────
 
   const updateFilter = useCallback((key: keyof LedgerFilterParams, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value || undefined }));
+    const normalizedValue = value || undefined;
+    setFilters(prev => {
+      if (prev[key] === normalizedValue) return prev;
+      return { ...prev, [key]: normalizedValue };
+    });
     setPage(1);
-    setSelectedIds(new Set());
+    setSelectedIds(prev => prev.size === 0 ? prev : new Set());
   }, []);
 
   const handleDatePreset = useCallback((preset: typeof DATE_PRESETS[number]) => {
@@ -285,7 +351,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     setFilters(prev => ({ ...prev, startDate, endDate }));
     setActiveDatePreset(preset.label);
     setPage(1);
-    setSelectedIds(new Set());
+    setSelectedIds(prev => prev.size === 0 ? prev : new Set());
   }, []);
 
   const clearAllFilters = useCallback(() => {
@@ -294,22 +360,31 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     setSearchTerm('');
     setActiveDatePreset('All Time');
     setPage(1);
-    setSelectedIds(new Set());
+    setSelectedIds(prev => prev.size === 0 ? prev : new Set());
   }, [driverId, vehicleId]);
 
   const hasActiveFilters = useMemo(() => {
     return !!(filters.startDate || filters.endDate || filters.eventType || filters.direction || filters.platform || filters.isReconciled !== undefined || searchTerm);
-  }, [filters, searchTerm]);
+  }, [filterKey, searchTerm]);
 
   // ─── Selection handlers ───────────────────────────────────────────
 
+  // FIX (Phase 1): Removed entryIds memoization to prevent infinite re-render loop
+  // Rationale: entryIds depended on entries array reference which changed on every
+  // fetch, causing cascade of callback recreations that led to browser crashes.
+  // Solution: Calculate IDs inside setState with stable primitive dependency (entries.length).
+
   const toggleSelectAll = useCallback(() => {
-    if (selectedIds.size === entries.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(entries.map(e => e.id)));
-    }
-  }, [entries, selectedIds]);
+    setSelectedIds(prev => {
+      // Compute IDs inside setState - doesn't cause re-renders since it's inside the updater
+      const currentEntryIds = entries.map(e => e.id);
+      if (prev.size === entries.length && currentEntryIds.every(id => prev.has(id))) {
+        return new Set();
+      } else {
+        return new Set(currentEntryIds);
+      }
+    });
+  }, [entries.length]); // Stable dependency: only re-create when entry count changes
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -375,7 +450,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
       setEntries(result.data || []);
       setTotal(result.total || 0);
     } catch { /* already have toast */ }
-  }, [selectedIds, filters, searchTerm, pageSize, page]);
+  }, [selectedIds, filterKey, searchTerm, pageSize, page]);
 
   // ─── Export handler ───────────────────────────────────────────────
 
@@ -430,7 +505,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     } finally {
       setExporting(false);
     }
-  }, [filters, searchTerm]);
+  }, [filterKey, searchTerm]);
 
   // ─── Derived values ───────────────────────────────────────────────
 
@@ -488,13 +563,28 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     <div className="space-y-4">
       {/* ── Summary Cards ────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="border-slate-200 shadow-sm">
+        <Card
+          className={cn(
+            "shadow-sm cursor-pointer transition-all hover:shadow-md",
+            filters.direction === 'inflow'
+              ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/30'
+              : 'border-slate-200 hover:border-emerald-300'
+          )}
+          onClick={() => {
+            const newDir = filters.direction === 'inflow' ? undefined : 'inflow';
+            setFilters(prev => ({ ...prev, direction: newDir as any }));
+            setPage(1);
+          }}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <div className="p-1.5 rounded-md bg-emerald-50">
                 <TrendingUp className="h-4 w-4 text-emerald-600" />
               </div>
               <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Inflow</span>
+              {filters.direction === 'inflow' && (
+                <span className="ml-auto text-[10px] font-semibold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">FILTERED</span>
+              )}
             </div>
             <p className="text-xl font-bold text-emerald-700">
               {summaryLoading ? (
@@ -503,15 +593,33 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                 formatCurrency(summary?.totalInflow || 0)
               )}
             </p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {filters.direction === 'inflow' ? 'Click to show all' : 'Click to filter inflow only'}
+            </p>
           </CardContent>
         </Card>
-        <Card className="border-slate-200 shadow-sm">
+        <Card
+          className={cn(
+            "shadow-sm cursor-pointer transition-all hover:shadow-md",
+            filters.direction === 'outflow'
+              ? 'border-red-400 ring-2 ring-red-200 bg-red-50/30'
+              : 'border-slate-200 hover:border-red-300'
+          )}
+          onClick={() => {
+            const newDir = filters.direction === 'outflow' ? undefined : 'outflow';
+            setFilters(prev => ({ ...prev, direction: newDir as any }));
+            setPage(1);
+          }}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <div className="p-1.5 rounded-md bg-red-50">
                 <TrendingDown className="h-4 w-4 text-red-600" />
               </div>
               <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Outflow</span>
+              {filters.direction === 'outflow' && (
+                <span className="ml-auto text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">FILTERED</span>
+              )}
             </div>
             <p className="text-xl font-bold text-red-700">
               {summaryLoading ? (
@@ -519,6 +627,9 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
               ) : (
                 formatCurrency(summary?.totalOutflow || 0)
               )}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {filters.direction === 'outflow' ? 'Click to show all' : 'Click to filter outflow only'}
             </p>
           </CardContent>
         </Card>
@@ -764,7 +875,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                         }));
                         setActiveDatePreset('Custom');
                         setPage(1);
-                        setSelectedIds(new Set());
+                        setSelectedIds(prev => prev.size === 0 ? prev : new Set());
                         setCustomDateOpen(false);
                       }}
                     >
@@ -788,67 +899,61 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
 
             <div className="h-4 w-px bg-slate-200 mx-1" />
 
-            {/* Event type filter */}
-            <Select
-              value={filters.eventType || '__all__'}
-              onValueChange={(val) => updateFilter('eventType', val === '__all__' ? undefined : val as LedgerEventType)}
-            >
-              <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs bg-slate-50 border-slate-200">
-                <SelectValue placeholder="All Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Types</SelectItem>
-                {Object.entries(EVENT_TYPE_CONFIG).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Platform filter buttons */}
+            {[
+              { label: 'All Platforms', value: undefined },
+              { label: 'Uber', value: 'Uber' },
+              { label: 'InDrive', value: 'InDrive' },
+              { label: 'Roam', value: 'Roam' },
+            ].map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => {
+                  if (filters.platform === opt.value) return;
+                  setFilters(prev => ({ ...prev, platform: opt.value }));
+                  setPage(1);
+                }}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  filters.platform === opt.value
+                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
 
-            {/* Direction filter */}
-            <Select
-              value={filters.direction || '__all__'}
-              onValueChange={(val) => updateFilter('direction', val === '__all__' ? undefined : val)}
-            >
-              <SelectTrigger className="h-7 w-auto min-w-[100px] text-xs bg-slate-50 border-slate-200">
-                <SelectValue placeholder="All" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All</SelectItem>
-                <SelectItem value="inflow">Inflows</SelectItem>
-                <SelectItem value="outflow">Outflows</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="h-4 w-px bg-slate-200 mx-1" />
 
-            {/* Platform filter */}
-            <Select
-              value={filters.platform || '__all__'}
-              onValueChange={(val) => updateFilter('platform', val === '__all__' ? undefined : val)}
-            >
-              <SelectTrigger className="h-7 w-auto min-w-[110px] text-xs bg-slate-50 border-slate-200">
-                <SelectValue placeholder="All Platforms" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Platforms</SelectItem>
-                <SelectItem value="Uber">Uber</SelectItem>
-                <SelectItem value="InDrive">InDrive</SelectItem>
-                <SelectItem value="Roam">Roam</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Reconciliation filter */}
-            <Select
-              value={filters.isReconciled === undefined ? '__all__' : filters.isReconciled ? 'true' : 'false'}
-              onValueChange={(val) => updateFilter('isReconciled', val === '__all__' ? undefined : val === 'true')}
-            >
-              <SelectTrigger className="h-7 w-auto min-w-[110px] text-xs bg-slate-50 border-slate-200">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Status</SelectItem>
-                <SelectItem value="true">Reconciled</SelectItem>
-                <SelectItem value="false">Unreconciled</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Direction (Inflow / Outflow) filter buttons */}
+            {[
+              { label: 'All Flows', value: undefined as string | undefined, icon: null },
+              { label: 'Inflow', value: 'inflow', icon: <ArrowDownLeft className="h-3 w-3" /> },
+              { label: 'Outflow', value: 'outflow', icon: <ArrowUpRight className="h-3 w-3" /> },
+            ].map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => {
+                  if (filters.direction === opt.value) return;
+                  setFilters(prev => ({ ...prev, direction: opt.value as any }));
+                  setPage(1);
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  filters.direction === opt.value
+                    ? opt.value === 'inflow'
+                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                      : opt.value === 'outflow'
+                      ? 'bg-red-100 text-red-700 border border-red-300'
+                      : 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                )}
+              >
+                {opt.icon}
+                {opt.label}
+              </button>
+            ))}
 
             {hasActiveFilters && (
               <button
@@ -1111,62 +1216,36 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
       {/* ── Detail Dialog ──────────────────────────────────────────── */}
       <Dialog open={detailDialogOpen} onOpenChange={(open) => { setDetailDialogOpen(open); if (!open) setDetailEntry(null); }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          {detailEntry && (() => {
-            const e = detailEntry;
-            const isInflow = e.direction === 'inflow';
-            const DetailRow = ({ icon: Icon, label, value, mono, copyable }: { icon: any; label: string; value: React.ReactNode; mono?: boolean; copyable?: string }) => (
-              <div className="flex items-start gap-3 py-2.5 border-b border-slate-100 last:border-0">
-                <div className="p-1.5 rounded-md bg-slate-50 mt-0.5 flex-shrink-0">
-                  <Icon className="h-3.5 w-3.5 text-slate-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">{label}</p>
-                  <div className={cn("text-sm text-slate-800 mt-0.5 break-words", mono && "font-mono text-xs")}>
-                    {value || <span className="text-slate-300 italic">Not available</span>}
-                  </div>
-                </div>
-                {copyable && (
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(copyable); toast.success('Copied to clipboard'); }}
-                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 mt-1 flex-shrink-0"
-                    title="Copy"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            );
-
-            return (
+          {detailEntry && (
               <>
                 <DialogHeader className="pb-0">
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "p-2.5 rounded-xl",
-                      isInflow ? "bg-emerald-50" : "bg-red-50"
+                      detailEntry.direction === 'inflow' ? "bg-emerald-50" : "bg-red-50"
                     )}>
-                      {isInflow
+                      {detailEntry.direction === 'inflow'
                         ? <ArrowUpRight className="h-5 w-5 text-emerald-600" />
                         : <ArrowDownLeft className="h-5 w-5 text-red-600" />
                       }
                     </div>
                     <div className="flex-1 min-w-0">
                       <DialogTitle className="text-base font-semibold text-slate-900">
-                        {getEventLabel(e.eventType)}
+                        {getEventLabel(detailEntry.eventType)}
                       </DialogTitle>
                       <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                        {e.description}
+                        {detailEntry.description}
                       </DialogDescription>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className={cn(
                         "text-xl font-bold tabular-nums",
-                        isInflow ? "text-emerald-700" : "text-red-600"
+                        detailEntry.direction === 'inflow' ? "text-emerald-700" : "text-red-600"
                       )}>
-                        {isInflow ? '+' : '-'}{formatCurrency(e.netAmount)}
+                        {detailEntry.direction === 'inflow' ? '+' : '-'}{formatCurrency(detailEntry.netAmount)}
                       </p>
-                      {e.grossAmount !== undefined && e.grossAmount !== e.netAmount && Math.abs(e.grossAmount) > 0 && (
-                        <p className="text-xs text-slate-400 mt-0.5">Gross: {formatCurrency(e.grossAmount)}</p>
+                      {detailEntry.grossAmount !== undefined && detailEntry.grossAmount !== detailEntry.netAmount && Math.abs(detailEntry.grossAmount) > 0 && (
+                        <p className="text-xs text-slate-400 mt-0.5">Gross: {formatCurrency(detailEntry.grossAmount)}</p>
                       )}
                     </div>
                   </div>
@@ -1174,18 +1253,18 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
 
                 {/* Type + Status badges row */}
                 <div className="flex flex-wrap items-center gap-2 mt-2 pt-3 border-t border-slate-100">
-                  {getEventBadge(e.eventType)}
-                  {getPlatformBadge(e.platform)}
+                  {getEventBadge(detailEntry.eventType)}
+                  {getPlatformBadge(detailEntry.platform)}
                   <span className={cn(
                     "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border",
-                    isInflow
+                    detailEntry.direction === 'inflow'
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                       : "bg-red-50 text-red-600 border-red-200"
                   )}>
-                    {isInflow ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
-                    {e.direction === 'inflow' ? 'Inflow' : 'Outflow'}
+                    {detailEntry.direction === 'inflow' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
+                    {detailEntry.direction === 'inflow' ? 'Inflow' : 'Outflow'}
                   </span>
-                  {e.isReconciled ? (
+                  {detailEntry.isReconciled ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <CheckCircle2 className="h-3 w-3" />
                       Reconciled
@@ -1200,7 +1279,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                 {/* Detail rows */}
                 <div className="mt-4 rounded-lg border border-slate-200 bg-white overflow-hidden">
                   <div className="px-4">
-                    <DetailRow icon={CalendarDays} label="Date" value={`${formatLedgerDate(e.date)}${e.time ? ` at ${e.time}` : ''}`} />
+                    <DetailRow icon={CalendarDays} label="Date" value={`${formatLedgerDate(detailEntry.date)}${detailEntry.time ? ` at ${detailEntry.time}` : ''}`} />
                   </div>
                   <div className="px-4">
                     <DetailRow
@@ -1208,29 +1287,29 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                       label="Driver"
                       value={
                         <div>
-                          <span className="font-medium">{e.driverName || 'Unknown Driver'}</span>
-                          {e.driverId && <span className="ml-2 text-[11px] text-slate-400 font-mono">{e.driverId.substring(0, 12)}...</span>}
+                          <span className="font-medium">{detailEntry.driverName || 'Unknown Driver'}</span>
+                          {detailEntry.driverId && <span className="ml-2 text-[11px] text-slate-400 font-mono">{detailEntry.driverId.substring(0, 12)}...</span>}
                         </div>
                       }
-                      copyable={e.driverId}
+                      copyable={detailEntry.driverId}
                     />
                   </div>
-                  {(e.vehicleId || e.vehiclePlate) && (
+                  {(detailEntry.vehicleId || detailEntry.vehiclePlate) && (
                     <div className="px-4">
                       <DetailRow
                         icon={Car}
                         label="Vehicle"
                         value={
                           <div>
-                            {e.vehiclePlate && <span className="font-medium">{e.vehiclePlate}</span>}
-                            {e.vehicleId && <span className={cn("text-[11px] text-slate-400 font-mono", e.vehiclePlate && "ml-2")}>{e.vehicleId.substring(0, 12)}...</span>}
+                            {detailEntry.vehiclePlate && <span className="font-medium">{detailEntry.vehiclePlate}</span>}
+                            {detailEntry.vehicleId && <span className={cn("text-[11px] text-slate-400 font-mono", detailEntry.vehiclePlate && "ml-2")}>{detailEntry.vehicleId.substring(0, 12)}...</span>}
                           </div>
                         }
                       />
                     </div>
                   )}
                   <div className="px-4">
-                    <DetailRow icon={Tag} label="Category" value={e.category} />
+                    <DetailRow icon={Tag} label="Category" value={detailEntry.category} />
                   </div>
                   <div className="px-4">
                     <DetailRow
@@ -1240,20 +1319,20 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                         <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-1">
                           <div>
                             <span className="text-[10px] text-slate-400 uppercase">Gross Amount</span>
-                            <p className="font-semibold tabular-nums">{formatCurrency(e.grossAmount)}</p>
+                            <p className="font-semibold tabular-nums">{formatCurrency(detailEntry.grossAmount)}</p>
                           </div>
                           <div>
                             <span className="text-[10px] text-slate-400 uppercase">Net Amount</span>
-                            <p className={cn("font-semibold tabular-nums", isInflow ? "text-emerald-700" : "text-red-600")}>{isInflow ? '+' : '-'}{formatCurrency(e.netAmount)}</p>
+                            <p className={cn("font-semibold tabular-nums", detailEntry.direction === 'inflow' ? "text-emerald-700" : "text-red-600")}>{detailEntry.direction === 'inflow' ? '+' : '-'}{formatCurrency(detailEntry.netAmount)}</p>
                           </div>
                           <div>
                             <span className="text-[10px] text-slate-400 uppercase">Currency</span>
-                            <p>{e.currency || 'USD'}</p>
+                            <p>{detailEntry.currency || 'USD'}</p>
                           </div>
-                          {e.paymentMethod && (
+                          {detailEntry.paymentMethod && (
                             <div>
                               <span className="text-[10px] text-slate-400 uppercase">Payment Method</span>
-                              <p>{e.paymentMethod}</p>
+                              <p>{detailEntry.paymentMethod}</p>
                             </div>
                           )}
                         </div>
@@ -1267,13 +1346,13 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                       value={
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">{e.sourceType}</span>
-                            <span className="font-mono text-xs text-slate-600">{e.sourceId}</span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">{detailEntry.sourceType}</span>
+                            <span className="font-mono text-xs text-slate-600">{detailEntry.sourceId}</span>
                           </div>
-                          {e.batchId && <p className="text-[11px] text-slate-400 mt-1">Batch: {e.batchName || e.batchId}</p>}
+                          {detailEntry.batchId && <p className="text-[11px] text-slate-400 mt-1">Batch: {detailEntry.batchName || detailEntry.batchId}</p>}
                         </div>
                       }
-                      copyable={e.sourceId}
+                      copyable={detailEntry.sourceId}
                     />
                   </div>
                   <div className="px-4">
@@ -1282,26 +1361,26 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                       label="Reconciliation"
                       value={
                         <div className="flex items-center gap-2">
-                          {e.isReconciled ? <span className="text-emerald-700 font-medium">Reconciled</span> : <span className="text-amber-600 font-medium">Pending</span>}
-                          {e.reconciledAt && <span className="text-[11px] text-slate-400">on {formatLedgerDate(e.reconciledAt.split('T')[0])}</span>}
+                          {detailEntry.isReconciled ? <span className="text-emerald-700 font-medium">Reconciled</span> : <span className="text-amber-600 font-medium">Pending</span>}
+                          {detailEntry.reconciledAt && <span className="text-[11px] text-slate-400">on {formatLedgerDate(detailEntry.reconciledAt.split('T')[0])}</span>}
                         </div>
                       }
                     />
                   </div>
                   <div className="px-4">
-                    <DetailRow icon={Clock} label="Created" value={e.createdAt ? format(new Date(e.createdAt), 'MMM dd, yyyy h:mm a') : 'Unknown'} />
+                    <DetailRow icon={Clock} label="Created" value={detailEntry.createdAt ? format(new Date(detailEntry.createdAt), 'MMM dd, yyyy h:mm a') : 'Unknown'} />
                   </div>
                   <div className="px-4">
-                    <DetailRow icon={FileText} label="Ledger Entry ID" value={<span className="font-mono text-xs">{e.id}</span>} mono copyable={e.id} />
+                    <DetailRow icon={FileText} label="Ledger Entry ID" value={<span className="font-mono text-xs">{detailEntry.id}</span>} mono copyable={detailEntry.id} />
                   </div>
-                  {e.metadata && Object.keys(e.metadata).length > 0 && (
+                  {detailEntry.metadata && Object.keys(detailEntry.metadata).length > 0 && (
                     <div className="px-4">
                       <DetailRow
                         icon={Info}
                         label="Additional Metadata"
                         value={
                           <div className="bg-slate-50 rounded-md p-2 mt-1 max-h-32 overflow-y-auto">
-                            <pre className="text-[11px] text-slate-600 whitespace-pre-wrap font-mono">{JSON.stringify(e.metadata, null, 2)}</pre>
+                            <pre className="text-[11px] text-slate-600 whitespace-pre-wrap font-mono">{JSON.stringify(detailEntry.metadata, null, 2)}</pre>
                           </div>
                         }
                       />
@@ -1316,19 +1395,19 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                     variant="outline"
                     className="text-xs"
                     onClick={() => {
-                      handleReconcile(e.id, !e.isReconciled);
-                      setDetailEntry({ ...e, isReconciled: !e.isReconciled });
+                      handleReconcile(detailEntry.id, !detailEntry.isReconciled);
+                      setDetailEntry({ ...detailEntry, isReconciled: !detailEntry.isReconciled });
                     }}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                    {e.isReconciled ? 'Mark Unreconciled' : 'Mark Reconciled'}
+                    {detailEntry.isReconciled ? 'Mark Unreconciled' : 'Mark Reconciled'}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     className="text-xs"
                     onClick={() => {
-                      navigator.clipboard.writeText(JSON.stringify(e, null, 2));
+                      navigator.clipboard.writeText(JSON.stringify(detailEntry, null, 2));
                       toast.success('Full entry data copied to clipboard');
                     }}
                   >
@@ -1341,13 +1420,14 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                   </Button>
                 </div>
               </>
-            );
-          })()}
+            )}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+
+LedgerViewInner.displayName = 'LedgerViewInner';
 
 // ─── Error Boundary (Phase 11) ────────────────────────────────────────
 

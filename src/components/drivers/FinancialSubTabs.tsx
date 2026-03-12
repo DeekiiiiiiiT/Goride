@@ -148,8 +148,6 @@ export function FinancialSubTabs({
 
         <DriverEarningsHistory
           driverId={driverId}
-          transactions={transactions}
-          trips={allTrips}
           quotaConfig={quotaConfig || undefined}
         />
       </TabsContent>
@@ -168,7 +166,6 @@ export function FinancialSubTabs({
         <DriverPayoutHistory
           driverId={driverId}
           transactions={transactions}
-          trips={allTrips}
         />
       </TabsContent>
     </Tabs>

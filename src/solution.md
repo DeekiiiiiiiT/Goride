@@ -1,675 +1,481 @@
-# Roam Fleet — Solution Architecture & Implementation Plan
+# Roam Fleet — Trip-to-Ledger Financial Migration Plan
+
+> **Created: March 10, 2026**
+> Migrate all remaining screens that compute financial data from `trip:*` to read from `ledger:*` instead.
 
 ---
 
-## Prior Work Summary
+## Core Principle
 
-The previous implementation plan covered the **Write-Time Ledger** system (pre-aggregating trip earnings into weekly ledger entries), the **Driver Detail Overview migration** (reading from the ledger via the `OverviewMetricsGrid` component), and the **Phase 6 Cleanup** (debug log removal, GoRide→Roam normalization). A ~468-line `{false && ...}` dead block in `DriverDetail.tsx` was left in place (harmless, never renders) due to persistent tooling failures on that file.
+> "If a screen shows a dollar sign, it reads from the ledger. No exceptions."
 
----
+- `trip:*` (Layer 1) = Operational source of truth — distance, duration, route, status, ratings, timestamps, trip counts
+- `ledger:*` (Layer 2) = Financial source of truth — every money movement is a ledger entry
+- `transaction:*` (Layer 3) = Cash management source of truth — payments, floats, fuel, toll reimbursements
+- `driver:*` (Layer 4) = Identity/HR data — name, status, tier, documents, bank info
 
-## Enterprise Import/Export Center — Implementation Plan
-
-### Problem Statement
-
-The current "Batch Import" page (`/components/imports/ImportsPage.tsx`) is narrowly focused on Uber/InDrive CSV trip imports with a small disaster recovery sidebar for fuel/service/odometer/check-in backups. There is **no way to export trip data**, which blocks the ability to delete-and-reimport historical trips that pre-date the ledger system (e.g., Dec 8–14 data showing $0.00). Additionally, most data sections in the app (drivers, vehicles, transactions, toll tags, equipment, etc.) have no import or export capability at all.
-
-### Goal
-
-Transform the current Batch Import page into an **enterprise-grade Import/Export Center** that covers every data entity in the system, with date range filtering, progress tracking, validation, and full system backup/restore.
-
-### Existing Infrastructure Inventory
-
-**Already exportable (via DisasterRecoveryCard):**
-- Fuel logs (`data-export.ts` → `fetchAllFuelLogs()`)
-- Service/maintenance logs (`data-export.ts` → `fetchAllServiceLogs()`)
-- Odometer readings (`data-export.ts` → `fetchAllOdometerReadings()`)
-- Check-ins (`data-export.ts` → `fetchAllCheckIns()`)
-
-**Already importable (via ImportsPage or DisasterRecoveryCard):**
-- Trips (Uber CSV multi-file merge + Uber API sync + InDrive CSV)
-- Fuel card statements (CSV)
-- Toll top-ups / usage (CSV via BulkImportTollTransactionsModal)
-- Fuel/service/odometer/check-in restore (CSV via import-validator + import-executor)
-
-**NOT exportable or importable — gaps to fill:**
-| Data Entity | Export? | Import? | API Read | API Write |
-|---|---|---|---|---|
-| Trips/Earnings | NO | YES (CSV) | `api.getTrips()`, `api.getTripsFiltered()` | `api.saveTrips()` |
-| Driver Profiles | NO | NO | `api.getDrivers()` | `api.saveDriver()` |
-| Driver Metrics | NO | Partial (AI) | `api.getDriverMetrics()` | `api.saveDriverMetrics()` |
-| Vehicle Profiles | NO | NO | `api.getVehicles()` | `api.saveVehicle()` |
-| Vehicle Metrics | NO | Partial (AI) | `api.getVehicleMetrics()` | `api.saveVehicleMetrics()` |
-| Financial Transactions | NO | NO | `api.getTransactions()` | `api.saveTransaction()` |
-| Toll Tags | NO | NO | `api.getTollTags()` | `api.saveTollTag()` |
-| Toll Plazas | NO | NO | `api.getTollPlazas()` | `api.saveTollPlaza()` |
-| Gas Stations (verified) | Own wizard | Own wizard | `api.getStations()` | `api.saveStation()` |
-| Learnt Locations | NO | NO | `api.getLearntLocations()` | N/A (promote only) |
-| Claims/Disputes | NO | NO | `api.getClaims()` | `api.saveClaim()` |
-| Equipment | NO | NO | `equipmentService.getAllEquipment()` | `equipmentService.saveEquipment()` |
-| Inventory | NO | NO | `inventoryService.getInventory()` | `inventoryService.saveStock()` |
-| Ledger Entries | NO | NO | Ledger endpoint | Write-time only |
-| Financials (org-level) | NO | NO | `api.getFinancials()` | `api.saveFinancials()` |
-| Notifications | NO | NO | `api.getNotifications()` | `api.createNotification()` |
-| Settings/Preferences | NO | NO | `api.getPreferences()` | `api.savePreferences()` |
-| Import Batches | NO | NO | `api.getBatches()` | `api.createBatch()` |
-
-### Utility Infrastructure
-
-- **CSV generation:** `utils/csv-helper.ts` — `jsonToCsv()`, `csvToJson()`, `downloadBlob()`, `CsvColumn<T>` interface
-- **CSV schemas:** `types/csv-schemas.ts` — `FUEL_CSV_COLUMNS`, `SERVICE_CSV_COLUMNS`, `ODOMETER_CSV_COLUMNS`, `CHECKIN_CSV_COLUMNS`
-- **Export orchestrator:** `services/data-export.ts` — `generateBackupFiles()` with ExportState toggle
-- **Import validator:** `services/import-validator.ts` — `validateImportFile()` with typed validation
-- **Import executor:** `services/data-import-executor.ts` — `importExecutor.processBatch()` with progress callback
-- **Toll export:** `utils/exportHelpers.ts` — `fetchFullTollHistory()`, `generateBackupCSV()`
-
-### Files That Will Be Modified or Created
-
-**Modified (carefully, with zero breakage):**
-- `/components/imports/ImportsPage.tsx` — Add Export tab, restructure layout
-- `/services/data-export.ts` — Add trip/driver/vehicle/transaction/equipment/toll export functions
-- `/services/data-import-executor.ts` — Add driver/vehicle/transaction/equipment/toll restore functions
-- `/services/import-validator.ts` — Add validation schemas for new import types
-- `/types/csv-schemas.ts` — Add CSV column definitions for all new data types
-
-**Created (new files):**
-- `/components/imports/ExportCenter.tsx` — Export tab UI component
-- `/components/imports/ImportCenter.tsx` — Restructured import tab UI component
-- `/components/imports/ExportCategoryCard.tsx` — Reusable card for each export category
-- `/components/imports/ImportCategoryCard.tsx` — Reusable card for each import category
-- `/components/imports/DateRangeExportFilter.tsx` — Date range picker for exports
-- `/components/imports/ExportProgressModal.tsx` — Progress modal during export
-- `/components/imports/ImportProgressModal.tsx` — Progress modal during import with validation
-- `/components/imports/SystemBackupRestore.tsx` — Full system backup/restore component
+Each screen reads from exactly ONE layer for each type of data. Never mix.
 
 ---
 
-## Phase 1: Foundation — New Import/Export Center Shell & Navigation
+## Pre-Migration Audit
 
-**Goal:** Restructure the ImportsPage from a single "Batch Import" flow into a tabbed layout with Import and Export tabs, without breaking any existing import functionality.
+The following screens still violate the enterprise rule:
 
-**Risk level:** LOW — purely additive UI restructuring; all existing import logic stays untouched.
-
-### Step 1.1: Create the ExportCenter shell component
-- **File:** Create `/components/imports/ExportCenter.tsx`
-- **What:** A new component that renders a grid of export category cards (placeholder only — no actual export logic yet)
-- **Categories to show (as placeholder cards):**
-  1. Trip Data & Earnings
-  2. Driver Roster & Metrics
-  3. Vehicle Fleet & Metrics
-  4. Financial Transactions
-  5. Fuel Logs (already exists — will wire later)
-  6. Service/Maintenance Logs (already exists — will wire later)
-  7. Odometer History (already exists — will wire later)
-  8. Weekly Check-ins (already exists — will wire later)
-  9. Toll Tags & Plazas
-  10. Gas Stations
-  11. Claims & Disputes
-  12. Equipment & Inventory
-  13. Full System Backup
-- **Each card shows:** Icon, title, description, record count (placeholder "—"), and a disabled "Export CSV" button
-- **Design:** Use existing Card/CardContent/Badge components, consistent with the rest of the app's slate/indigo theme
-
-### Step 1.2: Create the ImportCenter shell component
-- **File:** Create `/components/imports/ImportCenter.tsx`
-- **What:** Extract the existing platform selection grid + upload flow from `ImportsPage.tsx` into its own component
-- **Key constraint:** This component must accept ALL the same state and callbacks that the current inline code uses — we are lifting, not rewriting
-- **Categories to add (as new placeholder cards alongside existing ones):**
-  1. Existing: Uber Sync, Uber CSV, InDrive CSV, Fuel, Toll Top-up, Toll Usage, Disaster Recovery, Restore Backup
-  2. New (placeholder, disabled): Driver Roster CSV, Vehicle Fleet CSV, Financial Transactions CSV, Equipment CSV, Toll Tags CSV, Claims CSV
-- **DO NOT** move the upload/review/preview/success steps yet — only the platform selection grid (Step 0)
-
-### Step 1.3: Add tab navigation to ImportsPage
-- **File:** Modify `/components/imports/ImportsPage.tsx`
-- **What:** Add a `Tabs` component at the top with two tabs: "Import" and "Export"
-- **Import tab:** Renders all existing import functionality exactly as-is (no changes to step flow, handlers, or state)
-- **Export tab:** Renders the new `ExportCenter` component
-- **Title change:** Update heading from "Batch Import" to "Data Center" with subtitle "Import and export your fleet data"
-- **Preserve:** ALL existing state variables, handlers, useEffects, and the DisasterRecoveryCard (it stays in the Import tab)
-
-### Step 1.4: Create reusable ExportCategoryCard component
-- **File:** Create `/components/imports/ExportCategoryCard.tsx`
-- **What:** A reusable card component used by ExportCenter
-- **Props:** `title`, `description`, `icon`, `recordCount` (number | null), `onExport` callback, `isLoading`, `isDisabled`, `badge` (optional text like "4 types" or "Already available")
-- **UI:** Card with icon on left, title + description + record count in center, Export button on right
-- **States:** Default, loading (spinner), disabled (grayed out), success (green checkmark briefly)
-
-### Step 1.5: Verify zero breakage
-- **What:** After all 4 steps above, manually verify:
-  - [ ] ImportsPage loads without errors
-  - [ ] Import tab shows all existing platform cards (Uber Sync, Uber CSV, InDrive, Fuel, Toll Top-up, Toll Usage, Disaster Recovery, Restore Backup)
-  - [ ] Clicking any existing platform card still works (navigates to upload step)
-  - [ ] Export tab shows placeholder cards
-  - [ ] DisasterRecoveryCard still renders in Import tab
-  - [ ] No console errors
-  - [ ] All existing imports in progress are unaffected
+| Screen | File | Violation | Severity |
+|--------|------|-----------|----------|
+| **Drivers List Page** | `DriversPage.tsx` | Computes `totalEarnings`, `todaysEarnings`, `monthlyEarnings` by summing `trip.amount` in a client-side loop over ALL `trip:*` records. Tier calculation uses trip-sourced `monthlyEarnings`. Fleet summary stats use trip-sourced earnings. | **HIGH** — main landing page, every driver row affected |
+| **Executive Dashboard** | `ExecutiveDashboard.tsx` | `kpi.totalEarnings` falls back to `trips.reduce(sum + t.amount)` (and `organizationMetrics` is always passed as `[]` from `Dashboard.tsx:401`, so the fallback ALWAYS fires). Daily Earnings Trend chart and Top 5 Drivers chart both compute entirely from raw `trips`. | **MEDIUM** — dashboard tab, viewed less frequently |
+| **Dashboard Financials View** | `FinancialsView.tsx` | Computes `totalRevenue`, revenue-by-type breakdown, platform stats, cash percentage, avg revenue per trip — ALL from raw `trips` via `completedTrips.forEach(t => amt = t.amount)`. | **MEDIUM** — dashboard sub-tab |
+| **DriverDetail `metrics` useMemo** | `DriverDetail.tsx` | Legacy financial fields (`periodEarnings`, `cashCollected`, `totalTolls`, `weeklyEarningsData`) still computed from `trip:*`. Consumed by `resolvedFinancials` fallback and `earningsPerKm` on Efficiency tab. | **LOW** — primary display path already uses ledger; this is cleanup |
 
 ---
 
-## Phase 2: Export Engine Core — Trip Data Export with Date Filtering (CRITICAL PATH)
+## Phase 1: Per-Driver Ledger Summary Endpoint
 
-**Goal:** Enable exporting trip data as CSV with optional date range filtering. This is the #1 priority because it unblocks the user's ability to re-import Dec 8–14 data.
+**Goal**: Create a server endpoint that aggregates ledger entries per driver, returning lifetime/monthly/daily earnings summaries. This is the backend foundation for migrating the Drivers List Page (Phase 2).
 
-**Risk level:** LOW — purely additive; new functions in data-export.ts, new CSV schema in csv-schemas.ts, wiring to ExportCenter.
+**Files Modified**: `server/index.tsx`, `services/api.ts`
 
-### Step 2.1: Define Trip CSV schema
-- **File:** Modify `/types/csv-schemas.ts`
-- **What:** Add `TRIP_CSV_COLUMNS` constant
-- **Columns to include:**
-  - `id` (Trip UUID — critical for deduplication on re-import)
-  - `date` (formatted DD/MM/YYYY via `formatDateJM`)
-  - `driverId`
-  - `driverName`
-  - `vehicleId`
-  - `platform` (Uber, InDrive, Roam, etc.)
-  - `tripType` (Regular, Delivery, etc.)
-  - `status` (Completed, Cancelled, etc.)
-  - `earnings` (total fare)
-  - `tips`
-  - `surgeAmount`
-  - `tollCharges`
-  - `distance` (km)
-  - `duration` (minutes)
-  - `pickupLocation`
-  - `dropoffLocation`
-  - `riderPayment`
-  - `netFare`
-  - `batchId`
-- **Key decision:** Export raw numeric values (not formatted currency) so they can be cleanly re-imported
+### Step 1.1 — Define the endpoint contract
+- `GET /ledger/drivers-summary`
+- Optional query param: `?date=YYYY-MM-DD` (for "today" calculation; defaults to server's current date in UTC)
+- Response shape:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "<driverId>": {
+        "lifetimeEarnings": 12345.67,
+        "monthlyEarnings": 3456.78,
+        "todayEarnings": 234.56,
+        "lifetimeTripCount": 150,
+        "monthlyTripCount": 42,
+        "todayTripCount": 5
+      }
+    },
+    "meta": {
+      "totalDrivers": 25,
+      "dateUsed": "2026-03-10",
+      "monthRange": "2026-03-01..2026-03-31",
+      "durationMs": 850
+    }
+  }
+  ```
+- Earnings = sum of `grossAmount` from ledger entries where `eventType === 'fare_earning'`
+- Trip count = count of `fare_earning` entries (each fare_earning corresponds to one completed trip)
 
-### Step 2.2: Create DateRangeExportFilter component
-- **File:** Create `/components/imports/DateRangeExportFilter.tsx`
-- **What:** A compact date range picker that sits above or inline with an export card
-- **Props:** `startDate`, `endDate`, `onStartDateChange`, `onEndDateChange`, `onClear`
-- **UI:** Two date inputs (or use the existing `date-range-picker` component from `/components/ui/date-range-picker.tsx`) with a "Clear" button
-- **Default:** Empty (meaning "all dates")
-- **Validation:** Start date must be before end date; show inline error if invalid
+### Step 1.2 — Implement paginated ledger fetch
+- Use `paginatedFetch()` with `.range()` chunks to fetch ALL `ledger:*` entries where the value's `eventType` equals `fare_earning`
+- This is critical to avoid Supabase's PostgREST 1,000-row silent cap
+- Filter server-side: query `value->>eventType` = `fare_earning` to reduce data transfer
+- Log: `[Ledger DriversSummary] Fetched N fare_earning entries in Xms`
 
-### Step 2.3: Add trip export function to data-export.ts
-- **File:** Modify `/services/data-export.ts`
-- **What:** Add `fetchAllTrips(startDate?: string, endDate?: string): Promise<Trip[]>` function
-- **Logic:**
-  1. If no date range: Use `api.getTrips({ limit: 10000 })` to fetch all trips
-  2. If date range provided: Use `api.getTripsFiltered({ startDate, endDate, limit: 10000 })` to fetch filtered trips (the `getTripsFiltered` endpoint already supports these params)
-  3. Handle pagination: If total > limit, loop with offset to fetch all pages
-  4. Sort by date ascending
-  5. Return the full array
-- **Also add:** `ExportType` union update to include `'trip'`
-- **Also add:** Update `generateBackupFiles()` to handle `trip` type using `TRIP_CSV_COLUMNS`
+### Step 1.3 — Aggregate by driver and time bucket
+- For each fetched ledger entry:
+  - Extract `driverId`, `grossAmount`, and `date` from the entry's value
+  - Add to that driver's `lifetimeEarnings` and `lifetimeTripCount`
+  - If `date` falls within the current calendar month -> add to `monthlyEarnings` and `monthlyTripCount`
+  - If `date` equals today -> add to `todayEarnings` and `todayTripCount`
+- Use a `Map<string, DriverSummary>` for O(1) per-driver lookups
+- Handle edge cases: missing `driverId` (skip with warning), missing `grossAmount` (treat as 0), invalid `date` (skip with warning)
 
-### Step 2.4: Wire trip export to ExportCenter
-- **File:** Modify `/components/imports/ExportCenter.tsx`
-- **What:** Make the "Trip Data & Earnings" card functional
-- **Behavior:**
-  1. User clicks the card — it expands to show the DateRangeExportFilter
-  2. User optionally sets a date range
-  3. User clicks "Export CSV"
-  4. Show loading spinner on the button
-  5. Call `fetchAllTrips(startDate, endDate)`
-  6. Convert to CSV via `jsonToCsv(trips, TRIP_CSV_COLUMNS)`
-  7. Trigger download via `downloadBlob(csv, filename)`
-  8. Filename format: `trips_export_YYYY-MM-DD.csv` or `trips_export_YYYY-MM-DD_to_YYYY-MM-DD.csv` if date range
-  9. Show success toast with record count
-  10. Show error toast if fetch fails
+### Step 1.4 — Register the endpoint in server/index.tsx
+- Route: `GET /make-server-37f42386/ledger/drivers-summary`
+- Include try/catch with detailed error logging
+- Include execution time tracking (`durationMs` in response meta)
+- Log: `[Ledger DriversSummary] Returning summaries for N drivers, total lifetime earnings $X`
 
-### Step 2.5: Add record count loading to ExportCenter
-- **File:** Modify `/components/imports/ExportCenter.tsx`
-- **What:** On mount, fetch counts for categories that have quick count endpoints
-- **For trips:** Call `api.getTrips({ limit: 1 })` and read the response to estimate count, OR call `api.getTripStats({})` which returns aggregate stats
-- **Display:** Show "~1,234 records" on the Trip card
-- **Other cards:** Still show "—" (will be filled in later phases)
+### Step 1.5 — Add API method to services/api.ts
+- `api.getLedgerDriversSummary(): Promise<{ data: Record<string, DriverSummary>, meta: {...} }>`
+- Calls `GET /ledger/drivers-summary` with the standard auth header
+- Returns parsed JSON response
+- Handles errors gracefully (returns `{ data: {}, meta: {...} }` on failure, logs error)
 
-### Step 2.6: Verify trip export end-to-end
-- **What:** Test the full flow:
-  - [ ] Export all trips (no date filter) — downloads CSV with correct columns
-  - [ ] Export with date range (e.g., Dec 8–14) — downloads only matching trips
-  - [ ] CSV opens correctly in Excel/Google Sheets
-  - [ ] Date format is DD/MM/YYYY (Jamaica standard)
-  - [ ] Numeric values are raw numbers (no $ signs, no commas inside values)
-  - [ ] Empty fields show as empty (not "undefined" or "null")
-  - [ ] Large dataset (>1000 trips) doesn't crash or timeout
+### Step 1.6 — Manual verification (operational step, no code)
+- Call the endpoint directly (via browser console or network tab)
+- Pick 3 drivers and compare their `lifetimeEarnings` against the Driver Detail Overview tab totals
+- They should match within rounding tolerance ($0.01)
+- If they don't match, investigate before proceeding to Phase 2
 
 ---
 
-## Phase 3: Export Engine Expansion — All Remaining Data Types
+## Phase 2: Migrate Drivers List Page Earnings to Ledger
 
-**Goal:** Add export capability for every remaining data entity in the system.
+**Goal**: Switch `DriversPage.tsx` from computing earnings via client-side trip loops to reading from the Phase 1 server endpoint. Every dollar amount on the Drivers List page will come from the ledger.
 
-**Risk level:** LOW — purely additive functions and CSV schemas; no modifications to existing read endpoints.
+**Files Modified**: `DriversPage.tsx`
 
-### Step 3.1: Define all new CSV schemas
-- **File:** Modify `/types/csv-schemas.ts`
-- **What:** Add the following column definitions:
-  - `DRIVER_CSV_COLUMNS` — id, name, email, phone, licenseNumber, licenseExpiry, status, assignedVehicleId, hireDate, emergencyContact
-  - `VEHICLE_CSV_COLUMNS` — id, licensePlate, make, model, year, color, vin, status, mileage, fuelType, insuranceExpiry, registrationExpiry, assignedDriverId
-  - `TRANSACTION_CSV_COLUMNS` — id, date, type, category, amount, description, driverId, driverName, vehicleId, vehiclePlate, paymentMethod, status, isReconciled, tripId, receiptUrl
-  - `TOLL_TAG_CSV_COLUMNS` — id, tagNumber, provider, vehicleId, vehiclePlate, status, balance, lastTopupDate, lastTopupAmount
-  - `TOLL_PLAZA_CSV_COLUMNS` — id, name, location, lat, lng, direction, standardRate, status, parishOrRegion
-  - `STATION_CSV_COLUMNS` — id, name, brand, parentCompany, lat, lng, plusCode, address, isVerified, fuelTypes, pricePerLiter
-  - `CLAIM_CSV_COLUMNS` — id, date, driverId, driverName, type, amount, description, status, resolution, resolvedDate
-  - `EQUIPMENT_CSV_COLUMNS` — id, name, type, vehicleId, serialNumber, condition, assignedDate, value, notes
-  - `INVENTORY_CSV_COLUMNS` — id, name, category, quantity, minQuantity, unitCost, supplier, location, lastRestockDate
-  - `DRIVER_METRICS_CSV_COLUMNS` — driverId, driverName, totalTrips, totalEarnings, avgRating, completionRate, onlineHours, cancellationRate
-  - `VEHICLE_METRICS_CSV_COLUMNS` — vehicleId, plateNumber, totalTrips, totalRevenue, totalDistance, fuelCost, maintenanceCost, avgTripEarnings
-- **Key:** Each schema uses the existing `CsvColumn<T>` interface and `formatDateJM` for date fields
+### Step 2.1 — Add ledger summary state and fetch
+- New state variables:
+  - `ledgerSummary: Record<string, DriverSummary>` (default: `{}`)
+  - `ledgerLoaded: boolean` (default: `false`)
+  - `ledgerError: boolean` (default: `false`)
+- New `useEffect` that calls `api.getLedgerDriversSummary()` on mount
+- On success: set `ledgerSummary` to response data, `ledgerLoaded = true`
+- On error: set `ledgerError = true`, log `console.error('[DriversPage] Failed to load ledger summaries: ...', error)`
+- This fetch runs in parallel with the existing trips/drivers fetch — no blocking
 
-### Step 3.2: Add all fetch functions to data-export.ts
-- **File:** Modify `/services/data-export.ts`
-- **What:** Add fetch functions for each new type:
-  - `fetchAllDrivers()` — calls `api.getDrivers()`
-  - `fetchAllDriverMetrics()` — calls `api.getDriverMetrics()`
-  - `fetchAllVehicles()` — calls `api.getVehicles()`
-  - `fetchAllVehicleMetrics()` — calls `api.getVehicleMetrics()`
-  - `fetchAllTransactions(startDate?, endDate?)` — calls `api.getTransactions()`, applies client-side date filter
-  - `fetchAllTollTags()` — calls `api.getTollTags()`
-  - `fetchAllTollPlazas()` — calls `api.getTollPlazas()`
-  - `fetchAllStations()` — calls `api.getStations()`
-  - `fetchAllClaims()` — calls `api.getClaims()`
-  - `fetchAllEquipment()` — calls `equipmentService.getAllEquipment()`
-  - `fetchAllInventory()` — calls `inventoryService.getInventory()`
-- **Each function:** Wraps in try/catch, logs errors, returns empty array on failure, sorts by date or name as appropriate
-- **Update `ExportType`:** Add all new types to the union
-- **Update `generateBackupFiles()`:** Add cases for each new type
+### Step 2.2 — Wire ledger earnings into the trip-processing loop (primary path)
+- In the `drivers` useMemo (the big loop at ~line 300 that processes trips into driver profiles):
+  - **KEEP** the trip loop for operational data: `totalTrips += 1`, `todaysTrips += 1`, and trip linking (`linkedTrips.push(trip)`)
+  - **REMOVE** the earnings accumulation lines:
+    - Line 319: `driver.totalEarnings += trip.amount || 0;` -> remove
+    - Line 328: `driver.todaysEarnings += trip.amount || 0;` -> remove
+    - Line 335: `driver.monthlyEarnings += trip.amount || 0;` -> remove
+  - **AFTER** the trip loop completes, overlay ledger data onto each driver profile:
+    ```
+    if (ledgerLoaded && !ledgerError) {
+      for (const driver of driverArray) {
+        const summary = ledgerSummary[driver.id];
+        if (summary) {
+          driver.totalEarnings = summary.lifetimeEarnings;
+          driver.todaysEarnings = summary.todayEarnings;
+          driver.monthlyEarnings = summary.monthlyEarnings;
+        }
+      }
+    }
+    ```
+  - Add `ledgerSummary`, `ledgerLoaded`, `ledgerError` to the useMemo dependency array
 
-### Step 3.3: Wire all export cards in ExportCenter
-- **File:** Modify `/components/imports/ExportCenter.tsx`
-- **What:** Make every card functional:
-  - Each card calls its respective fetch function + `jsonToCsv()` + `downloadBlob()`
-  - Cards with date-relevant data (Trips, Transactions, Claims) show the DateRangeExportFilter
-  - Cards without date relevance (Drivers, Vehicles, Toll Tags, etc.) export everything
-  - Show record count for each category on mount (fetched in parallel, errors show "—")
+### Step 2.3 — Keep trip-based earnings as safety fallback
+- If `!ledgerLoaded || ledgerError`, keep the existing trip-based earnings lines active
+- Implement this as a conditional:
+  ```
+  // Inside the trip loop:
+  if (!ledgerLoaded || ledgerError) {
+    // FALLBACK: compute from trips (legacy)
+    driver.totalEarnings += trip.amount || 0;
+    if (tripDate === today) driver.todaysEarnings += trip.amount || 0;
+    if (isSameMonth(...)) driver.monthlyEarnings += trip.amount || 0;
+  }
+  ```
+- Log `console.error('[DriversPage] Ledger unavailable - falling back to trip-based earnings')` when the fallback activates
+- This ensures zero breakage if the endpoint is slow or fails
 
-### Step 3.4: Add "Export All" button
-- **File:** Modify `/components/imports/ExportCenter.tsx`
-- **What:** A button at the top that downloads ALL categories as individual CSV files
-- **Behavior:**
-  1. Shows a confirmation dialog: "This will export X categories as separate CSV files"
-  2. Fetches all data in parallel
-  3. Downloads each as a separate file with standardized naming: `roam_trips_YYYY-MM-DD.csv`, `roam_drivers_YYYY-MM-DD.csv`, etc.
-  4. Shows progress: "Exporting 3/13..."
-  5. Summary toast: "Exported 13 files (4,521 total records)"
+### Step 2.4 — Update fleet summary stats
+- The `fleetStats` useMemo (line 491) already reads from `drivers` array
+- Since Step 2.2 updates driver profiles with ledger data, `fleetStats` automatically uses correct numbers
+- No code change needed, but verify: `avgEarningsPerTrip` and `avgWeeklyEarnings` should now reflect ledger-sourced earnings
 
-### Step 3.5: Move existing disaster recovery exports
-- **File:** Modify `/components/imports/ExportCenter.tsx` and `/components/imports/DisasterRecoveryCard.tsx`
-- **What:** The DisasterRecoveryCard already has export buttons for fuel/service/odometer/check-in. These should ALSO appear in the Export tab for discoverability.
-- **Approach:** DO NOT remove them from DisasterRecoveryCard (some users may expect them there). Instead, wire the same `generateBackupFiles()` logic to the corresponding cards in ExportCenter.
-- **Result:** Two ways to access the same export — both work, no duplication of logic.
+### Step 2.5 — Update tier calculation
+- Line 374: `TierCalculations.getTierForEarnings(driver.monthlyEarnings, tiers)` — already correct
+- Since `driver.monthlyEarnings` is now set from ledger (Step 2.2), tiers are automatically calculated from ledger data
+- No code change needed, but verify: each driver's tier badge should match what Driver Detail Overview shows
 
-### Step 3.6: Verify all exports
-- **What:** Test each category:
-  - [ ] Driver Roster — downloads with correct columns, all drivers present
-  - [ ] Vehicle Fleet — all vehicles, correct plate numbers
-  - [ ] Financial Transactions — correct amounts, reconciliation status preserved
-  - [ ] Toll Tags — tag numbers, balances, vehicle assignments
-  - [ ] Toll Plazas — names, coordinates, rates
-  - [ ] Gas Stations — names, brands, coordinates, verification status
-  - [ ] Claims — all fields including resolution status
-  - [ ] Equipment — serial numbers, assignments
-  - [ ] Inventory — quantities, costs
-  - [ ] "Export All" — all 13 files download without errors
+### Step 2.6 — Update CSV export
+- Line 471: `d.totalEarnings.toFixed(2)` — already reads from driver profile
+- Since Step 2.2 updates the profile, CSV export automatically uses ledger data
+- No code change needed, but verify by exporting and spot-checking
 
----
+### Step 2.7 — Verify parity (operational step, no code)
+- For 5 drivers, compare:
+  - Drivers List `totalEarnings` column vs Driver Detail Overview lifetime earnings -> should match
+  - Drivers List `todaysEarnings` column vs Driver Detail Overview "Today" filter -> should match
+  - Drivers List tier badge vs Driver Detail tier -> should match
+- If any mismatch: investigate before proceeding
 
-## Phase 4: Import Engine Core — Trip Re-Import with Ledger Backfill
-
-**Goal:** Enable re-importing trip CSVs (including ones exported in Phase 2) with automatic ledger entry creation for the imported weeks. This directly solves the Dec 8–14 missing data problem.
-
-**Risk level:** MEDIUM — involves writing trip data and triggering ledger writes. Must handle deduplication carefully.
-
-### Step 4.1: Add trip import validation schema
-- **File:** Modify `/services/import-validator.ts`
-- **What:** Add `'trip'` to the `ImportType` union and create a trip validation function
-- **Validation rules:**
-  - Required fields: `date`, `driverId` OR `driverName`, `earnings` (must be numeric)
-  - Optional fields: All other TRIP_CSV_COLUMNS fields
-  - Date parsing: Accept DD/MM/YYYY (Jamaica standard), MM/DD/YYYY, YYYY-MM-DD, and ISO 8601
-  - Numeric parsing: Strip `$`, commas, spaces from earnings/tips/distance/duration
-  - Deduplication check: If `id` field is present and non-empty, flag duplicates within the file
-  - Platform normalization: Apply `normalizePlatform()` to the platform field
-- **Return:** `ValidationResult<Trip>` with `validRecords` and `errors`
-
-### Step 4.2: Add trip import executor
-- **File:** Modify `/services/data-import-executor.ts`
-- **What:** Add `restoreTrip(record)` method to `importExecutor`
-- **Logic:**
-  1. Generate a new `id` if none provided (or if the user wants to force new IDs)
-  2. Set `batchId` to a shared batch ID for this import session
-  3. Call `api.saveTrips([record])` for each record (or batch them in groups of 50)
-  4. The server's trip save endpoint already writes ledger entries (this is the write-time ledger), so **no separate ledger backfill step is needed** — the ledger gets populated automatically on save
-- **Progress:** Call `onProgress(pct)` after each batch
-
-### Step 4.3: Add trip import to the Import tab
-- **File:** Modify `/components/imports/ImportCenter.tsx` (or add to existing ImportsPage flow)
-- **What:** Add a "Trip Data (Re-Import)" card to the platform selection grid
-- **Behavior:**
-  1. User clicks the card
-  2. Upload step: Standard drag-and-drop CSV upload
-  3. Validation step: Run `validateImportFile(content, 'trip')` — show valid count, error count, and error details
-  4. Preview step: Show a table of the first 20 valid records with key columns (date, driver, earnings, platform)
-  5. Deduplication warning: If any `id` values match existing trips, show a yellow warning: "X trips already exist. They will be updated (not duplicated)."
-  6. Confirm step: "Import X trips" button
-  7. Progress: Show progress bar during import
-  8. Success: Show summary — "Imported X trips. Ledger entries were automatically created for Y weeks."
-
-### Step 4.4: Add deduplication logic
-- **File:** Modify `/services/data-import-executor.ts`
-- **What:** Before importing, check if trip IDs already exist
-- **Logic:**
-  1. Collect all `id` values from the import batch
-  2. For each ID, check if it exists (this may require a bulk lookup — if the API doesn't support it, do client-side check against `api.getTrips()`)
-  3. If duplicate found: SKIP the record (default behavior) or OVERWRITE (user choice via a toggle)
-  4. Report skipped count in the results
-
-### Step 4.5: Verify trip re-import with ledger backfill
-- **What:** Test the critical flow:
-  - [ ] Export trips for Dec 8–14 (from Phase 2)
-  - [ ] Delete those trips from the system
-  - [ ] Re-import the exported CSV
-  - [ ] Verify trips appear in the Trip Logs page
-  - [ ] Verify the Driver Detail Overview shows correct earnings for Dec 8–14 (ledger was auto-created)
-  - [ ] Verify no duplicate trips were created
-  - [ ] Verify the import batch appears in the Batches list
+### Step 2.8 — Remove fallback (deferred)
+- The trip-based fallback from Step 2.3 stays in place until parity is confirmed across multiple sessions
+- Removal will happen in Phase 6 (final cleanup) after all migrations are complete and stable
 
 ---
 
-## Phase 5: Import Engine Expansion — Driver, Vehicle, and Financial Bulk Import
+## Phase 3: Fleet-Wide Ledger Summary Endpoint
 
-**Goal:** Enable bulk import of driver profiles, vehicle profiles, and financial transactions via CSV.
+**Goal**: Create a server endpoint that aggregates ledger entries fleet-wide, returning the total earnings, daily trend, per-driver rankings, and per-platform breakdown. This is the backend foundation for migrating the Executive Dashboard (Phase 4) and Dashboard Financials View (Phase 5).
 
-**Risk level:** MEDIUM — writing entity data. Must validate carefully to avoid corrupting existing records.
+**Files Modified**: `server/index.tsx`, `services/api.ts`
 
-### Step 5.1: Add driver import validation and executor
-- **File:** Modify `/services/import-validator.ts` and `/services/data-import-executor.ts`
-- **Validation rules for drivers:**
-  - Required: `name`
-  - Optional: `email`, `phone`, `licenseNumber`, `licenseExpiry`, `status`, `hireDate`
-  - Auto-generate `id` if not provided
-  - Normalize phone numbers (strip spaces, dashes)
-  - Validate email format if provided
-  - Duplicate check: Match by `name` (case-insensitive) — if exists, warn but don't block
-- **Executor:** `restoreDriver(record)` — calls `api.saveDriver(record)`
+### Step 3.1 — Define the endpoint contract
+- `GET /ledger/fleet-summary`
+- Optional query params:
+  - `?days=7` (number of days for the trend period, default: 7)
+  - `?startDate=YYYY-MM-DD` and `?endDate=YYYY-MM-DD` (explicit date range, overrides `days`)
+- Response shape:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalEarnings": 567890.12,
+      "totalTripCount": 4500,
+      "totalCashCollected": 123456.78,
+      "dailyTrend": [
+        { "date": "2026-03-04", "earnings": 12345.67, "tripCount": 120 },
+        { "date": "2026-03-05", "earnings": 13456.78, "tripCount": 135 }
+      ],
+      "topDrivers": [
+        { "driverId": "abc123", "driverName": "John Smith", "earnings": 5678.90, "tripCount": 45 }
+      ],
+      "platformBreakdown": [
+        { "platform": "Uber", "earnings": 34567.89, "tripCount": 280 },
+        { "platform": "InDrive", "earnings": 12345.67, "tripCount": 150 },
+        { "platform": "Roam", "earnings": 5678.90, "tripCount": 70 }
+      ],
+      "revenueByType": {
+        "fare": 50000.00,
+        "tip": 3000.00,
+        "promotion": 1500.00,
+        "other": 500.00
+      }
+    },
+    "meta": {
+      "periodStart": "2026-03-04",
+      "periodEnd": "2026-03-10",
+      "durationMs": 1200
+    }
+  }
+  ```
 
-### Step 5.2: Add vehicle import validation and executor
-- **File:** Modify `/services/import-validator.ts` and `/services/data-import-executor.ts`
-- **Validation rules for vehicles:**
-  - Required: `licensePlate`
-  - Optional: `make`, `model`, `year`, `color`, `vin`, `status`, `fuelType`
-  - Auto-generate `id` if not provided
-  - Normalize license plate (uppercase, strip spaces)
-  - Duplicate check: Match by `licensePlate` — if exists, warn but don't block
-- **Executor:** `restoreVehicle(record)` — calls `api.saveVehicle(record)`
+### Step 3.2 — Implement paginated ledger fetch with date filtering
+- Use `paginatedFetch()` to get ALL `ledger:*` entries within the date range
+- Filter server-side by `value->>date` between `startDate` and `endDate`
+- Also fetch `value->>eventType` to include all types (fare_earning, tip, toll_charge, platform_fee, etc.) for the `revenueByType` breakdown
+- Log: `[Ledger FleetSummary] Fetched N ledger entries for period X..Y in Zms`
 
-### Step 5.3: Add financial transaction import validation and executor
-- **File:** Modify `/services/import-validator.ts` and `/services/data-import-executor.ts`
-- **Validation rules for transactions:**
-  - Required: `date`, `amount` (numeric), `category`
-  - Optional: `type`, `description`, `driverId`, `driverName`, `vehicleId`, `paymentMethod`, `status`
-  - Parse dates flexibly (DD/MM/YYYY, YYYY-MM-DD, ISO)
-  - Parse amounts (strip $ and commas)
-  - Validate category against known categories (Toll Usage, Fuel, Maintenance, etc.)
-- **Executor:** `restoreTransaction(record)` — calls `api.saveTransaction(record)`
+### Step 3.3 — Aggregate fleet-wide totals
+- **Total earnings**: sum `grossAmount` where `eventType === 'fare_earning'`
+- **Total trip count**: count of `fare_earning` entries
+- **Total cash collected**: sum `cashCollected` where `eventType === 'fare_earning'` and `cashCollected > 0`
+- **Revenue by type**:
+  - `fare` = sum of `grossAmount` where `eventType === 'fare_earning'`
+  - `tip` = sum of `netAmount` where `eventType === 'tip'`
+  - `promotion` = sum of `netAmount` where `eventType === 'promotion'` or `incentive`
+  - `other` = everything else with positive `netAmount`
 
-### Step 5.4: Add import cards to the Import tab
-- **File:** Modify `/components/imports/ImportCenter.tsx`
-- **What:** Enable the previously-disabled Driver, Vehicle, and Transaction import cards
-- **Each follows the same flow:** Upload → Validate → Preview → Confirm → Progress → Success
-- **Add "Download Template" button** for each: Generates a blank CSV with the correct headers so users know the expected format
+### Step 3.4 — Aggregate daily trend
+- Group `fare_earning` entries by date -> `{ date, earnings: sum(grossAmount), tripCount: count }`
+- Sort chronologically
+- Return as `dailyTrend` array
 
-### Step 5.5: Create template download utility
-- **File:** Modify `/services/data-export.ts`
-- **What:** Add `downloadTemplate(type: ImportType)` function
-- **Logic:** Generate a CSV with headers only (from the corresponding CSV_COLUMNS schema) + 1 example row with placeholder values
-- **Example row for drivers:** `DRV-001, John Smith, john@email.com, 876-555-0100, DL12345, 15/03/2027, Active, 01/01/2024, Jane Smith (876-555-0200)`
+### Step 3.5 — Aggregate top drivers
+- Group `fare_earning` entries by `driverId` -> sum earnings and count trips
+- Sort descending by earnings, take top 10
+- Cross-reference with `driver:*` profiles to get `driverName` for each
+- Return as `topDrivers` array
 
-### Step 5.6: Verify driver/vehicle/transaction import
-- **What:** Test each:
-  - [ ] Import 5 drivers from CSV — all appear in Drivers page
-  - [ ] Import with duplicate name — shows warning, doesn't block
-  - [ ] Import 3 vehicles — all appear in Vehicles page with correct plates
-  - [ ] Import 10 transactions — all appear in Financial Transactions with correct amounts
-  - [ ] Download each template — opens in Excel with correct headers
-  - [ ] Import a template with filled data — works correctly
+### Step 3.6 — Aggregate platform breakdown
+- Group `fare_earning` entries by `platform` -> sum earnings and count trips
+- Apply `normalizePlatform()` to handle GoRide->Roam aliasing
+- Return as `platformBreakdown` array
 
----
+### Step 3.7 — Register the endpoint and add API method
+- Route: `GET /make-server-37f42386/ledger/fleet-summary`
+- Include try/catch, execution time tracking, detailed error logging
+- Add `api.getLedgerFleetSummary({ days?, startDate?, endDate? })` to `services/api.ts`
 
-## Phase 6: Fleet Infrastructure Import — Toll Tags, Toll Plazas, Stations, Equipment
-
-**Goal:** Enable import for fleet infrastructure entities that change infrequently but are painful to enter manually one-by-one.
-
-**Risk level:** LOW — these are simple CRUD entities with straightforward schemas.
-
-### Step 6.1: Add toll tag import validation and executor
-- **Validation:** Required: `tagNumber`, `provider`. Optional: `vehicleId`, `status`, `balance`
-- **Executor:** `restoreTollTag(record)` — calls `api.saveTollTag(record)`
-- **Duplicate check:** Match by `tagNumber`
-
-### Step 6.2: Add toll plaza import validation and executor
-- **Validation:** Required: `name`, `lat`, `lng`. Optional: `direction`, `standardRate`, `parishOrRegion`
-- **Executor:** `restoreTollPlaza(record)` — calls `api.saveTollPlaza(record)`
-- **Duplicate check:** Match by `name` + proximity (within 100m of existing plaza)
-
-### Step 6.3: Add gas station import (leverage existing StationImportWizard)
-- **Note:** `/components/fuel/stations/StationImportWizard.tsx` already exists for station import
-- **What:** Add a card in the Import tab that opens the existing StationImportWizard in a dialog
-- **No new logic needed** — just surface the existing wizard in the new Import Center
-
-### Step 6.4: Add equipment import validation and executor
-- **Validation:** Required: `name`, `type`. Optional: `vehicleId`, `serialNumber`, `condition`, `value`
-- **Executor:** `restoreEquipment(record)` — calls `equipmentService.saveEquipment(record)`
-- **Duplicate check:** Match by `serialNumber` if provided
-
-### Step 6.5: Add inventory import validation and executor
-- **Validation:** Required: `name`, `quantity` (numeric). Optional: `category`, `unitCost`, `minQuantity`, `supplier`
-- **Executor:** `restoreInventory(record)` — calls `inventoryService.saveStock(record)`
-- **Duplicate check:** Match by `name` (case-insensitive)
-
-### Step 6.6: Add claim import validation and executor
-- **Validation:** Required: `date`, `driverId` OR `driverName`, `amount` (numeric), `type`. Optional: `description`, `status`
-- **Executor:** `restoreClaim(record)` — calls `api.saveClaim(record)`
-
-### Step 6.7: Wire all infrastructure import cards
-- **File:** Modify `/components/imports/ImportCenter.tsx`
-- **What:** Enable toll tag, toll plaza, station (via wizard), equipment, inventory, and claim import cards
-- **Each card:** Upload → Validate → Preview → Confirm → Progress → Success
-
-### Step 6.8: Add templates for all infrastructure types
-- **File:** Modify `/services/data-export.ts`
-- **What:** Add template downloads for each new import type
-- **Include example rows** with realistic Jamaican data (e.g., toll plazas: "Portmore Toll Plaza", stations: "Texaco Half Way Tree")
-
-### Step 6.9: Verify all infrastructure imports
-- **What:** Test each:
-  - [ ] Import 3 toll tags — appear in Toll Tag Inventory
-  - [ ] Import 2 toll plazas — appear in Toll Database
-  - [ ] Station import wizard opens from Import Center
-  - [ ] Import 5 equipment items — appear in Equipment section
-  - [ ] Import 10 inventory items — appear in Inventory
-  - [ ] Import 3 claims — appear in Claimable Loss section
-  - [ ] All templates download correctly
+### Step 3.8 — Manual verification (operational step, no code)
+- Call the endpoint directly
+- Compare `totalEarnings` against a manual sum of a few known drivers' ledger earnings
+- Compare `platformBreakdown` against known platform totals from Driver Detail views
+- Verify `dailyTrend` dates are in the expected range
 
 ---
 
-## Phase 7: Full System Backup & Restore (ZIP Bundle)
+## Phase 4: Migrate Executive Dashboard to Ledger
 
-**Goal:** Enable one-click full system backup (all data as a ZIP file) and full system restore from a previously-exported ZIP.
+**Goal**: Switch `ExecutiveDashboard.tsx` from computing financial KPIs from raw `trips` to reading from the Phase 3 fleet summary endpoint. All dollar amounts on the Executive Dashboard will come from the ledger.
 
-**Risk level:** HIGH — full restore overwrites all data. Must have confirmation gates and pre-restore validation.
+**Files Modified**: `ExecutiveDashboard.tsx`, `Dashboard.tsx` (props)
 
-### Step 7.1: Create SystemBackupRestore component
-- **File:** Create `/components/imports/SystemBackupRestore.tsx`
-- **What:** A dedicated component for full backup/restore with strong warnings
-- **Backup UI:**
-  - "Download Full Backup" button
-  - Shows estimated size and record counts per category
-  - Progress bar during generation
-  - Downloads a ZIP file named `roam_fleet_backup_YYYY-MM-DD_HHmm.zip`
-- **Restore UI:**
-  - "Upload Backup ZIP" drag-and-drop zone
-  - WARNING banner: "This will REPLACE all existing data. This cannot be undone."
-  - Pre-restore validation: Parse ZIP, verify all expected CSV files are present, show record counts
-  - Two-step confirmation: First "Review Backup Contents", then "Confirm Full Restore"
-  - Progress bar during restore
+### Step 4.1 — Add fleet summary data as a prop
+- Add a new optional prop to `ExecutiveDashboardProps`:
+  ```
+  fleetSummary?: {
+    totalEarnings: number;
+    dailyTrend: Array<{ date: string; earnings: number; tripCount: number }>;
+    topDrivers: Array<{ driverId: string; driverName: string; earnings: number; tripCount: number }>;
+    platformBreakdown: Array<{ platform: string; earnings: number; tripCount: number }>;
+  }
+  ```
+- The fetch will happen in `Dashboard.tsx` (parent) and be passed down, since `Dashboard.tsx` already manages data loading for all its sub-views
 
-### Step 7.2: Implement backup ZIP generation
-- **File:** Modify `/services/data-export.ts`
-- **What:** Add `generateFullBackup(): Promise<Blob>` function
-- **Logic:**
-  1. Fetch ALL data types in parallel (trips, drivers, vehicles, transactions, fuel, service, odometer, check-ins, toll tags, toll plazas, stations, claims, equipment, inventory, preferences, financials)
-  2. Convert each to CSV using respective schemas
-  3. Bundle into a ZIP using JSZip library
-  4. Add a `manifest.json` file inside the ZIP with metadata: version, date, record counts per type, Roam Fleet version
-  5. Return the ZIP as a Blob
-- **Error handling:** If any category fails to fetch, include it as an empty CSV with a warning in the manifest
+### Step 4.2 — Add fleet summary fetch to Dashboard.tsx
+- New state: `fleetSummary` (default: `null`)
+- New `useEffect`: call `api.getLedgerFleetSummary({ days: 7 })` on mount
+- Pass `fleetSummary` as a prop to `<ExecutiveDashboard>`
+- This runs in parallel with existing data fetches — no blocking
 
-### Step 7.3: Implement backup ZIP restore
-- **File:** Modify `/services/data-import-executor.ts`
-- **What:** Add `restoreFullBackup(zipBlob: Blob, onProgress: (step: string, pct: number) => void): Promise<RestoreResult>`
-- **Logic:**
-  1. Parse ZIP using JSZip
-  2. Read `manifest.json` — validate version compatibility
-  3. For each CSV file in the ZIP:
-     a. Parse with PapaParse
-     b. Validate with the corresponding validator
-     c. Import with the corresponding executor
-  4. Import ORDER matters (dependencies first):
-     - Stage A: Drivers, Vehicles (no dependencies)
-     - Stage B: Trips, Transactions, Claims (depend on driver/vehicle IDs)
-     - Stage C: Fuel, Service, Odometer, Check-ins (depend on vehicle IDs)
-     - Stage D: Equipment, Inventory, Toll Tags, Toll Plazas, Stations
-     - Stage E: Preferences, Financials
-  5. Report progress at each stage
-- **Error handling:** If any stage fails, report which categories succeeded and which failed — do NOT roll back (partial restore is better than no restore)
+### Step 4.3 — Wire KPI cards to ledger (primary path)
+- In the `kpi` useMemo (line 74):
+  - **Primary**: If `fleetSummary` is available, use `fleetSummary.totalEarnings`
+  - **Fallback**: Keep existing `organizationMetrics[0]?.totalEarnings ?? trips.reduce(...)` as safety net
+  - Keep `activeDrivers` and `totalTrips` from existing sources (these are operational, not financial)
+- Log `console.error` when the trips fallback activates
 
-### Step 7.4: Add data clearing option for full restore
-- **What:** Before a full restore, optionally clear existing data
-- **Options:**
-  1. "Merge" — import on top of existing data (duplicates handled per entity rules)
-  2. "Replace" — clear all existing data first, then import (uses `api.clearAllData()` and similar)
-- **Default:** "Merge" (safer)
-- **"Replace" mode:** Requires typing "REPLACE ALL DATA" to confirm
+### Step 4.4 — Wire Daily Earnings Trend chart to ledger
+- In the `earningsTrend` useMemo (line 105):
+  - **Primary**: If `fleetSummary?.dailyTrend` is available and non-empty, map it to `{ name: weekday, value: earnings }`
+  - **Fallback**: Keep existing trip-based computation as safety net
+  - Format the date as weekday name (e.g., "Mon") to match existing chart behavior
+- Log `console.error` when the trips fallback activates
 
-### Step 7.5: Wire SystemBackupRestore to ExportCenter and ImportCenter
-- **File:** Modify ExportCenter and ImportCenter
-- **Export tab:** "Full System Backup" card at the bottom with a distinctive design (larger, different color)
-- **Import tab:** "Full System Restore" card at the bottom with red/warning styling
+### Step 4.5 — Wire Top 5 Drivers chart to ledger
+- In the `topDrivers` useMemo (line 119):
+  - **Primary**: If `fleetSummary?.topDrivers` is available, map to `{ name: firstName, earnings }`
+  - **Fallback**: Keep existing `driverMetrics`-based and trip-based computation as safety net
+- Log `console.error` when a non-ledger fallback activates
 
-### Step 7.6: Verify full backup and restore
-- **What:** Test the complete cycle:
-  - [ ] Generate full backup — ZIP downloads, contains all CSVs + manifest.json
-  - [ ] Verify ZIP contents in a file explorer — all CSVs have data
-  - [ ] Restore from backup (Merge mode) — all data appears correctly
-  - [ ] Restore from backup (Replace mode) — existing data cleared, backup data replaces it
-  - [ ] Restore with a modified ZIP (e.g., removed one CSV) — partial restore succeeds, missing file reported
-  - [ ] Restore with a corrupt ZIP — error shown, no data written
+### Step 4.6 — Add data source indicator
+- Add a small subtle badge or text near the "Total Earnings" KPI card showing "Ledger" or "Trips fallback"
+- This helps the operator see which source is active at a glance
+
+### Step 4.7 — Verify parity (operational step, no code)
+- Compare Executive Dashboard "Total Earnings" vs summing a few drivers' earnings from the Drivers List
+- Compare "Daily Earnings Trend" chart values vs manual spot-check of specific days
+- Compare "Top 5 Drivers" chart vs Drivers List sorted by earnings
+- All should match within rounding tolerance
 
 ---
 
-## Phase 8: Enterprise Polish — Audit Trail, Scheduling, and UX Hardening
+## Phase 5: Migrate Dashboard Financials View to Ledger
 
-**Goal:** Add enterprise-grade finishing touches: import/export audit trail, scheduled exports, search/filter within the center, and UX polish.
+**Goal**: Switch `FinancialsView.tsx` from computing revenue, platform stats, and cash metrics from raw `trips` to reading from the Phase 3 fleet summary endpoint. This is the last dashboard sub-tab with trip-sourced financial data.
 
-**Risk level:** LOW — additive features on top of completed infrastructure.
+**Files Modified**: `FinancialsView.tsx`, `Dashboard.tsx` (props)
 
-### Step 8.1: Import/Export audit trail
-- **File:** Create `/components/imports/ImportExportHistory.tsx`
-- **What:** A log of all import and export operations
-- **Stored in:** KV store with prefix `import_export_log_`
-- **Each entry records:**
-  - Timestamp
-  - Operation type (import or export)
-  - Data category (trips, drivers, etc.)
-  - Record count
-  - Status (success, partial, failed)
-  - User who initiated (if auth is enabled)
-  - File name
-  - Errors (if any)
-- **UI:** A collapsible "Activity Log" section at the bottom of the Data Center page showing recent operations in reverse chronological order
-- **Retention:** Keep last 100 entries
+### Step 5.1 — Pass fleet summary to FinancialsView
+- `Dashboard.tsx` already fetches `fleetSummary` in Phase 4
+- Add `fleetSummary` as a new optional prop to `FinancialsView`
+- Update the `<FinancialsView>` call in `Dashboard.tsx` to pass it
 
-### Step 8.2: Search and filter within the Data Center
-- **File:** Modify `/components/imports/ExportCenter.tsx` and `/components/imports/ImportCenter.tsx`
-- **What:** A search bar at the top that filters the category cards
-- **Behavior:** Type "fuel" → only Fuel-related cards shown. Type "toll" → Toll Tags, Toll Plazas, Toll Usage shown.
-- **Also add:** Category grouping — group cards under headings: "People & Fleet", "Financial", "Operations", "Infrastructure", "System"
+### Step 5.2 — Wire total revenue and revenue-by-type to ledger (primary path)
+- In the `metrics` useMemo (line 62):
+  - **Primary**: If `fleetSummary` is available:
+    - `totalRevenue` = `fleetSummary.totalEarnings`
+    - `revenueByType` = from `fleetSummary.revenueByType` (fare, tip, promotion, other)
+    - `avgRevenuePerTrip` = `totalRevenue / fleetSummary.totalTripCount`
+  - **Fallback**: Keep existing trip-based computation as safety net
+- Log `console.error` when the trips fallback activates
 
-### Step 8.3: Export format options
-- **File:** Modify ExportCategoryCard
-- **What:** Add a dropdown to choose export format: CSV (default) or JSON
-- **CSV:** Uses `jsonToCsv()` as before
-- **JSON:** Uses `JSON.stringify(data, null, 2)` — useful for developers or API integrations
-- **File extension:** `.csv` or `.json` based on selection
+### Step 5.3 — Wire platform stats to ledger
+- The platform stats breakdown (line 109) currently loops over `trips`:
+  - **Primary**: If `fleetSummary.platformBreakdown` is available, use it directly
+  - **Fallback**: Keep existing trip-based platform aggregation
+- Handle platform name normalization (GoRide->Roam) — already handled server-side in Phase 3
 
-### Step 8.4: Bulk import progress modal
-- **File:** Create `/components/imports/ImportProgressModal.tsx`
-- **What:** A modal that shows during any import operation
-- **UI:**
-  - Category name and file name at top
-  - Progress bar (0–100%)
-  - Record counter: "Processing record 45 of 200"
-  - Error counter: "2 errors so far"
-  - Scrollable error list below
-  - "Cancel" button (stops processing remaining records, keeps already-imported ones)
-  - On completion: Summary with "X imported, Y skipped, Z errors" and a "Download Error Report" button
+### Step 5.4 — Wire cash metrics to ledger
+- `totalCash` and `cashPercentage` currently computed from `trip.cashCollected`:
+  - **Primary**: If `fleetSummary.totalCashCollected` is available, use it
+  - **Fallback**: Keep existing trip-based computation
+- Note: The `totalRefunds` / `expenseRatio` metric may need special handling — negative trip amounts represent refunds. If these aren't in the ledger yet, document as a known gap and keep the trip-based computation for this specific metric.
 
-### Step 8.5: Export progress modal
-- **File:** Create `/components/imports/ExportProgressModal.tsx`
-- **What:** A modal that shows during export operations (especially "Export All" and "Full Backup")
-- **UI:**
-  - Category being fetched: "Fetching trips... (3/13)"
-  - Progress bar
-  - Record counter
-  - On completion: Summary with total records exported
+### Step 5.5 — Verify parity (operational step, no code)
+- Compare FinancialsView "Total Revenue" vs Executive Dashboard "Total Earnings" -> should match (both from ledger)
+- Compare platform breakdown totals vs Drivers List earnings summed by platform
+- Compare revenue-by-type breakdown vs known data
 
-### Step 8.6: Responsive design pass
-- **What:** Ensure the Data Center works well on:
-  - Desktop (1920px) — 3–4 column card grid
-  - Tablet (768px) — 2 column grid
-  - Mobile (375px) — 1 column stack
-- **Import tab:** Platform selection cards should wrap cleanly
-- **Export tab:** Category cards should stack vertically on mobile
-- **Modals:** Should be full-screen on mobile
-
-### Step 8.7: Empty state and onboarding
-- **What:** If there's no data in a category:
-  - Export card shows "No data" with grayed-out export button
-  - Import card shows "Get started by importing your first [category]"
-- **First-time user:** Show a brief intro banner: "Welcome to the Data Center. Import your fleet data from CSV files or export backups for disaster recovery."
-- **Dismissible:** Banner has an "X" button and saves dismissal to localStorage
-
-### Step 8.8: Final integration verification
-- **What:** Full regression test:
-  - [ ] All existing import flows still work (Uber CSV, InDrive, Fuel, Toll, Disaster Recovery restore)
-  - [ ] All new export flows work (every category)
-  - [ ] All new import flows work (every category)
-  - [ ] Full system backup + restore cycle works
-  - [ ] Activity log records all operations
-  - [ ] Search/filter works in both tabs
-  - [ ] Responsive on desktop, tablet, mobile
-  - [ ] No console errors anywhere
-  - [ ] App navigation (currentPage/setCurrentPage) unaffected
-  - [ ] Driver portal unaffected
-  - [ ] FuelLogForm.tsx and FuelLogModal.tsx completely untouched
+### Step 5.6 — Remove trips prop (deferred)
+- The `trips` prop removal is deferred to Phase 6 (final cleanup)
+- The trip-based fallback stays as a safety net until all migrations are confirmed stable
 
 ---
 
-## Phase Summary
+## Phase 6: Final Cleanup — Remove All Trip-Sourced Financial Code
 
-| Phase | Description | Risk | Priority |
-|---|---|---|---|
-| **1** | Foundation — Tab layout, shell components | LOW | P0 |
-| **2** | Trip Data Export with date filtering | LOW | P0 (CRITICAL) |
-| **3** | Export all remaining data types | LOW | P1 |
-| **4** | Trip Re-Import with ledger backfill | MEDIUM | P0 (CRITICAL) |
-| **5** | Driver, Vehicle, Transaction bulk import | MEDIUM | P1 |
-| **6** | Toll Tags, Plazas, Stations, Equipment import | LOW | P2 |
-| **7** | Full System Backup & Restore (ZIP) | HIGH | P1 |
-| **8** | Enterprise Polish — Audit, search, UX | LOW | P2 |
+**Goal**: Remove all legacy trip-to-financial computation code across the entire app. After this phase, the enterprise rule is fully enforced: every dollar amount reads from the ledger, every operational metric reads from trips, and there is zero mixing.
 
-**Critical path for the Dec 8–14 fix:** Phase 1 → Phase 2 → Phase 4 (after Phase 2, the user can export existing trips, delete, and re-import).
+**Files Modified**: `DriverDetail.tsx`, `DriversPage.tsx`, `ExecutiveDashboard.tsx`, `FinancialsView.tsx`, `Dashboard.tsx`
 
-**Files that will NOT be touched (per user constraints):**
-- `/components/driver-portal/FuelLogForm.tsx`
-- `/components/fuel/FuelLogModal.tsx`
-- `/components/figma/ImageWithFallback.tsx`
-- `/supabase/functions/server/kv_store.tsx`
-- `/utils/supabase/info.tsx`
+### Step 6.1 — Remove DriverDetail `metrics` useMemo financial fields
+- Remove the "LEGACY FINANCIAL" category fields from the `metrics` useMemo:
+  - `periodEarnings` — remove computation (sum of trip amounts by period)
+  - `cashCollected` — remove computation (sum of trip cashCollected)
+  - `totalTolls` — remove computation (sum of trip tolls)
+  - `weeklyEarningsData` — remove computation (weekly buckets of trip earnings)
+  - `chartDataMap` — remove computation (daily chart data from trip amounts)
+- **KEEP** all "OPERATIONAL" fields (totalDistance, totalDuration, completionRate, etc.)
+- **KEEP** all "CASH WALLET" fields (from transactions, not trips)
+- Update the useMemo dependency array accordingly
+
+### Step 6.2 — Fix `earningsPerKm` on Efficiency tab
+- Currently: `metrics.periodEarnings / metrics.totalDistance` (trip-sourced earnings)
+- Change to: `resolvedFinancials.totalEarnings / metrics.totalDistance` (ledger-sourced earnings / trip-sourced distance)
+- This is a legitimate HYBRID metric: financial numerator from ledger, operational denominator from trips
+- Update any component that displays `earningsPerKm` to read from the new source
+
+### Step 6.3 — Convert `resolvedFinancials` fallback to empty-state
+- Currently: when ledger is incomplete, the fallback computes full financial data from trips
+- Change to: when ledger is incomplete, return zeros/empty with a `dataIncomplete: true` flag
+- Update `OverviewMetricsGrid` to show a warning state (e.g., "Financial data unavailable - ledger incomplete") instead of incorrect trip-sourced numbers
+- The completeness guard remains as the detection mechanism
+- The "Repair Now" button remains as the fix mechanism
+
+### Step 6.4 — Remove trip-based fallbacks from DriversPage
+- Remove the conditional fallback block added in Phase 2 Step 2.3
+- The earnings accumulation lines (319, 328, 335) were already removed in Step 2.2
+- If ledger fails: show dash or "$0" in earnings columns instead of computing from trips
+- Add a subtle loading state or error indicator in the fleet stats card
+
+### Step 6.5 — Remove trip-based fallbacks from ExecutiveDashboard
+- Remove the trips fallback in the `kpi` useMemo (line 76)
+- Remove the trips fallback in the `earningsTrend` useMemo (line 105)
+- Remove the trips fallback in the `topDrivers` useMemo (line 130)
+- If ledger fails: show "$0" or "No data" in KPI cards and empty charts
+- Consider: can `trips` prop be removed entirely? Check if it's used for any non-financial purpose (e.g., active driver count). If `activeDrivers` is the only operational use, it could come from the fleet summary `topDrivers.length` or a separate query.
+
+### Step 6.6 — Remove trip-based fallbacks from FinancialsView
+- Remove the trips fallback in the `metrics` useMemo
+- Remove the trips fallback in platform stats
+- If the `trips` prop is no longer needed by any computation, remove it from the props interface
+- Update `Dashboard.tsx` to stop passing `trips` to `<FinancialsView>` if the prop is removed
+
+### Step 6.7 — Dead code and unused import cleanup
+- Scan all modified files for:
+  - Unused imports (e.g., `Trip` type if no longer referenced)
+  - Unused utility functions (e.g., `getEffectiveTripEarnings` if removed from all call sites)
+  - Unused state variables (e.g., `trips` state in `DriversPage` if no longer needed for any purpose)
+- **CAUTION**: `trips` state in `DriversPage` is likely still needed for `linkedTrips` (passed to `DriverDetail` when you click into a driver). Do NOT remove it without checking all consumers.
+
+### Step 6.8 — Update architecture documentation
+- Update the comment block at the top of `DriverDetail.tsx`:
+  - Move ALL items from "remaining trip-to-financial consumers" to "migrated"
+  - Add note: "As of Phase 6, ALL dollar amounts in the app read from ledger:*. No financial computation from trip:* remains."
+- Update this `solution.md`:
+  - Update the Status Tracker with completion dates
+  - Add a "Final Architecture State" section confirming the enterprise rule is fully enforced
+
+### Step 6.9 — Final cross-app verification (operational step, no code)
+- **Every screen that shows a dollar sign** must now read from ledger. Verify:
+  - Drivers List page: `totalEarnings`, `todaysEarnings` columns -> ledger
+  - Driver Detail Overview tab: all financial cards -> ledger (already uses ledger)
+  - Driver Detail Financials tab: earnings history, payout history -> ledger (already uses ledger)
+  - Driver Detail Efficiency tab: `earningsPerKm` -> ledger numerator (Step 6.2)
+  - Executive Dashboard: Total Earnings KPI, Daily Trend, Top Drivers -> ledger
+  - Dashboard Financials View: Total Revenue, platform stats, cash metrics -> ledger
+- **No `console.error` fallback messages** should appear in the browser console under normal operation
+- **Tier badges** on Drivers List should match Driver Detail for every driver
+- **Fleet summary stats** should be consistent across Dashboard and Drivers List
+
+---
+
+## Phase Dependency Map
+
+```
+Phase 1 (Per-Driver Endpoint)
+    |
+    v
+Phase 2 (Drivers List Migration)
+                                      \
+Phase 3 (Fleet-Wide Endpoint)          \
+    |           |                       \
+    v           v                        v
+Phase 4     Phase 5                  Phase 6
+(Exec       (Financials              (Final Cleanup -
+Dashboard)   View)                    ALL fallbacks removed)
+```
+
+Phase 6 can only begin after Phases 2, 4, and 5 are ALL verified stable.
+
+---
+
+## Implementation Status Tracker
+
+| Phase | Status | Started | Completed | Notes |
+|-------|--------|---------|-----------|-------|
+| Phase 1: Per-Driver Ledger Summary Endpoint | NOT STARTED | - | - | Backend foundation for Drivers List migration |
+| Phase 2: Migrate Drivers List Earnings to Ledger | NOT STARTED | - | - | Depends on Phase 1 |
+| Phase 3: Fleet-Wide Ledger Summary Endpoint | NOT STARTED | - | - | Backend foundation for Dashboard migrations |
+| Phase 4: Migrate Executive Dashboard to Ledger | NOT STARTED | - | - | Depends on Phase 3 |
+| Phase 5: Migrate Dashboard Financials View to Ledger | NOT STARTED | - | - | Depends on Phase 3 |
+| Phase 6: Final Cleanup - Remove All Trip-Sourced Financial Code | NOT STARTED | - | - | Depends on Phases 2, 4, 5 all being verified |

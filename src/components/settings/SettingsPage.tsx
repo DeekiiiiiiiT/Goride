@@ -62,7 +62,7 @@ import {
 } from "../ui/alert-dialog";
 import { Separator } from "../ui/separator";
 
-import { DataResetModal } from '../admin/DataResetModal';
+// DataResetModal kept as a file but no longer rendered from Settings — deletion centralized in Data Center > Delete tab
 import { SystemHardeningPanel } from '../admin/SystemHardeningPanel';
 import { SyncCenter } from '../sync/SyncCenter';
 
@@ -123,7 +123,6 @@ export function SettingsPage() {
 
 function GeneralPanel() {
   const [isSaving, setIsSaving] = useState(false);
-  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [currency, setCurrency] = useState('jmd');
   const [timezone, setTimezone] = useState('est-jam');
   const [darkMode, setDarkMode] = useState(false);
@@ -327,39 +326,6 @@ function GeneralPanel() {
         </CardFooter>
       </Card>
 
-      <Card className="border-rose-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-rose-600 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5" />
-            Danger Zone
-          </CardTitle>
-          <CardDescription>
-            Destructive actions that affect your entire workspace.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-4 border border-rose-100 rounded-lg bg-rose-50 dark:bg-rose-950/20">
-             <div className="space-y-1">
-                <h4 className="font-medium text-rose-900 dark:text-rose-100">Reset System Data</h4>
-                <p className="text-sm text-rose-700 dark:text-rose-300">
-                  Permanently delete imported data. Choose between clearing trips, tolls, or a full factory reset.
-                </p>
-             </div>
-             <Button variant="destructive" onClick={() => setIsResetModalOpen(true)}>Reset Data</Button>
-          </div>
-          
-          <DataResetModal 
-            isOpen={isResetModalOpen} 
-            onClose={() => setIsResetModalOpen(false)}
-            onSuccess={() => {
-                // Replicate the cleanup logic
-                localStorage.removeItem('fleet_name');
-                window.dispatchEvent(new Event('storage'));
-                setIsResetModalOpen(false);
-            }} 
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -368,8 +334,6 @@ function IntegrationsPanel() {
   // Default structure for available platforms
   const defaultIntegrations = [
     { id: 'uber', name: 'Uber Fleet', status: 'disconnected', lastSync: '-', icon: 'figma:asset/e81b41be1a56e0ba817406c557cd6e02c443dfd4.png' },
-    { id: 'lyft', name: 'Lyft Business', status: 'disconnected', lastSync: '-', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Lyft_logo.svg/1200px-Lyft_logo.svg.png' },
-    { id: 'bolt', name: 'Bolt', status: 'disconnected', lastSync: '-', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Bolt-logo-green.svg/2560px-Bolt-logo-green.svg.png' }
   ];
 
   const [integrations, setIntegrations] = useState(defaultIntegrations);

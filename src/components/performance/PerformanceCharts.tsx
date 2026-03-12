@@ -74,12 +74,12 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
             {dailyStats.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={300}>
                 <BarChart data={dailyStats}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: string) => {
+                  <CartesianGrid key="grid" strokeDasharray="3 3" vertical={false} />
+                  <XAxis key="xaxis" dataKey="date" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: string) => {
                     try { return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); } catch { return value; }
                   }} />
-                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                  <Tooltip 
+                  <YAxis key="yaxis" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                  <Tooltip key="tooltip" 
                     cursor={{ fill: '#f4f4f5' }}
                     content={({ active, payload, label }) => {
                        if (active && payload && payload.length) {
@@ -110,7 +110,7 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
                       return null
                     }}
                   />
-                  <Bar dataKey="earnings" fill="#0f172a" radius={[4, 4, 0, 0]} />
+                  <Bar key="bar" dataKey="earnings" fill="#0f172a" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -132,10 +132,10 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
           <div style={{ width: '100%', height: '300px', minWidth: '300px', minHeight: '300px', display: 'block', position: 'relative' }}>
             <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={300}>
               <BarChart data={topDrivers} layout="vertical" margin={{ left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                <XAxis type="number" domain={[0, 100]} unit="%" hide />
-                <YAxis dataKey="uniqueName" type="category" width={80} fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: string) => value.split('_')[0].split(' ')[0]} />
-                <Tooltip 
+                <CartesianGrid key="grid" strokeDasharray="3 3" horizontal={true} vertical={false} />
+                <XAxis key="xaxis" type="number" domain={[0, 100]} unit="%" hide />
+                <YAxis key="yaxis" dataKey="uniqueName" type="category" width={80} fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: string) => value.split('_')[0].split(' ')[0]} />
+                <Tooltip key="tooltip"
                   cursor={{ fill: '#f4f4f5' }}
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
@@ -159,7 +159,7 @@ export function PerformanceCharts({ drivers }: PerformanceChartsProps) {
                     return null;
                   }}
                 />
-                <Bar dataKey="successRate" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} />
+                <Bar key="bar" dataKey="successRate" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>

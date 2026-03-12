@@ -213,7 +213,7 @@ export function DesignSystem() {
                   <TableCell>
                     <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 shadow-none border-0">On Trip</Badge>
                   </TableCell>
-                  <TableCell>Bolt</TableCell>
+                  <TableCell>InDrive</TableCell>
                   <TableCell className="text-right font-medium">$1,105.25</TableCell>
                   <TableCell className="text-right">4.7</TableCell>
                 </TableRow>
@@ -245,7 +245,7 @@ export function DesignSystem() {
                 <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:bg-slate-50 cursor-pointer transition-colors">
                   <Upload className="h-8 w-8 text-slate-400 mb-2" />
                   <p className="text-sm font-medium text-slate-700">Drag files here or click to upload</p>
-                  <p className="text-xs text-slate-400 mt-1">Supports CSV, XLS from Uber, Lyft</p>
+                  <p className="text-xs text-slate-400 mt-1">Supports CSV, XLS from Uber, InDrive</p>
                 </div>
               </div>
             </div>

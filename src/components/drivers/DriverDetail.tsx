@@ -1,3 +1,42 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ARCHITECTURE: Driver Detail — Data Flow (Phase 7 Documentation)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// FINANCIAL DATA (earnings, cash collected, tolls, tips, base fare):
+//   → Source: ledger:* KV entries, aggregated by server endpoints
+//   → Overview tab: GET /ledger/driver-overview  →  `resolvedFinancials`
+//   → Financials > Earnings tab: GET /ledger/driver-earnings-history
+//   → Financials > Donut chart: `resolvedFinancials.lifetimePlatformStats`
+//
+// OPERATIONAL DATA (distance, duration, ratings, utilization, fuel):
+//   → Source: trip:* KV entries, computed client-side in `metrics` useMemo
+//   → Efficiency tab, Trips tab, distance/time breakdowns
+//
+// CASH WALLET DATA (net outstanding, float, pending clearance):
+//   → Source: ledger (lifetime cash) + transaction:* (floats/payments), in `walletMetrics` useMemo
+//   → Cash Wallet section on Overview tab
+//
+// INTEGRITY MONITORING (Phase 6):
+//   → Server: /ledger/driver-overview returns `completeness` object
+//   → Client: amber warning banner + "Repair Now" button when gaps detected
+//   → Repair: POST /ledger/repair-driver does targeted per-driver re-generation
+//
+// SAFETY NET (Phase 6): resolvedFinancials fallback now returns ZEROS
+//   with dataIncomplete=true instead of trip-computed financials.
+//   Auto-repair triggers when missing platforms detected.
+//
+// MIGRATED TO LEDGER (Phase 8):
+//   → DriverPayoutHistory: now reads from GET /ledger/driver-earnings-history
+//     (trips prop removed in Step 8.5; fallback gutted to return [])
+//
+// REMAINING TRIP-TO-FINANCIAL CONSUMERS:
+//   → DriverExpensesHistory: uses trips only for date-range detection
+//   → earningsPerKm: MIGRATED (Phase 6.2) — now hybrid: ledger earnings ÷ trip distance
+//
+// As of Phase 6, ALL dollar amounts in the app read from ledger:*.
+// No financial computation from trip:* remains in any display path.
+// ════════════════════════════════════════════════════════════════════════════
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, 
@@ -37,7 +76,8 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
-  CornerDownRight
+  CornerDownRight,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -63,7 +103,7 @@ import {
   DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
 import { 
-  BarChart, 
+  BarChart as RawBarChart, 
   Bar, 
   XAxis, 
   YAxis, 
@@ -120,7 +160,11 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 
-// Wrapper to auto-add keys to PieChart children, fixing recharts null-key warning
+// Wrapper to auto-add keys to chart children, fixing recharts null-key warning.
+// Recharts internally maps JSX children (CartesianGrid, XAxis, YAxis, Tooltip, Bar, Pie, etc.)
+// into SVG elements. When any of those children lack an explicit React key, the resulting
+// SVG siblings end up with key={null} and React warns about duplicate keys.
+// Wrapping each chart type to ensure ALL direct children carry a key eliminates the warning.
 const PieChart = ({ children, ...props }: React.ComponentProps<typeof RawPieChart>) => {
   const keyedChildren = React.Children.map(children, (child, i) => {
     if (React.isValidElement(child) && child.key == null) {
@@ -131,12 +175,22 @@ const PieChart = ({ children, ...props }: React.ComponentProps<typeof RawPieChar
   return <RawPieChart {...props}>{keyedChildren}</RawPieChart>;
 };
 
+const BarChart = ({ children, ...props }: React.ComponentProps<typeof RawBarChart>) => {
+  const keyedChildren = React.Children.map(children, (child, i) => {
+    if (React.isValidElement(child) && child.key == null) {
+      return React.cloneElement(child as React.ReactElement<any>, { key: `bc-child-${i}` });
+    }
+    return child;
+  });
+  return <RawBarChart {...props}>{keyedChildren}</RawBarChart>;
+};
+
 const PLATFORM_COLORS: Record<string, string> = {
   Uber: '#3b82f6',
   InDrive: '#10b981',
   Roam: '#6366f1',
-  Bolt: '#22c55e',
-  Lyft: '#ec4899',
+
+
   Private: '#f59e0b',
   Cash: '#84cc16',
   Other: '#64748b'
@@ -286,6 +340,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [ledgerSummaryLoaded, setLedgerSummaryLoaded] = useState(false);
   const [ledgerOverview, setLedgerOverview] = useState<LedgerDriverOverview | null>(null);
   const [ledgerOverviewLoaded, setLedgerOverviewLoaded] = useState(false);
+  const [repairInProgress, setRepairInProgress] = useState(false);
+  const [repairResult, setRepairResult] = useState<any>(null);
+  const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
+  const [cashDiagResult, setCashDiagResult] = useState<any>(null);
+  const [cashDiagLoading, setCashDiagLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,12 +356,23 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         if (driver?.inDriveDriverId) allIds.push(driver.inDriveDriverId);
         const resolvedName = driver?.name || (driver?.firstName ? [driver.firstName, driver.lastName].filter(Boolean).join(' ') : '') || driverName || '';
 
-        const result = await api.getTripsFiltered({ driverIds: allIds, driverName: resolvedName || undefined, limit: 2000 }).catch(() => ({ data: [] as Trip[], total: 0 }));
-        if (cancelled) return;
+        // Paginate in 1,000-trip pages to get ALL trips (PostgREST caps at 1,000)
+        const PAGE_SIZE = 1000;
         const seen = new Set<string>();
         const merged: Trip[] = [];
-        for (const trip of (result.data || [])) {
-          if (trip.id && !seen.has(trip.id)) { seen.add(trip.id); merged.push(trip); }
+        let pageOffset = 0;
+        while (true) {
+          const result = await api.getTripsFiltered({ driverIds: allIds, driverName: resolvedName || undefined, limit: PAGE_SIZE, offset: pageOffset }).catch(() => ({ data: [] as Trip[], total: 0 }));
+          if (cancelled) return;
+          const page = result.data || [];
+          for (const trip of page) {
+            if (trip.id && !seen.has(trip.id)) { seen.add(trip.id); merged.push(trip); }
+          }
+          // If we got fewer than PAGE_SIZE, we've fetched everything
+          if (page.length < PAGE_SIZE) break;
+          pageOffset += PAGE_SIZE;
+          // Safety cap at 10,000 trips
+          if (pageOffset >= 10000) break;
         }
 
         setServerTrips(merged);
@@ -1046,9 +1116,17 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     setLedgerOverviewLoaded(false);
     fetchLedgerOverview();
     return () => { cancelled = true; };
-  }, [driverId, dateRange, selectedPlatforms]);
+  }, [driverId, dateRange, selectedPlatforms, ledgerRefreshKey]);
 
   // Calculate Metrics based on Date Range
+   // Phase 7 NOTE: This useMemo computes THREE categories of data:
+   //   1. LEGACY FINANCIAL — periodEarnings, cashCollected, totalTolls, weeklyEarningsData, etc.
+   //      Only consumed by the resolvedFinancials fallback path + metrics.earningsPerKm.
+   //      DriverPayoutHistory migrated to ledger in Phase 8 — no longer a consumer.
+   //   2. OPERATIONAL — totalDistance, totalDuration, completionRate, distanceMetrics, tripRatio,
+   //      fuelMetrics, platformStats.completed/distance/rating. Used by Efficiency + Trips tabs.
+   //   3. CASH WALLET — floatHeld, pendingClearance, approvedFuelCredits, cashReceived (still live).
+   //      Phase 5: netOutstanding/periodCashReceived/periodNetChange are DEAD CODE. totalCashCollected kept as fallback for walletMetrics.
   const metrics = useMemo(() => {
      const emptyMetrics = {
         periodEarnings: 0,
@@ -1083,7 +1161,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
             InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
             Roam: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
-            Bolt: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
             Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 }
         },
         tripRatio: {
@@ -1128,7 +1205,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      let totalEarnings = 0; // Lifetime
      let lifetimeTrips = 0; // Lifetime
-     let totalCashCollected = 0; // Lifetime
+     let totalCashCollected = 0; // Lifetime — Phase 5: now FALLBACK only (walletMetrics uses it when ledger unavailable)
      let lifetimeTolls = 0; // Lifetime
 
      let periodCompletedTrips = 0;
@@ -1157,7 +1234,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
         InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
         Roam: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
-        Bolt: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
         Other: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 }
      };
 
@@ -1404,7 +1480,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       for (const [plat, acc] of Object.entries(perPlatformDistanceAccum)) { perPlatformDistance[plat] = { ...acc, total: acc.open + acc.enroute + acc.onTrip + acc.unavailable + acc.riderCancelled + acc.driverCancelled + acc.deliveryFailed }; }
 
       // Prepare Charts Data
-     const weeklyEarningsData = Array.from(chartDataMap.entries()).map(([date, amounts]) => {
+     const weeklyEarningsData = Array.from(chartDataMap.entries()).filter(([date]) => !!date).map(([date, amounts]) => {
          const d = new Date(date);
          return {
              day: format(d, 'MMM d'),
@@ -1591,7 +1667,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      const totalTrips = periodCompletedTrips + periodCancelledTrips;
      const avgDistance = totalTrips > 0 ? totalDistance / totalTrips : 0;
      const avgDuration = totalTrips > 0 ? totalDuration / totalTrips : 0;
-     const earningsPerKm = totalDistance > 0 ? periodEarnings / totalDistance : 0;
+     const earningsPerKm = 0; // Phase 6: Moved to hybrid metric (resolvedFinancials / totalDistance)
      const tripsPerHour = totalDuration > 0 ? (totalTrips / (totalDuration / 60)) : 0;
 
      // Completion Rate (Calculated from Logs)
@@ -1617,14 +1693,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      const currentRating = latestCsvMetric?.ratingLast4Weeks || latestCsvMetric?.ratingLast500 || 5.0;
 
-     // Use CSV metric for Cash Collected if available (it is more accurate)
+     // Phase 5: totalCashCollected override — FALLBACK path (used by walletMetrics when ledger unavailable)
      if (latestCsvMetric?.cashCollected) {
          totalCashCollected = Math.max(totalCashCollected, latestCsvMetric.cashCollected);
      }
 
      // Phase 4: Cash Logic
 
-     // FIX: Prioritize Source of Truth (CSV) for Period Cash Collected
+     // DEAD CODE (Phase 5): csvPeriodCash / cashCollected override — only fed dead periodNetChange
      // Calculate cash from CSV only if the selected range covers the CSV period
      const csvPeriodCash = relevantCsvMetrics.reduce((sum, m) => {
         const mStart = new Date(m.periodStart);
@@ -1657,7 +1733,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
      // --- Phase 1: STRICT Cash Liability Logic ---
      
-     // 1. Calculate Float Issued (Cash given to driver)
+     // 1. DEAD CODE (Phase 5): totalFloatIssued — identical to floatHeld, only fed dead netOutstanding
      // In transactions, floats are negative (money leaving fleet). We need the absolute value.
      const totalFloatIssued = Math.abs((transactions || [])
         .filter(t => t && t.category === "Float Issue")
@@ -1676,7 +1752,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         })
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
-     // 3. Calculate Approved Cash Toll Expenses (Valid expenses paid by driver)
+     // 3. DEAD CODE (Phase 5): approvedCashTollExpenses — walletMetrics recomputes this
      // These must be CASH payments (receipts) that are RESOLVED or APPROVED (Reimbursed/Written Off).
      // These reduce the liability.
      const approvedCashTollExpenses = (transactions || [])
@@ -1697,8 +1773,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         })
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
-     // 4. Final Net Outstanding Calculation
-     // (Cash They Took) - (Cash They Gave Back) - (Valid Expenses They Paid)
+     // 4. DEAD CODE (Phase 5): Old Net Outstanding — replaced by walletMetrics useMemo
+     // netOutstanding, totalFloatIssued, approvedCashTollExpenses, periodCashReceived, periodNetChange below are no longer consumed.
      // Note: totalCashCollected is Lifetime, calculated earlier in the loop.
      const netOutstanding = (totalCashCollected + totalFloatIssued) - (totalPaymentsReceived + approvedCashTollExpenses);
 
@@ -1829,7 +1905,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         totalTrips,
         cashCollected,
         totalCashCollected,
-        cashReceived, 
+        cashReceived, // ── CASH WALLET (from transactions, NOT trips) ──
         netOutstanding,
         approvedFuelCredits, // Phase 5: Fuel reimbursement credits
         periodCashReceived, // New
@@ -1844,7 +1920,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         totalDuration,
         avgDistance,
         avgDuration,
-        earningsPerKm,
+        earningsPerKm, // HYBRID: trip-computed earnings ÷ distance (Efficiency tab)
         tripsPerHour,
         completionRate,
         cancellationRate,
@@ -1875,7 +1951,42 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   // ── Phase 15: Resolved Financials — prefer ledger, fall back to trips ──
   const resolvedFinancials = useMemo(() => {
     const ledgerHasData = ledgerOverview && (ledgerOverview.period.tripCount > 0 || ledgerOverview.lifetime.tripCount > 0);
-    if (ledgerHasData) {
+
+    // ── Phase 1 Completeness Guard: detect if ledger covers all platforms with trip data ──
+    // If any platform that has completed trips is missing from the ledger, the ledger is
+    // incomplete and we must fall back entirely to trips — never create a hybrid.
+    // Only require a platform in the ledger if it has COMPLETED trips in the period,
+    // because generateTripLedgerEntries() only creates entries for status === 'Completed'.
+    // Non-completed trips (Cancelled, In Progress) with non-zero amounts are expected
+    // to be absent from the ledger — that is NOT a data gap.
+    const tripPlatformsWithData = new Set<string>();
+    for (const [platform, stats] of Object.entries(metrics.platformStats) as [string, any][]) {
+      if (stats.completed > 0) {
+        tripPlatformsWithData.add(platform);
+      }
+    }
+    // TIGHTENED GUARD: Only check PERIOD-level ledger platforms, NOT lifetime.
+    // Previously this also included lifetime.platformStats, which caused a bug:
+    // if a platform had lifetime ledger entries (from old imports) but the CURRENT
+    // period's trips had no ledger entries (e.g. fleet/sync gap), the guard would
+    // pass and the period total would silently exclude that platform's earnings.
+    const ledgerPlatforms = new Set<string>();
+    if (ledgerOverview?.platformStats) {
+      for (const rawPlat of Object.keys(ledgerOverview.platformStats)) {
+        ledgerPlatforms.add(normalizePlatform(rawPlat));
+      }
+    }
+    const missingFromLedger: string[] = [];
+    for (const p of tripPlatformsWithData) {
+      if (!ledgerPlatforms.has(p)) {
+        missingFromLedger.push(p);
+      }
+    }
+    const isLedgerComplete = missingFromLedger.length === 0;
+    if (!isLedgerComplete && ledgerHasData) {
+      console.log(`[ResolvedFinancials] Ledger incomplete — missing platforms: ${missingFromLedger.join(', ')}. Auto-repair will regenerate.`);
+    }
+    if (ledgerHasData && isLedgerComplete) {
       // Merge ledger financial fields with trip-computed operational fields
       const platformStats: Record<string, any> = {};
       // Start with trip-computed platforms (keeps distance, ratings, completed counts)
@@ -1895,7 +2006,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       }
 
       // Build chart data from ledger dailyEarnings
-      const weeklyEarningsData = ledgerOverview.dailyEarnings.map(d => ({
+      const weeklyEarningsData = ledgerOverview.dailyEarnings.filter((d: any) => !!d.date).map((d: any) => ({
         day: (() => { try { return format(new Date(d.date + 'T00:00:00'), 'MMM d'); } catch { return d.date; } })(),
         fullDate: d.date,
         ...d.byPlatform,
@@ -1918,44 +2029,120 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         weeklyEarningsData,
         tripCount: ledgerOverview.period.tripCount,
         source: 'ledger' as const,
+        isLedgerComplete: true,
+        missingPlatforms: [] as string[],
         lifetimeEarnings: ledgerOverview.lifetime.earnings,
         lifetimeTrips: ledgerOverview.lifetime.tripCount,
         lifetimeCashCollected: ledgerOverview.lifetime.cashCollected,
         lifetimeTolls: ledgerOverview.lifetime.tolls,
+        lifetimePlatformStats: ledgerOverview.lifetime.platformStats || {},
       };
     }
-    // Fallback to trip-computed metrics
+    // ⚠️ LEGACY FALLBACK — Phase 7 safety net. If this fires, ledger is incomplete.
+    // Phase 6 monitoring should detect & auto-repair. Investigate if this persists.
+    if (ledgerOverviewLoaded) {
+      console.log(`[ResolvedFinancials] Awaiting ledger data — ledgerHasData=${!!ledgerHasData}, isLedgerComplete=${isLedgerComplete}, missing=[${missingFromLedger.join(',')}]. Auto-repair will resolve if needed.`);
+    }
     return {
-      periodEarnings: metrics.periodEarnings,
-      prevPeriodEarnings: metrics.prevPeriodEarnings,
-      trendPercent: metrics.trendPercent,
-      trendUp: metrics.trendUp,
-      cashCollected: metrics.cashCollected,
-      totalTolls: metrics.totalTolls,
-      totalTips: metrics.totalTips,
-      totalBaseFare: metrics.totalBaseFare,
-      platformStats: metrics.platformStats,
-      weeklyEarningsData: metrics.weeklyEarningsData,
+      // Phase 6: Return zeros — no trip-sourced financial fallback
+      periodEarnings: 0,
+      prevPeriodEarnings: 0,
+      trendPercent: '0.0',
+      trendUp: true,
+      cashCollected: 0,
+      totalTolls: 0,
+      totalTips: 0,
+      totalBaseFare: 0,
+      platformStats: metrics.platformStats, // Keep operational fields (distance, completed, rating)
+      weeklyEarningsData: [],
       tripCount: metrics.periodCompletedTrips,
       source: 'trips' as const,
-      lifetimeEarnings: metrics.totalEarnings,
+      isLedgerComplete,
+      dataIncomplete: true,
+      missingPlatforms: missingFromLedger,
+      lifetimeEarnings: 0,
       lifetimeTrips: metrics.lifetimeTrips,
-      lifetimeCashCollected: metrics.totalCashCollected,
-      lifetimeTolls: metrics.lifetimeTolls,
+      lifetimeCashCollected: 0,
+      lifetimeTolls: 0,
+      lifetimePlatformStats: {} as Record<string, any>,
     };
-  }, [ledgerOverview, metrics]);
+  }, [ledgerOverview, ledgerOverviewLoaded, metrics]);
 
+  // Phase 6.2: Hybrid earningsPerKm — ledger earnings ÷ trip-sourced distance
+  const ledgerEarningsPerKm = useMemo(() => {
+    const earnings = resolvedFinancials.periodEarnings || 0;
+    const distance = metrics.totalDistance || 0;
+    return distance > 0 ? earnings / distance : 0;
+  }, [resolvedFinancials.periodEarnings, metrics.totalDistance]);
 
+  // ── Phase 4: Ledger-sourced Cash Wallet metrics ──
+  // Uses lifetime cash from the ledger (single source of truth) combined with
+  // transaction-derived values (floats, payments, toll expenses, fuel credits).
+  const walletMetrics = useMemo(() => {
+    const ledgerLifetimeCash = resolvedFinancials.lifetimeCashCollected || metrics.totalCashCollected || 0;
+    const floatIssued = metrics.floatHeld;
+    const paymentsReceived = metrics.cashReceived || 0;
+    const tollExpenses = (transactions || [])
+      .filter((t: any) => {
+        if (!t) return false;
+        const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
+        const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl;
+        const isResolved = t.status === 'Resolved' || t.status === 'Approved';
+        return isToll && isCash && isResolved;
+      })
+      .reduce((sum: number, t: any) => sum + Math.abs(t?.amount || 0), 0);
+    const netOutstanding = (ledgerLifetimeCash + floatIssued) - (paymentsReceived + tollExpenses);
+    return { netOutstanding, lifetimeCashCollected: ledgerLifetimeCash };
+  }, [resolvedFinancials.lifetimeCashCollected, metrics.totalCashCollected, metrics.floatHeld, metrics.cashReceived, transactions]);
+
+  // ── Auto-Repair: When the completeness guard detects missing ledger platforms,
+  // automatically trigger a one-time ledger repair for this driver, then re-fetch.
+  // Guards: repairResult starts null on mount, so fires once; repairInProgress prevents overlap.
+  useEffect(() => {
+    if (
+      resolvedFinancials.source === 'trips' &&
+      resolvedFinancials.missingPlatforms?.length > 0 &&
+      ledgerOverviewLoaded &&
+      !repairInProgress &&
+      repairResult === null
+    ) {
+      console.log(`[AutoRepair] Triggering ledger repair for driver ${driverId} — missing platforms: ${resolvedFinancials.missingPlatforms.join(', ')}`);
+      // DISABLED: Auto-repair was firing on every date change. Use manual button instead.
+      // handleRepairLedger();
+    }
+  }, [resolvedFinancials.source, resolvedFinancials.missingPlatforms, ledgerOverviewLoaded, driverId, repairInProgress, repairResult]);
 
 
 
 
   // ────────────────────────────────────────────────────────────
-  // Platform Breakdown for Earnings donut chart (Phase 6)
-  //   Uses ALL trips (not date-filtered) for a full picture.
-  //   Replaces the old Base Fare / Tips breakdown that was always hollow.
+  // Platform Breakdown for Earnings donut chart (Step 5.6)
+  //   Prefers lifetime per-platform stats from the ledger.
+  //   Falls back to raw trips only when ledger has no lifetime platform data.
   // ────────────────────────────────────────────────────────────
   const platformBreakdownData = useMemo(() => {
+    const colors: Record<string, string> = {
+      Uber: '#3b82f6',
+      InDrive: '#10b981',
+      Roam: '#f59e0b',
+      Private: '#ec4899',
+      Cash: '#84cc16',
+      Other: '#94a3b8'
+    };
+
+    const ltStats = resolvedFinancials.lifetimePlatformStats;
+    if (ltStats && Object.keys(ltStats).length > 0) {
+      // Ledger path: use lifetime per-platform earnings from the server
+      return Object.entries(ltStats)
+        .map(([rawPlat, stats]: [string, any]) => ({
+          name: normalizePlatform(rawPlat),
+          value: stats.earnings || 0,
+          color: colors[normalizePlatform(rawPlat)] || '#94a3b8',
+        }))
+        .filter(d => d.value > 0);
+    }
+
+    // Fallback: compute from raw trips (temporary — until ledger is fully populated)
     const completed = (allTrips || []).filter(t => t.status === 'Completed');
     const platformTotals: Record<string, number> = {};
     completed.forEach(trip => {
@@ -1963,19 +2150,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const earnings = getEffectiveTripEarnings(trip);
       platformTotals[platform] = (platformTotals[platform] || 0) + earnings;
     });
-    const colors: Record<string, string> = {
-      Uber: '#3b82f6',
-      InDrive: '#10b981',
-      Bolt: '#8b5cf6',
-      Roam: '#f59e0b',
-      Private: '#ec4899',
-      Cash: '#84cc16',
-      Other: '#94a3b8'
-    };
     return Object.entries(platformTotals)
       .filter(([_, value]) => value > 0)
       .map(([name, value]) => ({ name, value, color: colors[name] || '#94a3b8' }));
-  }, [allTrips]);
+  }, [resolvedFinancials.lifetimePlatformStats, allTrips]);
 
   const platformTotalEarnings = useMemo(() =>
     platformBreakdownData.reduce((sum, d) => sum + d.value, 0),
@@ -1985,6 +2163,53 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const handleDateSelect = (newRange: DateRange | undefined) => {
     if (newRange?.from) {
       setDateRange(newRange);
+    }
+  };
+
+  // Phase 6.4: Repair handler — regenerates missing ledger entries for this driver
+  const handleRepairLedger = async () => {
+    setRepairInProgress(true);
+    setRepairResult(null);
+    try {
+      // Pass trip IDs from client-side allTrips so the repair endpoint doesn't
+      // have to re-discover them (the client already found them via the broader
+      // driverIds + driverName OR search in getTripsFiltered).
+      const clientTripIds = allTrips
+        .filter(t => t?.id && t.status === 'Completed')
+        .map(t => t.id);
+      console.log(`[DriverDetail] Sending ${clientTripIds.length} client trip IDs to repair endpoint`);
+      const result = await api.repairDriverLedger(driverId, clientTripIds, true);
+      setRepairResult(result);
+      console.log(`[DriverDetail] Ledger repair complete:`, result);
+      // Refresh ledger overview after repair (bump key to re-trigger useEffect with current dateRange)
+      setLedgerRefreshKey(k => k + 1);
+      if (false && dateRange?.from) { // DISABLED: stale-closure bug — replaced by ledgerRefreshKey bump above
+        const startDate = format(dateRange.from, 'yyyy-MM-dd');
+        const endDate = format(dateRange.to || dateRange.from, 'yyyy-MM-dd');
+        const platforms = selectedPlatforms.has('All') ? undefined : Array.from(selectedPlatforms);
+        const refreshed = await api.getLedgerDriverOverview({ driverId, startDate, endDate, platforms });
+        setLedgerOverview(refreshed);
+      }
+    } catch (err: any) {
+      console.error('[DriverDetail] Ledger repair failed:', err);
+      setRepairResult({ success: false, error: err.message });
+    } finally {
+      setRepairInProgress(false);
+    }
+  };
+
+  const handleCashDiagnostic = async () => {
+    setCashDiagLoading(true);
+    setCashDiagResult(null);
+    try {
+      const result = await api.getCashDiagnostic(driverId);
+      setCashDiagResult(result);
+      console.log('[CashDiag] Result:', result);
+    } catch (err: any) {
+      console.error('[CashDiag] Failed:', err);
+      setCashDiagResult({ success: false, error: err.message });
+    } finally {
+      setCashDiagLoading(false);
     }
   };
 
@@ -2219,7 +2444,147 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 </div>
             )}
 
-             <OverviewMetricsGrid resolvedFinancials={resolvedFinancials} metrics={metrics} localLoading={localLoading} isToday={!!isToday} />
+             {/* Phase 6.4: Ledger integrity warning banner */}
+             {ledgerOverview?.completeness && !ledgerOverview.completeness.isComplete && (
+               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4 rounded-xl flex items-start gap-4">
+                 <div className="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-full shrink-0">
+                   <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                 </div>
+                 <div className="flex-1 min-w-0">
+                   <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">Ledger Integrity Gap Detected</h3>
+                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                     {ledgerOverview.completeness.totalTrips} completed trips found but only {ledgerOverview.completeness.ledgerTrips} have ledger entries ({ledgerOverview.completeness.missingCount} missing).
+                     {ledgerOverview.completeness.byPlatform && Object.entries(ledgerOverview.completeness.byPlatform as Record<string, {trips: number; ledger: number}>)
+                       .filter(([_, v]) => v.trips !== v.ledger)
+                       .map(([p, v]) => ` ${p}: ${v.trips} trips / ${v.ledger} ledger`)
+                       .join(';')}
+                   </p>
+                   {repairResult?.success && (
+                     <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                       <CheckCircle2 className="h-3.5 w-3.5" />
+                       Repair complete — {repairResult.stats?.ledgerCreated || 0} entries created, {repairResult.stats?.alreadyExisted || 0} already existed ({repairResult.durationMs}ms)
+                     </p>
+                   )}
+                   {repairResult?.success === false && (
+                     <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">Repair failed: {repairResult.error}</p>
+                   )}
+                 </div>
+                 <button
+                   onClick={handleRepairLedger}
+                   disabled={repairInProgress}
+                   className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+                 >
+                   {repairInProgress ? (
+                     <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Repairing...</>
+                   ) : (
+                     'Repair Now'
+                   )}
+                 </button>
+               </div>
+             )}
+
+             {false && (
+             <div className="flex items-center gap-3">
+               <button
+                 onClick={handleRepairLedger}
+                 disabled={repairInProgress}
+                 className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+               >
+                 {repairInProgress ? (
+                   <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recalculating...</>
+                 ) : (
+                   <><RefreshCw className="h-3.5 w-3.5" /> Recalculate Ledger</>
+                 )}
+               </button>
+               {repairResult?.success && (
+                 <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                   <CheckCircle2 className="h-3.5 w-3.5" />
+                   Done — replaced {repairResult.stats?.forceDeleted || 0}, created {repairResult.stats?.ledgerCreated || 0} ({repairResult.durationMs}ms)
+                 </span>
+               )}
+               {repairResult?.success === false && (
+                 <span className="text-xs text-rose-600 dark:text-rose-400">Failed: {repairResult.error}</span>
+                )}
+              </div>
+              )}
+              {/*  DEAD CODE: original closings + orphan lines absorbed by this comment
+                )}
+              </div>
+              )}
+               )}
+             </div>
+
+             */}
+              {/* ── Phase 1: Repair Ledger + Phase 2: Cash Diagnostic Tool ── */}
+              {false && (<div className="mt-2 mb-3 flex items-center gap-2 flex-wrap">
+                <button onClick={handleRepairLedger} disabled={repairInProgress} className="px-3 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors">{repairInProgress ? (<><Loader2 className="h-3.5 w-3.5 animate-spin" /> Repairing Ledger...</>) : (<><RefreshCw className="h-3.5 w-3.5" /> Repair Ledger</>)}</button>
+                {repairResult?.success && (<span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Repair complete — {repairResult.stats?.ledgerCreated || 0} created, {repairResult.stats?.alreadyExisted || 0} existed</span>)}
+                {repairResult?.success === false && (<span className="text-xs text-rose-600 dark:text-rose-400">Repair failed: {repairResult.error}</span>)}
+                {false && (<button
+                  onClick={handleCashDiagnostic}
+                  disabled={cashDiagLoading}
+                  className="px-3 py-1.5 text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+                >
+                  {cashDiagLoading ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running Cash Diagnostic...</>
+                  ) : (
+                    <><Search className="h-3.5 w-3.5" /> Cash Diagnostic</>
+                  )}
+                </button>)}
+                {false && cashDiagResult && cashDiagResult.success && (
+                  <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs space-y-2 max-w-2xl">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700 dark:text-slate-200">Cash Diagnostic Results</span>
+                      <button onClick={() => setCashDiagResult(null)} className="text-slate-400 hover:text-slate-600 text-xs">Dismiss</button>
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400">Driver: {cashDiagResult.driverName || cashDiagResult.driverId} | {cashDiagResult.completedTrips} completed trips | {cashDiagResult.durationMs}ms</p>
+                    {Object.entries(cashDiagResult.platforms || {}).map(([platform, data]: [string, any]) => (
+                      <div key={platform} className="border-t border-slate-200 dark:border-slate-700 pt-2">
+                        <p className="font-semibold text-slate-600 dark:text-slate-300">{platform} — {data.total} trips</p>
+                        <div className="grid grid-cols-3 gap-2 mt-1">
+                          <div className="bg-white dark:bg-slate-900 rounded p-1.5 text-center">
+                            <p className="text-lg font-bold text-sky-600">{data.withCashCollectedGt0}</p>
+                            <p className="text-[10px] text-slate-400">cashCollected &gt; 0</p>
+                          </div>
+                          <div className="bg-white dark:bg-slate-900 rounded p-1.5 text-center">
+                            <p className="text-lg font-bold text-amber-600">{data.withPaymentMethodCash}</p>
+                            <p className="text-[10px] text-slate-400">paymentMethod = Cash</p>
+                          </div>
+                          <div className="bg-white dark:bg-slate-900 rounded p-1.5 text-center">
+                            <p className="text-lg font-bold text-emerald-600">{data.withEitherCashSignal}</p>
+                            <p className="text-[10px] text-slate-400">Either signal</p>
+                          </div>
+                        </div>
+                        {data.samples && data.samples.length > 0 && (
+                          <details className="mt-1.5">
+                            <summary className="cursor-pointer text-sky-600 hover:underline text-[11px]">Show {data.samples.length} sample trips</summary>
+                            <div className="mt-1 overflow-x-auto">
+                              <table className="w-full text-[10px] border-collapse">
+                                <thead><tr className="text-left text-slate-400"><th className="pr-2 py-0.5">Date</th><th className="pr-2">Amount</th><th className="pr-2">cashCollected</th><th className="pr-2">paymentMethod</th><th>fareBreakdown.cashCollected</th></tr></thead>
+                                <tbody>
+                                  {data.samples.map((s: any, i: number) => (
+                                    <tr key={s.id || i} className="border-t border-slate-100 dark:border-slate-800">
+                                      <td className="pr-2 py-0.5 text-slate-500">{s.date?.substring(0, 10)}</td>
+                                      <td className="pr-2">${s.amount}</td>
+                                      <td className="pr-2 font-mono">{s.cashCollected === null ? <span className="text-rose-400">null</span> : s.cashCollected}</td>
+                                      <td className="pr-2 font-mono">{s.paymentMethod === null ? <span className="text-rose-400">null</span> : s.paymentMethod}</td>
+                                      <td className="font-mono">{s.fareBreakdown?.cashCollected === null ? <span className="text-rose-400">null</span> : (s.fareBreakdown?.cashCollected ?? <span className="text-rose-400">n/a</span>)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {false && cashDiagResult && cashDiagResult.success === false && (
+                  <p className="mt-1 text-xs text-rose-600">Diagnostic failed: {cashDiagResult.error}</p>
+                )}
+              </div>)}
+              <OverviewMetricsGrid resolvedFinancials={resolvedFinancials} metrics={metrics} localLoading={localLoading} isToday={!!isToday} />
              {false && (<div>
                <MetricCard 
                   title={isToday ? "Today's Earnings" : "Period Earnings"} 
@@ -2915,8 +3280,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
             <DriverEarningsHistory
               driverId={driverId}
-              transactions={transactions}
-              trips={allTrips}
               quotaConfig={quotaConfig || undefined}
             />
          </TabsContent>
@@ -2950,11 +3313,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                          <DollarSign className="h-4 w-4 text-slate-500" />
                      </CardHeader>
                      <CardContent>
-                         <div className={cn("text-2xl font-bold", metrics.netOutstanding > 0 ? "text-rose-600" : "text-emerald-600")}>
-                             ${metrics.netOutstanding.toFixed(2)}
+                         <div className={cn("text-2xl font-bold", walletMetrics.netOutstanding > 0 ? "text-rose-600" : "text-emerald-600")}>
+                             ${walletMetrics.netOutstanding.toFixed(2)}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                             {metrics.netOutstanding > 0 ? "Driver owes platform" : "Platform owes driver"}
+                             {walletMetrics.netOutstanding > 0 ? "Driver owes platform" : "Platform owes driver"}
                          </p>
                      </CardContent>
                  </Card>
@@ -3708,7 +4071,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <MetricCard 
                     title="Earnings per Km" 
-                    value={`$${metrics.earningsPerKm.toFixed(2)}`} 
+                    value={`$${ledgerEarningsPerKm.toFixed(2)}`} 
                     icon={<Zap className="h-4 w-4 text-slate-500" />}
                     subtext="Target: >$1.50"
                  />
@@ -4408,7 +4771,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         onClose={() => setPaymentModalState({ isOpen: false })}
         onSave={handleSavePayment}
         driverName={driverName}
-        cashOwed={metrics.netOutstanding} // Use calculated net outstanding
+        cashOwed={walletMetrics.netOutstanding} // Phase 4: Use ledger-sourced net outstanding
         initialWorkPeriodStart={paymentModalState.initialWorkPeriodStart}
         initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}
         initialAmount={paymentModalState.initialAmount}

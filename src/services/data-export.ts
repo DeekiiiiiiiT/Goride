@@ -86,11 +86,11 @@ async function fetchAllServiceLogs(): Promise<ServiceRequest[]> {
 }
 
 /**
- * Fetches all trip data with optional date range filtering.
+ * Fetches all trip data with optional date range and platform filtering.
  * Uses paginated API to handle large datasets safely.
  * Exported for use by ExportCenter.
  */
-export async function fetchAllTrips(startDate?: string, endDate?: string): Promise<Trip[]> {
+export async function fetchAllTrips(startDate?: string, endDate?: string, platform?: string): Promise<Trip[]> {
     const PAGE_SIZE = 500;
     const allTrips: Trip[] = [];
 
@@ -130,11 +130,19 @@ export async function fetchAllTrips(startDate?: string, endDate?: string): Promi
         }
 
         // Sort by date ascending
-        return allTrips.sort((a, b) => {
+        const sorted = allTrips.sort((a, b) => {
             const dateA = new Date(a.date || a.requestTime || 0).getTime();
             const dateB = new Date(b.date || b.requestTime || 0).getTime();
             return dateA - dateB;
         });
+
+        // Apply platform filter client-side if specified
+        if (platform) {
+            const p = platform.toLowerCase();
+            return sorted.filter((t: any) => (t.platform || '').toLowerCase() === p);
+        }
+
+        return sorted;
     } catch (error) {
         console.error("Error fetching trips for export:", error);
         throw error; // Re-throw so ExportCenter can show the error
@@ -144,7 +152,7 @@ export async function fetchAllTrips(startDate?: string, endDate?: string): Promi
 /**
  * Normalizes Fuel Entries into Odometer Readings
  */
-function normalizeFuelReadings(fuelEntries: FuelEntry[], verifiedIds: Set<string>): OdometerReading[] {
+function normalizeFuelReadings(fuelEntries: FuelEntry[], verifiedIds: Set<string> = new Set()): OdometerReading[] {
     return fuelEntries
         .filter(entry => entry.odometer && entry.odometer > 0)
         .map(entry => ({

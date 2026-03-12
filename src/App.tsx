@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-// Build stability ping: 2026-02-10 03:45
+// Build stability ping: 2026-03-11 sidebar-fix
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { BusinessConfigProvider } from './components/auth/BusinessConfigContext';
 import { LoginPage } from './components/auth/LoginPage';
@@ -22,6 +22,7 @@ import { PerformanceDashboard } from './components/performance/PerformanceDashbo
 import { FuelManagement } from './pages/FuelManagement';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
+import { LedgerBackfillPanel } from './components/admin/LedgerBackfillPanel';
 
 // Driver Portal Components
 import { DriverLayout } from './components/driver-portal/DriverLayout';
@@ -47,7 +48,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
-      cacheTime: 1000 * 60 * 30, // 30 minutes
+      gcTime: 1000 * 60 * 30, // 30 minutes
       retry: 1,
       refetchOnWindowFocus: false,
     },
@@ -198,6 +199,7 @@ function AppContent() {
 
         {currentPage === 'user-management' && <UserManagementPage />}
         {currentPage === 'settings' && <SettingsPage />}
+        {currentPage === 'ledger-backfill' && <LedgerBackfillPanel />}
       </ErrorBoundary>
     </AppLayout>
   );

@@ -136,6 +136,21 @@ export function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
+  // Phase 4: Fetch ledger-sourced fleet summary (runs in parallel, non-blocking)
+  const { data: fleetSummary = null } = useQuery({
+    queryKey: ['ledger', 'fleet-summary'],
+    queryFn: async () => {
+      const result = await api.getLedgerFleetSummary({ days: 7 });
+      if (result.success) {
+        console.log(`[Dashboard] Ledger fleet summary loaded: ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
+        return result.data;
+      }
+      console.error('[Dashboard] Ledger fleet summary returned success=false');
+      return null;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
   const loading = statsLoading || tripsLoading || driversLoading || vehiclesLoading || batchesLoading || notificationsLoading;
 
   // 2. Derived State (Memoized)
@@ -401,11 +416,12 @@ export function Dashboard() {
             organizationMetrics={[]}
             notifications={notifications}
             periodLabel="Today"
+            fleetSummary={fleetSummary}
           />
         </TabsContent>
 
         <TabsContent value="financials" className="space-y-6">
-          <FinancialsView trips={trips} />
+          <FinancialsView trips={trips} fleetSummary={fleetSummary} />
         </TabsContent>
 
         <TabsContent value="drivers" className="space-y-6">

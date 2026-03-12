@@ -132,6 +132,18 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Phase 2: Ledger-sourced earnings
+  const [ledgerSummary, setLedgerSummary] = useState<Record<string, {
+    lifetimeEarnings: number;
+    monthlyEarnings: number;
+    todayEarnings: number;
+    lifetimeTripCount: number;
+    monthlyTripCount: number;
+    todayTripCount: number;
+  }>>({});
+  const [ledgerLoaded, setLedgerLoaded] = useState(false);
+  const [ledgerError, setLedgerError] = useState(false);
+
   const handleDeleteDriver = async () => {
     if (!driverToDelete) return;
     
@@ -183,6 +195,27 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
       }
     };
     fetchData();
+  }, []);
+
+  // Phase 2: Fetch ledger-sourced driver earnings (runs in parallel with main fetch)
+  useEffect(() => {
+    const fetchLedger = async () => {
+      try {
+        const result = await api.getLedgerDriversSummary();
+        if (result.success && result.data) {
+          setLedgerSummary(result.data);
+          setLedgerLoaded(true);
+          console.log(`[DriversPage] Ledger summary loaded: ${result.meta.totalDrivers} drivers, ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
+        } else {
+          console.error('[DriversPage] Ledger summary returned success=false');
+          setLedgerError(true);
+        }
+      } catch (err: any) {
+        console.error('[DriversPage] Failed to load ledger summaries:', err.message || err);
+        setLedgerError(true);
+      }
+    };
+    fetchLedger();
   }, []);
 
   // Transform Trips into Unique Drivers List with Real Metrics
@@ -316,7 +349,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
         // Update Totals
         driver.totalTrips += 1;
-        driver.totalEarnings += trip.amount || 0;
+        // Phase 6: Trip-based earnings fallback removed — ledger is sole source
         
         // Link Trip
         if (driver.linkedTrips) {
@@ -325,14 +358,14 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
         // Update Today's Metrics
         if (tripDate === today) {
-            driver.todaysEarnings += trip.amount || 0;
+            // Phase 6: Trip-based todaysEarnings fallback removed — ledger is sole source
             driver.todaysTrips += 1;
         }
 
         // Update Monthly Earnings (for Tier Calc)
         try {
              if (isSameMonth(new Date(trip.date), now)) {
-                 driver.monthlyEarnings += trip.amount || 0;
+                 // Phase 6: Trip-based monthlyEarnings fallback removed — ledger is sole source
              }
         } catch (e) {
              // Ignore invalid dates
@@ -347,6 +380,26 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
             driver.vehicle = trip.vehicleId;
         }
     });
+
+    // Phase 2: Overlay ledger-sourced earnings onto driver profiles
+    if (ledgerLoaded && !ledgerError) {
+      for (const [, driver] of driverMap) {
+        // Try matching by driver's Roam ID first, then by external platform IDs
+        const summary = ledgerSummary[driver.id]
+          || (driver.uberDriverId ? ledgerSummary[driver.uberDriverId] : undefined)
+          || (driver.inDriveDriverId ? ledgerSummary[driver.inDriveDriverId] : undefined);
+        if (summary) {
+          driver.totalEarnings = summary.lifetimeEarnings;
+          driver.todaysEarnings = summary.todayEarnings;
+          driver.monthlyEarnings = summary.monthlyEarnings;
+        }
+        // If no ledger summary for this driver, earnings stay at 0 (not trip-based)
+      }
+    } else if (!ledgerLoaded) {
+      // Phase 6: Still loading — earnings stay at 0 until ledger loads
+    } else {
+      console.error('[DriversPage] Ledger unavailable — earnings will show $0 (no trip fallback)');
+    }
 
     // Finalize Metrics (Rate, Tier, Status)
     const processedDrivers = Array.from(driverMap.values()).map(driver => {
@@ -427,11 +480,29 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
             tier: tier,
             status: d.status || 'Active'
         };
+    }).map(orphan => {
+        // Phase 2: Overlay ledger earnings for orphaned drivers too
+        if (ledgerLoaded && !ledgerError) {
+            const summary = ledgerSummary[orphan.id]
+              || (orphan.uberDriverId ? ledgerSummary[orphan.uberDriverId] : undefined)
+              || (orphan.inDriveDriverId ? ledgerSummary[orphan.inDriveDriverId] : undefined);
+            if (summary) {
+                orphan.totalEarnings = summary.lifetimeEarnings;
+                orphan.todaysEarnings = summary.todayEarnings;
+                orphan.monthlyEarnings = summary.monthlyEarnings;
+                // Re-calculate tier with ledger monthly earnings
+                if (tiers.length > 0) {
+                    const t = TierCalculations.getTierForEarnings(summary.monthlyEarnings, tiers);
+                    orphan.tier = t.name;
+                }
+            }
+        }
+        return orphan;
     });
 
     // @ts-ignore
     return [...processedDrivers, ...orphanedDrivers];
-  }, [trips, manualDrivers, importedMetrics, tiers]);
+  }, [trips, manualDrivers, importedMetrics, tiers, ledgerSummary, ledgerLoaded, ledgerError]);
 
   // Apply Filters
   const filteredDrivers = useMemo(() => {

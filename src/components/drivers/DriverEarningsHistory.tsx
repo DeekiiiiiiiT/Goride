@@ -1,26 +1,18 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Download, Target, CalendarDays, X } from "lucide-react";
-import { FinancialTransaction, TierConfig, Trip, QuotaConfig } from "../../types/data";
-import {
-  startOfWeek, endOfWeek, format,
-  eachWeekOfInterval, eachDayOfInterval, eachMonthOfInterval,
-  startOfDay, endOfDay, startOfMonth, endOfMonth
-} from "date-fns";
-import { TierCalculations } from "../../utils/tierCalculations";
-import { tierService } from "../../services/tierService";
-import { getEffectiveTripEarnings } from "../../utils/tripEarnings";
+import { Download, Target, CalendarDays, X, Database, AlertTriangle } from "lucide-react";
+import { TierConfig, QuotaConfig } from "../../types/data";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { ScrollArea } from "../ui/scroll-area";
+import { api } from "../../services/api";
 
 interface DriverEarningsHistoryProps {
   driverId: string;
-  transactions: FinancialTransaction[];
-  trips?: Trip[];              // Source of Gross Revenue (Phase 2)
   quotaConfig?: QuotaConfig;   // For Quota % column (Phase 5)
 }
 
@@ -75,16 +67,76 @@ function getQuotaBadgeStyle(percent: number): string {
   return 'bg-rose-50 text-rose-700 border-rose-200';
 }
 
-export function DriverEarningsHistory({ driverId, transactions = [], trips = [], quotaConfig }: DriverEarningsHistoryProps) {
-  const [tiers, setTiers] = React.useState<TierConfig[]>([]);
-  const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
-  const [selectedRowIdx, setSelectedRowIdx] = React.useState<number | null>(null);
-  const [dateFrom, setDateFrom] = React.useState<string>('');
-  const [dateTo, setDateTo] = React.useState<string>('');
+export function DriverEarningsHistory({ driverId, quotaConfig }: DriverEarningsHistoryProps) {
+  const [periodType, setPeriodType] = useState<PeriodType>('weekly');
+  const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
 
-  React.useEffect(() => {
-    tierService.getTiers().then(setTiers);
-  }, []);
+  // ────────────────────────────────────────────────────────────
+  // Phase 5: Server-side ledger earnings history (ONLY source)
+  // ────────────────────────────────────────────────────────────
+  const [serverPeriodData, setServerPeriodData] = useState<PeriodRow[]>([]);
+  const [serverDataLoaded, setServerDataLoaded] = useState(false);
+  const [serverDataLoading, setServerDataLoading] = useState(false);
+  const [dataSource, setDataSource] = useState<'loading' | 'ledger' | 'error'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    setServerDataLoaded(false);
+    setServerDataLoading(true);
+    setDataSource('loading');
+
+    api.getLedgerEarningsHistory({ driverId, periodType })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success && result.data && result.data.length > 0) {
+          // Convert server date strings → Date objects to match PeriodRow interface
+          const converted: PeriodRow[] = result.data.map((row: any) => ({
+            periodStart: new Date(row.periodStart + 'T00:00:00'),
+            periodEnd: new Date(row.periodEnd + 'T23:59:59'),
+            grossRevenue: row.grossRevenue,
+            driverShare: row.driverShare,
+            fleetShare: row.fleetShare,
+            expenses: row.expenses,
+            tier: {
+              id: row.tier.id,
+              name: row.tier.name,
+              minEarnings: 0,
+              maxEarnings: null,
+              sharePercentage: row.tier.sharePercentage,
+              color: row.tier.color,
+            } as TierConfig,
+            netEarnings: row.netEarnings,
+            payouts: row.payouts,
+            tripCount: row.tripCount,
+            transactionCount: row.transactionCount,
+            quotaTarget: row.quotaTarget,
+            quotaPercent: row.quotaPercent,
+          }));
+          setServerPeriodData(converted);
+          setServerDataLoaded(true);
+          setDataSource('ledger');
+          console.log(`[EarningsHistory] Loaded ${converted.length} rows from ledger (${result.durationMs}ms)`);
+        } else {
+          setServerPeriodData([]);
+          setServerDataLoaded(true);
+          setDataSource('ledger');
+          console.log('[EarningsHistory] Ledger returned no data for this driver/period');
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('[EarningsHistory] Ledger fetch failed:', err);
+        setServerDataLoaded(true);
+        setDataSource('error');
+      })
+      .finally(() => {
+        if (!cancelled) setServerDataLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [driverId, periodType]);
 
   // Reset visible rows when switching period type
   const handlePeriodChange = (pt: PeriodType) => {
@@ -99,151 +151,27 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   const quotaEnabled = quotaTarget !== null;
 
   // ────────────────────────────────────────────────────────────
-  // Core aggregation engine — computes rows for the selected period type.
-  //   • Gross Revenue comes from TRIPS (via getEffectiveTripEarnings)
-  //   • Expenses / Payouts come from TRANSACTIONS
-  //   • Tier is looked up from cumulative trip earnings
+  // Step 5.4: Client-side periodData fallback REMOVED.
+  // Earnings History now reads ONLY from the server ledger endpoint.
   // ────────────────────────────────────────────────────────────
-  const periodData: PeriodRow[] = useMemo(() => {
-    if (tiers.length === 0) return [];
-    if (trips.length === 0 && transactions.length === 0) return [];
-
-    // 1. Collect all dates from trips + transactions to find the overall range
-    const allDates: number[] = [];
-    trips.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
-    transactions.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
-    if (allDates.length === 0) return [];
-
-    const minDate = new Date(Math.min(...allDates));
-    const maxDate = new Date(Math.min(Math.max(...allDates), Date.now()));
-
-    // 2. Generate period buckets based on periodType
-    let buckets: { start: Date; end: Date }[] = [];
-
-    if (periodType === 'daily') {
-      const days = eachDayOfInterval({ start: startOfDay(minDate), end: endOfDay(maxDate) });
-      buckets = days.map(d => ({ start: startOfDay(d), end: endOfDay(d) }));
-    } else if (periodType === 'monthly') {
-      const months = eachMonthOfInterval({ start: startOfMonth(minDate), end: endOfMonth(maxDate) });
-      buckets = months.map(m => ({ start: startOfMonth(m), end: endOfMonth(m) }));
-    } else {
-      // weekly (default)
-      const weeks = eachWeekOfInterval(
-        { start: startOfWeek(minDate, { weekStartsOn: 1 }), end: endOfWeek(maxDate, { weekStartsOn: 1 }) },
-        { weekStartsOn: 1 }
-      );
-      buckets = weeks.map(w => ({ start: w, end: endOfWeek(w, { weekStartsOn: 1 }) }));
-    }
-
-    // 3. Pre-filter completed trips for revenue calculations
-    const completedTrips = trips.filter(t => t.status === 'Completed');
-
-    // 4. Pre-sort completed trips by date for efficient cumulative calculation
-    const sortedTrips = [...completedTrips].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-
-    // 5. Aggregate each bucket
-    const rows: PeriodRow[] = buckets.map(({ start: periodStart, end: periodEnd }) => {
-      const pStartTime = periodStart.getTime();
-      const pEndTime = periodEnd.getTime();
-
-      // --- Trips in this period ---
-      const periodTrips = completedTrips.filter(t => {
-        const d = new Date(t.date).getTime();
-        return d >= pStartTime && d <= pEndTime;
-      });
-
-      const grossRevenue = periodTrips.reduce(
-        (sum, t) => sum + getEffectiveTripEarnings(t), 0
-      );
-
-      const tripCount = periodTrips.length;
-
-      // --- Monthly-reset cumulative earnings for tier lookup ---
-      // Tier resets on the 1st of each month. The "reference month" is
-      // determined by the period's start date. Only trips dated within
-      // that calendar month (up to the period end, capped at month-end)
-      // count toward the cumulative that determines the tier.
-      const refMonthStart = startOfMonth(periodStart).getTime();
-      const refMonthEnd = endOfMonth(periodStart).getTime();
-      const cumulativeCap = Math.min(pEndTime, refMonthEnd);
-
-      const cumulativeEarnings = sortedTrips.reduce((sum, t) => {
-        const d = new Date(t.date).getTime();
-        if (d >= refMonthStart && d <= cumulativeCap) {
-          return sum + getEffectiveTripEarnings(t);
-        }
-        return sum;
-      }, 0);
-
-      const tier = TierCalculations.getTierForEarnings(cumulativeEarnings, tiers);
-
-      // --- Driver / Fleet share ---
-      const driverShare = grossRevenue * (tier.sharePercentage / 100);
-      const fleetShare = grossRevenue - driverShare;
-
-      // --- Transactions in this period ---
-      const periodTx = transactions.filter(t => {
-        const d = new Date(t.date).getTime();
-        return d >= pStartTime && d <= pEndTime;
-      });
-
-      const expenses = periodTx
-        .filter(t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0))
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-      const payouts = periodTx
-        .filter(t => t.type === 'Payout')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-      // --- Net Earnings = Driver Share minus Expenses ---
-      const netEarnings = driverShare - expenses;
-
-      // --- Quota ---
-      const qTarget = quotaTarget;
-      const qPercent = qTarget !== null && qTarget > 0 ? (grossRevenue / qTarget) * 100 : null;
-
-      return {
-        periodStart,
-        periodEnd,
-        grossRevenue,
-        driverShare,
-        fleetShare,
-        expenses,
-        tier,
-        netEarnings,
-        payouts,
-        tripCount,
-        transactionCount: periodTx.length,
-        quotaTarget: qTarget,
-        quotaPercent: qPercent,
-      };
-    });
-
-    // 6. Only show rows that had activity (trips or transactions), sorted newest-first
-    return rows
-      .filter(r => r.tripCount > 0 || r.transactionCount > 0)
-      .reverse();
-
-  }, [trips, transactions, tiers, periodType, quotaTarget]);
+  const activePeriodData = serverPeriodData;
 
   // ────────────────────────────────────────────────────────────
   // Date range filter — applied AFTER aggregation
   // ────────────────────────────────────────────────────────────
   const filteredPeriodData = useMemo(() => {
-    if (!dateFrom && !dateTo) return periodData;
+    if (!dateFrom && !dateTo) return activePeriodData;
 
     const fromTime = dateFrom ? startOfDay(new Date(dateFrom + 'T00:00:00')).getTime() : -Infinity;
     const toTime = dateTo ? endOfDay(new Date(dateTo + 'T00:00:00')).getTime() : Infinity;
 
-    return periodData.filter(row => {
+    return activePeriodData.filter(row => {
       const rowEnd = row.periodEnd.getTime();
       const rowStart = row.periodStart.getTime();
       // Include row if any part of the period overlaps the filter range
       return rowEnd >= fromTime && rowStart <= toTime;
     });
-  }, [periodData, dateFrom, dateTo]);
+  }, [activePeriodData, dateFrom, dateTo]);
 
   const dateFilterActive = dateFrom !== '' || dateTo !== '';
 
@@ -273,13 +201,13 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   // ────────────────────────────────────────────────────────────
   // Latest period row (for summary card)
   // ────────────────────────────────────────────────────────────
-  const latestRow = periodData.length > 0 ? periodData[0] : null;
+  const latestRow = activePeriodData.length > 0 ? activePeriodData[0] : null;
 
   // ────────────────────────────────────────────────────────────
   // Display row for the progress bar — selected row or latest
   // ────────────────────────────────────────────────────────────
-  const displayRow = (selectedRowIdx !== null && periodData[selectedRowIdx]) ? periodData[selectedRowIdx] : latestRow;
-  const isViewingSelected = selectedRowIdx !== null && periodData[selectedRowIdx] !== undefined;
+  const displayRow = (selectedRowIdx !== null && activePeriodData[selectedRowIdx]) ? activePeriodData[selectedRowIdx] : latestRow;
+  const isViewingSelected = selectedRowIdx !== null && activePeriodData[selectedRowIdx] !== undefined;
 
   // ────────────────────────────────────────────────────────────
   // CSV Export
@@ -315,10 +243,18 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   // ────────────────────────────────────────────────────────────
   // Empty state
   // ───────────────────────────────────────────────────────────
-  if (periodData.length === 0) {
+  if (activePeriodData.length === 0 && !serverDataLoading) {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-500">
         No earnings history available.
+      </div>
+    );
+  }
+
+  if (serverDataLoading && activePeriodData.length === 0) {
+    return (
+      <div className="text-center p-8 border border-dashed rounded-lg text-slate-400">
+        <div className="animate-pulse">Loading earnings history...</div>
       </div>
     );
   }
@@ -329,7 +265,26 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">Earnings History</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-lg">Earnings History</CardTitle>
+          {dataSource === 'ledger' && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border-emerald-200 font-normal">
+              <Database className="h-3 w-3 mr-1" />
+              Ledger
+            </Badge>
+          )}
+          {dataSource === 'error' && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-rose-50 text-rose-600 border-rose-200 font-normal">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Error
+            </Badge>
+          )}
+          {dataSource === 'loading' && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-slate-50 text-slate-400 border-slate-200 font-normal animate-pulse">
+              Loading...
+            </Badge>
+          )}
+        </div>
         <Button variant="outline" size="sm" onClick={handleExport}>
           <Download className="h-4 w-4 mr-2" />
           Export History
@@ -400,7 +355,7 @@ export function DriverEarningsHistory({ driverId, transactions = [], trips = [],
               {dateTo ? format(new Date(dateTo + 'T00:00:00'), 'MMM d, yyyy') : 'present'}
             </span>
             <span className="text-indigo-500 font-medium">
-              ({filteredPeriodData.length} of {periodData.length} {periodLabel}{periodData.length !== 1 ? 's' : ''})
+              ({filteredPeriodData.length} of {activePeriodData.length} {periodLabel}{activePeriodData.length !== 1 ? 's' : ''})
             </span>
           </div>
         )}

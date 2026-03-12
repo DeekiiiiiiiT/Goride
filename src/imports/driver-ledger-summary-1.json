@@ -1,0 +1,57 @@
+{
+  "success": true,
+  "totalLedgerEntries": 1277,
+  "totalRoamDrivers": 2,
+  "uniqueUnresolvableIds": 2,
+  "mapping": [
+    {
+      "driverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+      "count": 995,
+      "driverNames": [
+        "KENNY GREGORY RATTRAY"
+      ],
+      "platforms": [
+        "Uber"
+      ],
+      "eventTypes": [
+        "fare_earning",
+        "tip",
+        "toll_charge"
+      ],
+      "sampleSourceIds": [
+        "e5bcaf33-42a1-420b-a3f7-6bf9440059f7",
+        "898b6361-6fcd-4e37-87d5-a1f919b1d6d3",
+        "abfbd4ea-0e26-4202-96d5-ca0c44519f7e"
+      ]
+    },
+    {
+      "driverId": "fleet_general",
+      "count": 2,
+      "driverNames": [
+        "fleet_general"
+      ],
+      "platforms": [],
+      "eventTypes": [
+        "fuel_expense"
+      ],
+      "sampleSourceIds": [
+        "a7f308b1-61b6-486c-8707-dcdecf00ded9",
+        "0a9431c0-7768-4b92-a3ab-9e8454651e05"
+      ]
+    }
+  ],
+  "driverRecords": [
+    {
+      "roamId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+      "name": "Kenny Gregory Rattray",
+      "uberDriverId": null,
+      "inDriveDriverId": null
+    },
+    {
+      "roamId": "b94d7df0-c654-4ab5-b7c5-46a54229d15b",
+      "name": "SADIKI ABAYOMI THOMAS",
+      "uberDriverId": null,
+      "inDriveDriverId": null
+    }
+  ]
+}

@@ -25,13 +25,15 @@ type FlowStep = 'upload' | 'validating' | 'preview' | 'importing' | 'success' | 
 
 interface TripReImportFlowProps {
   onBack: () => void;
+  /** If set, only import trips matching this platform (e.g. 'Uber', 'InDrive', 'Roam') */
+  platformFilter?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Component
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function TripReImportFlow({ onBack }: TripReImportFlowProps) {
+export function TripReImportFlow({ onBack, platformFilter }: TripReImportFlowProps) {
   const [flowStep, setFlowStep] = useState<FlowStep>('upload');
   const [fileName, setFileName] = useState('');
   const [validRecords, setValidRecords] = useState<Partial<Trip>[]>([]);
@@ -71,14 +73,32 @@ export function TripReImportFlow({ onBack }: TripReImportFlowProps) {
 
       // Validate
       const result = validateImportFile(content, 'trip');
-      setValidRecords(result.validRecords);
+
+      // Apply platform filter if specified
+      let filtered = result.validRecords;
+      if (platformFilter) {
+        const pf = platformFilter.toLowerCase();
+        filtered = result.validRecords.filter(
+          (r: any) => (r.platform || '').toLowerCase() === pf
+        );
+      }
+
+      setValidRecords(filtered);
       setErrors(result.errors);
       setTotalParsed(result.totalProcessed);
 
-      if (result.validRecords.length === 0) {
-        toast.error('No valid trip records found in the file.');
+      if (filtered.length === 0) {
+        if (platformFilter && result.validRecords.length > 0) {
+          toast.error(`No ${platformFilter} trips found in the file. The file contains ${result.validRecords.length} trip(s) from other platforms.`);
+        } else {
+          toast.error('No valid trip records found in the file.');
+        }
         setFlowStep('upload');
         return;
+      }
+
+      if (platformFilter && filtered.length < result.validRecords.length) {
+        toast.info(`Filtered to ${filtered.length} ${platformFilter} trips out of ${result.validRecords.length} total valid trips.`);
       }
 
       setFlowStep('preview');
@@ -88,7 +108,7 @@ export function TripReImportFlow({ onBack }: TripReImportFlowProps) {
       setFlowStep('upload');
     };
     reader.readAsText(file);
-  }, []);
+  }, [platformFilter]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -151,9 +171,13 @@ export function TripReImportFlow({ onBack }: TripReImportFlowProps) {
           Back
         </Button>
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Trip Re-Import</h3>
+          <h3 className="text-lg font-semibold text-slate-900">
+            {platformFilter ? `${platformFilter} Trip Import` : 'Trip Re-Import'}
+          </h3>
           <p className="text-sm text-slate-500">
-            Import trip data from a CSV file. The ledger is automatically updated.
+            {platformFilter
+              ? `Import only ${platformFilter} trips from a CSV file. Non-${platformFilter} rows are automatically excluded.`
+              : 'Import trip data from a CSV file. The ledger is automatically updated.'}
           </p>
         </div>
       </div>
@@ -162,10 +186,16 @@ export function TripReImportFlow({ onBack }: TripReImportFlowProps) {
       {flowStep === 'upload' && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Upload Trip CSV</CardTitle>
+            <CardTitle className="text-base">
+              {platformFilter ? `Upload ${platformFilter} Trip CSV` : 'Upload Trip CSV'}
+            </CardTitle>
             <CardDescription>
-              Upload a CSV file exported from the Trip Data export, or any CSV with at least:
-              <strong> date</strong>, <strong>driverId</strong> (or driverName), and <strong>amount</strong> columns.
+              {platformFilter ? (
+                <>Upload a CSV containing {platformFilter} trip data. Only rows where <strong>platform</strong> = "{platformFilter}" will be imported; other platforms are filtered out automatically.</>
+              ) : (
+                <>Upload a CSV file exported from the Trip Data export, or any CSV with at least:
+                <strong> date</strong>, <strong>driverId</strong> (or driverName), and <strong>amount</strong> columns.</>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>

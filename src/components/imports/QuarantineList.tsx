@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { CheckCircle, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp, Edit2, Trash2, Check } from 'lucide-react';
+import { CheckCircle, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp, Edit2, Trash2, Check, X } from 'lucide-react';
 import { Input } from '../ui/input';
 
 interface QuarantineListProps {

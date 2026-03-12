@@ -1,0 +1,55 @@
+{
+  "success": true,
+  "dryRun": false,
+  "filterDriverId": "73e5b1dc-81b4-45ee-a34a-25a32569841",
+  "filterCanonicalId": "73e5b1dc-81b4-45ee-a34a-25a32569841",
+  "startedAt": "2026-03-09T14:22:11.822Z",
+  "completedAt": "2026-03-09T14:22:12.229Z",
+  "durationMs": 407,
+  "stats": {
+    "scanned": 1277,
+    "alreadyCorrect": 0,
+    "repaired": 0,
+    "unresolvable": 0,
+    "skippedNoDriverId": 0,
+    "skippedFilterMismatch": 1277,
+    "errors": 0,
+    "byPlatform": {
+      "Unknown": {
+        "scanned": 167,
+        "repaired": 0
+      },
+      "Uber": {
+        "scanned": 995,
+        "repaired": 0
+      },
+      "Roam": {
+        "scanned": 42,
+        "repaired": 0
+      },
+      "InDrive": {
+        "scanned": 73,
+        "repaired": 0
+      }
+    },
+    "repairedSamples": [],
+    "errorSamples": [],
+    "unresolvableSamples": []
+  },
+  "_diagnostics": {
+    "driverRecords": [
+      {
+        "id": "73e5b1dc-01b",
+        "name": "Kenny Gregory Rattray",
+        "uberDriverId": "52ff47da-ef48-41b8-93d5-80a09b85ce5b",
+        "inDriveDriverId": null
+      },
+      {
+        "id": "b94d7df0-c65",
+        "name": "SADIKI ABAYOMI THOMAS",
+        "uberDriverId": null,
+        "inDriveDriverId": null
+      }
+    ]
+  }
+}

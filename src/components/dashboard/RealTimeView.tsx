@@ -66,7 +66,7 @@ export function RealTimeView({ trips }: RealTimeViewProps) {
 
   // Platform activity from recent trips
   const platformActivity = useMemo(() => {
-    const counts: Record<string, number> = { Uber: 0, Lyft: 0, Bolt: 0, Other: 0 };
+    const counts: Record<string, number> = { Uber: 0, InDrive: 0, Roam: 0, Other: 0 };
     latestTrips.slice(0, 50).forEach(t => {
       const p = t.platform || 'Other';
       if (counts[p] !== undefined) counts[p]++;
@@ -148,7 +148,6 @@ export function RealTimeView({ trips }: RealTimeViewProps) {
                        <div className="col-span-2">
                           <Badge variant="outline" className={`
                             ${trip.platform === 'Uber' ? 'border-slate-800 text-slate-800' : 
-                              trip.platform === 'Lyft' ? 'border-pink-500 text-pink-600' : 
                               'border-indigo-500 text-indigo-600'}
                           `}>
                             {normalizePlatform(trip.platform)}
@@ -209,7 +208,7 @@ export function RealTimeView({ trips }: RealTimeViewProps) {
                         {platformActivity.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={
                             entry.name === 'Uber' ? '#1f2937' : 
-                            entry.name === 'Lyft' ? '#ec4899' : 
+                            entry.name === 'InDrive' ? '#10b981' :
                             '#6366f1'
                           } />
                         ))}

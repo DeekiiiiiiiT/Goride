@@ -16,15 +16,25 @@ import {
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { Trip, Budget } from '../../types/data';
 import { api } from '../../services/api';
-import { DollarSign, TrendingUp, Wallet, CreditCard, PiggyBank, Receipt, Loader2 } from "lucide-react";
+import { DollarSign, TrendingUp, Wallet, CreditCard, PiggyBank, Receipt, Loader2, Database } from "lucide-react";
 
 interface FinancialsViewProps {
   trips: Trip[];
+  // Phase 5: Ledger-sourced fleet summary (optional — falls back to trips if null)
+  fleetSummary?: {
+    totalEarnings: number;
+    totalTripCount: number;
+    totalCashCollected: number;
+    dailyTrend: Array<{ date: string; earnings: number; tripCount: number }>;
+    topDrivers: Array<{ driverId: string; driverName: string; earnings: number; tripCount: number }>;
+    platformBreakdown: Array<{ platform: string; earnings: number; tripCount: number }>;
+    revenueByType: { fare: number; tip: number; promotion: number; other: number };
+  } | null;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
-export function FinancialsView({ trips }: FinancialsViewProps) {
+export function FinancialsView({ trips, fleetSummary = null }: FinancialsViewProps) {
   const [budgets, setBudgets] = React.useState<Budget[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -64,69 +74,58 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
     let totalCash = 0;
     let totalRefunds = 0;
     let totalTips = 0;
-    
-    // Revenue Breakdown by Type
-    const revenueByType = {
-        'Fare': 0,
-        'Tip': 0,
-        'Promotion': 0,
-        'Other': 0
-    };
-
-    const completedTrips = trips.filter(t => t.status === 'Completed' || t.transactionType);
-    
-    completedTrips.forEach(t => {
-        const amt = t.amount || 0;
-        
-        // 1. Total Revenue
-        if (amt > 0) totalRevenue += amt;
-        
-        // 2. Cash Collected
-        if (t.cashCollected) totalCash += t.cashCollected;
-        
-        // 3. Refunds/Expenses (Negative amounts usually)
-        if (amt < 0) totalRefunds += Math.abs(amt);
-
-        // 4. Breakdown
-        const type = t.transactionType || 'Fare'; // Default to Fare
-        if (type.includes('Tip')) {
-            revenueByType['Tip'] += amt;
-            totalTips += amt;
-        } else if (type.includes('Promo') || type.includes('Incentive')) {
-            revenueByType['Promotion'] += amt;
-        } else if (type.includes('Fare') || type === 'Completed Trip') {
-            revenueByType['Fare'] += amt;
-        } else {
-            revenueByType['Other'] += amt;
-        }
-    });
-
-    const avgRevenuePerTrip = completedTrips.length > 0 ? totalRevenue / completedTrips.length : 0;
-    const expenseRatio = totalRevenue > 0 ? (totalRefunds / totalRevenue) * 100 : 0;
-    const cashPercentage = totalRevenue > 0 ? (totalCash / totalRevenue) * 100 : 0;
-
-    // Platform Grouping (Keep existing logic)
-    const platformStats: Record<string, { revenue: number, count: number }> = {};
-    trips.forEach(t => {
-      if (t.status !== 'Completed') return;
-      if (!platformStats[t.platform]) platformStats[t.platform] = { revenue: 0, count: 0 };
-      platformStats[t.platform].revenue += t.amount;
-      platformStats[t.platform].count += 1;
-    });
-    
-    // Find best platform
+    let avgRevenuePerTrip = 0;
+    let expenseRatio = 0;
+    let cashPercentage = 0;
     let bestPlatform = 'N/A';
-    let maxRev = 0;
-    Object.entries(platformStats).forEach(([p, stats]) => {
-      if (stats.revenue > maxRev) {
-        maxRev = stats.revenue;
-        bestPlatform = p;
-      }
-    });
+    let platformStats: Record<string, { revenue: number, count: number }> = {};
+    let pieData: Array<{ name: string; value: number }> = [];
+    let revenueSource: 'ledger' | 'unavailable' = 'unavailable';
 
-    const pieData = Object.entries(revenueByType)
-        .filter(([_, val]) => val > 0)
-        .map(([name, value]) => ({ name, value }));
+    if (fleetSummary) {
+      // Phase 6: Ledger is sole source — no trip fallback
+      revenueSource = 'ledger';
+      totalRevenue = fleetSummary.totalEarnings;
+      totalCash = fleetSummary.totalCashCollected;
+      avgRevenuePerTrip = fleetSummary.totalTripCount > 0 ? totalRevenue / fleetSummary.totalTripCount : 0;
+      cashPercentage = totalRevenue > 0 ? (totalCash / totalRevenue) * 100 : 0;
+
+      // Revenue by type from ledger
+      const rbt = fleetSummary.revenueByType;
+      pieData = [
+        { name: 'Fare', value: rbt.fare },
+        { name: 'Tip', value: rbt.tip },
+        { name: 'Promotion', value: rbt.promotion },
+        { name: 'Other', value: rbt.other },
+      ].filter(d => d.value > 0);
+      totalTips = rbt.tip;
+
+      // Platform stats from ledger
+      fleetSummary.platformBreakdown.forEach(p => {
+        platformStats[p.platform] = { revenue: p.earnings, count: p.tripCount };
+      });
+
+      // Best platform
+      let maxRev = 0;
+      Object.entries(platformStats).forEach(([p, stats]) => {
+        if (stats.revenue > maxRev) {
+          maxRev = stats.revenue;
+          bestPlatform = p;
+        }
+      });
+
+      // Refunds/expenses — known gap: not in ledger yet, compute from trips
+      const completedTrips = trips.filter(t => t.status === 'Completed' || t.transactionType);
+      completedTrips.forEach(t => {
+        const amt = t.amount || 0;
+        if (amt < 0) totalRefunds += Math.abs(amt);
+      });
+      expenseRatio = totalRevenue > 0 ? (totalRefunds / totalRevenue) * 100 : 0;
+
+    } else {
+      // Phase 6: No trip fallback — show zeros when ledger unavailable
+      console.error('[FinancialsView] Ledger fleet summary unavailable — showing $0 (no trip fallback)');
+    }
 
     return {
       totalRevenue,
@@ -138,9 +137,10 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
       totalTips,
       expenseRatio,
       cashPercentage,
-      pieData
+      pieData,
+      revenueSource
     };
-  }, [trips]);
+  }, [trips, fleetSummary]);
 
   // Budget Analysis Calculation
   const budgetAnalysis = useMemo(() => {
@@ -183,26 +183,19 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
 
   // Daily Revenue & Trip Count Data for Composed Chart
   const chartData = useMemo(() => {
-    const dailyMap = new Map<string, { date: string, revenue: number, trips: number }>();
-    
-    // Sort trips chronologically
-    const sorted = [...trips].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Phase 6: Ledger is sole source — no trip fallback
+    if (fleetSummary?.dailyTrend && fleetSummary.dailyTrend.length > 0) {
+      return fleetSummary.dailyTrend.map(d => ({
+        date: new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        revenue: d.earnings,
+        trips: d.tripCount,
+      }));
+    }
 
-    sorted.forEach(t => {
-      if (t.status !== 'Completed') return;
-      const dateStr = new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      
-      if (!dailyMap.has(dateStr)) {
-        dailyMap.set(dateStr, { date: dateStr, revenue: 0, trips: 0 });
-      }
-      const entry = dailyMap.get(dateStr)!;
-      entry.revenue += t.amount;
-      entry.trips += 1;
-    });
-
-    // Take last 14 days if available, or all
-    return Array.from(dailyMap.values()).slice(-14);
-  }, [trips]);
+    // Phase 6: Return empty when ledger unavailable
+    console.error('[FinancialsView] Ledger daily trend unavailable — showing empty chart (no trip fallback)');
+    return [];
+  }, [fleetSummary]);
 
   return (
     <div className="space-y-6">
@@ -213,6 +206,10 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
           value={`$${metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
           icon={<DollarSign className="h-4 w-4 text-emerald-600" />}
           subtext="Gross Revenue"
+          sourceTag={metrics.revenueSource === 'ledger' 
+            ? <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full font-medium"><Database className="h-2.5 w-2.5" />Ledger</span>
+            : <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">Unavailable</span>
+          }
         />
         <MetricCard 
           title="Net Profit (Est)"
@@ -395,7 +392,7 @@ export function FinancialsView({ trips }: FinancialsViewProps) {
   );
 }
 
-function MetricCard({ title, value, icon, subtext }: { title: string, value: string, icon: React.ReactNode, subtext: string }) {
+function MetricCard({ title, value, icon, subtext, sourceTag }: { title: string, value: string, icon: React.ReactNode, subtext: string, sourceTag?: React.ReactNode }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -409,6 +406,7 @@ function MetricCard({ title, value, icon, subtext }: { title: string, value: str
         <p className="text-xs text-slate-500 mt-1">
           {subtext}
         </p>
+        {sourceTag && <div className="mt-1">{sourceTag}</div>}
       </CardContent>
     </Card>
   );

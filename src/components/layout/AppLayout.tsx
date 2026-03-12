@@ -43,7 +43,8 @@ import {
   FileSpreadsheet,
   LayoutGrid,
   TrendingUp,
-  Award
+  Award,
+  Wrench
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -350,6 +351,12 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             label="Settings" 
             active={currentPage === 'settings'} 
             onClick={() => onNavigate?.('settings')}
+          />
+          <NavItem 
+            icon={<Wrench className="h-4 w-4" />} 
+            label="Ledger Backfill" 
+            active={currentPage === 'ledger-backfill'} 
+            onClick={() => onNavigate?.('ledger-backfill')}
           />
         </SidebarMenu>
       </SidebarContent>

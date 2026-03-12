@@ -3,13 +3,6 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -19,23 +12,23 @@ import {
   SheetFooter,
   SheetClose
 } from "../ui/sheet";
-import { Filter, X, Search } from 'lucide-react';
+import { Filter, X, ChevronDown } from 'lucide-react';
 import { Separator } from "../ui/separator";
 
 export interface TripFilterState {
   status: string;
   driverId: string;
   vehicleId: string;
-  dateRange: string; // 'today', 'yesterday', 'week', 'month', 'custom'
+  dateRange: string;
   dateStart?: string;
   dateEnd?: string;
   minEarnings?: string;
   maxEarnings?: string;
   minDistance?: string;
-  hasTip?: string; // 'yes', 'no', 'all'
-  hasSurge?: string; // 'yes', 'no', 'all'
-  tripType?: string; // 'all', 'manual', 'platform'
-  platform?: string; // 'all', 'Uber', 'InDrive', 'Roam'
+  hasTip?: string;
+  hasSurge?: string;
+  tripType?: string;
+  platform?: string;
 }
 
 interface TripFiltersProps {
@@ -45,10 +38,89 @@ interface TripFiltersProps {
   vehicles: { id: string; plate: string }[];
 }
 
+// ─── Toggle Button Group Component ──────────────────────────────────────────
+// Replaces Radix Select to avoid infinite re-render / portal crash issues.
+interface ToggleOption {
+  value: string;
+  label: string;
+}
+
+function ToggleButtonGroup({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: ToggleOption[];
+  value: string;
+  onChange: (val: string) => void;
+  label?: string;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => {
+            if (opt.value !== value) {
+              onChange(opt.value);
+            }
+          }}
+          className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap
+            ${opt.value === value
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+            }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Simple Dropdown (native HTML select wrapper) ───────────────────────────
+// Used for long lists like drivers/vehicles where toggle buttons would overflow
+function NativeSelect({
+  options,
+  value,
+  onChange,
+  placeholder,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => {
+          if (e.target.value !== value) {
+            onChange(e.target.value);
+          }
+        }}
+        className="appearance-none w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 cursor-pointer"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+    </div>
+  );
+}
+
 export function TripFilters({ filters, onFilterChange, drivers, vehicles }: TripFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const updateFilter = (key: keyof TripFilterState, value: any) => {
+    // Bail out if value hasn't changed — prevents unnecessary re-renders
+    if ((filters as any)[key] === value) return;
     onFilterChange({ ...filters, [key]: value });
   };
 
@@ -89,38 +161,32 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
         {/* Primary Filters Row */}
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
           
-          {/* Time Range */}
-          <div className="w-[140px]">
-            <Select 
-              value={filters.dateRange} 
-              onValueChange={(val) => updateFilter('dateRange', val)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Date Range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="yesterday">Yesterday</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">Last 30 Days</SelectItem>
-                <SelectItem value="custom">Custom Range</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Time Range - Toggle Buttons */}
+          <ToggleButtonGroup
+            value={filters.dateRange}
+            onChange={(val) => updateFilter('dateRange', val)}
+            options={[
+              { value: 'today', label: 'Today' },
+              { value: 'yesterday', label: 'Yesterday' },
+              { value: 'week', label: 'This Week' },
+              { value: 'month', label: 'Last 30 Days' },
+              { value: 'custom', label: 'Custom' },
+              { value: 'all', label: 'All Time' },
+            ]}
+          />
 
           {filters.dateRange === 'custom' && (
              <div className="flex items-center gap-2">
                 <Input 
                    type="date" 
-                   className="w-auto" 
+                   className="w-auto h-8 text-xs" 
                    value={filters.dateStart}
                    onChange={(e) => updateFilter('dateStart', e.target.value)}
                 />
-                <span className="text-slate-400">-</span>
+                <span className="text-slate-400 text-xs">to</span>
                 <Input 
                    type="date" 
-                   className="w-auto"
+                   className="w-auto h-8 text-xs"
                    value={filters.dateEnd}
                    onChange={(e) => updateFilter('dateEnd', e.target.value)}
                 />
@@ -129,78 +195,51 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
 
           <Separator orientation="vertical" className="h-8 hidden lg:block" />
 
-          {/* Status */}
-          <div className="w-[130px]">
-            <Select 
-              value={filters.status} 
-              onValueChange={(val) => updateFilter('status', val)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Completed">Completed</SelectItem>
-                <SelectItem value="Cancelled">Cancelled</SelectItem>
-                <SelectItem value="Processing">In Progress</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Status - Toggle Buttons */}
+          <ToggleButtonGroup
+            value={filters.status}
+            onChange={(val) => updateFilter('status', val)}
+            options={[
+              { value: 'all', label: 'All Status' },
+              { value: 'Completed', label: 'Completed' },
+              { value: 'Cancelled', label: 'Cancelled' },
+              { value: 'Processing', label: 'In Progress' },
+            ]}
+          />
 
-          {/* Platform */}
-          <div className="w-[140px]">
-            <Select 
-              value={filters.platform || 'all'} 
-              onValueChange={(val) => updateFilter('platform', val)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Platform" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Platforms</SelectItem>
-                <SelectItem value="Uber">Uber</SelectItem>
-                <SelectItem value="Lyft">Lyft</SelectItem>
-                <SelectItem value="Bolt">Bolt</SelectItem>
-                <SelectItem value="InDrive">InDrive</SelectItem>
-                <SelectItem value="Roam">Roam</SelectItem>
-                <SelectItem value="Other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Platform - Toggle Buttons */}
+          <ToggleButtonGroup
+            value={filters.platform || 'all'}
+            onChange={(val) => updateFilter('platform', val)}
+            options={[
+              { value: 'all', label: 'All Platforms' },
+              { value: 'Uber', label: 'Uber' },
+              { value: 'InDrive', label: 'InDrive' },
+              { value: 'Roam', label: 'Roam' },
+            ]}
+          />
 
-          {/* Trip Type */}
-          <div className="w-[140px]">
-             <Select 
-               value={filters.tripType || 'all'} 
-               onValueChange={(val) => updateFilter('tripType', val)}
-             >
-              <SelectTrigger>
-                <SelectValue placeholder="Trip Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="platform">Platform Import</SelectItem>
-                <SelectItem value="manual">Manual Entry</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Trip Type - Toggle Buttons */}
+          <ToggleButtonGroup
+            value={filters.tripType || 'all'}
+            onChange={(val) => updateFilter('tripType', val)}
+            options={[
+              { value: 'all', label: 'All Types' },
+              { value: 'platform', label: 'Platform' },
+              { value: 'manual', label: 'Manual' },
+            ]}
+          />
 
-          {/* Driver */}
+          {/* Driver - Native Select (too many options for toggle) */}
           <div className="w-[160px]">
-             <Select 
-               value={filters.driverId} 
-               onValueChange={(val) => updateFilter('driverId', val)}
-             >
-              <SelectTrigger>
-                <SelectValue placeholder="All Drivers" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Drivers</SelectItem>
-                {drivers.map(d => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <NativeSelect
+              value={filters.driverId}
+              onChange={(val) => updateFilter('driverId', val)}
+              options={[
+                { value: 'all', label: 'All Drivers' },
+                ...drivers.map(d => ({ value: d.id, label: d.name }))
+              ]}
+            />
           </div>
 
         </div>
@@ -209,6 +248,7 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
         <div className="flex items-center gap-2">
            {activeFilterCount > 0 && (
                <Button variant="ghost" size="sm" onClick={clearFilters} className="text-slate-500">
+                   <X className="h-3.5 w-3.5 mr-1" />
                    Clear
                </Button>
            )}
@@ -238,20 +278,14 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
                     {/* Vehicle */}
                     <div className="space-y-2">
                         <Label>Vehicle</Label>
-                        <Select 
-                           value={filters.vehicleId} 
-                           onValueChange={(val) => updateFilter('vehicleId', val)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Vehicle" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Vehicles</SelectItem>
-                            {vehicles.map(v => (
-                                <SelectItem key={v.id} value={v.id}>{v.plate}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <NativeSelect
+                          value={filters.vehicleId}
+                          onChange={(val) => updateFilter('vehicleId', val)}
+                          options={[
+                            { value: 'all', label: 'All Vehicles' },
+                            ...vehicles.map(v => ({ value: v.id, label: v.plate }))
+                          ]}
+                        />
                     </div>
 
                     <Separator />
@@ -282,36 +316,28 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
 
                         <div className="flex items-center justify-between">
                             <Label className="text-sm font-normal">Includes Tip?</Label>
-                            <Select 
-                               value={filters.hasTip} 
-                               onValueChange={(val) => updateFilter('hasTip', val)}
-                            >
-                                <SelectTrigger className="w-[100px] h-8 text-xs">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Any</SelectItem>
-                                    <SelectItem value="yes">Yes</SelectItem>
-                                    <SelectItem value="no">No</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <ToggleButtonGroup
+                              value={filters.hasTip || 'all'}
+                              onChange={(val) => updateFilter('hasTip', val)}
+                              options={[
+                                { value: 'all', label: 'Any' },
+                                { value: 'yes', label: 'Yes' },
+                                { value: 'no', label: 'No' },
+                              ]}
+                            />
                         </div>
 
                         <div className="flex items-center justify-between">
                             <Label className="text-sm font-normal">Surge Pricing?</Label>
-                            <Select 
-                               value={filters.hasSurge} 
-                               onValueChange={(val) => updateFilter('hasSurge', val)}
-                            >
-                                <SelectTrigger className="w-[100px] h-8 text-xs">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Any</SelectItem>
-                                    <SelectItem value="yes">Yes</SelectItem>
-                                    <SelectItem value="no">No</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <ToggleButtonGroup
+                              value={filters.hasSurge || 'all'}
+                              onChange={(val) => updateFilter('hasSurge', val)}
+                              options={[
+                                { value: 'all', label: 'Any' },
+                                { value: 'yes', label: 'Yes' },
+                                { value: 'no', label: 'No' },
+                              ]}
+                            />
                         </div>
                     </div>
 

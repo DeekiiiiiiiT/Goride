@@ -1456,6 +1456,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     // 2. If it's a FARE ADJUSTMENT (like the $418.44 case) -> It is likely a Net Payout correction, NOT new Gross Revenue.
                     //    We should NOT add it to 'amount' (Gross), but we SHOULD add it to 'netTransaction' (Payout).
                     
+                    // Check the dedicated Tip column (not just Description) for tip detection
+                    const tipColumnVal = parseCurrency(row['Paid to you:Your earnings:Tip'] || row['Paid to you : Your earnings : Tip']);
+
                     let addToGross = 0;
                     let addToNet = 0;
 
@@ -1472,7 +1475,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                          // Edge case: Earnings is 0, but Payout exists (Adjustment/Tip)
                          const desc = String(row['Description'] || '').toLowerCase();
                          
-                         if (desc.includes('tip')) {
+                         if (desc.includes('tip') || tipColumnVal !== 0) {
                              // Tips are new revenue
                              addToGross = netPayoutRaw;
                              addToNet = netPayoutRaw;
@@ -1489,6 +1492,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     current.grossEarnings = (current.grossEarnings || 0) + addToGross;
                     
                     current.cashCollected = (current.cashCollected || 0) + cash;
+                    // Phase 1 Cash Fix: Uber reports cash as negative — normalize to positive
+                    current.cashCollected = Math.abs(current.cashCollected);
+                    // Tag payment method so ledger generator recognizes cash trips
+                    if (current.cashCollected > 0) current.paymentMethod = 'Cash';
                     current.netTransaction = (current.netTransaction || 0) + addToNet;
                     
                     current.payouts = current.netTransaction;
@@ -1528,7 +1535,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     const desc = String(row['Description'] || '').toLowerCase();
                     let type = 'Completed Trip';
                     if (desc.includes('adjustment')) type = 'Fare Adjustment';
-                    else if (desc.includes('tip')) type = 'Tip';
+                    else if (desc.includes('tip') || tipColumnVal !== 0) type = 'Tip';
                     else if (desc.includes('settle')) type = 'Settlement';
                     
                     if (current.transactionType && current.transactionType !== type) {

@@ -49,7 +49,7 @@ const DEFAULT_SETTINGS: PlatformSettingsData = {
 };
 
 const BUSINESS_TYPE_DEFS = [
-  { key: 'rideshare', label: 'Rideshare', description: 'Uber, Lyft-style ride services', icon: Car },
+  { key: 'rideshare', label: 'Rideshare', description: 'Uber, InDrive-style ride services', icon: Car },
   { key: 'delivery', label: 'Delivery / Courier', description: 'Package delivery, document courier, last-mile', icon: Package },
   { key: 'taxi', label: 'Taxi / Cab', description: 'Traditional taxi and dispatch services', icon: Navigation },
   { key: 'trucking', label: 'Trucking / Haulage', description: 'Long-haul freight, cargo transport', icon: Truck },

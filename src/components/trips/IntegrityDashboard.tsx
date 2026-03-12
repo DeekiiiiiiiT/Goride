@@ -36,7 +36,7 @@ export function IntegrityDashboard({ trips }: IntegrityDashboardProps) {
     { name: 'Auto-Healed', value: metrics.resolutionDistribution.background, color: '#6366f1' }, // Indigo-500
     { name: 'Manual', value: metrics.resolutionDistribution.manual, color: '#f59e0b' }, // Amber-500
     { name: 'Pending/Failed', value: metrics.resolutionDistribution.pending, color: '#f43f5e' }, // Rose-500
-  ], [metrics]);
+  ].filter(d => d.value > 0), [metrics]);
 
   return (
     <div className="space-y-6">
@@ -142,7 +142,7 @@ export function IntegrityDashboard({ trips }: IntegrityDashboardProps) {
                    dataKey="value"
                  >
                    {chartData.map((entry, index) => (
-                     <Cell key={`cell-${index}`} fill={entry.color} />
+                     <Cell key={`cell-${index}-${entry.name}`} fill={entry.color} />
                    ))}
                  </Pie>
                  <Tooltip 

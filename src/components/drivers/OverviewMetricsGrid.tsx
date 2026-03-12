@@ -23,8 +23,6 @@ export const PLATFORM_COLORS: Record<string, string> = {
   Uber: '#3b82f6',
   InDrive: '#10b981',
   Roam: '#6366f1',
-  Bolt: '#22c55e',
-  Lyft: '#ec4899',
   Private: '#f59e0b',
   Cash: '#84cc16',
   Other: '#64748b'
@@ -157,23 +155,23 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
       {/* Card 1: Period Earnings — breakdown now from resolvedFinancials */}
       <MetricCard
         title={isToday ? "Today's Earnings" : "Period Earnings"}
-        subtext={resolvedFinancials.source === 'ledger' ? 'Ledger' : 'Trips fallback'}
-        value={`$${resolvedFinancials.periodEarnings.toFixed(2)}`}
-        trend={`${resolvedFinancials.trendPercent}% vs prev`}
+        subtext={resolvedFinancials.source === 'ledger' ? 'Ledger' : resolvedFinancials.dataIncomplete ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(', ')})` : ''}` : 'Unavailable'}
+        value={resolvedFinancials.dataIncomplete ? '—' : `$${resolvedFinancials.periodEarnings.toFixed(2)}`}
+        trend={resolvedFinancials.dataIncomplete ? undefined : `${resolvedFinancials.trendPercent}% vs prev`}
         trendUp={resolvedFinancials.trendUp}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         loading={localLoading}
-        breakdown={earningsBreakdown}
+        breakdown={resolvedFinancials.dataIncomplete ? [] : earningsBreakdown}
       />
 
       {/* Card 2: Cash Collected */}
       <MetricCard
         title="Cash Collected"
-        value={`$${resolvedFinancials.cashCollected.toFixed(2)}`}
+        value={resolvedFinancials.dataIncomplete ? '—' : `$${resolvedFinancials.cashCollected.toFixed(2)}`}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         tooltip="Total cash collected from trips during this period"
         loading={localLoading}
-        breakdown={cashBreakdown}
+        breakdown={resolvedFinancials.dataIncomplete ? [] : cashBreakdown}
       />
 
       {/* Card 3: Km Driven (operational — stays on metrics) */}
@@ -301,11 +299,11 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
       {/* Card 5: Toll Refunded — breakdown now from resolvedFinancials */}
       <MetricCard
         title="Toll Refunded"
-        value={`$${resolvedFinancials.totalTolls.toFixed(2)}`}
+        value={resolvedFinancials.dataIncomplete ? '—' : `$${resolvedFinancials.totalTolls.toFixed(2)}`}
         subtext="Added to Debt (Cash Risk)"
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         loading={localLoading}
-        breakdown={tollsBreakdown}
+        breakdown={resolvedFinancials.dataIncomplete ? [] : tollsBreakdown}
       />
 
       {/* Card 6: Distance Metrics Donut */}

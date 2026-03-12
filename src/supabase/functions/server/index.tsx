@@ -203,8 +203,15 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         isReconciled: false,
     };
 
-    const isCash = (trip.cashCollected || 0) > 0;
-    const netPayout = trip.netPayout ?? trip.amount;
+    // Phase 1 Cash Fix: Use Math.abs() so negative Uber cash values are still recognized
+    const isCash = Math.abs(trip.cashCollected || 0) > 0 || trip.paymentMethod === 'Cash';
+    // [Phase 2 DIAGNOSTIC] Log cash-related fields to verify stored trip data
+    console.log(`[Ledger:CashDiag] tripId=${trip.id} platform=${trip.platform} cashCollected=${trip.cashCollected} paymentMethod=${trip.paymentMethod} isCash=${isCash} amount=${trip.amount}`);
+    // Use the same effective-earnings formula as the trip-computed path:
+    // InDrive → indriveNetIncome (after InDrive's fee), Uber/others → trip.amount (gross fare)
+    const effectiveEarnings = (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
+        ? trip.indriveNetIncome
+        : trip.amount;
     const pickupShort = (trip.pickupLocation || 'Unknown').substring(0, 30);
     const dropoffShort = (trip.dropoffLocation || 'Unknown').substring(0, 30);
 
@@ -216,7 +223,7 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         category: 'Fare Earnings',
         description: `${trip.platform || 'Trip'}${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
         grossAmount: trip.amount,
-        netAmount: isCash ? (trip.cashCollected || trip.amount) : netPayout,
+        netAmount: effectiveEarnings,
         paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
         direction: 'inflow',
         metadata: {
@@ -224,6 +231,7 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
             duration: trip.duration,
             serviceType: trip.serviceType || trip.productType,
             fareBreakdown: trip.fareBreakdown || null,
+            cashCollected: isCash ? Math.abs(trip.cashCollected || 0) : undefined,
         },
     });
 
@@ -1379,7 +1387,12 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
     }
 
     if (platform) {
-        query = query.eq("value->>platform", platform);
+        // Alias: "Roam" was formerly "GoRide" — query both to include pre-rebrand trips
+        if (platform === 'Roam') {
+            query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
+        } else {
+            query = query.eq("value->>platform", platform);
+        }
     }
 
     if (vehicleId) {
@@ -1404,7 +1417,9 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
     query = query.order("value->>date", { ascending: false });
 
     const from = offset || 0;
-    const to = from + (limit || 50) - 1;
+    // Cap at 1000 per request (PostgREST max row limit)
+    const effectiveLimit = Math.min(limit || 50, 1000);
+    const to = from + effectiveLimit - 1;
     
     query = query.range(from, to);
 
@@ -1420,13 +1435,15 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
     const trips = (data || []).map((d: any) => {
         const v = d.value || {};
         const { route, stops, ...lightweight } = v;
+        // Normalize legacy "GoRide" → "Roam" for display
+        if (lightweight.platform === 'GoRide') lightweight.platform = 'Roam';
         return lightweight;
     });
 
     return c.json({
         data: trips,
-        page: Math.floor(from / (limit || 50)) + 1,
-        limit: limit || 50,
+        page: Math.floor(from / effectiveLimit) + 1,
+        limit: effectiveLimit,
         total: count || 0
     });
 
@@ -1483,7 +1500,12 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
     }
 
     if (platform) {
-        query = query.eq("value->>platform", platform);
+        // Alias: "Roam" was formerly "GoRide" — query both to include pre-rebrand trips
+        if (platform === 'Roam') {
+            query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
+        } else {
+            query = query.eq("value->>platform", platform);
+        }
     }
 
     if (vehicleId) {
@@ -1589,6 +1611,25 @@ app.post("/make-server-37f42386/trips", async (c) => {
         return trip;
     });
     
+    // ── Normalize driverId to canonical Roam UUID ──────────────────────
+    // Resolves platform-specific UUIDs (Uber, InDrive) and display names
+    // to the canonical Roam UUID so all queries by Roam ID find every trip.
+    for (const trip of processedTrips) {
+        try {
+            const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+            if (resolved.resolved) {
+                trip.driverId = resolved.canonicalId;
+                // Backfill driverName if missing
+                if (!trip.driverName) {
+                    trip.driverName = resolved.driverName;
+                }
+            }
+        } catch (resolveErr) {
+            // Resolution failure should NOT break trip import
+            console.warn(`[TripNormalize] Failed to resolve driverId for trip ${trip.id}:`, resolveErr);
+        }
+    }
+
     // Create keys for each trip
     // Assuming each trip has a unique 'id' field
     const keys = processedTrips.map((t: any) => `trip:${t.id}`);
@@ -1611,6 +1652,12 @@ app.post("/make-server-37f42386/trips", async (c) => {
                 await kv.mset(ledgerKeys, chunk);
             }
             console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
+            // Phase 6.6: Verification — count completed trips with amount > 0 vs ledger entries created
+            const completedCount = processedTrips.filter((t: any) => t.status === 'Completed' && t.amount > 0).length;
+            const fareEntries = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning').length;
+            if (fareEntries < completedCount) {
+                console.warn(`[Ledger] INTEGRITY WARNING: ${completedCount} completed trips but only ${fareEntries} fare_earning entries created. ${completedCount - fareEntries} trips may be missing ledger entries.`);
+            }
         }
     } catch (ledgerErr) {
         // Ledger creation failure should NOT break trip import
@@ -1666,6 +1713,8 @@ app.get("/make-server-37f42386/trips", async (c) => {
         for (const [k, val] of Object.entries(lightweight)) {
           sanitized[k] = typeof val === 'string' ? val.replace(/[\x00-\x1F\x7F]/g, ' ') : val;
         }
+        // Normalize legacy "GoRide" → "Roam" for display
+        if (sanitized.platform === 'GoRide') sanitized.platform = 'Roam';
         return sanitized;
     });
 
@@ -2514,7 +2563,14 @@ app.get("/make-server-37f42386/ledger", async (c) => {
     }
 
     if (direction) query = query.eq("value->>direction", direction);
-    if (platform) query = query.eq("value->>platform", platform);
+    // Alias: "Roam" was formerly "GoRide" — query both to include pre-rebrand ledger entries
+    if (platform) {
+      if (platform === 'Roam') {
+        query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
+      } else {
+        query = query.eq("value->>platform", platform);
+      }
+    }
     if (isReconciledParam !== undefined && isReconciledParam !== null && isReconciledParam !== "") {
       query = query.eq("value->>isReconciled", isReconciledParam);
     }
@@ -2533,6 +2589,11 @@ app.get("/make-server-37f42386/ledger", async (c) => {
       if (error) throw error;
 
       let entries = (data || []).map((d: any) => d.value).filter(Boolean);
+      // Normalize legacy "GoRide" → "Roam" for display (platform + description)
+      entries.forEach((e: any) => {
+        if (e.platform === 'GoRide') e.platform = 'Roam';
+        if (typeof e.description === 'string') e.description = e.description.replace(/GoRide/g, 'Roam');
+      });
       if (minAmount !== undefined) {
         entries = entries.filter((e: any) => Math.abs(Number(e.netAmount) || 0) >= minAmount);
       }
@@ -2557,6 +2618,11 @@ app.get("/make-server-37f42386/ledger", async (c) => {
     if (error) throw error;
 
     const entries = (data || []).map((d: any) => d.value).filter(Boolean);
+    // Normalize legacy "GoRide" → "Roam" for display (platform + description)
+    entries.forEach((e: any) => {
+      if (e.platform === 'GoRide') e.platform = 'Roam';
+      if (typeof e.description === 'string') e.description = e.description.replace(/GoRide/g, 'Roam');
+    });
     const total = count || 0;
 
     return c.json({
@@ -2601,6 +2667,97 @@ app.get("/make-server-37f42386/ledger/count", async (c) => {
   }
 });
 
+// ─── POST /ledger/purge-orphans — Delete orphaned ledger entries ─────
+// Orphan = ledger entry with sourceType 'trip' whose sourceId doesn't
+// match any existing trip:* key. Uses paginated fetch to handle >1000 rows.
+app.post("/make-server-37f42386/ledger/purge-orphans", async (c) => {
+  try {
+    console.log("[PurgeOrphans] Starting orphaned ledger cleanup...");
+
+    // 1. Fetch ALL trip:* keys (paginated) to build a set of valid trip IDs
+    const validTripIds = new Set<string>();
+    let tripOffset = 0;
+    const PAGE = 1000;
+    while (true) {
+      const { data: tripPage, error: tripErr } = await supabase
+        .from("kv_store_37f42386")
+        .select("key")
+        .like("key", "trip:%")
+        .range(tripOffset, tripOffset + PAGE - 1);
+      if (tripErr) throw tripErr;
+      if (!tripPage || tripPage.length === 0) break;
+      for (const row of tripPage) {
+        validTripIds.add(row.key.replace("trip:", ""));
+      }
+      if (tripPage.length < PAGE) break;
+      tripOffset += PAGE;
+    }
+    console.log(`[PurgeOrphans] Found ${validTripIds.size} valid trip IDs`);
+
+    // 2. Fetch ALL ledger:* entries (paginated) and identify orphans
+    const orphanKeys: string[] = [];
+    let ledgerOffset = 0;
+    let totalLedger = 0;
+    while (true) {
+      const { data: ledgerPage, error: ledgerErr } = await supabase
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .like("key", "ledger:%")
+        .range(ledgerOffset, ledgerOffset + PAGE - 1);
+      if (ledgerErr) throw ledgerErr;
+      if (!ledgerPage || ledgerPage.length === 0) break;
+      totalLedger += ledgerPage.length;
+
+      for (const row of ledgerPage) {
+        const val = row.value;
+        if (!val) {
+          orphanKeys.push(row.key);
+          continue;
+        }
+        // Orphan if sourceType is 'trip' and sourceId doesn't match any existing trip
+        if (val.sourceType === 'trip') {
+          if (!val.sourceId || !validTripIds.has(val.sourceId)) {
+            orphanKeys.push(row.key);
+          }
+        }
+        // Ledger entries with sourceType 'transaction' are NOT orphans here
+      }
+
+      if (ledgerPage.length < PAGE) break;
+      ledgerOffset += PAGE;
+    }
+    console.log(`[PurgeOrphans] Scanned ${totalLedger} ledger entries, found ${orphanKeys.length} orphans`);
+
+    // 3. Delete orphans in batches of 500
+    let deletedCount = 0;
+    const BATCH = 500;
+    for (let i = 0; i < orphanKeys.length; i += BATCH) {
+      const batch = orphanKeys.slice(i, i + BATCH);
+      const { error: delErr } = await supabase
+        .from("kv_store_37f42386")
+        .delete()
+        .in("key", batch);
+      if (delErr) {
+        console.error(`[PurgeOrphans] Batch delete error at offset ${i}:`, delErr);
+      } else {
+        deletedCount += batch.length;
+      }
+    }
+
+    console.log(`[PurgeOrphans] Deleted ${deletedCount} orphaned ledger entries`);
+    return c.json({
+      success: true,
+      scannedLedgerEntries: totalLedger,
+      validTrips: validTripIds.size,
+      orphansFound: orphanKeys.length,
+      deletedCount,
+    });
+  } catch (e: any) {
+    console.error(`[PurgeOrphans] Error: ${e.message}`);
+    return c.json({ error: `Orphan purge failed: ${e.message}` }, 500);
+  }
+});
+
 // ─── GET /ledger/summary — Aggregate totals for a filter set ────────
 app.get("/make-server-37f42386/ledger/summary", async (c) => {
   try {
@@ -2632,7 +2789,14 @@ app.get("/make-server-37f42386/ledger/summary", async (c) => {
     if (endDate) query = query.lte("value->>date", endDate);
     if (eventType) query = query.eq("value->>eventType", eventType);
     if (direction) query = query.eq("value->>direction", direction);
-    if (platform) query = query.eq("value->>platform", platform);
+    // Alias: "Roam" was formerly "GoRide" — query both to include pre-rebrand ledger entries
+    if (platform) {
+      if (platform === 'Roam') {
+        query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
+      } else {
+        query = query.eq("value->>platform", platform);
+      }
+    }
 
     const { data, error } = await query.limit(10000);
     if (error) throw error;
@@ -2665,7 +2829,8 @@ app.get("/make-server-37f42386/ledger/summary", async (c) => {
       byEventType[et].count++;
       byEventType[et].total += net;
 
-      const pl = e.platform || "Unknown";
+      // Normalize legacy "GoRide" → "Roam" for display
+      const pl = (e.platform === 'GoRide' ? 'Roam' : e.platform) || "Unknown";
       if (!byPlatform[pl]) byPlatform[pl] = { count: 0, total: 0 };
       byPlatform[pl].count++;
       byPlatform[pl].total += net;
@@ -2705,15 +2870,45 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
 
     console.log(`[Ledger DriverOverview] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"}`);
 
-    // Helper: build a base query filtered by driverId (and optional platforms)
+    // ── Resolve ALL known IDs for this driver (Roam UUID, Uber UUID, InDrive UUID) ──
+    // This mirrors the trip search endpoint's broad OR approach so that ledger entries
+    // created with a platform-specific UUID (e.g. Uber CSV import where resolution failed)
+    // are still found by the overview query.
+    const allDriverIds: string[] = [driverId];
+    try {
+        const driverRecord = await kv.get(`driver:${driverId}`);
+        if (driverRecord) {
+            if (driverRecord.uberDriverId) allDriverIds.push(driverRecord.uberDriverId);
+            if (driverRecord.inDriveDriverId) allDriverIds.push(driverRecord.inDriveDriverId);
+        }
+    } catch (lookupErr) {
+        console.warn(`[Ledger DriverOverview] Could not look up driver record for ${driverId}:`, lookupErr);
+    }
+
+    const driverIdOrFilter = allDriverIds.length === 1
+        ? null  // single ID — use .eq() for efficiency
+        : allDriverIds.map(id => `value->>driverId.eq.${id}`).join(',');
+
+    console.log(`[Ledger DriverOverview] Searching with ${allDriverIds.length} driver IDs: [${allDriverIds.join(', ')}]`);
+
+    // Helper: build a base query filtered by driverId(s) (and optional platforms)
     const baseQuery = () => {
       let q = supabase
         .from("kv_store_37f42386")
         .select("value")
-        .like("key", "ledger:%")
-        .eq("value->>driverId", driverId);
+        .like("key", "ledger:%");
+
+      // Apply driver ID filter — single exact match or multi-ID OR
+      if (driverIdOrFilter) {
+        q = q.or(driverIdOrFilter);
+      } else {
+        q = q.eq("value->>driverId", driverId);
+      }
+
       if (platformsParam) {
-        const plats = platformsParam.split(",").map((s: string) => s.trim()).filter(Boolean);
+        // Alias: "Roam" was formerly "GoRide" — expand to include both
+        let plats = platformsParam.split(",").map((s: string) => s.trim()).filter(Boolean);
+        if (plats.includes('Roam') && !plats.includes('GoRide')) plats.push('GoRide');
         if (plats.length === 1) {
           q = q.eq("value->>platform", plats[0]);
         } else if (plats.length > 1) {
@@ -2723,15 +2918,32 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
       return q;
     };
 
+    // Pagination helper — fetches all rows in 1,000-row pages to bypass PostgREST cap
+    const PAGE = 1000;
+    const MAX_ROWS = 50000;
+    const paginatedFetch = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
     // ── 1. Period data ───────────────────────────────────────────────
-    const { data: periodData, error: periodErr } = await baseQuery()
-      .gte("value->>date", startDate)
-      .lte("value->>date", endDate)
-      .limit(10000);
+    const periodData = await paginatedFetch(() =>
+      baseQuery()
+        .gte("value->>date", startDate)
+        .lte("value->>date", endDate)
+    );
 
-    if (periodErr) throw new Error(`Period query failed: ${periodErr.message}`);
-
-    const periodEntries = (periodData || []).map((d: any) => d.value).filter(Boolean);
+    const periodEntries = periodData.map((d: any) => d.value).filter(Boolean);
+    console.log(`[Ledger DriverOverview] Period entries fetched: ${periodEntries.length}`);
 
     // Accumulate period metrics in a single pass
     let pEarnings = 0;
@@ -2756,28 +2968,32 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
         pEarnings += net;
         pBaseFare += gross;
         pTripCount += 1;
-        if (e.paymentMethod === "Cash") pCash += Math.abs(net);
+        if (e.paymentMethod === "Cash") pCash += (e.metadata?.cashCollected ? Number(e.metadata.cashCollected) : Math.abs(net));
 
         // Platform stats
         if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
         pPlatformStats[plat].earnings += net;
         pPlatformStats[plat].tripCount += 1;
-        if (e.paymentMethod === "Cash") pPlatformStats[plat].cashCollected += Math.abs(net);
+        if (e.paymentMethod === "Cash") pPlatformStats[plat].cashCollected += (e.metadata?.cashCollected ? Number(e.metadata.cashCollected) : Math.abs(net));
 
         // Daily chart
         const day = e.date;
-        if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
-        dailyMap[day].total += net;
-        dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        if (day) {
+          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
+          dailyMap[day].total += net;
+          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        }
       } else if (et === "tip") {
         pTips += net;
         // Add tips to platform earnings and daily chart too
         if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
         pPlatformStats[plat].earnings += net;
         const day = e.date;
-        if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
-        dailyMap[day].total += net;
-        dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        if (day) {
+          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
+          dailyMap[day].total += net;
+          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        }
       } else if (et === "toll_charge") {
         pTolls += Math.abs(net);
         if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
@@ -2805,34 +3021,42 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
     const prevStart = prevStartD.toISOString().slice(0, 10);
     const prevEnd = prevEndD.toISOString().slice(0, 10);
 
-    const { data: prevData, error: prevErr } = await baseQuery()
-      .gte("value->>date", prevStart)
-      .lte("value->>date", prevEnd)
-      .in("value->>eventType", ["fare_earning", "tip"])
-      .limit(10000);
-
-    if (prevErr) {
+    let prevData: any[] = [];
+    try {
+      prevData = await paginatedFetch(() =>
+        baseQuery()
+          .gte("value->>date", prevStart)
+          .lte("value->>date", prevEnd)
+          .in("value->>eventType", ["fare_earning", "tip"])
+      );
+    } catch (prevErr: any) {
       console.log(`[Ledger DriverOverview] Prev period query warning: ${prevErr.message}`);
     }
 
     let prevEarnings = 0;
-    if (prevData) {
-      for (const d of prevData) {
-        const v = d.value;
-        if (v) prevEarnings += Number(v.netAmount) || 0;
-      }
+    for (const d of prevData) {
+      const v = d.value;
+      if (v) prevEarnings += Number(v.netAmount) || 0;
     }
 
     // ── 3. Lifetime totals (no date filter) ──────────────────────────
-    const { data: lifetimeData, error: lifeErr } = await supabase
-      .from("kv_store_37f42386")
-      .select("value")
-      .like("key", "ledger:%")
-      .eq("value->>driverId", driverId)
-      .in("value->>eventType", ["fare_earning", "tip", "toll_charge"])
-      .limit(50000);
-
-    if (lifeErr) {
+    let lifetimeData: any[] = [];
+    try {
+      lifetimeData = await paginatedFetch(() => {
+        let q = supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "ledger:%")
+          .in("value->>eventType", ["fare_earning", "tip", "toll_charge"]);
+        // Use same multi-ID OR filter as baseQuery
+        if (driverIdOrFilter) {
+          q = q.or(driverIdOrFilter);
+        } else {
+          q = q.eq("value->>driverId", driverId);
+        }
+        return q;
+      });
+    } catch (lifeErr: any) {
       console.log(`[Ledger DriverOverview] Lifetime query warning: ${lifeErr.message}`);
     }
 
@@ -2840,22 +3064,87 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
     let ltTripCount = 0;
     let ltCash = 0;
     let ltTolls = 0;
+    const ltPlatformStats: Record<string, { earnings: number; tripCount: number; cashCollected: number; tolls: number }> = {};
 
-    if (lifetimeData) {
+    {
       for (const d of lifetimeData) {
         const v = d.value;
         if (!v) continue;
         const net = Number(v.netAmount) || 0;
+        const platform = v.platform || 'Unknown';
+        if (!ltPlatformStats[platform]) {
+          ltPlatformStats[platform] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+        }
         if (v.eventType === "fare_earning") {
           ltEarnings += net;
           ltTripCount += 1;
-          if (v.paymentMethod === "Cash") ltCash += Math.abs(net);
+          ltPlatformStats[platform].earnings += net;
+          ltPlatformStats[platform].tripCount += 1;
+          if (v.paymentMethod === "Cash") {
+            const cashAmt = v.metadata?.cashCollected ? Number(v.metadata.cashCollected) : Math.abs(net);
+            ltCash += cashAmt;
+            ltPlatformStats[platform].cashCollected += cashAmt;
+          }
         } else if (v.eventType === "tip") {
           ltEarnings += net;
+          ltPlatformStats[platform].earnings += net;
         } else if (v.eventType === "toll_charge") {
           ltTolls += Math.abs(net);
+          ltPlatformStats[platform].tolls += Math.abs(net);
         }
       }
+    }
+
+    // ── 4. Completeness check: compare trip:* count vs ledger fare_earning count (Phase 6) ──
+    let completeness: any = { totalTrips: 0, ledgerTrips: pTripCount, isComplete: true, missingCount: 0, byPlatform: {} };
+    try {
+      const tripData = await paginatedFetch(() => {
+        let q = supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "trip:%")
+          .eq("value->>status", "Completed")
+          .gte("value->>date", startDate)
+          .lte("value->>date", endDate);
+        // Use same multi-ID OR filter for trip completeness check
+        if (driverIdOrFilter) {
+          q = q.or(driverIdOrFilter);
+        } else {
+          q = q.eq("value->>driverId", driverId);
+        }
+        return q;
+      });
+      const tripPlatformCounts: Record<string, number> = {};
+      let totalCompletedTrips = 0;
+      for (const d of tripData) {
+        const v = d.value;
+        if (!v || !v.amount || Number(v.amount) <= 0) continue;
+        totalCompletedTrips += 1;
+        const plat = (v.platform === 'GoRide' ? 'Roam' : v.platform) || 'Other';
+        tripPlatformCounts[plat] = (tripPlatformCounts[plat] || 0) + 1;
+      }
+      // Compare per-platform: trips vs ledger fare_earnings
+      const byPlatform: Record<string, { trips: number; ledger: number }> = {};
+      const allPlats = new Set([...Object.keys(tripPlatformCounts), ...Object.keys(pPlatformStats)]);
+      for (const p of allPlats) {
+        byPlatform[p] = {
+          trips: tripPlatformCounts[p] || 0,
+          ledger: pPlatformStats[p]?.tripCount || 0,
+        };
+      }
+      const missingCount = Math.max(0, totalCompletedTrips - pTripCount);
+      completeness = {
+        totalTrips: totalCompletedTrips,
+        ledgerTrips: pTripCount,
+        isComplete: missingCount === 0,
+        missingCount,
+        byPlatform,
+      };
+      if (!completeness.isComplete) {
+        console.log(`[Ledger DriverOverview] INTEGRITY WARNING: ${totalCompletedTrips} completed trips but only ${pTripCount} ledger entries. Missing: ${missingCount}. By platform: ${JSON.stringify(byPlatform)}`);
+      }
+    } catch (compErr: any) {
+      console.log(`[Ledger DriverOverview] Completeness check warning: ${compErr.message}`);
     }
 
     // ── Assemble response ────────────────────────────────────────────
@@ -2878,6 +3167,14 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
         tripCount: ltTripCount,
         cashCollected: Number(ltCash.toFixed(2)),
         tolls: Number(ltTolls.toFixed(2)),
+        platformStats: Object.fromEntries(
+          Object.entries(ltPlatformStats).map(([k, v]) => [k, {
+            earnings: Number(v.earnings.toFixed(2)),
+            tripCount: v.tripCount,
+            cashCollected: Number(v.cashCollected.toFixed(2)),
+            tolls: Number(v.tolls.toFixed(2)),
+          }])
+        ),
       },
       platformStats: Object.fromEntries(
         Object.entries(pPlatformStats).map(([k, v]) => [k, {
@@ -2888,9 +3185,10 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
         }])
       ),
       dailyEarnings,
+      completeness,
     };
 
-    console.log(`[Ledger DriverOverview] OK — period: ${pTripCount} trips, $${result.period.earnings} | lifetime: ${ltTripCount} trips, $${result.lifetime.earnings}`);
+    console.log(`[Ledger DriverOverview] OK — period: ${pTripCount} trips, $${result.period.earnings} | lifetime: ${ltTripCount} trips, $${result.lifetime.earnings} | integrity: ${completeness.isComplete ? 'OK' : `GAPS (${completeness.missingCount} missing)`}`);
 
     return c.json({ success: true, data: result });
   } catch (e: any) {
@@ -3105,11 +3403,39 @@ app.delete("/make-server-37f42386/ledger/:id", async (c) => {
   }
 });
 
-// ─── POST /ledger/backfill — One-time historical data backfill ───────
+// ─── POST /ledger/backfill — Historical data backfill (Phase 2 Enhanced) ──────
+// Supports: ?dryRun=true, ?driverId=xxx, per-platform stats, skip reasons, error details, timing
 app.post("/make-server-37f42386/ledger/backfill", async (c) => {
     try {
-        console.log('[Ledger Backfill] Starting...');
-        const stats = { tripsProcessed: 0, tripsSkipped: 0, txProcessed: 0, txSkipped: 0, ledgerCreated: 0, errors: 0 };
+        const startedAt = new Date().toISOString();
+        const startMs = Date.now();
+
+        // ── Query params ──
+        const dryRun = c.req.query("dryRun") === "true";
+        const filterDriverId = c.req.query("driverId") || null;
+
+        console.log(`[Ledger Backfill] Starting... dryRun=${dryRun} driverId=${filterDriverId || 'ALL'}`);
+
+        const stats = {
+            tripsProcessed: 0,
+            tripsSkipped: 0,
+            txProcessed: 0,
+            txSkipped: 0,
+            ledgerCreated: 0,
+            errors: 0,
+        };
+
+        // Per-platform breakdown of ledger entries that would be / were created
+        const byPlatform: Record<string, number> = {};
+        // Skip-reason tracking
+        const skipped: Record<string, number> = {
+            notCompleted: 0,
+            zeroAmount: 0,
+            noDriverId: 0,
+            alreadyHasLedger: 0,
+        };
+        // Error details (capped at 50 for response size)
+        const errorDetails: { tripId: string; platform: string; driverId: string; error: string }[] = [];
 
         // ── Step 1: Backfill from trips ──
         let tripOffset = 0;
@@ -3117,11 +3443,17 @@ app.post("/make-server-37f42386/ledger/backfill", async (c) => {
         let hasMoreTrips = true;
 
         while (hasMoreTrips) {
-            const { data: tripData } = await supabase
+            let query = supabase
                 .from("kv_store_37f42386")
                 .select("value")
-                .like("key", "trip:%")
-                .range(tripOffset, tripOffset + PAGE_SIZE - 1);
+                .like("key", "trip:%");
+
+            // Optional driverId filter at query level (works for canonical IDs)
+            if (filterDriverId) {
+                query = query.eq("value->>driverId", filterDriverId);
+            }
+
+            const { data: tripData } = await query.range(tripOffset, tripOffset + PAGE_SIZE - 1);
 
             const trips = (tripData || []).map((d: any) => d.value).filter(Boolean);
             if (trips.length < PAGE_SIZE) hasMoreTrips = false;
@@ -3130,29 +3462,62 @@ app.post("/make-server-37f42386/ledger/backfill", async (c) => {
             const ledgerBatch: any[] = [];
             for (const trip of trips) {
                 try {
+                    // ── Pre-flight skip-reason checks ──
+                    if (trip.status !== 'Completed') {
+                        skipped.notCompleted++;
+                        stats.tripsSkipped++;
+                        continue;
+                    }
+                    if (!trip.amount || trip.amount <= 0) {
+                        skipped.zeroAmount++;
+                        stats.tripsSkipped++;
+                        continue;
+                    }
+                    if (!trip.driverId) {
+                        skipped.noDriverId++;
+                        stats.tripsSkipped++;
+                        continue;
+                    }
+
+                    // Call generator (includes its own dedup check)
                     const entries = await generateTripLedgerEntries(trip);
                     if (entries.length > 0) {
                         ledgerBatch.push(...entries);
                         stats.tripsProcessed++;
+                        // Track per-platform
+                        const plat = trip.platform || 'Unknown';
+                        byPlatform[plat] = (byPlatform[plat] || 0) + entries.length;
                     } else {
+                        // Pre-flight passed but generator returned [] → dedup caught it
+                        skipped.alreadyHasLedger++;
                         stats.tripsSkipped++;
                     }
-                } catch (e) {
+                } catch (e: any) {
                     stats.errors++;
-                    console.error(`[Ledger Backfill] Error processing trip ${trip.id}:`, e);
+                    console.error(`[Ledger Backfill] Error processing trip ${trip.id} (${trip.platform || 'Unknown'}, driver=${trip.driverId || 'N/A'}):`, e);
+                    if (errorDetails.length < 50) {
+                        errorDetails.push({
+                            tripId: trip.id || 'unknown',
+                            platform: trip.platform || 'Unknown',
+                            driverId: trip.driverId || 'N/A',
+                            error: String(e?.message || e),
+                        });
+                    }
                 }
             }
 
-            if (ledgerBatch.length > 0) {
+            // Write batch (skip writes if dryRun)
+            if (ledgerBatch.length > 0 && !dryRun) {
                 for (let i = 0; i < ledgerBatch.length; i += 100) {
                     const chunk = ledgerBatch.slice(i, i + 100);
                     const keys = chunk.map((e: any) => `ledger:${e.id}`);
                     await kv.mset(keys, chunk);
                 }
-                stats.ledgerCreated += ledgerBatch.length;
             }
+            // Always count (even in dryRun) so the preview shows what WOULD be created
+            stats.ledgerCreated += ledgerBatch.length;
 
-            console.log(`[Ledger Backfill] Trips page done. Offset: ${tripOffset}, batch entries: ${ledgerBatch.length}`);
+            console.log(`[Ledger Backfill] Trips page done. Offset: ${tripOffset}, batch entries: ${ledgerBatch.length}${dryRun ? ' (DRY RUN — not written)' : ''}`);
         }
 
         // ── Step 2: Backfill from transactions ──
@@ -3180,30 +3545,807 @@ app.post("/make-server-37f42386/ledger/backfill", async (c) => {
                     } else {
                         stats.txSkipped++;
                     }
-                } catch (e) {
+                } catch (e: any) {
                     stats.errors++;
                     console.error(`[Ledger Backfill] Error processing transaction ${tx.id}:`, e);
+                    if (errorDetails.length < 50) {
+                        errorDetails.push({
+                            tripId: tx.id || 'unknown',
+                            platform: 'transaction',
+                            driverId: tx.driverId || 'N/A',
+                            error: String(e?.message || e),
+                        });
+                    }
                 }
             }
 
-            if (ledgerBatch.length > 0) {
+            if (ledgerBatch.length > 0 && !dryRun) {
                 for (let i = 0; i < ledgerBatch.length; i += 100) {
                     const chunk = ledgerBatch.slice(i, i + 100);
                     const keys = chunk.map((e: any) => `ledger:${e.id}`);
                     await kv.mset(keys, chunk);
                 }
-                stats.ledgerCreated += ledgerBatch.length;
             }
+            stats.ledgerCreated += ledgerBatch.length;
 
-            console.log(`[Ledger Backfill] Transactions page done. Offset: ${txOffset}, batch entries: ${ledgerBatch.length}`);
+            console.log(`[Ledger Backfill] Transactions page done. Offset: ${txOffset}, batch entries: ${ledgerBatch.length}${dryRun ? ' (DRY RUN — not written)' : ''}`);
         }
 
-        console.log('[Ledger Backfill] Complete:', stats);
-        return c.json({ success: true, stats });
+        const completedAt = new Date().toISOString();
+        const durationMs = Date.now() - startMs;
+
+        console.log(`[Ledger Backfill] ${dryRun ? 'DRY RUN ' : ''}Complete in ${durationMs}ms:`, JSON.stringify({ stats, byPlatform, skipped }));
+        return c.json({
+            success: true,
+            dryRun,
+            filterDriverId,
+            stats,
+            byPlatform,
+            skipped,
+            errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
+            startedAt,
+            completedAt,
+            durationMs,
+        });
     } catch (e: any) {
         console.error('[Ledger Backfill] Fatal error:', e);
         return c.json({ error: e.message }, 500);
     }
+});
+
+// ─── POST /ledger/repair-driver-ids — Phase 5.2b: Fix Uber UUID → Roam UUID in ledger ──────
+// Old Uber imports stored the raw Uber UUID as driverId in ledger entries.
+// This endpoint scans all ledger entries, resolves each driverId to the canonical Roam UUID,
+// and updates any mismatched entries in place.
+// Supports: ?dryRun=true (preview only), ?driverId=xxx (repair only one driver's entries)
+app.post("/make-server-37f42386/ledger/repair-driver-ids", async (c) => {
+    try {
+        const startedAt = new Date().toISOString();
+        const startMs = Date.now();
+        const url = new URL(c.req.url);
+        const dryRun = url.searchParams.get("dryRun") === "true";
+        const filterDriverId = url.searchParams.get("driverId") || null;
+
+        console.log(`[Ledger RepairDriverIds] Starting ${dryRun ? 'DRY RUN' : 'LIVE REPAIR'}${filterDriverId ? ` for driver ${filterDriverId}` : ' for ALL entries'}`);
+
+        // Paginated fetch of ALL ledger entries (key + value)
+        const PAGE = 1000;
+        const MAX_ROWS = 100000;
+        let allEntries: Array<{ key: string; value: any }> = [];
+        let offset = 0;
+        while (offset < MAX_ROWS) {
+            const { data, error } = await supabase
+                .from("kv_store_37f42386")
+                .select("key, value")
+                .like("key", "ledger:%")
+                .range(offset, offset + PAGE - 1);
+            if (error) throw error;
+            const page = data || [];
+            allEntries = allEntries.concat(page);
+            if (page.length < PAGE) break;
+            offset += PAGE;
+        }
+
+        console.log(`[Ledger RepairDriverIds] Fetched ${allEntries.length} ledger entries`);
+
+        const stats = {
+            scanned: 0,
+            alreadyCorrect: 0,
+            repaired: 0,
+            unresolvable: 0,
+            skippedNoDriverId: 0,
+            skippedFilterMismatch: 0,
+            errors: 0,
+            byPlatform: {} as Record<string, { scanned: number; repaired: number }>,
+            repairedSamples: [] as Array<{ entryId: string; oldDriverId: string; newDriverId: string; platform: string; eventType: string }>,
+            errorSamples: [] as Array<{ entryId: string; error: string }>,
+            unresolvableSamples: [] as Array<{ entryId: string; driverId: string; platform: string; eventType: string }>,
+        };
+
+        // Cache resolved IDs to avoid repeated lookups
+        const resolveCache = new Map<string, ResolvedDriver>();
+        const resolveWithCache = async (id: string): Promise<ResolvedDriver> => {
+            if (resolveCache.has(id)) return resolveCache.get(id)!;
+            const result = await resolveCanonicalDriverId(id);
+            resolveCache.set(id, result);
+            return result;
+        };
+
+        // If filtering, resolve the filter ID first
+        let filterCanonicalId: string | null = null;
+        if (filterDriverId) {
+            const resolved = await resolveWithCache(filterDriverId);
+            filterCanonicalId = resolved.resolved ? resolved.canonicalId : filterDriverId;
+        }
+
+        // Process entries
+        const toUpdate: Array<{ key: string; value: any }> = [];
+
+        for (const entry of allEntries) {
+            const val = entry.value;
+            if (!val || !val.driverId) {
+                stats.skippedNoDriverId++;
+                continue;
+            }
+
+            stats.scanned++;
+            const platform = val.platform || 'Unknown';
+            if (!stats.byPlatform[platform]) {
+                stats.byPlatform[platform] = { scanned: 0, repaired: 0 };
+            }
+            stats.byPlatform[platform].scanned++;
+
+            try {
+                const resolved = await resolveWithCache(val.driverId);
+
+                // If filtering by driver, skip entries that don't resolve to the target driver
+                if (filterCanonicalId && resolved.canonicalId !== filterCanonicalId) {
+                    stats.skippedFilterMismatch++;
+                    continue;
+                }
+
+                if (!resolved.resolved) {
+                    stats.unresolvable++;
+                    if (stats.unresolvableSamples.length < 20) {
+                        stats.unresolvableSamples.push({
+                            entryId: val.id || entry.key,
+                            driverId: val.driverId,
+                            platform,
+                            eventType: val.eventType || 'unknown',
+                        });
+                    }
+                    continue;
+                }
+
+                if (val.driverId === resolved.canonicalId) {
+                    stats.alreadyCorrect++;
+                    continue;
+                }
+
+                // Mismatch found — non-canonical driverId
+                stats.repaired++;
+                stats.byPlatform[platform].repaired++;
+
+                if (stats.repairedSamples.length < 20) {
+                    stats.repairedSamples.push({
+                        entryId: val.id || entry.key,
+                        oldDriverId: val.driverId,
+                        newDriverId: resolved.canonicalId,
+                        platform,
+                        eventType: val.eventType || 'unknown',
+                    });
+                }
+
+                if (!dryRun) {
+                    toUpdate.push({
+                        key: entry.key,
+                        value: {
+                            ...val,
+                            driverId: resolved.canonicalId,
+                            driverName: val.driverName || resolved.driverName,
+                            _repairedAt: new Date().toISOString(),
+                            _oldDriverId: val.driverId,
+                        },
+                    });
+                }
+            } catch (err: any) {
+                stats.errors++;
+                if (stats.errorSamples.length < 20) {
+                    stats.errorSamples.push({
+                        entryId: val.id || entry.key,
+                        error: err.message || String(err),
+                    });
+                }
+            }
+        }
+
+        // Batch write updates in chunks of 100
+        if (!dryRun && toUpdate.length > 0) {
+            for (let i = 0; i < toUpdate.length; i += 100) {
+                const chunk = toUpdate.slice(i, i + 100);
+                const keys = chunk.map(u => u.key);
+                const values = chunk.map(u => u.value);
+                await kv.mset(keys, values);
+            }
+            console.log(`[Ledger RepairDriverIds] Updated ${toUpdate.length} entries`);
+        }
+
+        // Diagnostic: show driver records' platform IDs
+        const drivers = await loadDriverCache();
+        const driverDiagnostics = drivers.map((d: any) => ({
+            id: d.id?.substring(0, 12),
+            name: d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || 'Unknown',
+            uberDriverId: d.uberDriverId || null,
+            inDriveDriverId: d.inDriveDriverId || null,
+        }));
+
+        const durationMs = Date.now() - startMs;
+        const result = {
+            success: true,
+            dryRun,
+            filterDriverId: filterDriverId || null,
+            filterCanonicalId,
+            startedAt,
+            completedAt: new Date().toISOString(),
+            durationMs,
+            stats,
+            _diagnostics: { driverRecords: driverDiagnostics },
+        };
+
+        console.log(`[Ledger RepairDriverIds] ${dryRun ? 'DRY RUN' : 'REPAIR'} complete: scanned=${stats.scanned}, repaired=${stats.repaired}, alreadyCorrect=${stats.alreadyCorrect}, unresolvable=${stats.unresolvable}, errors=${stats.errors} (${durationMs}ms)`);
+        return c.json(result);
+    } catch (e: any) {
+        console.error('[Ledger RepairDriverIds] Fatal error:', e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// ─── POST /ledger/repair-driver — Phase 6.3: Targeted per-driver ledger repair ──────
+// Fetches ALL completed trips for a driver, calls generateTripLedgerEntries() for each,
+// and writes only the missing ones (dedup check built into the generator).
+app.post("/make-server-37f42386/ledger/repair-driver", async (c) => {
+    try {
+        const startMs = Date.now();
+        const body = await c.req.json();
+        const driverId = body.driverId;
+        if (!driverId) {
+            return c.json({ error: "Missing required field: driverId" }, 400);
+        }
+
+        const clientTripIds: string[] | undefined = body.tripIds;
+        const force: boolean = body.force === true;
+        console.log(`[Ledger RepairDriver] Starting ${force ? 'FORCE ' : ''}repair for driver ${driverId}${clientTripIds ? ` with ${clientTripIds.length} client-supplied tripIds` : ''}`);
+
+        let allTrips: any[] = [];
+
+        if (clientTripIds && Array.isArray(clientTripIds) && clientTripIds.length > 0) {
+            // ── Fast path: Client supplied trip IDs (most reliable — the client already
+            // found these trips via the broader driverIds+driverName OR search). ──
+            // Batch-fetch trips by key using kv.mget in chunks of 100.
+            console.log(`[Ledger RepairDriver] Using ${clientTripIds.length} client-supplied trip IDs`);
+            for (let i = 0; i < clientTripIds.length; i += 100) {
+                const chunk = clientTripIds.slice(i, i + 100);
+                const keys = chunk.map(id => `trip:${id}`);
+                try {
+                    const values = await kv.mget(keys);
+                    if (Array.isArray(values)) {
+                        allTrips = allTrips.concat(values.filter(Boolean));
+                    }
+                } catch (mgetErr) {
+                    console.warn(`[Ledger RepairDriver] mget chunk failed, falling back to individual gets:`, mgetErr);
+                    for (const key of keys) {
+                        try {
+                            const val = await kv.get(key);
+                            if (val) allTrips.push(val);
+                        } catch { /* skip */ }
+                    }
+                }
+            }
+            console.log(`[Ledger RepairDriver] Fetched ${allTrips.length} trips from ${clientTripIds.length} client IDs`);
+        } else {
+            // ── Fallback: Server-side discovery using all known driver IDs + name ──
+            const allDriverIds: string[] = [driverId];
+            let resolvedDriverName = '';
+            try {
+                const driverRecord = await kv.get(`driver:${driverId}`);
+                if (driverRecord) {
+                    if (driverRecord.uberDriverId) allDriverIds.push(driverRecord.uberDriverId);
+                    if (driverRecord.inDriveDriverId) allDriverIds.push(driverRecord.inDriveDriverId);
+                    resolvedDriverName = driverRecord.name || [driverRecord.firstName, driverRecord.lastName].filter(Boolean).join(' ') || '';
+                }
+            } catch (lookupErr) {
+                console.warn(`[Ledger RepairDriver] Could not look up driver record for ${driverId}:`, lookupErr);
+            }
+
+            console.log(`[Ledger RepairDriver] Searching with IDs: [${allDriverIds.join(', ')}]${resolvedDriverName ? `, name: "${resolvedDriverName}"` : ''}`);
+
+            const orParts: string[] = [];
+            for (const id of allDriverIds) {
+                orParts.push(`value->>driverId.eq.${id}`);
+            }
+            if (resolvedDriverName) {
+                orParts.push(`value->>driverName.ilike.${resolvedDriverName}`);
+            }
+            const orFilter = orParts.join(',');
+
+            const PAGE = 1000;
+            const MAX_ROWS = 50000;
+            let offset = 0;
+            while (offset < MAX_ROWS) {
+                const { data, error } = await supabase
+                    .from("kv_store_37f42386")
+                    .select("value")
+                    .like("key", "trip:%")
+                    .or(orFilter)
+                    .range(offset, offset + PAGE - 1);
+                if (error) throw error;
+                const page = data || [];
+                allTrips = allTrips.concat(page.map((d: any) => d.value).filter(Boolean));
+                if (page.length < PAGE) break;
+                offset += PAGE;
+            }
+        }
+
+        const stats = {
+            totalTrips: allTrips.length,
+            completedWithAmount: 0,
+            ledgerCreated: 0,
+            alreadyExisted: 0,
+            skippedNotCompleted: 0,
+            skippedNoAmount: 0,
+            errors: 0,
+            forceDeleted: 0,
+            byPlatform: {} as Record<string, { trips: number; created: number; existed: number }>,
+        };
+
+        for (const trip of allTrips) {
+            const plat = (trip.platform === 'GoRide' ? 'Roam' : trip.platform) || 'Other';
+            if (!stats.byPlatform[plat]) {
+                stats.byPlatform[plat] = { trips: 0, created: 0, existed: 0 };
+            }
+            stats.byPlatform[plat].trips += 1;
+
+            if (trip.status !== 'Completed') {
+                stats.skippedNotCompleted += 1;
+                continue;
+            }
+            if (!trip.amount || Number(trip.amount) <= 0) {
+                stats.skippedNoAmount += 1;
+                continue;
+            }
+
+            stats.completedWithAmount += 1;
+
+            try {
+                // Force mode: delete existing ledger entries for this trip so they get regenerated
+                if (force) {
+                    try {
+                        const { data: existingEntries } = await supabase
+                            .from("kv_store_37f42386")
+                            .select("key")
+                            .like("key", "ledger:%")
+                            .eq("value->>sourceId", trip.id)
+                            .eq("value->>sourceType", "trip");
+                        if (existingEntries && existingEntries.length > 0) {
+                            const delKeys = existingEntries.map((e: any) => e.key);
+                            await kv.mdel(delKeys);
+                            stats.forceDeleted += delKeys.length;
+                            console.log(`[Ledger RepairDriver] Force-deleted ${delKeys.length} existing ledger entries for trip ${trip.id}`);
+                        }
+                    } catch (delErr: any) {
+                        console.warn(`[Ledger RepairDriver] Force-delete failed for trip ${trip.id}: ${delErr.message}`);
+                    }
+                }
+                // Normalize driverId to canonical Roam UUID before generating ledger entries.
+                // Trips found via Uber/InDrive UUID still have the platform UUID as driverId;
+                // the ledger must use the canonical Roam UUID so the overview query finds them.
+                const tripForLedger = trip.driverId === driverId ? trip : { ...trip, driverId };
+                const entries = await generateTripLedgerEntries(tripForLedger);
+                if (entries.length > 0) {
+                    const keys = entries.map((e: any) => `ledger:${e.id}`);
+                    await kv.mset(keys, entries);
+                    stats.ledgerCreated += entries.length;
+                    stats.byPlatform[plat].created += entries.length;
+                } else {
+                    stats.alreadyExisted += 1;
+                    stats.byPlatform[plat].existed += 1;
+                }
+            } catch (err: any) {
+                stats.errors += 1;
+                console.error(`[Ledger RepairDriver] Error processing trip ${trip.id}: ${err.message}`);
+            }
+        }
+
+        const durationMs = Date.now() - startMs;
+        console.log(`[Ledger RepairDriver] Complete for ${driverId}: created=${stats.ledgerCreated}, existed=${stats.alreadyExisted}, errors=${stats.errors} (${durationMs}ms)`);
+
+        return c.json({
+            success: true,
+            driverId,
+            stats,
+            durationMs,
+        });
+    } catch (e: any) {
+        console.error('[Ledger RepairDriver] Fatal error:', e);
+        return c.json({ error: `Ledger repair failed: ${e.message}` }, 500);
+    }
+});
+
+// ─── GET /diagnostic/unresolvable-driver-map — Step A: Discover Uber/InDrive UUID → Driver mapping ──
+// Scans all ledger entries, finds driverIds that are NOT known Roam UUIDs,
+// and groups them with their driverName, count, and platforms so we can
+// figure out which Roam driver each platform UUID belongs to.
+app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", async (c) => {
+    try {
+        const drivers = await loadDriverCache();
+        const roamIds = new Set(drivers.map((d: any) => d.id));
+
+        // Paginated fetch of all ledger entries
+        const PAGE = 1000;
+        const MAX_ROWS = 50000;
+        let allEntries: Array<{ key: string; value: any }> = [];
+        let offset = 0;
+        while (offset < MAX_ROWS) {
+            const { data, error } = await supabase
+                .from("kv_store_37f42386")
+                .select("key, value")
+                .like("key", "ledger:%")
+                .range(offset, offset + PAGE - 1);
+            if (error) throw error;
+            const page = data || [];
+            allEntries = allEntries.concat(page);
+            if (page.length < PAGE) break;
+            offset += PAGE;
+        }
+
+        // Group non-Roam driverIds
+        const unknownMap: Record<string, {
+            count: number;
+            driverNames: Set<string>;
+            platforms: Set<string>;
+            eventTypes: Set<string>;
+            sampleSourceIds: string[];
+        }> = {};
+
+        for (const entry of allEntries) {
+            const val = entry.value;
+            if (!val || !val.driverId) continue;
+            const did = val.driverId;
+            if (roamIds.has(did)) continue; // already a Roam UUID — skip
+
+            if (!unknownMap[did]) {
+                unknownMap[did] = {
+                    count: 0,
+                    driverNames: new Set(),
+                    platforms: new Set(),
+                    eventTypes: new Set(),
+                    sampleSourceIds: [],
+                };
+            }
+            const m = unknownMap[did];
+            m.count++;
+            if (val.driverName) m.driverNames.add(val.driverName);
+            if (val.platform) m.platforms.add(val.platform);
+            if (val.eventType) m.eventTypes.add(val.eventType);
+            if (val.sourceId && m.sampleSourceIds.length < 3) m.sampleSourceIds.push(val.sourceId);
+        }
+
+        // Convert Sets to arrays for JSON serialization
+        const mapping = Object.entries(unknownMap).map(([driverId, info]) => ({
+            driverId,
+            count: info.count,
+            driverNames: Array.from(info.driverNames),
+            platforms: Array.from(info.platforms),
+            eventTypes: Array.from(info.eventTypes),
+            sampleSourceIds: info.sampleSourceIds,
+        }));
+
+        // Also include the Roam driver records for easy reference
+        const driverRecords = drivers.map((d: any) => ({
+            roamId: d.id,
+            name: d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || 'Unknown',
+            uberDriverId: d.uberDriverId || null,
+            inDriveDriverId: d.inDriveDriverId || null,
+        }));
+
+        console.log(`[Diagnostic] Scanned ${allEntries.length} ledger entries, found ${mapping.length} unique non-Roam driverIds`);
+        return c.json({
+            success: true,
+            totalLedgerEntries: allEntries.length,
+            totalRoamDrivers: drivers.length,
+            uniqueUnresolvableIds: mapping.length,
+            mapping,
+            driverRecords,
+        });
+    } catch (e: any) {
+        console.error('[Diagnostic] unresolvable-driver-map error:', e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// ─── POST /diagnostic/set-platform-id — Step B: Set uberDriverId/inDriveDriverId on a driver record ──
+// Body: { roamId: string, platform: "uber"|"indrive", platformId: string }
+app.post("/make-server-37f42386/diagnostic/set-platform-id", async (c) => {
+    try {
+        const { roamId, platform, platformId } = await c.req.json();
+        if (!roamId || !platform || !platformId) {
+            return c.json({ error: 'Missing required fields: roamId, platform, platformId' }, 400);
+        }
+        const fieldName = platform === 'uber' ? 'uberDriverId' : platform === 'indrive' ? 'inDriveDriverId' : null;
+        if (!fieldName) {
+            return c.json({ error: `Invalid platform "${platform}". Must be "uber" or "indrive".` }, 400);
+        }
+
+        // Read current driver record
+        const existing = await kv.get(`driver:${roamId}`);
+        if (!existing) {
+            return c.json({ error: `Driver record not found for roamId: ${roamId}` }, 404);
+        }
+
+        const oldValue = existing[fieldName] || null;
+        const updated = { ...existing, [fieldName]: platformId };
+        await kv.set(`driver:${roamId}`, updated);
+        invalidateDriverCache();
+
+        const driverName = existing.name || [existing.firstName, existing.lastName].filter(Boolean).join(' ') || 'Unknown';
+        console.log(`[Diagnostic] Set ${fieldName}=${platformId} on driver "${driverName}" (${roamId}). Old value: ${oldValue}`);
+        return c.json({
+            success: true,
+            driverName,
+            roamId,
+            field: fieldName,
+            oldValue,
+            newValue: platformId,
+        });
+    } catch (e: any) {
+        console.error('[Diagnostic] set-platform-id error:', e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// ─── GET /ledger/driver-earnings-history — Phase 4: Server-Side Earnings History ──────
+// Computes the same weekly/daily/monthly earnings table as DriverEarningsHistory,
+// but from ledger entries instead of raw trips.
+// Query params: driverId (required), periodType (daily|weekly|monthly, default: weekly),
+//               startDate (optional), endDate (optional)
+app.get("/make-server-37f42386/ledger/driver-earnings-history", async (c) => {
+  try {
+    const startMs = Date.now();
+    const driverId = c.req.query("driverId");
+    const periodType = (c.req.query("periodType") || "weekly") as "daily" | "weekly" | "monthly";
+    const startDateParam = c.req.query("startDate") || null;
+    const endDateParam = c.req.query("endDate") || null;
+
+    if (!driverId) {
+      return c.json({ error: "Missing required param: driverId" }, 400);
+    }
+
+    console.log(`[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"}`);
+
+    // ── Paginated fetch helper ──
+    const PAGE = 1000;
+    const MAX_ROWS = 50000;
+    const paginatedFetchEH = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
+    // ── Step 1: Fetch ALL ledger entries for this driver ──
+    const rawData = await paginatedFetchEH(() =>
+      supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "ledger:%")
+        .eq("value->>driverId", driverId)
+    );
+    const allEntries = rawData.map((d: any) => d.value).filter(Boolean);
+    console.log(`[Ledger EarningsHistory] Total ledger entries for driver: ${allEntries.length}`);
+
+    if (allEntries.length === 0) {
+      return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
+    }
+
+    // ── Step 2: Determine date range ──
+    const allDatesEH = allEntries
+      .map((e: any) => e.date)
+      .filter(Boolean)
+      .map((d: string) => new Date(d + "T00:00:00").getTime())
+      .filter((t: number) => !isNaN(t));
+
+    if (allDatesEH.length === 0) {
+      return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
+    }
+
+    const minDateMs = startDateParam ? new Date(startDateParam + "T00:00:00").getTime() : Math.min(...allDatesEH);
+    const maxDateMs = endDateParam ? new Date(endDateParam + "T23:59:59").getTime() : Math.min(Math.max(...allDatesEH), Date.now());
+
+    // ── Step 3: Generate period buckets ──
+    const msPerDay = 86400000;
+
+    function toDateStrEH(d: Date): string {
+      return d.toISOString().split("T")[0];
+    }
+    function startOfDayMsEH(ms: number): number {
+      const d = new Date(ms);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    }
+    function endOfDayMsEH(ms: number): number {
+      return startOfDayMsEH(ms) + msPerDay - 1;
+    }
+    function startOfMonthMsEH(ms: number): number {
+      const d = new Date(ms);
+      return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    }
+    function endOfMonthMsEH(ms: number): number {
+      const d = new Date(ms);
+      return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    }
+    function startOfWeekMsEH(ms: number): number {
+      const d = new Date(ms);
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1) - day;
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff).getTime();
+    }
+    function endOfWeekMsEH(ms: number): number {
+      return startOfWeekMsEH(ms) + 7 * msPerDay - 1;
+    }
+
+    interface BucketEH { startMs: number; endMs: number; startDate: string; endDate: string; }
+    const buckets: BucketEH[] = [];
+
+    if (periodType === "daily") {
+      let cursor = startOfDayMsEH(minDateMs);
+      const cap = endOfDayMsEH(maxDateMs);
+      while (cursor <= cap) {
+        const s = cursor;
+        const e = endOfDayMsEH(cursor);
+        buckets.push({ startMs: s, endMs: e, startDate: toDateStrEH(new Date(s)), endDate: toDateStrEH(new Date(s)) });
+        cursor += msPerDay;
+      }
+    } else if (periodType === "monthly") {
+      let cursor = startOfMonthMsEH(minDateMs);
+      const cap = endOfMonthMsEH(maxDateMs);
+      while (cursor <= cap) {
+        const s = cursor;
+        const e = endOfMonthMsEH(cursor);
+        buckets.push({ startMs: s, endMs: e, startDate: toDateStrEH(new Date(s)), endDate: toDateStrEH(new Date(e)) });
+        const d = new Date(cursor);
+        cursor = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+      }
+    } else {
+      let cursor = startOfWeekMsEH(minDateMs);
+      const cap = endOfWeekMsEH(maxDateMs);
+      while (cursor <= cap) {
+        const s = cursor;
+        const e = endOfWeekMsEH(cursor);
+        buckets.push({ startMs: s, endMs: e, startDate: toDateStrEH(new Date(s)), endDate: toDateStrEH(new Date(e)) });
+        cursor += 7 * msPerDay;
+      }
+    }
+
+    // ── Step 4: Load tiers + quota from preferences ──
+    const prefsEH: any = (await kv.get("preferences:general")) || {};
+
+    const defaultTiersEH = [
+      { id: "tier_1", name: "Bronze", minEarnings: 0, maxEarnings: 75000, sharePercentage: 25, color: "#CD7F32" },
+      { id: "tier_2", name: "Silver", minEarnings: 75000, maxEarnings: 150000, sharePercentage: 27, color: "#C0C0C0" },
+      { id: "tier_3", name: "Gold", minEarnings: 150000, maxEarnings: null, sharePercentage: 30, color: "#FFD700" },
+    ];
+    const tiersEH: any[] = (prefsEH.tiers && prefsEH.tiers.length > 0) ? prefsEH.tiers : defaultTiersEH;
+    const sortedTiersEH = [...tiersEH].sort((a: any, b: any) => a.minEarnings - b.minEarnings);
+
+    function getTierForEarningsEH(cumulative: number): any {
+      const match = sortedTiersEH.find((t: any) => {
+        if (t.maxEarnings === null) return cumulative >= t.minEarnings;
+        return cumulative >= t.minEarnings && cumulative < t.maxEarnings;
+      });
+      return match || sortedTiersEH[0];
+    }
+
+    const quotaConfigEH: any = prefsEH.quotas || null;
+    function getQuotaTargetEH(pt: string): number | null {
+      if (!quotaConfigEH) return null;
+      if (pt === "daily") {
+        if (!quotaConfigEH.weekly?.enabled) return null;
+        const workingDays = quotaConfigEH.weekly.workingDays?.length || 6;
+        return quotaConfigEH.weekly.amount / workingDays;
+      }
+      if (pt === "weekly") {
+        if (!quotaConfigEH.weekly?.enabled) return null;
+        return quotaConfigEH.weekly.amount;
+      }
+      if (quotaConfigEH.monthly?.enabled) return quotaConfigEH.monthly.amount;
+      if (quotaConfigEH.weekly?.enabled) return quotaConfigEH.weekly.amount * 4.33;
+      return null;
+    }
+    const quotaTargetEH = getQuotaTargetEH(periodType);
+
+    // ── Step 5: Pre-index entries by date for fast bucket assignment ──
+    const parsedEntries = allEntries.map((e: any) => ({
+      ...e,
+      _dateMs: e.date ? new Date(e.date + "T00:00:00").getTime() : NaN,
+    })).filter((e: any) => !isNaN(e._dateMs));
+
+    const fareEntriesEH = parsedEntries
+      .filter((e: any) => e.eventType === "fare_earning")
+      .sort((a: any, b: any) => a._dateMs - b._dateMs);
+
+    // ── Step 6: Aggregate each bucket ──
+    const expenseTypes = new Set(["fuel_expense", "maintenance", "insurance", "other_expense"]);
+
+    const rowsEH: any[] = buckets.map((bucket) => {
+      const { startMs: bStart, endMs: bEnd } = bucket;
+      const periodEntries = parsedEntries.filter((e: any) => e._dateMs >= bStart && e._dateMs <= bEnd);
+
+      const periodFares = periodEntries.filter((e: any) => e.eventType === "fare_earning");
+      const grossRevenue = periodFares.reduce((s: number, e: any) => s + (e.grossAmount || 0), 0);
+      const tripCount = periodFares.length;
+
+      const tips = periodEntries
+        .filter((e: any) => e.eventType === "tip")
+        .reduce((s: number, e: any) => s + (e.netAmount || 0), 0);
+
+      const tolls = periodEntries
+        .filter((e: any) => e.eventType === "toll_charge")
+        .reduce((s: number, e: any) => s + Math.abs(e.netAmount || 0), 0);
+
+      const platformFees = periodEntries
+        .filter((e: any) => e.eventType === "platform_fee")
+        .reduce((s: number, e: any) => s + Math.abs(e.netAmount || 0), 0);
+
+      const expenses = periodEntries
+        .filter((e: any) => expenseTypes.has(e.eventType) || (e.direction === "outflow" && e.category === "Expense"))
+        .reduce((s: number, e: any) => s + Math.abs(e.netAmount || 0), 0);
+
+      const payouts = periodEntries
+        .filter((e: any) => e.eventType === "driver_payout")
+        .reduce((s: number, e: any) => s + Math.abs(e.netAmount || 0), 0);
+
+      const transactionCount = periodEntries.filter((e: any) =>
+        expenseTypes.has(e.eventType) || e.eventType === "driver_payout" || e.eventType === "adjustment"
+      ).length;
+
+      // Monthly-reset cumulative earnings for tier lookup
+      const refMonthStartMs = startOfMonthMsEH(bStart);
+      const refMonthEndMs = endOfMonthMsEH(bStart);
+      const cumulativeCap = Math.min(bEnd, refMonthEndMs);
+
+      const cumulativeEarnings = fareEntriesEH.reduce((s: number, e: any) => {
+        if (e._dateMs >= refMonthStartMs && e._dateMs <= cumulativeCap) {
+          return s + (e.grossAmount || 0);
+        }
+        return s;
+      }, 0);
+
+      const tier = getTierForEarningsEH(cumulativeEarnings);
+      const driverShare = grossRevenue * (tier.sharePercentage / 100);
+      const fleetShare = grossRevenue - driverShare;
+      const netEarnings = driverShare - expenses;
+
+      const qPercent = (quotaTargetEH !== null && quotaTargetEH > 0) ? (grossRevenue / quotaTargetEH) * 100 : null;
+
+      return {
+        periodStart: bucket.startDate,
+        periodEnd: bucket.endDate,
+        grossRevenue: Math.round(grossRevenue * 100) / 100,
+        driverShare: Math.round(driverShare * 100) / 100,
+        fleetShare: Math.round(fleetShare * 100) / 100,
+        expenses: Math.round(expenses * 100) / 100,
+        tier: { id: tier.id, name: tier.name, sharePercentage: tier.sharePercentage, color: tier.color },
+        netEarnings: Math.round(netEarnings * 100) / 100,
+        payouts: Math.round(payouts * 100) / 100,
+        tripCount,
+        transactionCount,
+        tips: Math.round(tips * 100) / 100,
+        tolls: Math.round(tolls * 100) / 100,
+        platformFees: Math.round(platformFees * 100) / 100,
+        quotaTarget: quotaTargetEH,
+        quotaPercent: qPercent !== null ? Math.round(qPercent * 100) / 100 : null,
+      };
+    });
+
+    const activeRows = rowsEH
+      .filter((r: any) => r.tripCount > 0 || r.transactionCount > 0)
+      .reverse();
+
+    const durationMs = Date.now() - startMs;
+    const totalGross = activeRows.reduce((s: number, r: any) => s + r.grossRevenue, 0);
+    console.log(`[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} — returned ${activeRows.length} rows, total gross $${totalGross.toFixed(2)}, ${durationMs}ms`);
+
+    return c.json({ success: true, data: activeRows, durationMs });
+  } catch (e: any) {
+    console.error("[Ledger EarningsHistory] Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -4481,7 +5623,24 @@ app.get("/make-server-37f42386/batches", async (c) => {
 
     if (error) throw error;
     const batches = data?.map((d: any) => d.value) || [];
-    return c.json(batches);
+
+    // Enrich each batch with platform info by sampling one trip per batch
+    const enriched = await Promise.all(batches.map(async (batch: any) => {
+      try {
+        const { data: tripRows } = await supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "trip:%")
+          .eq("value->>batchId", batch.id)
+          .limit(1);
+        const platform = tripRows?.[0]?.value?.platform || null;
+        return { ...batch, platform };
+      } catch {
+        return { ...batch, platform: null };
+      }
+    }));
+
+    return c.json(enriched);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -4503,70 +5662,332 @@ app.post("/make-server-37f42386/batches", async (c) => {
 app.delete("/make-server-37f42386/batches/:id", async (c) => {
   const batchId = c.req.param("id");
   try {
-    // 1. Get trips belonging to this batch using native Supabase filters
-    const { data: tripData, error: tripError } = await supabase
-        .from("kv_store_37f42386")
-        .select("key")
-        .like("key", "trip:%")
-        .eq("value->>batchId", batchId);
+    console.log(`[Batch delete] Starting cascade delete for batch ${batchId}`);
 
-    if (tripError) throw tripError;
-    const tripsToDelete = tripData?.map(d => d.key) || [];
-    
-    // 2. Delete trips in chunks
-    if (tripsToDelete.length > 0) {
-        for (let i = 0; i < tripsToDelete.length; i += 100) {
-            await kv.mdel(tripsToDelete.slice(i, i + 100));
-        }
+    // Paginated helper — fetches all matching rows in 1,000-row pages
+    const PAGE = 1000;
+    const MAX_ROWS = 50000;
+    const paginatedKeyFetch = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
+    // ── 1. Fetch all trips in this batch (paginated, with values for ID extraction) ──
+    const tripRows = await paginatedKeyFetch(() =>
+      supabase
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .like("key", "trip:%")
+        .eq("value->>batchId", batchId)
+    );
+
+    const tripKeys = tripRows.map(d => d.key);
+    const tripIds: string[] = [];
+    const driverIdSet = new Set<string>();
+    const vehicleIdSet = new Set<string>();
+    for (const row of tripRows) {
+      const v = row.value;
+      if (!v) continue;
+      tripIds.push(v.id || row.key.replace("trip:", ""));
+      if (v.driverId) driverIdSet.add(v.driverId);
+      if (v.vehicleId) vehicleIdSet.add(v.vehicleId);
+    }
+    console.log(`[Batch delete] Found ${tripKeys.length} trips, ${driverIdSet.size} drivers, ${vehicleIdSet.size} vehicles`);
+
+    // Delete trips in chunks
+    if (tripKeys.length > 0) {
+      for (let i = 0; i < tripKeys.length; i += 100) {
+        await kv.mdel(tripKeys.slice(i, i + 100));
+      }
     }
 
-    // 3. Get transactions belonging to this batch
-    const { data: txData, error: txError } = await supabase
+    // ── 2. Fetch and delete transactions in this batch (paginated) ──
+    const txRows = await paginatedKeyFetch(() =>
+      supabase
         .from("kv_store_37f42386")
         .select("key")
         .like("key", "transaction:%")
-        .eq("value->>batchId", batchId);
+        .eq("value->>batchId", batchId)
+    );
+    const txKeys = txRows.map(d => d.key);
 
-    if (txError) throw txError;
-    const transactionsToDelete = txData?.map(d => d.key) || [];
-    
-    if (transactionsToDelete.length > 0) {
-        for (let i = 0; i < transactionsToDelete.length; i += 100) {
-             await kv.mdel(transactionsToDelete.slice(i, i + 100));
-        }
+    if (txKeys.length > 0) {
+      for (let i = 0; i < txKeys.length; i += 100) {
+        await kv.mdel(txKeys.slice(i, i + 100));
+      }
     }
-    
-    // 4. Ghost Data Cleanup
-    const { count: tripCount } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "trip:%");
-    const { count: txCount } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "transaction:%");
+    console.log(`[Batch delete] Deleted ${tripKeys.length} trips, ${txKeys.length} transactions`);
 
-    if (tripCount === 0 && txCount === 0) {
-        console.log("No source data remaining. Cleaning up ghost metrics...");
-        const metricPrefixes = ["driver_metric:", "vehicle_metric:", "organization_metric:"];
-        for (const prefix of metricPrefixes) {
-             const { data: items } = await supabase.from("kv_store_37f42386").select("key").like("key", `${prefix}%`);
-             if (items && items.length > 0) {
-                 const keys = items.map(d => d.key);
-                 for (let i = 0; i < keys.length; i += 100) await kv.mdel(keys.slice(i, i + 100));
-             }
+    // ── 3. Delete ledger entries tied to these trip IDs ──
+    //    Ledger keys are "ledger:RANDOM_UUID" with trip ID stored in value.sourceId
+    let deletedLedger = 0;
+    const CHUNK = 50;
+    for (let i = 0; i < tripIds.length; i += CHUNK) {
+      const chunk = tripIds.slice(i, i + CHUNK);
+      const ledgerRows = await paginatedKeyFetch(() =>
+        supabase
+          .from("kv_store_37f42386")
+          .select("key")
+          .like("key", "ledger:%")
+          .eq("value->>sourceType", "trip")
+          .in("value->>sourceId", chunk)
+      );
+      if (ledgerRows.length > 0) {
+        const ledgerKeys = ledgerRows.map(d => d.key);
+        for (let j = 0; j < ledgerKeys.length; j += 100) {
+          await kv.mdel(ledgerKeys.slice(j, j + 100));
         }
+        deletedLedger += ledgerKeys.length;
+      }
+    }
+    console.log(`[Batch delete] Deleted ${deletedLedger} ledger entries`);
+
+    // ── 4. Smart driver_metric cleanup ──
+    //    Only delete if the driver has NO trips remaining in other batches
+    let deletedDriverMetrics = 0;
+    let skippedDriverMetrics = 0;
+    for (const driverId of driverIdSet) {
+      const { count, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("*", { count: "exact", head: true })
+        .like("key", "trip:%")
+        .eq("value->>driverId", driverId)
+        .neq("value->>batchId", batchId);
+      if (error) {
+        console.log(`[Batch delete] Driver metric check error for ${driverId}: ${error.message} — skipping (safe)`);
+        skippedDriverMetrics++;
+        continue;
+      }
+      if ((count || 0) === 0) {
+        try {
+          await kv.del(`driver_metric:${driverId}`);
+          deletedDriverMetrics++;
+        } catch (delErr: any) {
+          console.log(`[Batch delete] Failed to delete driver_metric:${driverId}: ${delErr.message}`);
+        }
+      } else {
+        skippedDriverMetrics++;
+      }
+    }
+    console.log(`[Batch delete] Driver metrics: ${deletedDriverMetrics} deleted, ${skippedDriverMetrics} shared/skipped`);
+
+    // ── 5. Smart vehicle_metric cleanup ──
+    //    Only delete if the vehicle has NO trips remaining in other batches
+    let deletedVehicleMetrics = 0;
+    let skippedVehicleMetrics = 0;
+    for (const vehicleId of vehicleIdSet) {
+      const { count, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("*", { count: "exact", head: true })
+        .like("key", "trip:%")
+        .eq("value->>vehicleId", vehicleId)
+        .neq("value->>batchId", batchId);
+      if (error) {
+        console.log(`[Batch delete] Vehicle metric check error for ${vehicleId}: ${error.message} — skipping (safe)`);
+        skippedVehicleMetrics++;
+        continue;
+      }
+      if ((count || 0) === 0) {
+        try {
+          await kv.del(`vehicle_metric:${vehicleId}`);
+          deletedVehicleMetrics++;
+        } catch (delErr: any) {
+          console.log(`[Batch delete] Failed to delete vehicle_metric:${vehicleId}: ${delErr.message}`);
+        }
+      } else {
+        skippedVehicleMetrics++;
+      }
+    }
+    console.log(`[Batch delete] Vehicle metrics: ${deletedVehicleMetrics} deleted, ${skippedVehicleMetrics} shared/skipped`);
+
+    // ── 6. Ghost Data Cleanup (safety net — catches edge cases) ──
+    const { count: remainingTrips } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "trip:%");
+    const { count: remainingTx } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "transaction:%");
+
+    if (remainingTrips === 0 && remainingTx === 0) {
+      console.log("[Batch delete] No source data remaining. Running ghost metrics cleanup...");
+      const metricPrefixes = ["driver_metric:", "vehicle_metric:", "organization_metric:"];
+      for (const prefix of metricPrefixes) {
+        const { data: items } = await supabase.from("kv_store_37f42386").select("key").like("key", `${prefix}%`);
+        if (items && items.length > 0) {
+          const keys = items.map(d => d.key);
+          for (let i = 0; i < keys.length; i += 100) await kv.mdel(keys.slice(i, i + 100));
+        }
+      }
     }
 
-    // 5. Delete the batch record itself
+    // ── 7. Delete the batch record itself ──
     await kv.del(`batch:${batchId}`);
-    
+
     // Invalidate caches
     await cache.invalidateCacheVersion("stats");
     await cache.invalidateCacheVersion("performance");
 
-    return c.json({ 
-        success: true, 
-        deletedTrips: tripsToDelete.length,
-        deletedTransactions: transactionsToDelete.length,
-        deletedBatch: batchId 
+    console.log(`[Batch delete] Cascade complete for batch ${batchId}`);
+
+    return c.json({
+      success: true,
+      deletedTrips: tripKeys.length,
+      deletedTransactions: txKeys.length,
+      deletedLedgerEntries: deletedLedger,
+      deletedDriverMetrics,
+      skippedDriverMetrics,
+      deletedVehicleMetrics,
+      skippedVehicleMetrics,
+      deletedBatch: batchId
     });
   } catch (e: any) {
-    console.error("Delete batch error:", e);
+    console.error(`[Batch delete] Cascade error for batch ${batchId}:`, e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Batch Delete Preview — returns impact summary for deleting a batch
+// ---------------------------------------------------------------------------
+app.get("/make-server-37f42386/batches/:id/delete-preview", async (c) => {
+  const batchId = c.req.param("id");
+  try {
+    // 0. Fetch the batch record itself
+    const batchRecord = await kv.get(`batch:${batchId}`);
+    if (!batchRecord) {
+      return c.json({ error: `Batch ${batchId} not found` }, 404);
+    }
+
+    // Paginated helper — fetches all matching rows in 1,000-row pages
+    const PAGE = 1000;
+    const MAX_ROWS = 50000;
+    const paginatedKeyFetch = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
+    // 1. Fetch all trips in this batch (need IDs, driverIds, vehicleIds)
+    const tripRows = await paginatedKeyFetch(() =>
+      supabase
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .like("key", "trip:%")
+        .eq("value->>batchId", batchId)
+    );
+    const tripCount = tripRows.length;
+
+    // Extract trip IDs, unique driverIds, unique vehicleIds
+    const tripIds: string[] = [];
+    const driverIdSet = new Set<string>();
+    const vehicleIdSet = new Set<string>();
+    for (const row of tripRows) {
+      const v = row.value;
+      if (!v) continue;
+      tripIds.push(v.id || row.key.replace("trip:", ""));
+      if (v.driverId) driverIdSet.add(v.driverId);
+      if (v.vehicleId) vehicleIdSet.add(v.vehicleId);
+    }
+
+    // 2. Count transactions in this batch
+    const txRows = await paginatedKeyFetch(() =>
+      supabase
+        .from("kv_store_37f42386")
+        .select("key")
+        .like("key", "transaction:%")
+        .eq("value->>batchId", batchId)
+    );
+    const transactionCount = txRows.length;
+
+    // 3. Count ledger entries tied to these trip IDs
+    //    Ledger keys are "ledger:RANDOM_UUID" with trip ID stored in value.sourceId
+    let ledgerCount = 0;
+    const CHUNK = 50;
+    for (let i = 0; i < tripIds.length; i += CHUNK) {
+      const chunk = tripIds.slice(i, i + CHUNK);
+      const { count, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("*", { count: "exact", head: true })
+        .like("key", "ledger:%")
+        .eq("value->>sourceType", "trip")
+        .in("value->>sourceId", chunk);
+      if (error) {
+        console.log(`Batch delete-preview ledger count error at chunk ${i}: ${error.message}`);
+      } else {
+        ledgerCount += count || 0;
+      }
+    }
+
+    // 4. Driver metrics safety check
+    //    For each driver in this batch, check if they have trips in OTHER batches
+    const driverMetrics = { affected: driverIdSet.size, safeToDelete: 0, shared: 0, details: [] as any[] };
+    for (const driverId of driverIdSet) {
+      const { count, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("*", { count: "exact", head: true })
+        .like("key", "trip:%")
+        .eq("value->>driverId", driverId)
+        .neq("value->>batchId", batchId);
+      if (error) {
+        console.log(`Batch delete-preview driver check error for ${driverId}: ${error.message}`);
+        driverMetrics.shared++;
+        driverMetrics.details.push({ driverId, status: "shared", reason: "query error — kept safe" });
+      } else if ((count || 0) > 0) {
+        driverMetrics.shared++;
+        driverMetrics.details.push({ driverId, status: "shared", otherTrips: count });
+      } else {
+        driverMetrics.safeToDelete++;
+        driverMetrics.details.push({ driverId, status: "safeToDelete" });
+      }
+    }
+
+    // 5. Vehicle metrics safety check — same logic
+    const vehicleMetrics = { affected: vehicleIdSet.size, safeToDelete: 0, shared: 0, details: [] as any[] };
+    for (const vehicleId of vehicleIdSet) {
+      const { count, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("*", { count: "exact", head: true })
+        .like("key", "trip:%")
+        .eq("value->>vehicleId", vehicleId)
+        .neq("value->>batchId", batchId);
+      if (error) {
+        console.log(`Batch delete-preview vehicle check error for ${vehicleId}: ${error.message}`);
+        vehicleMetrics.shared++;
+        vehicleMetrics.details.push({ vehicleId, status: "shared", reason: "query error — kept safe" });
+      } else if ((count || 0) > 0) {
+        vehicleMetrics.shared++;
+        vehicleMetrics.details.push({ vehicleId, status: "shared", otherTrips: count });
+      } else {
+        vehicleMetrics.safeToDelete++;
+        vehicleMetrics.details.push({ vehicleId, status: "safeToDelete" });
+      }
+    }
+
+    console.log(`[Batch delete-preview] Batch ${batchId}: ${tripCount} trips, ${transactionCount} txns, ${ledgerCount} ledger entries, ${driverMetrics.safeToDelete}/${driverMetrics.affected} driver metrics deletable, ${vehicleMetrics.safeToDelete}/${vehicleMetrics.affected} vehicle metrics deletable`);
+
+    return c.json({
+      batch: batchRecord,
+      trips: tripCount,
+      transactions: transactionCount,
+      ledgerEntries: ledgerCount,
+      driverMetrics,
+      vehicleMetrics,
+    });
+  } catch (e: any) {
+    console.error(`Batch delete-preview error for ${batchId}:`, e);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -5425,8 +6846,8 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
     `;
 
     // Robust fallback strategy for model selection
-    // Added 'gemini-1.5-flash-latest' and 'gemini-1.5-pro-latest' and explicit fallback to OpenAI
-    const modelCandidates = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest"];
+    // Updated 2026-03-11: Use current Gemini model names (old -exp/-latest suffixes are deprecated/404)
+    const modelCandidates = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"];
     let result = null;
     let lastError = null;
 
@@ -5526,6 +6947,11 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
     return c.json({ success: true, data });
   } catch (e: any) {
     console.error("Analysis Error:", e);
+    // Detect quota / rate-limit errors and return a user-friendly message
+    const isQuota = e?.status === 429 || e?.code === "insufficient_quota" || /quota|rate.?limit/i.test(e?.message || "");
+    if (isQuota) {
+      return c.json({ error: "AI service temporarily unavailable — your API quota may be exhausted. Please check your OpenAI billing dashboard and try again in a few minutes.", userFriendly: true }, 503);
+    }
     return c.json({ error: e.message }, 500);
   }
 });
@@ -5557,8 +6983,53 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
     if (Array.isArray(trips) && trips.length > 0) {
         // Deduplicate trips by id
         const uniqueTrips = Array.from(new Map(trips.map(t => [t.id, t])).values());
+
+        // ── Normalize driverId to canonical Roam UUID (mirrors POST /trips) ──
+        for (const trip of uniqueTrips) {
+            try {
+                const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+                if (resolved.resolved) {
+                    trip.driverId = resolved.canonicalId;
+                    if (!trip.driverName) {
+                        trip.driverName = resolved.driverName;
+                    }
+                }
+            } catch (resolveErr) {
+                console.warn(`[FleetSync] Failed to resolve driverId for trip ${trip.id}:`, resolveErr);
+            }
+        }
+
         const tripKeys = uniqueTrips.map((t: any) => `trip:${t.id}`);
         operations.push(kv.mset(tripKeys, uniqueTrips));
+
+        // ── Write-Time Ledger: Generate ledger entries for each imported trip ──
+        // This mirrors the POST /trips ledger generation to ensure fleet/sync
+        // imports (Uber Mega-JSON path) also populate the ledger.
+        try {
+            const allLedgerEntries: any[] = [];
+            for (const trip of uniqueTrips) {
+                const tripEntries = await generateTripLedgerEntries(trip);
+                allLedgerEntries.push(...tripEntries);
+            }
+            if (allLedgerEntries.length > 0) {
+                // Batch save in chunks of 100
+                for (let i = 0; i < allLedgerEntries.length; i += 100) {
+                    const chunk = allLedgerEntries.slice(i, i + 100);
+                    const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
+                    await kv.mset(ledgerKeys, chunk);
+                }
+                console.log(`[FleetSync Ledger] Created ${allLedgerEntries.length} ledger entries for ${uniqueTrips.length} trips`);
+                // Verification: count completed trips with amount > 0 vs ledger entries created
+                const completedCount = uniqueTrips.filter((t: any) => t.status === 'Completed' && t.amount > 0).length;
+                const fareEntries = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning').length;
+                if (fareEntries < completedCount) {
+                    console.warn(`[FleetSync Ledger] INTEGRITY WARNING: ${completedCount} completed trips but only ${fareEntries} fare_earning entries created. ${completedCount - fareEntries} trips may be missing ledger entries.`);
+                }
+            }
+        } catch (ledgerErr) {
+            // Ledger creation failure should NOT break fleet sync
+            console.error('[FleetSync Ledger] Failed to create ledger entries:', ledgerErr);
+        }
     }
 
     // 4. Financials (Singleton)
@@ -5575,6 +7046,10 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
     }
 
     await Promise.all(operations);
+
+    // Invalidate stats cache since data has changed
+    await cache.invalidateCacheVersion("stats");
+    await cache.invalidateCacheVersion("performance");
 
     return c.json({ 
         success: true, 
@@ -8038,6 +9513,618 @@ app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
     console.log(`admin/platform-settings PUT error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Bulk Delete — Preview
+// ---------------------------------------------------------------------------
+// Generic endpoint: fetch items by KV key prefix with optional filters,
+// returning lean preview rows for the DeleteFlowModal.
+// ---------------------------------------------------------------------------
+app.post("/make-server-37f42386/bulk-delete-preview", async (c) => {
+  try {
+    const { prefix, startDate, endDate, dateField, driverId, platform, fields } = await c.req.json();
+
+    if (!prefix || typeof prefix !== "string") {
+      return c.json({ error: "Missing required 'prefix' parameter" }, 400);
+    }
+
+    const SAFETY_LIMIT = 50000;
+    const PAGE_SIZE = 1000;
+    const dateFld = dateField || "date";
+    const requestedFields = Array.isArray(fields) && fields.length > 0 ? fields : null;
+
+    // Paginate through all matching records to avoid the 1,000-row PostgREST cap
+    let rows: any[] = [];
+    let offset = 0;
+    while (offset < SAFETY_LIMIT) {
+      let query = supabase
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .like("key", `${prefix}%`)
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      // Server-side date filtering via JSON field extraction
+      if (startDate) {
+        query = query.gte(`value->>${dateFld}`, startDate);
+      }
+      if (endDate) {
+        query = query.lte(`value->>${dateFld}`, endDate);
+      }
+
+      // Server-side driverId filtering
+      if (driverId) {
+        query = query.eq("value->>driverId", driverId);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.log(`bulk-delete-preview query error at offset ${offset}: ${error.message}`);
+        return c.json({ error: `Database query failed: ${error.message}` }, 500);
+      }
+
+      const page = data || [];
+      rows = rows.concat(page);
+
+      // If we got fewer than PAGE_SIZE rows, we've reached the end
+      if (page.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
+    }
+
+    console.log(`bulk-delete-preview: fetched ${rows.length} total rows for prefix "${prefix}"`);
+
+    // Client-side platform filtering (case-insensitive)
+    if (platform) {
+      const plat = platform.toLowerCase();
+      rows = rows.filter((r: any) => {
+        const val = r.value;
+        if (!val) return false;
+        const p = (val.platform || "").toLowerCase();
+        return p === plat || p.includes(plat);
+      });
+    }
+
+    // Map to lean preview items
+    const items = rows.map((r: any) => {
+      const val = r.value || {};
+      const item: Record<string, any> = { key: r.key };
+      if (requestedFields) {
+        for (const f of requestedFields) {
+          item[f] = val[f] ?? null;
+        }
+      } else {
+        Object.assign(item, val);
+      }
+      return item;
+    });
+
+    return c.json({ items, totalCount: items.length });
+  } catch (e: any) {
+    console.log(`bulk-delete-preview error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bulk Delete — Execute
+// ---------------------------------------------------------------------------
+// Accepts an array of KV keys and deletes them in chunks.
+// Optionally cleans up Supabase Storage files referenced by the values.
+// ---------------------------------------------------------------------------
+app.post("/make-server-37f42386/bulk-delete-execute", async (c) => {
+  try {
+    const { keys, cleanupStorage } = await c.req.json();
+
+    if (!Array.isArray(keys) || keys.length === 0) {
+      return c.json({ error: "Missing or empty 'keys' array" }, 400);
+    }
+    if (keys.length > 5000) {
+      return c.json({ error: "Too many items (max 5000). Please use narrower filters." }, 400);
+    }
+
+    const CHUNK_SIZE = 100;
+    const FILE_CHUNK_SIZE = 50;
+    const BUCKET_NAME = "make-37f42386-docs";
+    const filesToDelete: string[] = [];
+
+    for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
+      const chunk = keys.slice(i, i + CHUNK_SIZE);
+
+      // If cleanupStorage requested, fetch values first to find file references
+      if (cleanupStorage) {
+        try {
+          const values = await kv.mget(chunk);
+          (values || []).forEach((item: any) => {
+            if (!item) return;
+            const urlFields = ["receiptUrl", "invoiceUrl", "photoUrl", "imageUrl", "fileUrl"];
+            for (const field of urlFields) {
+              const url = item[field];
+              if (url && typeof url === "string" && url.includes(BUCKET_NAME)) {
+                const parts = url.split(`${BUCKET_NAME}/`);
+                if (parts.length > 1) {
+                  const path = parts[1].split("?")[0];
+                  if (path) filesToDelete.push(path);
+                }
+              }
+            }
+          });
+        } catch (fetchErr: any) {
+          console.log(`bulk-delete-execute: storage scan warning (non-fatal): ${fetchErr.message}`);
+        }
+      }
+
+      // Delete the KV entries
+      await kv.mdel(chunk);
+    }
+
+    // Cleanup storage files if any were found
+    let filesDeletedCount = 0;
+    if (filesToDelete.length > 0) {
+      for (let i = 0; i < filesToDelete.length; i += FILE_CHUNK_SIZE) {
+        const fileChunk = filesToDelete.slice(i, i + FILE_CHUNK_SIZE);
+        try {
+          await supabase.storage.from(BUCKET_NAME).remove(fileChunk);
+          filesDeletedCount += fileChunk.length;
+        } catch (storageErr: any) {
+          console.log(`bulk-delete-execute: storage cleanup warning (non-fatal): ${storageErr.message}`);
+        }
+      }
+    }
+
+    console.log(`bulk-delete-execute: deleted ${keys.length} keys, ${filesDeletedCount} storage files`);
+    return c.json({ success: true, deletedCount: keys.length, filesDeletedCount });
+  } catch (e: any) {
+    console.log(`bulk-delete-execute error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 1: Per-Driver Ledger Summary Endpoint
+// Aggregates ALL fare_earning ledger entries per driver into
+// lifetime / monthly / today earnings & trip-count buckets.
+// Used by DriversPage.tsx to display ledger-sourced financials.
+// ═══════════════════════════════════════════════════════════════════════════
+app.get("/make-server-37f42386/ledger/drivers-summary", async (c) => {
+  const t0 = Date.now();
+  try {
+    // Date param (for "today" bucket) — defaults to server's current date
+    const dateParam = c.req.query("date");
+    const today = dateParam || new Date().toISOString().split("T")[0];
+    const monthStart = today.substring(0, 7) + "-01"; // YYYY-MM-01
+    // Last day of month: go to next month day-0
+    const [yr, mo] = today.substring(0, 7).split("-").map(Number);
+    const monthEndDate = new Date(yr, mo, 0); // day 0 of next month = last day of this month
+    const monthEnd = monthEndDate.toISOString().split("T")[0];
+
+    console.log(`[Ledger DriversSummary] Starting — today=${today}, month=${monthStart}..${monthEnd}`);
+
+    // ── Paginated fetch of ALL fare_earning ledger entries ──────────
+    const PAGE = 1000;
+    const MAX_ROWS = 100000;
+    let allEntries: any[] = [];
+    let offset = 0;
+
+    while (offset < MAX_ROWS) {
+      const { data, error } = await supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "ledger:%")
+        .eq("value->>eventType", "fare_earning")
+        .range(offset, offset + PAGE - 1);
+
+      if (error) throw error;
+      const page = data || [];
+      allEntries = allEntries.concat(page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
+
+    console.log(`[Ledger DriversSummary] Fetched ${allEntries.length} fare_earning entries in ${Date.now() - t0}ms`);
+
+    // ── Aggregate by driver ────────────────────────────────────────
+    const driverMap = new Map<string, {
+      lifetimeEarnings: number;
+      monthlyEarnings: number;
+      todayEarnings: number;
+      lifetimeTripCount: number;
+      monthlyTripCount: number;
+      todayTripCount: number;
+    }>();
+
+    let skippedNoDriver = 0;
+    let skippedBadDate = 0;
+
+    for (const row of allEntries) {
+      const e = row.value;
+      if (!e) continue;
+
+      const driverId = e.driverId;
+      if (!driverId || driverId === "unknown") {
+        skippedNoDriver++;
+        continue;
+      }
+
+      const gross = Number(e.grossAmount) || 0;
+      const entryDate = (e.date || "").substring(0, 10);
+
+      if (!entryDate || entryDate.length !== 10) {
+        skippedBadDate++;
+        continue;
+      }
+
+      // Get or create driver bucket
+      let bucket = driverMap.get(driverId);
+      if (!bucket) {
+        bucket = {
+          lifetimeEarnings: 0,
+          monthlyEarnings: 0,
+          todayEarnings: 0,
+          lifetimeTripCount: 0,
+          monthlyTripCount: 0,
+          todayTripCount: 0,
+        };
+        driverMap.set(driverId, bucket);
+      }
+
+      // Lifetime
+      bucket.lifetimeEarnings += gross;
+      bucket.lifetimeTripCount += 1;
+
+      // Monthly
+      if (entryDate >= monthStart && entryDate <= monthEnd) {
+        bucket.monthlyEarnings += gross;
+        bucket.monthlyTripCount += 1;
+      }
+
+      // Today
+      if (entryDate === today) {
+        bucket.todayEarnings += gross;
+        bucket.todayTripCount += 1;
+      }
+    }
+
+    // ── Build response object ──────────────────────────────────────
+    const result: Record<string, any> = {};
+    let totalLifetime = 0;
+    for (const [driverId, bucket] of driverMap) {
+      result[driverId] = {
+        lifetimeEarnings: Number(bucket.lifetimeEarnings.toFixed(2)),
+        monthlyEarnings: Number(bucket.monthlyEarnings.toFixed(2)),
+        todayEarnings: Number(bucket.todayEarnings.toFixed(2)),
+        lifetimeTripCount: bucket.lifetimeTripCount,
+        monthlyTripCount: bucket.monthlyTripCount,
+        todayTripCount: bucket.todayTripCount,
+      };
+      totalLifetime += bucket.lifetimeEarnings;
+    }
+
+    const durationMs = Date.now() - t0;
+    console.log(`[Ledger DriversSummary] Returning summaries for ${driverMap.size} drivers, total lifetime earnings $${totalLifetime.toFixed(2)}, skipped ${skippedNoDriver} no-driver / ${skippedBadDate} bad-date, duration ${durationMs}ms`);
+
+    return c.json({
+      success: true,
+      data: result,
+      meta: {
+        totalDrivers: driverMap.size,
+        totalEntriesProcessed: allEntries.length,
+        dateUsed: today,
+        monthRange: `${monthStart}..${monthEnd}`,
+        skippedNoDriver,
+        skippedBadDate,
+        durationMs,
+      },
+    });
+  } catch (e: any) {
+    const durationMs = Date.now() - t0;
+    console.error(`[Ledger DriversSummary] FAILED after ${durationMs}ms: ${e.message}`);
+    return c.json({ success: false, error: `Ledger drivers-summary failed: ${e.message}`, meta: { durationMs } }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 3: Fleet-Wide Ledger Summary Endpoint
+// Aggregates ALL ledger entries fleet-wide: total earnings, cash collected,
+// daily trend, top drivers, platform breakdown, revenue by type.
+// Backend for ExecutiveDashboard (Phase 4) and FinancialsView (Phase 5).
+// ═══════════════════════════════════════════════════════════════════════════
+app.get("/make-server-37f42386/ledger/fleet-summary", async (c) => {
+  const t0 = Date.now();
+  try {
+    // ── Parse query params ─────────────────────────────────────────
+    const daysParam = c.req.query("days");
+    const startDateParam = c.req.query("startDate");
+    const endDateParam = c.req.query("endDate");
+
+    let periodStart: string;
+    let periodEnd: string;
+
+    if (startDateParam && endDateParam) {
+      periodStart = startDateParam;
+      periodEnd = endDateParam;
+    } else {
+      const days = daysParam ? parseInt(daysParam, 10) : 7;
+      const now = new Date();
+      periodEnd = now.toISOString().split("T")[0];
+      const startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - (days - 1));
+      periodStart = startDate.toISOString().split("T")[0];
+    }
+
+    console.log(`[Ledger FleetSummary] Starting — period=${periodStart}..${periodEnd}`);
+
+    // ── Paginated fetch helper ─────────────────────────────────────
+    const PAGE = 1000;
+    const MAX_ROWS = 100000;
+    const paginatedFetchFS = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
+    // ── Fetch ALL ledger entries in the period ─────────────────────
+    const rawData = await paginatedFetchFS(() =>
+      supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "ledger:%")
+        .gte("value->>date", periodStart)
+        .lte("value->>date", periodEnd)
+    );
+
+    const entries = rawData.map((r: any) => r.value).filter(Boolean);
+    console.log(`[Ledger FleetSummary] Fetched ${entries.length} ledger entries for period ${periodStart}..${periodEnd} in ${Date.now() - t0}ms`);
+
+    // ── Aggregate totals ───────────────────────────────────────────
+    let totalEarnings = 0;
+    let totalTripCount = 0;
+    let totalCashCollected = 0;
+
+    // Revenue by type
+    const revenueByType: Record<string, number> = {
+      fare: 0,
+      tip: 0,
+      promotion: 0,
+      other: 0,
+    };
+
+    // Daily trend: date -> { earnings, tripCount }
+    const dailyMap = new Map<string, { earnings: number; tripCount: number }>();
+
+    // Top drivers: driverId -> { driverName, earnings, tripCount }
+    const driverMap = new Map<string, { driverName: string; earnings: number; tripCount: number }>();
+
+    // Platform breakdown: platform -> { earnings, tripCount }
+    const platformMap = new Map<string, { earnings: number; tripCount: number }>();
+
+    for (const e of entries) {
+      const eventType = e.eventType || "";
+      const gross = Number(e.grossAmount) || 0;
+      const net = Number(e.netAmount) || 0;
+      const entryDate = (e.date || "").substring(0, 10);
+      // Normalize GoRide -> Roam
+      const platform = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
+      const driverId = e.driverId || "unknown";
+      const driverName = e.driverName || "Unknown";
+      const paymentMethod = e.paymentMethod || "";
+
+      if (eventType === "fare_earning") {
+        totalEarnings += gross;
+        totalTripCount += 1;
+
+        // Cash
+        if (paymentMethod === "Cash") {
+          totalCashCollected += Math.abs(net);
+        }
+
+        // Revenue by type
+        revenueByType.fare += gross;
+
+        // Daily trend
+        if (entryDate && entryDate.length === 10) {
+          let day = dailyMap.get(entryDate);
+          if (!day) {
+            day = { earnings: 0, tripCount: 0 };
+            dailyMap.set(entryDate, day);
+          }
+          day.earnings += gross;
+          day.tripCount += 1;
+        }
+
+        // Top drivers
+        if (driverId && driverId !== "unknown") {
+          let drv = driverMap.get(driverId);
+          if (!drv) {
+            drv = { driverName, earnings: 0, tripCount: 0 };
+            driverMap.set(driverId, drv);
+          }
+          drv.earnings += gross;
+          drv.tripCount += 1;
+          if (driverName && driverName !== "Unknown") drv.driverName = driverName;
+        }
+
+        // Platform breakdown
+        let plat = platformMap.get(platform);
+        if (!plat) {
+          plat = { earnings: 0, tripCount: 0 };
+          platformMap.set(platform, plat);
+        }
+        plat.earnings += gross;
+        plat.tripCount += 1;
+
+      } else if (eventType === "tip") {
+        revenueByType.tip += net;
+        totalEarnings += net;
+      } else if (eventType === "promotion" || eventType === "incentive") {
+        revenueByType.promotion += net;
+      } else if (net > 0) {
+        revenueByType.other += net;
+      }
+    }
+
+    // ── Build daily trend array (sorted chronologically) ───────────
+    const dailyTrend = Array.from(dailyMap.entries())
+      .map(([date, d]) => ({
+        date,
+        earnings: Number(d.earnings.toFixed(2)),
+        tripCount: d.tripCount,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // ── Build top drivers (top 10 by earnings, descending) ─────────
+    const topDrivers = Array.from(driverMap.entries())
+      .map(([driverId, d]) => ({
+        driverId,
+        driverName: d.driverName,
+        earnings: Number(d.earnings.toFixed(2)),
+        tripCount: d.tripCount,
+      }))
+      .sort((a, b) => b.earnings - a.earnings)
+      .slice(0, 10);
+
+    // ── Build platform breakdown ───────────────────────────────────
+    const platformBreakdown = Array.from(platformMap.entries())
+      .map(([platform, d]) => ({
+        platform,
+        earnings: Number(d.earnings.toFixed(2)),
+        tripCount: d.tripCount,
+      }))
+      .sort((a, b) => b.earnings - a.earnings);
+
+    const durationMs = Date.now() - t0;
+    console.log(`[Ledger FleetSummary] Done — ${entries.length} entries, $${totalEarnings.toFixed(2)} total earnings, ${totalTripCount} trips, ${dailyTrend.length} days, ${topDrivers.length} top drivers, ${platformBreakdown.length} platforms, ${durationMs}ms`);
+
+    return c.json({
+      success: true,
+      data: {
+        totalEarnings: Number(totalEarnings.toFixed(2)),
+        totalTripCount,
+        totalCashCollected: Number(totalCashCollected.toFixed(2)),
+        dailyTrend,
+        topDrivers,
+        platformBreakdown,
+        revenueByType: {
+          fare: Number(revenueByType.fare.toFixed(2)),
+          tip: Number(revenueByType.tip.toFixed(2)),
+          promotion: Number(revenueByType.promotion.toFixed(2)),
+          other: Number(revenueByType.other.toFixed(2)),
+        },
+      },
+      meta: {
+        periodStart,
+        periodEnd,
+        totalEntriesProcessed: entries.length,
+        durationMs,
+      },
+    });
+  } catch (e: any) {
+    const durationMs = Date.now() - t0;
+    console.error(`[Ledger FleetSummary] FAILED after ${durationMs}ms: ${e.message}`);
+    return c.json({ success: false, error: `Ledger fleet-summary failed: ${e.message}`, meta: { durationMs } }, 500);
+  }
+});
+
+// ─── GET /ledger/cash-diagnostic/:driverId — Phase 2 diagnostic ──────────────
+// Read-only: fetches all trips for a driver and returns a summary of cash-related
+// fields (cashCollected, paymentMethod) so the operator can verify stored data.
+app.get("/make-server-37f42386/ledger/cash-diagnostic/:driverId", async (c) => {
+    try {
+        const startMs = Date.now();
+        const driverId = c.req.param("driverId");
+        if (!driverId) return c.json({ error: "Missing driverId" }, 400);
+
+        // Resolve all known IDs for this driver
+        const allDriverIds: string[] = [driverId];
+        let resolvedDriverName = '';
+        try {
+            const driverRecord = await kv.get(`driver:${driverId}`);
+            if (driverRecord) {
+                if (driverRecord.uberDriverId) allDriverIds.push(driverRecord.uberDriverId);
+                if (driverRecord.inDriveDriverId) allDriverIds.push(driverRecord.inDriveDriverId);
+                resolvedDriverName = driverRecord.name || [driverRecord.firstName, driverRecord.lastName].filter(Boolean).join(' ') || '';
+            }
+        } catch { /* ignore */ }
+
+        // Build OR filter
+        const orParts: string[] = [];
+        for (const id of allDriverIds) {
+            orParts.push(`value->>driverId.eq.${id}`);
+        }
+        if (resolvedDriverName) {
+            orParts.push(`value->>driverName.ilike.${resolvedDriverName}`);
+        }
+        const orFilter = orParts.join(',');
+
+        // Fetch all trips
+        let allTrips: any[] = [];
+        const PAGE = 1000;
+        let offset = 0;
+        while (offset < 50000) {
+            const { data, error } = await supabase
+                .from("kv_store_37f42386")
+                .select("value")
+                .like("key", "trip:%")
+                .or(orFilter)
+                .range(offset, offset + PAGE - 1);
+            if (error) throw error;
+            const page = data || [];
+            allTrips = allTrips.concat(page.map((d: any) => d.value).filter(Boolean));
+            if (page.length < PAGE) break;
+            offset += PAGE;
+        }
+
+        const completed = allTrips.filter((t: any) => t.status === 'Completed');
+
+        // Group by platform
+        const platforms: Record<string, any> = {};
+        for (const t of completed) {
+            const plat = t.platform || 'Unknown';
+            if (!platforms[plat]) {
+                platforms[plat] = { total: 0, withCashCollectedGt0: 0, withPaymentMethodCash: 0, withEitherCashSignal: 0, samples: [] };
+            }
+            const p = platforms[plat];
+            p.total++;
+            const hasCashCollected = (t.cashCollected || 0) > 0;
+            const hasPaymentMethodCash = (t.paymentMethod || '').toLowerCase() === 'cash';
+            if (hasCashCollected) p.withCashCollectedGt0++;
+            if (hasPaymentMethodCash) p.withPaymentMethodCash++;
+            if (hasCashCollected || hasPaymentMethodCash) p.withEitherCashSignal++;
+            // Keep up to 10 samples per platform
+            if (p.samples.length < 10) {
+                p.samples.push({
+                    id: t.id,
+                    date: t.date,
+                    amount: t.amount,
+                    cashCollected: t.cashCollected ?? null,
+                    paymentMethod: t.paymentMethod ?? null,
+                    fareBreakdown: t.fareBreakdown ? { cashCollected: t.fareBreakdown.cashCollected ?? null } : null,
+                });
+            }
+        }
+
+        const durationMs = Date.now() - startMs;
+        return c.json({
+            success: true,
+            driverId,
+            driverName: resolvedDriverName,
+            allDriverIds,
+            totalTrips: allTrips.length,
+            completedTrips: completed.length,
+            platforms,
+            durationMs,
+        });
+    } catch (e: any) {
+        console.error('[CashDiagnostic] Error:', e);
+        return c.json({ error: `Cash diagnostic failed: ${e.message}` }, 500);
+    }
 });
 
 // ---------------------------------------------------------------------------

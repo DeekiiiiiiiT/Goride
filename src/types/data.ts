@@ -575,6 +575,13 @@ export interface LedgerDriverOverview {
     total: number;
     byPlatform: Record<string, number>;
   }>;
+  completeness?: {
+    totalTrips: number;
+    ledgerTrips: number;
+    isComplete: boolean;
+    missingCount: number;
+    byPlatform: Record<string, { trips: number; ledger: number }>;
+  };
 }
 
 export interface FinancialTransaction {

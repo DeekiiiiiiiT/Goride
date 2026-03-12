@@ -50,7 +50,8 @@ import {
   Wrench,
   Package,
   ShieldAlert,
-  HardDrive
+  HardDrive,
+  Search
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Progress } from "../ui/progress";
@@ -68,6 +69,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/
 import { toast } from "sonner@2.0.3";
 import { BulkImportTollTransactionsModal } from '../vehicles/BulkImportTollTransactionsModal';
 import { ExportCenter } from './ExportCenter';
+import { DeleteCenter } from './DeleteCenter';
 
 import { 
     detectFileType, 
@@ -89,7 +91,7 @@ import { fuelService } from '../../services/fuelService';
 import { DataSanitizer } from '../../services/dataSanitizer';
 import { tripCalibrationService } from '../../services/tripCalibrationService';
 import { ImpactAnalysis } from './ImpactAnalysis';
-import { DisasterRecoveryCard } from './DisasterRecoveryCard';
+
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { CalibrationReport } from './CalibrationReport';
 import { QuarantineList } from './QuarantineList';
@@ -97,6 +99,7 @@ import { TripReImportFlow } from './TripReImportFlow';
 import { BulkEntityImportFlow } from './BulkEntityImportFlow';
 import { SystemBackupRestore } from './SystemBackupRestore';
 import { ImportExportHistory } from './ImportExportHistory';
+import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
@@ -127,7 +130,7 @@ const CollapsibleSection = ({ title, children, defaultOpen = true, icon }: { tit
 }
 
 export function ImportsPage() {
-  const [activeTab, setActiveTab] = useState<'import' | 'export'>('import');
+  const [activeTab, setActiveTab] = useState<'import' | 'export' | 'delete'>('import');
   const [step, setStep] = useState<Step>('select_platform');
   
   // Staging: Multiple files
@@ -167,9 +170,11 @@ export function ImportsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Uber');
   const [disabledColumns, setDisabledColumns] = useState<Record<string, string[]>>({});
   const [tollImportMode, setTollImportMode] = useState<'usage' | 'topup' | 'recovery' | null>(null);
-  const [showTripReImport, setShowTripReImport] = useState(false);
+  const [showTripReImport, setShowTripReImport] = useState<string | null>(null);
   const [bulkImportType, setBulkImportType] = useState<'driver' | 'vehicle' | 'transaction' | 'tollTag' | 'tollPlaza' | 'station' | 'equipment' | 'inventory' | 'claim' | null>(null);
   const [showFullRestore, setShowFullRestore] = useState(false);
+  const [importGroup, setImportGroup] = useState<string | null>(null);
+  const [importSearch, setImportSearch] = useState('');
 
   // Phase 8: Onboarding banner
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -339,6 +344,14 @@ export function ImportsPage() {
           platform: selectedPlatform as any
       }));
 
+      // Recalculate actual cash collected from individual trips (Uber summary undercounts)
+      const tripCashTotal = finalTrips
+          .filter(t => t.paymentMethod === 'Cash' && t.cashCollected)
+          .reduce((sum, t) => sum + Math.abs(t.cashCollected || 0), 0);
+      if (tripCashTotal > 0 && organizationMetrics.length > 0) {
+          organizationMetrics[0].totalCashExposure = tripCashTotal;
+      }
+
       setProcessedData(finalTrips);
       setProcessedDriverMetrics(driverMetrics);
       setProcessedVehicleMetrics(vehicleMetrics);
@@ -412,6 +425,14 @@ export function ImportsPage() {
             platform: selectedPlatform as any
         }));
 
+        // Recalculate actual cash collected from individual trips (Uber summary undercounts)
+        const tripCashTotal = finalTrips
+            .filter(t => t.paymentMethod === 'Cash' && t.cashCollected)
+            .reduce((sum, t) => sum + Math.abs(t.cashCollected || 0), 0);
+        if (tripCashTotal > 0 && localResult.organizationMetrics.length > 0) {
+            localResult.organizationMetrics[0].totalCashExposure = tripCashTotal;
+        }
+
         // 3. Merge AI Data into State
         setProcessedData(finalTrips); // Keep local trips for table
         setCalibrationStats(localResult.calibrationStats);
@@ -468,7 +489,14 @@ export function ImportsPage() {
 
         setStep('preview_merged');
     } catch (e: any) {
-        setError(e.message);
+        // Show a user-friendly message for quota / connectivity errors
+        const msg = e?.message || "";
+        if (/quota|rate.?limit|temporarily unavailable|503|429/i.test(msg)) {
+          setError("AI analysis is temporarily unavailable — your API quota may be exhausted. Please check your OpenAI/Gemini billing and try again in a few minutes.");
+        } else {
+          setError(msg);
+        }
+        console.error("handleAnalyze error:", e);
     } finally {
         setIsParsing(false);
         // Do not clear warning immediately so user sees the result
@@ -583,6 +611,8 @@ export function ImportsPage() {
       setUploadedFiles([]);
       setProcessedData([]);
       setStep('select_platform');
+      setImportGroup(null);
+      setImportSearch('');
       setError(null);
       setWarning(null);
   };
@@ -1002,6 +1032,16 @@ export function ImportsPage() {
         >
           Export
         </button>
+        <button
+          onClick={() => setActiveTab('delete')}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+            activeTab === 'delete'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Delete
+        </button>
       </div>
 
       {/* Phase 8: Onboarding Banner */}
@@ -1014,8 +1054,8 @@ export function ImportsPage() {
             <div>
               <p className="text-sm font-semibold text-slate-800">Welcome to the Data Center</p>
               <p className="text-xs text-slate-600 mt-0.5">
-                Import your fleet data from CSV files, export reports for analysis, or create full system backups for disaster recovery.
-                Use the <strong>Import</strong> tab to upload data and the <strong>Export</strong> tab to download it.
+                Import your fleet data from CSV files, export reports for analysis, manage data deletion, or create full system backups for disaster recovery.
+                Use the <strong>Import</strong> tab to upload data, the <strong>Export</strong> tab to download it, and the <strong>Delete</strong> tab to permanently remove records.
               </p>
             </div>
           </div>
@@ -1027,6 +1067,9 @@ export function ImportsPage() {
           </button>
         </div>
       )}
+
+      {/* ═══ DELETE TAB ═══ */}
+      {activeTab === 'delete' && <DeleteCenter />}
 
       {/* ═══ EXPORT TAB ═══ */}
       {activeTab === 'export' && <ExportCenter />}
@@ -1042,12 +1085,14 @@ export function ImportsPage() {
         </Alert>
       )}
 
-      {/* DISASTER RECOVERY SECTION */}
-      <DisasterRecoveryCard />
+
 
       {/* TRIP RE-IMPORT FLOW (Phase 4) */}
       {showTripReImport && (
-        <TripReImportFlow onBack={() => setShowTripReImport(false)} />
+        <TripReImportFlow
+          onBack={() => setShowTripReImport(null)}
+          platformFilter={showTripReImport === 'all' ? undefined : showTripReImport}
+        />
       )}
 
       {/* BULK ENTITY IMPORT FLOW (Phase 5) */}
@@ -1060,82 +1105,174 @@ export function ImportsPage() {
         <SystemBackupRestore onBack={() => setShowFullRestore(false)} />
       )}
 
-      {/* STEP 0: SELECT PLATFORM */}
-      {step === 'select_platform' && !showTripReImport && !bulkImportType && !showFullRestore && (
-        <div className="space-y-6">
-            <div className="text-center space-y-2">
-                <h3 className="text-lg font-medium text-slate-900">Select Platform</h3>
-                <p className="text-slate-500">Choose the service provider for the data you are importing.</p>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                {/* Special API Sync Card */}
-                <Card 
-                    onClick={handleUberSync}
-                    className="cursor-pointer transition-all duration-200 border-2 border-indigo-100 hover:border-indigo-600 hover:shadow-md bg-indigo-50/50"
-                >
-                    <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
-                        <div className="h-12 w-12 rounded-full bg-indigo-600 flex items-center justify-center">
-                            {isParsing ? (
-                                <Zap className="h-6 w-6 text-white animate-pulse" /> 
-                            ) : (
-                                <CloudDownload className="h-6 w-6 text-white" />
-                            )}
-                        </div>
-                        <div className="text-center">
-                            <h4 className="font-semibold text-indigo-900">Uber Sync</h4>
-                            <p className="text-xs text-indigo-600/80 mt-1">Connect Account</p>
-                        </div>
-                    </CardContent>
-                </Card>
+      {/* STEP 0: SELECT PLATFORM — Grouped drill-in view */}
+      {step === 'select_platform' && !showTripReImport && !bulkImportType && !showFullRestore && (() => {
 
-                {/* CSV Options */}
-                {[
-                    { id: 'Uber', icon: 'UB', color: 'bg-black text-white' },
-                    { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white' },
-                    { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white' },
-                    { id: 'Toll Top-up', icon: <CreditCard className="h-6 w-6" />, color: 'bg-emerald-600 text-white', action: () => setTollImportMode('topup') },
-                    { id: 'Toll Usage', icon: <MinusCircle className="h-6 w-6" />, color: 'bg-slate-600 text-white', action: () => setTollImportMode('usage') },
-                    { id: 'Disaster Recovery', icon: <CloudDownload className="h-6 w-6" />, color: 'bg-white border-2 border-slate-200 text-slate-600', subtext: 'Export Backup', action: handleTollBackup },
-                    { id: 'Restore Backup', icon: <UploadCloud className="h-6 w-6" />, color: 'bg-rose-50 border-2 border-rose-100 text-rose-600', subtext: 'Import Recovery CSV', action: () => setTollImportMode('recovery') },
-                    { id: 'Trip Re-Import', icon: <MapPin className="h-6 w-6" />, color: 'bg-violet-600 text-white', subtext: 'CSV with Ledger', action: () => setShowTripReImport(true) },
-                    { id: 'Driver Import', icon: <Users className="h-6 w-6" />, color: 'bg-teal-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('driver') },
-                    { id: 'Vehicle Import', icon: <Car className="h-6 w-6" />, color: 'bg-sky-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('vehicle') },
-                    { id: 'Transaction Import', icon: <DollarSign className="h-6 w-6" />, color: 'bg-amber-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('transaction') },
-                    { id: 'Toll Tag Import', icon: <Tag className="h-6 w-6" />, color: 'bg-orange-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('tollTag') },
-                    { id: 'Toll Plaza Import', icon: <Building2 className="h-6 w-6" />, color: 'bg-stone-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('tollPlaza') },
-                    { id: 'Station Import', icon: <Fuel className="h-6 w-6" />, color: 'bg-lime-600 text-white', subtext: 'Simple CSV', action: () => setBulkImportType('station') },
-                    { id: 'Equipment Import', icon: <Wrench className="h-6 w-6" />, color: 'bg-cyan-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('equipment') },
-                    { id: 'Inventory Import', icon: <Package className="h-6 w-6" />, color: 'bg-fuchsia-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('inventory') },
-                    { id: 'Claim Import', icon: <ShieldAlert className="h-6 w-6" />, color: 'bg-red-600 text-white', subtext: 'Bulk CSV', action: () => setBulkImportType('claim') },
-                    { id: 'Full Restore', icon: <HardDrive className="h-6 w-6" />, color: 'bg-slate-900 text-white', subtext: 'ZIP Backup', action: () => setShowFullRestore(true) },
-                ].map((platform: any) => (
-                    <Card 
-                        key={platform.id}
-                        onClick={() => {
-                            if (platform.action) {
-                                platform.action();
-                            } else {
-                                setSelectedPlatform(platform.id); 
-                                setStep('upload'); 
-                            }
-                        }}
-                        className="cursor-pointer transition-all duration-200 hover:border-slate-400 hover:shadow-md"
-                    >
-                        <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
-                            <div className={`h-12 w-12 rounded-full ${platform.color} flex items-center justify-center font-bold text-lg`}>
-                                {platform.icon}
-                            </div>
-                            <div className="text-center">
-                                <h4 className="font-semibold">{platform.id}</h4>
-                                <p className="text-xs text-slate-500 mt-1">{platform.subtext || 'CSV Import'}</p>
-                            </div>
-                        </CardContent>
-                    </Card>
+        // ── Card definitions with descriptions ──
+        const allImportCards: Record<string, Array<{ id: string; icon: React.ReactNode | string; color: string; subtext?: string; description: string; action?: () => void }>> = {
+          'platform': [
+            { id: 'Uber Sync', icon: isParsing ? <Zap className="h-6 w-6" /> : <CloudDownload className="h-6 w-6" />, color: 'bg-indigo-600 text-white', description: 'Connect your Uber account to automatically sync trip data via API', action: handleUberSync },
+            { id: 'Uber', icon: 'UB', color: 'bg-black text-white', description: 'Upload Uber Trip Activity and Payment Orders CSV files' },
+            { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white', description: 'Upload your InDrive trip export CSV file' },
+          ],
+          'trips': [
+            { id: 'Trip Re-Import', icon: <MapPin className="h-6 w-6" />, color: 'bg-violet-600 text-white', subtext: 'CSV with Ledger', description: 'Re-import all trip records from CSV with automatic ledger reconciliation', action: () => setShowTripReImport('all') },
+            { id: 'Uber Trips Import', icon: 'UB', color: 'bg-black text-white', subtext: 'Uber Only', description: 'Import only Uber platform trips from a CSV file — non-Uber rows are filtered out', action: () => setShowTripReImport('Uber') },
+            { id: 'InDrive Trips Import', icon: 'IN', color: 'bg-blue-500 text-white', subtext: 'InDrive Only', description: 'Import only InDrive platform trips from a CSV file — non-InDrive rows are filtered out', action: () => setShowTripReImport('InDrive') },
+            { id: 'Roam Trips Import', icon: 'RM', color: 'bg-violet-500 text-white', subtext: 'Roam Only', description: 'Import only Roam (formerly GoRide) trips from a CSV — non-Roam rows are filtered out', action: () => setShowTripReImport('Roam') },
+          ],
+          'drivers': [
+            { id: 'Driver Import', icon: <Users className="h-6 w-6" />, color: 'bg-teal-600 text-white', subtext: 'Bulk CSV', description: 'Bulk import driver profiles with contact and license details from CSV', action: () => setBulkImportType('driver') },
+          ],
+          'vehicles': [
+            { id: 'Vehicle Import', icon: <Car className="h-6 w-6" />, color: 'bg-sky-600 text-white', subtext: 'Bulk CSV', description: 'Bulk import vehicle records with plate, VIN, and registration from CSV', action: () => setBulkImportType('vehicle') },
+          ],
+          'fuel': [
+            { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white', description: 'Upload fuel card statements with amounts, dates, and station info' },
+            { id: 'Station Import', icon: <Fuel className="h-6 w-6" />, color: 'bg-lime-600 text-white', subtext: 'Simple CSV', description: 'Import gas station database with brands and coordinates', action: () => setBulkImportType('station') },
+          ],
+          'toll': [
+            { id: 'Toll Top-up', icon: <CreditCard className="h-6 w-6" />, color: 'bg-emerald-600 text-white', description: 'Import toll account top-up and recharge transactions from CSV', action: () => setTollImportMode('topup') },
+            { id: 'Toll Usage', icon: <MinusCircle className="h-6 w-6" />, color: 'bg-slate-600 text-white', description: 'Import toll usage records showing plaza charges and deductions', action: () => setTollImportMode('usage') },
+            { id: 'Toll Tag Import', icon: <Tag className="h-6 w-6" />, color: 'bg-orange-600 text-white', subtext: 'Bulk CSV', description: 'Import toll tag inventory with tag numbers and vehicle assignments', action: () => setBulkImportType('tollTag') },
+            { id: 'Toll Plaza Import', icon: <Building2 className="h-6 w-6" />, color: 'bg-stone-600 text-white', subtext: 'Bulk CSV', description: 'Import toll plaza database with GPS coordinates and rates', action: () => setBulkImportType('tollPlaza') },
+          ],
+          'finance': [
+            { id: 'Transaction Import', icon: <DollarSign className="h-6 w-6" />, color: 'bg-amber-600 text-white', subtext: 'Bulk CSV', description: 'Bulk import financial transactions from CSV', action: () => setBulkImportType('transaction') },
+            { id: 'Equipment Import', icon: <Wrench className="h-6 w-6" />, color: 'bg-cyan-600 text-white', subtext: 'Bulk CSV', description: 'Bulk import fleet equipment assignments from CSV', action: () => setBulkImportType('equipment') },
+            { id: 'Inventory Import', icon: <Package className="h-6 w-6" />, color: 'bg-fuchsia-600 text-white', subtext: 'Bulk CSV', description: 'Bulk import stock inventory with reorder points from CSV', action: () => setBulkImportType('inventory') },
+            { id: 'Claim Import', icon: <ShieldAlert className="h-6 w-6" />, color: 'bg-red-600 text-white', subtext: 'Bulk CSV', description: 'Bulk import claims and dispute records from CSV', action: () => setBulkImportType('claim') },
+          ],
+          'system': [
+            { id: 'Disaster Recovery', icon: <CloudDownload className="h-6 w-6" />, color: 'bg-white border-2 border-slate-200 text-slate-600', subtext: 'Export Backup', description: 'Export a full toll data backup as CSV for safekeeping', action: handleTollBackup },
+            { id: 'Restore Backup', icon: <UploadCloud className="h-6 w-6" />, color: 'bg-rose-50 border-2 border-rose-100 text-rose-600', subtext: 'Import Recovery CSV', description: 'Restore toll data from a previously exported recovery CSV', action: () => setTollImportMode('recovery') },
+            { id: 'Full Restore', icon: <HardDrive className="h-6 w-6" />, color: 'bg-slate-900 text-white', subtext: 'ZIP Backup', description: 'Restore entire system from a previously exported ZIP backup', action: () => setShowFullRestore(true) },
+          ],
+        };
+
+        // ── Group definitions ──
+        const importGroups: CategoryGroup[] = [
+          { id: 'platform', title: 'Platform Imports', description: 'Import trip data from rideshare platforms via API sync or CSV upload', icon: <Globe className="h-5 w-5" />, iconColor: 'bg-indigo-50 text-indigo-600', itemCount: allImportCards['platform'].length },
+          { id: 'trips', title: 'Trips & Earnings', description: 'Re-import trip records — all platforms or filter by Uber, InDrive, or Roam', icon: <MapPin className="h-5 w-5" />, iconColor: 'bg-violet-50 text-violet-600', itemCount: allImportCards['trips'].length },
+          { id: 'drivers', title: 'Drivers & Staff', description: 'Bulk import driver profiles from CSV', icon: <Users className="h-5 w-5" />, iconColor: 'bg-teal-50 text-teal-600', itemCount: allImportCards['drivers'].length },
+          { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Bulk import vehicle records from CSV', icon: <Car className="h-5 w-5" />, iconColor: 'bg-sky-50 text-sky-600', itemCount: allImportCards['vehicles'].length },
+          { id: 'fuel', title: 'Fuel & Stations', description: 'Import fuel card statements and gas station databases', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: allImportCards['fuel'].length },
+          { id: 'toll', title: 'Toll Management', description: 'Import toll top-ups, usage records, tags, and plaza databases', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: allImportCards['toll'].length },
+          { id: 'finance', title: 'Finance & Assets', description: 'Import transactions, equipment, inventory, and claims', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-700', itemCount: allImportCards['finance'].length },
+          { id: 'system', title: 'System & Backup', description: 'Export data backups or restore from a previous backup file', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-slate-100 text-slate-600', itemCount: allImportCards['system'].length },
+        ];
+
+        // ── Drilled-in group ──
+        const activeGroupCards = importGroup ? allImportCards[importGroup] || [] : [];
+        const activeGroupMeta = importGroup ? importGroups.find(g => g.id === importGroup) : null;
+
+        // ── Search filtering ──
+        const q = importSearch.toLowerCase().trim();
+        const cardMatchesSearch = (card: { id: string; description: string; subtext?: string }) => {
+          if (!q) return true;
+          return card.id.toLowerCase().includes(q) || card.description.toLowerCase().includes(q) || (card.subtext || '').toLowerCase().includes(q);
+        };
+        const groupMatchesSearch = (groupId: string) => {
+          if (!q) return true;
+          const grp = importGroups.find(g => g.id === groupId);
+          if (grp && (grp.title.toLowerCase().includes(q) || grp.description.toLowerCase().includes(q))) return true;
+          return (allImportCards[groupId] || []).some(c => cardMatchesSearch(c));
+        };
+        const filteredGroups = importGroups.filter(g => groupMatchesSearch(g.id));
+        const filteredCards = activeGroupCards.filter(c => cardMatchesSearch(c));
+
+        return (
+        <div className="space-y-6">
+          {/* Search bar — visible at both levels */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              value={importSearch}
+              onChange={e => setImportSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') { if (importSearch) setImportSearch(''); else if (importGroup) { setImportGroup(null); setImportSearch(''); } } }}
+              placeholder={importGroup ? `Filter ${activeGroupMeta?.title || 'imports'}...` : 'Search all import categories...'}
+              className="pl-9 pr-8 h-9 text-sm"
+            />
+            {importSearch && (
+              <button onClick={() => setImportSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Clear search">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {!importGroup ? (
+            <>
+              {/* GROUP OVERVIEW */}
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-medium text-slate-900">Import Data</h3>
+                <p className="text-slate-500">Select a category to see available import options.</p>
+              </div>
+              {filteredGroups.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredGroups.map(group => (
+                    <CategoryGroupCard key={group.id} group={group} onClick={(id) => { setImportGroup(id); setImportSearch(''); }} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 text-slate-400">
+                  <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm font-medium">No categories match &ldquo;{importSearch}&rdquo;</p>
+                  <p className="text-xs mt-1">Try a different term like &ldquo;fuel&rdquo;, &ldquo;driver&rdquo;, or &ldquo;toll&rdquo;</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* DRILLED-IN VIEW */}
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="sm" onClick={() => { setImportGroup(null); setImportSearch(''); }} className="text-slate-500 hover:text-slate-700">
+                  <ArrowLeft className="h-4 w-4 mr-1" /> Back
+                </Button>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Import Data &rsaquo; {activeGroupMeta?.title}</p>
+                  <h3 className="text-lg font-medium text-slate-900 leading-tight">{activeGroupMeta?.title}</h3>
+                  <p className="text-sm text-slate-500">{activeGroupMeta?.description}</p>
+                </div>
+              </div>
+            
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredCards.map((card) => (
+                  <Card
+                    key={card.id}
+                    onClick={() => {
+                      if (card.action) {
+                        card.action();
+                      } else {
+                        setSelectedPlatform(card.id);
+                        setStep('upload');
+                      }
+                    }}
+                    className="cursor-pointer transition-all duration-200 hover:border-slate-400 hover:shadow-md"
+                  >
+                    <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
+                      <div className={`h-12 w-12 rounded-full ${card.color} flex items-center justify-center font-bold text-lg`}>
+                        {card.icon}
+                      </div>
+                      <div className="text-center">
+                        <h4 className="font-semibold">{card.id}</h4>
+                        <p className="text-xs text-slate-500 mt-1">{card.subtext || 'CSV Import'}</p>
+                        <p className="text-[11px] text-slate-400 mt-1.5 line-clamp-2 max-w-[180px] mx-auto">{card.description}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
-            </div>
+              </div>
+              {filteredCards.length === 0 && q && (
+                <div className="text-center py-10 text-slate-400">
+                  <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm font-medium">No imports match &ldquo;{importSearch}&rdquo; in {activeGroupMeta?.title}</p>
+                </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {/* STEP 1: UPLOAD */}
       {step === 'upload' && (

@@ -129,6 +129,24 @@ export const api = {
     return response.json();
   },
 
+  async getBatchDeletePreview(id: string): Promise<{
+    batch: ImportBatch;
+    trips: number;
+    transactions: number;
+    ledgerEntries: number;
+    driverMetrics: { affected: number; safeToDelete: number; shared: number; details: any[] };
+    vehicleMetrics: { affected: number; safeToDelete: number; shared: number; details: any[] };
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}/delete-preview`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Batch delete preview failed (${response.status})`);
+    }
+    return response.json();
+  },
+
   async deleteBatch(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}`, {
       method: 'DELETE',
@@ -1710,6 +1728,30 @@ export const api = {
     return response.json();
   },
 
+  async purgeOrphanedLedgers(): Promise<{
+    success: boolean;
+    scannedLedgerEntries: number;
+    validTrips: number;
+    orphansFound: number;
+    deletedCount: number;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/purge-orphans`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+      }
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to purge orphaned ledgers');
+    }
+    return response.json();
+  },
+
   async getLedgerSummary(params: Partial<LedgerFilterParams> = {}): Promise<any> {
     const qp = new URLSearchParams();
     if (params.driverId) qp.set('driverId', params.driverId);
@@ -1831,6 +1873,29 @@ export const api = {
     return response.json();
   },
 
+  async getLedgerEarningsHistory(params: {
+    driverId: string;
+    periodType?: 'daily' | 'weekly' | 'monthly';
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{ success: boolean; data: any[]; durationMs: number }> {
+    const qp = new URLSearchParams();
+    qp.set('driverId', params.driverId);
+    if (params.periodType) qp.set('periodType', params.periodType);
+    if (params.startDate) qp.set('startDate', params.startDate);
+    if (params.endDate) qp.set('endDate', params.endDate);
+
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/driver-earnings-history?${qp.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger earnings history failed: ${errText}`);
+    }
+    return response.json();
+  },
+
   async runLedgerBackfill(): Promise<{ success: boolean; stats: { tripsProcessed: number; tripsSkipped: number; txProcessed: number; txSkipped: number; ledgerCreated: number; errors: number } }> {
     console.log('[Ledger] Starting backfill...');
     const response = await fetch(
@@ -1850,5 +1915,205 @@ export const api = {
     const result = await response.json();
     console.log('[Ledger] Backfill complete:', result);
     return result;
+  },
+
+  // Phase 6.3: Targeted per-driver ledger repair
+  async repairDriverLedger(driverId: string, tripIds?: string[], force?: boolean): Promise<{ success: boolean; driverId: string; stats: any; durationMs: number }> {
+    console.log(`[Ledger] Starting ${force ? 'FORCE ' : ''}repair for driver ${driverId}${tripIds ? ` with ${tripIds.length} client-supplied tripIds` : ''}...`);
+    const response = await fetch(
+      `${API_ENDPOINTS.financial}/ledger/repair-driver`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ driverId, ...(tripIds ? { tripIds } : {}), ...(force ? { force: true } : {}) }),
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Ledger repair failed: ${errText}`);
+    }
+    const result = await response.json();
+    console.log('[Ledger] Repair complete:', result);
+    return result;
+  },
+
+  // Phase 2 Diagnostic: Cash field inspection for a driver's stored trips
+  async getCashDiagnostic(driverId: string): Promise<any> {
+    const response = await fetch(
+      `${API_ENDPOINTS.financial}/ledger/cash-diagnostic/${driverId}`,
+      {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Cash diagnostic failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  // ─── Bulk Delete ─────────────────────────────────────────────────────
+
+  async bulkDeletePreview(payload: {
+    prefix: string;
+    startDate?: string;
+    endDate?: string;
+    dateField?: string;
+    driverId?: string;
+    platform?: string;
+    fields?: string[];
+  }): Promise<{ items: any[]; totalCount: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/bulk-delete-preview`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Bulk delete preview failed (${response.status})`);
+    }
+    return response.json();
+  },
+
+  async bulkDeleteExecute(payload: {
+    keys: string[];
+    cleanupStorage?: boolean;
+  }): Promise<{ success: boolean; deletedCount: number; filesDeletedCount: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/bulk-delete-execute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Bulk delete execute failed (${response.status})`);
+    }
+    return response.json();
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Phase 1: Per-Driver Ledger Summary (for DriversPage migration)
+  // ═══════════════════════════════════════════════════════════════════
+
+  async getLedgerDriversSummary(date?: string): Promise<{
+    success: boolean;
+    data: Record<string, {
+      lifetimeEarnings: number;
+      monthlyEarnings: number;
+      todayEarnings: number;
+      lifetimeTripCount: number;
+      monthlyTripCount: number;
+      todayTripCount: number;
+    }>;
+    meta: {
+      totalDrivers: number;
+      totalEntriesProcessed: number;
+      dateUsed: string;
+      monthRange: string;
+      skippedNoDriver: number;
+      skippedBadDate: number;
+      durationMs: number;
+    };
+  }> {
+    try {
+      const qp = date ? `?date=${date}` : '';
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.financial}/ledger/drivers-summary${qp}`,
+        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      );
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Ledger drivers-summary failed: ${errText}`);
+      }
+      return response.json();
+    } catch (err: any) {
+      console.error('[API] getLedgerDriversSummary failed:', err.message || err);
+      return {
+        success: false,
+        data: {},
+        meta: {
+          totalDrivers: 0,
+          totalEntriesProcessed: 0,
+          dateUsed: date || new Date().toISOString().split('T')[0],
+          monthRange: '',
+          skippedNoDriver: 0,
+          skippedBadDate: 0,
+          durationMs: 0,
+        },
+      };
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Phase 3: Fleet-Wide Ledger Summary (for ExecutiveDashboard & FinancialsView)
+  // ═══════════════════════════════════════════════════════════════════
+
+  async getLedgerFleetSummary(params?: {
+    days?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{
+    success: boolean;
+    data: {
+      totalEarnings: number;
+      totalTripCount: number;
+      totalCashCollected: number;
+      dailyTrend: Array<{ date: string; earnings: number; tripCount: number }>;
+      topDrivers: Array<{ driverId: string; driverName: string; earnings: number; tripCount: number }>;
+      platformBreakdown: Array<{ platform: string; earnings: number; tripCount: number }>;
+      revenueByType: { fare: number; tip: number; promotion: number; other: number };
+    };
+    meta: {
+      periodStart: string;
+      periodEnd: string;
+      totalEntriesProcessed: number;
+      durationMs: number;
+    };
+  }> {
+    try {
+      const qp = new URLSearchParams();
+      if (params?.days) qp.set('days', String(params.days));
+      if (params?.startDate) qp.set('startDate', params.startDate);
+      if (params?.endDate) qp.set('endDate', params.endDate);
+      const qs = qp.toString() ? `?${qp.toString()}` : '';
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.financial}/ledger/fleet-summary${qs}`,
+        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      );
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Ledger fleet-summary failed: ${errText}`);
+      }
+      return response.json();
+    } catch (err: any) {
+      console.error('[API] getLedgerFleetSummary failed:', err.message || err);
+      return {
+        success: false,
+        data: {
+          totalEarnings: 0,
+          totalTripCount: 0,
+          totalCashCollected: 0,
+          dailyTrend: [],
+          topDrivers: [],
+          platformBreakdown: [],
+          revenueByType: { fare: 0, tip: 0, promotion: 0, other: 0 },
+        },
+        meta: {
+          periodStart: '',
+          periodEnd: '',
+          totalEntriesProcessed: 0,
+          durationMs: 0,
+        },
+      };
+    }
   },
 };

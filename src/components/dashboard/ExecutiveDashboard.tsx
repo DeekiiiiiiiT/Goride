@@ -13,7 +13,8 @@ import {
   Clock,
   MapPin,
   XCircle,
-  Navigation
+  Navigation,
+  Database
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -47,6 +48,16 @@ interface ExecutiveDashboardProps {
   tripAnalytics?: TripAnalytics;
   notifications?: Notification[];
   periodLabel?: string; // e.g., "Today", "Last 7 Days"
+  // Phase 4: Ledger-sourced fleet summary (optional — falls back to trips if null)
+  fleetSummary?: {
+    totalEarnings: number;
+    totalTripCount: number;
+    totalCashCollected: number;
+    dailyTrend: Array<{ date: string; earnings: number; tripCount: number }>;
+    topDrivers: Array<{ driverId: string; driverName: string; earnings: number; tripCount: number }>;
+    platformBreakdown: Array<{ platform: string; earnings: number; tripCount: number }>;
+    revenueByType: { fare: number; tip: number; promotion: number; other: number };
+  } | null;
 }
 
 const COLORS = {
@@ -67,13 +78,27 @@ export function ExecutiveDashboard({
   organizationMetrics,
   tripAnalytics,
   notifications = [],
-  periodLabel = "Today"
+  periodLabel = "Today",
+  fleetSummary = null
 }: ExecutiveDashboardProps) {
 
   // --- 1. Top Row Metrics Calculation ---
   const kpi = useMemo(() => {
-    // Fallback if organizationMetrics is empty
-    const totalEarnings = organizationMetrics[0]?.totalEarnings ?? trips.reduce((sum, t) => sum + (t.amount || 0), 0);
+    // Phase 6: Ledger is sole source for earnings — no trip fallback
+    let totalEarnings: number;
+    let earningsSource: 'ledger' | 'unavailable';
+
+    if (fleetSummary) {
+      totalEarnings = fleetSummary.totalEarnings;
+      earningsSource = 'ledger';
+    } else {
+      // Phase 6: No trip fallback — show $0 when ledger unavailable
+      console.error('[ExecutiveDashboard] Ledger fleet summary unavailable — showing $0 (no trip fallback)');
+      totalEarnings = 0;
+      earningsSource = 'unavailable';
+    }
+
+    // These remain operational (not financial) — keep from existing sources
     const activeDrivers = organizationMetrics[0]?.activeDrivers ?? new Set(trips.map(t => t.driverId)).size;
     const totalTrips = organizationMetrics[0]?.totalTrips ?? trips.length;
     
@@ -81,8 +106,8 @@ export function ExecutiveDashboard({
     const totalScore = driverMetrics.reduce((sum, d) => sum + (d.score || 0), 0);
     const avgScore = driverMetrics.length > 0 ? (totalScore / driverMetrics.length) : 0;
 
-    return { totalEarnings, activeDrivers, totalTrips, avgScore };
-  }, [organizationMetrics, trips, driverMetrics]);
+    return { totalEarnings, activeDrivers, totalTrips, avgScore, earningsSource };
+  }, [organizationMetrics, trips, driverMetrics, fleetSummary]);
 
   // --- 2. Middle Row Charts Data ---
   
@@ -103,40 +128,33 @@ export function ExecutiveDashboard({
 
   // B. Daily Earnings Trend (Line)
   const earningsTrend = useMemo(() => {
-      const dailyMap = new Map<string, number>();
-      // Sort trips by date
-      const sorted = [...trips].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      sorted.forEach(t => {
-          const d = new Date(t.date).toLocaleDateString('en-US', { weekday: 'short' }); // e.g. "Mon"
-          dailyMap.set(d, (dailyMap.get(d) || 0) + (t.amount || 0));
-      });
-      
-      return Array.from(dailyMap.entries()).map(([name, value]) => ({ name, value }));
-  }, [trips]);
+      // Phase 6: Ledger is sole source — no trip fallback
+      if (fleetSummary?.dailyTrend && fleetSummary.dailyTrend.length > 0) {
+        return fleetSummary.dailyTrend.map(d => ({
+          name: new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }),
+          value: d.earnings,
+        }));
+      }
+
+      // Phase 6: Return empty when ledger unavailable
+      console.error('[ExecutiveDashboard] Ledger daily trend unavailable — showing empty chart (no trip fallback)');
+      return [];
+  }, [fleetSummary]);
 
   // C. Top 5 Drivers (Bar)
   const topDrivers = useMemo(() => {
-      // Use driverMetrics if available (pre-aggregated), else aggregate from trips
-      if (driverMetrics.length > 0) {
-          return [...driverMetrics]
-              .sort((a, b) => (b.totalEarnings || 0) - (a.totalEarnings || 0))
-              .slice(0, 5)
-              .map(d => ({
-                  name: d.driverName.split(' ')[0], // First name only for space
-                  earnings: d.totalEarnings || 0
-              }));
-      } else {
-          const map = new Map<string, number>();
-           trips.forEach(t => {
-               map.set(t.driverId, (map.get(t.driverId) || 0) + (t.amount || 0));
-           });
-           return Array.from(map.entries())
-               .sort((a, b) => b[1] - a[1])
-               .slice(0, 5)
-               .map(([id, earnings]) => ({ name: id.substring(0,6), earnings }));
+      // Phase 6: Ledger is sole source — no trip fallback
+      if (fleetSummary?.topDrivers && fleetSummary.topDrivers.length > 0) {
+        return fleetSummary.topDrivers.slice(0, 5).map(d => ({
+          name: (d.driverName || d.driverId).split(' ')[0],
+          earnings: d.earnings,
+        }));
       }
-  }, [driverMetrics, trips]);
+
+      // Phase 6: Return empty when ledger unavailable
+      console.error('[ExecutiveDashboard] Ledger top drivers unavailable — showing empty chart (no trip fallback)');
+      return [];
+  }, [fleetSummary]);
 
 
   // --- 3. Bottom Row Lists ---
@@ -159,6 +177,10 @@ export function ExecutiveDashboard({
             subtitle={periodLabel}
             trend="+12% vs last period" // Placeholder for now
             trendUp={true}
+            sourceTag={kpi.earningsSource === 'ledger' 
+              ? <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full font-medium"><Database className="h-2.5 w-2.5" />Ledger</span>
+              : <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">Unavailable</span>
+            }
         />
         <KpiCard 
             title="Active Drivers" 
@@ -386,7 +408,7 @@ function RouteItem({ label, efficiency }: { label: string, efficiency: string })
     )
 }
 
-function KpiCard({ title, value, icon, subtitle, trend, trendUp }: any) {
+function KpiCard({ title, value, icon, subtitle, trend, trendUp, sourceTag }: any) {
     return (
         <Card>
             <CardContent className="p-6">
@@ -405,6 +427,9 @@ function KpiCard({ title, value, icon, subtitle, trend, trendUp }: any) {
                         </span>
                     )}
                     <span className={`text-slate-500 ${trend ? 'ml-2' : ''}`}>{subtitle}</span>
+                    {sourceTag && (
+                        <span className="ml-2">{sourceTag}</span>
+                    )}
                 </div>
             </CardContent>
         </Card>

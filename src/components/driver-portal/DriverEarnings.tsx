@@ -41,6 +41,7 @@ import {
 import { DriverHistory } from './DriverHistory';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { MonthlyPerformance } from '../../types/data';
+import { LedgerDriverOverview } from '../../types/data';
 
 export function DriverEarnings() {
   const { user } = useAuth();
@@ -55,6 +56,7 @@ export function DriverEarnings() {
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [history, setHistory] = useState<MonthlyPerformance[]>([]);
+  const [ledgerOverview, setLedgerOverview] = useState<LedgerDriverOverview | null>(null);
   const [stats, setStats] = useState({
     totalBalance: 0,
     tripFares: 0,
@@ -154,6 +156,23 @@ export function DriverEarnings() {
             setMetrics(myMetrics);
         }
 
+        // Fetch ledger overview for lifetime cash data (non-blocking)
+        try {
+          const dId = driverRecord?.id || user.id;
+          const today = format(new Date(), 'yyyy-MM-dd');
+          const ledgerResult = await api.getLedgerDriverOverview({
+            driverId: dId,
+            startDate: '2020-01-01',
+            endDate: today,
+          });
+          if (ledgerResult) {
+            setLedgerOverview(ledgerResult);
+            console.log('[DriverEarnings] Ledger overview loaded:', ledgerResult.lifetime);
+          }
+        } catch (ledgerErr) {
+          console.error('[DriverEarnings] Ledger overview fetch failed (non-blocking, using trip fallback):', ledgerErr);
+        }
+
       } catch (error) {
         console.error("Error fetching earnings:", error);
       } finally {
@@ -233,27 +252,48 @@ export function DriverEarnings() {
   // - Expenses (Tolls + Fuel + Other)
   const netPayout = tierState.projectedPayout + stats.reimbursements - stats.expenses;
 
-  // Calculate Net Outstanding (Lifetime)
+  // Calculate Net Outstanding (Lifetime) — Ledger-sourced with trip-based fallback
+  // Mirrors the admin DriverDetail.tsx walletMetrics pattern:
+  //   lifetimeCashCollected (from ledger) - payments received + toll expenses
   const netOutstanding = React.useMemo(() => {
-      let totalCash = trips.reduce((sum, t) => sum + (Math.abs(t.cashCollected || 0)), 0);
-      
-      const latestMetric = [...metrics]
-          .sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())
-          .find(m => m.cashCollected !== undefined);
-          
-      if (latestMetric?.cashCollected && latestMetric.cashCollected > totalCash) {
-          totalCash = latestMetric.cashCollected;
+      // 1. Lifetime cash collected — prefer ledger, fall back to trip-based sum
+      let lifetimeCash: number;
+      if (ledgerOverview?.lifetime?.cashCollected != null) {
+          // Ledger is the single source of truth
+          lifetimeCash = ledgerOverview.lifetime.cashCollected;
+      } else {
+          // Fallback: trip-based calculation (old approach, used when ledger unavailable)
+          lifetimeCash = trips.reduce((sum, t) => sum + (Math.abs(t.cashCollected || 0)), 0);
+          const latestMetric = [...metrics]
+              .sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())
+              .find(m => m.cashCollected !== undefined);
+          if (latestMetric?.cashCollected && latestMetric.cashCollected > lifetimeCash) {
+              lifetimeCash = latestMetric.cashCollected;
+          }
       }
 
-      const totalTolls = trips.reduce((sum, t) => {
-          if (t.tollCharges && !t.cashCollected) return sum + t.tollCharges;
-          return sum;
-      }, 0);
+      // 2. Payments received (Cash Collections / Payment_Received — same filter as paymentTransactions)
+      const paymentsReceived = transactions
+          .filter(t => {
+              if (t.paymentMethod === 'Tag Balance') return false;
+              return (t.type === 'Payment_Received' || t.category === 'Cash Collection') && t.amount > 0;
+          })
+          .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-      const totalPaid = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-      
-      return (totalCash - totalPaid) + totalTolls;
-  }, [trips, transactions, metrics]);
+      // 3. Approved cash toll expenses (reduce liability — driver paid out of pocket)
+      const tollExpenses = transactions
+          .filter(t => {
+              const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
+              const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl;
+              const isResolved = t.status === 'Resolved' || t.status === 'Approved';
+              return isToll && isCash && isResolved;
+          })
+          .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+
+      const result = lifetimeCash - paymentsReceived - tollExpenses;
+      console.log(`[DriverEarnings] netOutstanding=${result.toFixed(2)} (cash=${lifetimeCash.toFixed(2)} [${ledgerOverview ? 'ledger' : 'trip-fallback'}], paid=${paymentsReceived.toFixed(2)}, tollExp=${tollExpenses.toFixed(2)})`);
+      return result;
+  }, [ledgerOverview, trips, transactions, metrics]);
 
   const processEarnings = (currentTrips: Trip[], currentTx: FinancialTransaction[]) => {
       // 1. Calculate Stats

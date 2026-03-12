@@ -72,7 +72,6 @@ function MenubarContent({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Content>) {
   return (
-    <MenubarPortal>
       <MenubarPrimitive.Content
         data-slot="menubar-content"
         align={align}
@@ -84,7 +83,6 @@ function MenubarContent({
         )}
         {...props}
       />
-    </MenubarPortal>
   );
 }
 

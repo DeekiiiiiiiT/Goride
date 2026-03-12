@@ -475,8 +475,6 @@ export function ManualTripForm({
                   <SelectContent>
                     <SelectItem value="InDrive">InDrive (Manual)</SelectItem>
                     <SelectItem value="Uber">Uber (Manual)</SelectItem>
-                    <SelectItem value="Lyft">Lyft (Manual)</SelectItem>
-                    <SelectItem value="Bolt">Bolt (Manual)</SelectItem>
                     <SelectItem value="Roam">Roam (Manual)</SelectItem>
                   </SelectContent>
                 </Select>

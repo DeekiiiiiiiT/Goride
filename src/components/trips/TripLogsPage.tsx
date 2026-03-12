@@ -157,19 +157,10 @@ export function TripLogsPage() {
   const trips = tripData?.data || [];
   const hasMore = (tripData?.data?.length || 0) === pageSize;
 
-  // Background Address Resolution
-  React.useEffect(() => {
-    if (trips.length > 0) {
-        // Attempt to resolve missing addresses for trips that have coordinates
-        resolveMissingTripAddresses(trips).then(resolved => {
-            if (resolved.length > 0) {
-                // If any addresses were resolved, refresh the data
-                queryClient.invalidateQueries({ queryKey: ['trips'] });
-                toast.success(`Resolved addresses for ${resolved.length} trips`);
-            }
-        });
-    }
-  }, [trips, queryClient]);
+  // Background Address Resolution - DISABLED to prevent infinite re-render loop.
+  // The effect depended on `trips` array reference which changes on every query,
+  // and invalidateQueries inside it would trigger another query → new reference → loop.
+  // TODO: Re-implement with a stable dependency (e.g. trip IDs string) and a "resolved" cache.
 
   // 4. Stats Query (Independent of page)
   const statsParams = useMemo(() => {
