@@ -207,19 +207,59 @@ html {
   .bg-white { background-color: #0f172a; }           /* → slate-900 */
   .bg-slate-50 { background-color: rgb(30 41 59 / 0.5); } /* → slate-800/50 */
   .bg-slate-100 { background-color: #1e293b; }        /* → slate-800 */
+  .bg-slate-200 { background-color: #334155; }        /* → slate-700 */
+  .bg-slate-200\/50 { background-color: rgb(51 65 85 / 0.5); } /* → slate-700/50 */
+  .bg-slate-300 { background-color: #475569; }        /* → slate-600 */
   .bg-slate-50\/50 { background-color: rgb(30 41 59 / 0.3); }
 
   /* --- Border / Ring Colors --- */
   .border-slate-200 { border-color: #334155; }       /* → slate-700 */
+  .border-slate-300 { border-color: #475569; }       /* → slate-600 */
   .border-slate-100 { border-color: #334155; }       /* → slate-700 */
   .ring-slate-200 { --tw-ring-color: #334155; }      /* → slate-700 */
 
   /* --- Hover States --- */
   .hover\:bg-slate-50:hover { background-color: rgb(30 41 59 / 0.5); }
   .hover\:bg-slate-100:hover { background-color: #1e293b; }
+  .hover\:bg-slate-200:hover { background-color: #334155; }
+  .hover\:bg-slate-300:hover { background-color: #475569; }
   .hover\:bg-slate-50\/50:hover { background-color: rgb(30 41 59 / 0.5); }
   .hover\:text-slate-900:hover { color: #f1f5f9; }
 
   /* --- Input / Form Background --- */
   .bg-slate-50\/50 { background-color: rgb(30 41 59 / 0.3); }
+
+  /* --- Accent Color Inversions (for components designed for light mode) --- */
+  /* Indigo */
+  .text-indigo-900 { color: #c7d2fe; }     /* → indigo-200 */
+  .text-indigo-700 { color: #a5b4fc; }     /* → indigo-300 */
+  .text-indigo-600 { color: #818cf8; }     /* → indigo-400 */
+  .bg-indigo-50 { background-color: rgb(49 46 129 / 0.2); }     /* → indigo-900/20 */
+  .bg-indigo-50\/50 { background-color: rgb(49 46 129 / 0.15); }
+  .bg-indigo-100 { background-color: rgb(49 46 129 / 0.3); }
+  .border-indigo-200 { border-color: rgb(99 102 241 / 0.3); }   /* → indigo-500/30 */
+  .border-indigo-100 { border-color: rgb(99 102 241 / 0.2); }
+  .hover\:bg-indigo-50:hover { background-color: rgb(49 46 129 / 0.3); }
+  .hover\:bg-indigo-100:hover { background-color: rgb(49 46 129 / 0.4); }
+
+  /* Emerald */
+  .text-emerald-700 { color: #6ee7b7; }    /* → emerald-300 */
+  .text-emerald-600 { color: #34d399; }    /* → emerald-400 */
+  .bg-emerald-50 { background-color: rgb(6 78 59 / 0.2); }      /* → emerald-900/20 */
+  .border-emerald-200 { border-color: rgb(16 185 129 / 0.3); }  /* → emerald-500/30 */
+  .hover\:bg-emerald-50:hover { background-color: rgb(6 78 59 / 0.3); }
+
+  /* Rose */
+  .text-rose-700 { color: #fda4af; }       /* → rose-300 */
+  .text-rose-600 { color: #fb7185; }       /* → rose-400 */
+  .bg-rose-50 { background-color: rgb(136 19 55 / 0.2); }       /* → rose-900/20 */
+  .border-rose-200 { border-color: rgb(244 63 94 / 0.3); }      /* → rose-500/30 */
+  .hover\:bg-rose-50:hover { background-color: rgb(136 19 55 / 0.3); }
+
+  /* Amber */
+  .text-amber-700 { color: #fcd34d; }      /* → amber-300 */
+  .text-amber-600 { color: #fbbf24; }      /* → amber-400 */
+  .bg-amber-50 { background-color: rgb(120 53 15 / 0.2); }      /* → amber-900/20 */
+  .border-amber-200 { border-color: rgb(245 158 11 / 0.3); }    /* → amber-500/30 */
+  .hover\:bg-amber-50:hover { background-color: rgb(120 53 15 / 0.3); }
 }

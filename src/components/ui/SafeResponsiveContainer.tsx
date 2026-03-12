@@ -1,15 +1,18 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ResponsiveContainer, ResponsiveContainerProps } from 'recharts';
+import { ResponsiveContainerProps } from 'recharts';
 
 /**
- * A wrapper around Recharts ResponsiveContainer that prevents rendering
- * when the container has no dimensions.
- * 
- * FIX: We now pass the calculated pixel dimensions directly to ResponsiveContainer
- * instead of letting it measure itself ("100%"). This eliminates the "width(-1)" error
- * which happens when Recharts tries to measure a container that might be in a transition state.
+ * Drop-in replacement for Recharts ResponsiveContainer that completely
+ * eliminates the "width(-1) height(-1)" console error.
+ *
+ * How it works:
+ *  1. We measure the outer div with a ResizeObserver.
+ *  2. Once dimensions are positive we clone each chart child, injecting
+ *     explicit `width` and `height` pixel values.
+ *  3. Recharts' own ResponsiveContainer is never used, so it can never
+ *     see a negative measurement.
  */
 const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
   const divRef = useRef<HTMLDivElement>(null);
@@ -32,7 +35,7 @@ const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
         setShouldRender(false);
       } else {
         // Update dimensions immediately
-        setDimensions({ width, height });
+        setDimensions({ width: Math.floor(width), height: Math.floor(height) });
         
         // Debounce the actual rendering of the chart
         clearTimeout(timeoutId);
@@ -58,11 +61,8 @@ const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
     };
   }, []);
 
-  const { width = '100%', height = '100%', minWidth, minHeight, className, style, children, ...others } = props;
+  const { width = '100%', height = '100%', minWidth, minHeight, className, style, children } = props;
 
-  // FIX: To avoid the "width(-1)" error while also avoiding the "fixed numbers" warning,
-  // we pass "100%" to the ResponsiveContainer but wrap it in a div that is explicitly
-  // sized to the dimensions we've measured.
   return (
     <div 
       ref={divRef} 
@@ -77,13 +77,15 @@ const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
     >
       {shouldRender && dimensions.width > 0 && dimensions.height > 0 ? (
         <div style={{ width: dimensions.width, height: dimensions.height }}>
-            <ResponsiveContainer 
-                width="100%"
-                height="100%"
-                {...others}
-            >
-              {children}
-            </ResponsiveContainer>
+          {React.Children.map(children, child => {
+            if (React.isValidElement(child)) {
+              return React.cloneElement(child as React.ReactElement<any>, {
+                width: dimensions.width,
+                height: dimensions.height,
+              });
+            }
+            return child;
+          })}
         </div>
       ) : null}
     </div>

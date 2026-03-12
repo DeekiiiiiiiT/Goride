@@ -6,8 +6,8 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer 
 } from 'recharts';
+import { SafeResponsiveContainer as ResponsiveContainer } from '../../../ui/SafeResponsiveContainer';
 import { Minus, TrendingUp } from 'lucide-react';
 
 interface PriceHistoryChartProps {

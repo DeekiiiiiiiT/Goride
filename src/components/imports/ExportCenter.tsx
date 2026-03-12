@@ -26,7 +26,7 @@ import { Button } from '../ui/button';
 import {
   MapPin, Car, Users, DollarSign, Fuel, Wrench, Gauge,
   ClipboardCheck, CreditCard, Building2, Scale, Package,
-  HardDrive, Download, Loader2, Search, ArrowLeft, X,
+  HardDrive, Download, Loader2, Search, ArrowLeft, X as XIcon,
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
@@ -447,7 +447,7 @@ export function ExportCenter() {
         />
         {searchQuery && (
           <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Clear search">
-            <X className="h-4 w-4" />
+            <XIcon className="h-4 w-4" />
           </button>
         )}
       </div>

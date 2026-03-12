@@ -13,6 +13,7 @@ import { Trip, FinancialTransaction, QuotaConfig } from '../../types/data';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
+import { SettlementSummaryView } from './SettlementSummaryView';
 
 // ────────────────────────────────────────────────────────────
 // Props
@@ -25,6 +26,7 @@ interface FinancialSubTabsProps {
   quotaConfig: QuotaConfig | null;
   platformBreakdownData: Array<{ name: string; value: number; color: string }>;
   platformTotalEarnings: number;
+  csvMetrics?: import('../../types/data').DriverMetrics[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -38,12 +40,14 @@ export function FinancialSubTabs({
   quotaConfig,
   platformBreakdownData,
   platformTotalEarnings,
+  csvMetrics = [],
 }: FinancialSubTabsProps) {
   return (
     <Tabs defaultValue="earnings" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-3 max-w-[450px]">
+      <TabsList className="grid w-full grid-cols-4 max-w-[600px]">
         <TabsTrigger value="earnings">Earnings</TabsTrigger>
         <TabsTrigger value="expenses">Expenses</TabsTrigger>
+        <TabsTrigger value="settlement">Settlement</TabsTrigger>
         <TabsTrigger value="payout">Payout</TabsTrigger>
       </TabsList>
 
@@ -166,6 +170,18 @@ export function FinancialSubTabs({
         <DriverPayoutHistory
           driverId={driverId}
           transactions={transactions}
+          trips={allTrips}
+          csvMetrics={csvMetrics}
+        />
+      </TabsContent>
+
+      {/* ── Settlement Sub-Tab ── */}
+      <TabsContent value="settlement" className="space-y-6">
+        <SettlementSummaryView
+          driverId={driverId}
+          trips={allTrips}
+          transactions={transactions}
+          csvMetrics={csvMetrics}
         />
       </TabsContent>
     </Tabs>

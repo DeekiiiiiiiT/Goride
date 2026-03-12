@@ -844,6 +844,15 @@ export const api = {
     return response.json();
   },
 
+  /** Fix 2: Aggregated init — stats + trips + driverMetrics + vehicleMetrics in one call */
+  async getDashboardInit(): Promise<{ stats: any; trips: any[]; driverMetrics: any[]; vehicleMetrics: any[] }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/dashboard/init`, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch dashboard init bundle");
+    return response.json();
+  },
+
   // Station Management (Phase 3)
   async addStationAlias(id: string, alias: { lat: number, lng: number, label: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}/alias`, {

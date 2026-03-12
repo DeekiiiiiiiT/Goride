@@ -2,23 +2,29 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
-import { Download, ChevronDown, DollarSign, TrendingDown, Clock, Loader2, CheckCircle } from "lucide-react";
-import { FinancialTransaction, TierConfig } from "../../types/data";
+import { Download, ChevronDown, DollarSign, TrendingDown, Clock, Loader2, CheckCircle, Wallet, Info } from "lucide-react";
+import { FinancialTransaction, TierConfig, Trip, DriverMetrics } from "../../types/data";
 import {
   format,
-  differenceInCalendarDays
+  differenceInCalendarDays,
+  startOfMonth,
+  endOfMonth
 } from "date-fns";
 // Phase 8.5: TierCalculations import removed — was only used by trip-based fallback
 import { tierService } from "../../services/tierService";
 import { api } from "../../services/api";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
+import { computeWeeklyCashSettlement, CashWeekData } from "../../utils/cashSettlementCalc";
+import { PayoutPeriodDetail } from './PayoutPeriodDetail';
 
 // ────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
+type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Pending';
 
 interface PayoutPeriodRow {
   periodStart: Date;
@@ -33,6 +39,10 @@ interface PayoutPeriodRow {
   isFinalized: boolean;        // true if a finalized fuel report covers this period
   tripCount: number;
   tierName: string;            // Display name, e.g. "Gold", "Silver"
+  cashOwed: number;            // Cash driver collected for this period
+  cashPaid: number;            // Cash driver returned for this period
+  cashBalance: number;         // cashOwed - cashPaid (positive = driver still holds cash)
+  status: PayoutStatus;        // Finalized, Awaiting Cash, Pending
 }
 
 // ────────────────────────────────────────────────────────────
@@ -42,13 +52,15 @@ interface PayoutPeriodRow {
 interface DriverPayoutHistoryProps {
   driverId: string;
   transactions: FinancialTransaction[];
+  trips?: Trip[];
+  csvMetrics?: DriverMetrics[];
 }
 
 // ────────────────────────────────────────────────────────────
 // Component
 // ────────────────────────────────────────────────────────────
 
-export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayoutHistoryProps) {
+export function DriverPayoutHistory({ driverId, transactions = [], trips = [], csvMetrics = [] }: DriverPayoutHistoryProps) {
 
   // ── Phase 3: Tier data (same pattern as DriverEarningsHistory) ──
   const [tiers, setTiers] = useState<TierConfig[]>([]);
@@ -154,6 +166,13 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
   // The primary ledger path receives pre-bucketed rows from the server.
 
   // ────────────────────────────────────────────────────────────
+  // Cash settlement: compute weekly cash data once (same utility as Settlement tab)
+  // ────────────────────────────────────────────────────────────
+  const cashWeeks: CashWeekData[] = useMemo(() => {
+    return computeWeeklyCashSettlement({ trips, transactions, csvMetrics });
+  }, [trips, transactions, csvMetrics]);
+
+  // ────────────────────────────────────────────────────────────
   // Phase 8 Step 8.2: Ledger-Based Period Aggregation (primary)
   //   Earnings: from server ledger (grossRevenue, driverShare, tier, tripCount)
   //   Expenses: client-side toll keyword matching + finalized fuel deductions
@@ -212,6 +231,57 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
     // PRIMARY PATH: Ledger-based earnings + client-side expenses
     // ══════════════════════════════════════════════════════════
     if (ledgerLoaded && !ledgerError && ledgerRows.length > 0) {
+
+      // ── Cash map: key by Monday date string for fast lookup ──
+      const cashMap = new Map<string, CashWeekData>();
+      for (const cw of cashWeeks) {
+        const key = format(cw.start, 'yyyy-MM-dd');
+        cashMap.set(key, cw);
+      }
+
+      // ── Helper: look up cash for a period (weekly exact match, fuzzy ±2 days, monthly sum) ──
+      const getCashForPeriod = (periodStart: Date, periodEnd: Date): { cashOwed: number; cashPaid: number; cashBalance: number } => {
+        if (periodType === 'daily') {
+          // Cash is tracked weekly — daily rows show 0 (per plan Step 4.5)
+          return { cashOwed: 0, cashPaid: 0, cashBalance: 0 };
+        }
+
+        if (periodType === 'monthly') {
+          // Sum all cash weeks whose start falls within this month
+          const mStart = startOfMonth(periodStart);
+          const mEnd = endOfMonth(periodStart);
+          let owed = 0, paid = 0, bal = 0;
+          for (const cw of cashWeeks) {
+            if (cw.start >= mStart && cw.start <= mEnd) {
+              owed += cw.amountOwed;
+              paid += cw.amountPaid;
+              bal += cw.balance;
+            }
+          }
+          return { cashOwed: owed, cashPaid: paid, cashBalance: bal };
+        }
+
+        // Weekly: exact match first, then fuzzy ±2 days (same as Settlement tab)
+        const key = format(periodStart, 'yyyy-MM-dd');
+        let cw = cashMap.get(key);
+        if (!cw) {
+          const keyDate = periodStart;
+          for (const [ck, cv] of cashMap.entries()) {
+            const ckDate = new Date(ck + 'T00:00:00');
+            if (Math.abs(differenceInCalendarDays(keyDate, ckDate)) <= 2) {
+              cw = cv;
+              break;
+            }
+          }
+        }
+        if (cw) {
+          return { cashOwed: cw.amountOwed, cashPaid: cw.amountPaid, cashBalance: cw.balance };
+        }
+        return { cashOwed: 0, cashPaid: 0, cashBalance: 0 };
+      };
+
+      let matchedCashCount = 0;
+
       const rows: PayoutPeriodRow[] = ledgerRows.map((lr: any) => {
         const periodStart = new Date(lr.periodStart + 'T00:00:00');
         const periodEnd = new Date(lr.periodEnd + 'T23:59:59');
@@ -234,6 +304,10 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
         const totalDeductions = tollExpenses + fuelDeduction;
         const netPayout = driverShare - totalDeductions;
 
+        // Cash data from precomputed cashWeeks
+        const { cashOwed, cashPaid, cashBalance } = getCashForPeriod(periodStart, periodEnd);
+        if (cashOwed > 0 || cashPaid > 0) matchedCashCount++;
+
         return {
           periodStart,
           periodEnd,
@@ -247,9 +321,15 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
           isFinalized,
           tripCount,
           tierName,
+          cashOwed,
+          cashPaid,
+          cashBalance,
+          status: (!isFinalized ? 'Pending' : cashBalance > 0.005 ? 'Awaiting Cash' : 'Finalized') as PayoutStatus,
         };
       });
 
+      // Diagnostic logging (Phase 4 Step 4.8)
+      console.log(`[DriverPayoutHistory] Cash weeks computed: ${cashWeeks.length}, matched to payout rows: ${matchedCashCount}`);
       // Ledger rows arrive newest-first and already filtered for activity by server
       console.log(`[DriverPayoutHistory] Built ${rows.length} payout rows from LEDGER data`);
       return rows;
@@ -266,21 +346,23 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
     }
 
     return [];
-  }, [ledgerLoaded, ledgerError, ledgerRows, transactions, finalizedReports, periodType]);
+  }, [ledgerLoaded, ledgerError, ledgerRows, transactions, finalizedReports, periodType, cashWeeks]);
 
   // ────────────────────────────────────────────────────────────
-  // Phase 4: Summary totals (needed by Phase 5 cards, computed here)
+  // Phase 6: Summary totals (3-state counts)
   // ────────────────────────────────────────────────────────────
   const summaryTotals = useMemo(() => {
-    const finalized = periodData.filter(r => r.isFinalized);
-    const unfinalized = periodData.filter(r => !r.isFinalized);
+    const finalizedRows = periodData.filter(r => r.status === 'Finalized');
+    const awaitingCashRows = periodData.filter(r => r.status === 'Awaiting Cash');
+    const pendingRows = periodData.filter(r => r.status === 'Pending');
 
     return {
-      totalNetPayout: finalized.reduce((s, r) => s + r.netPayout, 0),
+      totalNetPayout: finalizedRows.reduce((s, r) => s + r.netPayout, 0),
       totalDriverShare: periodData.reduce((s, r) => s + r.driverShare, 0),
-      totalDeductions: finalized.reduce((s, r) => s + r.totalDeductions, 0),
-      finalizedCount: finalized.length,
-      unfinalizedCount: unfinalized.length,
+      totalDeductions: finalizedRows.reduce((s, r) => s + r.totalDeductions, 0),
+      finalizedCount: finalizedRows.length,
+      awaitingCashCount: awaitingCashRows.length,
+      pendingCount: pendingRows.length,
       totalPeriods: periodData.length,
     };
   }, [periodData]);
@@ -327,13 +409,19 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
         'Driver Share': row.driverShare.toFixed(2),
         'Deductions': row.isFinalized ? row.totalDeductions.toFixed(2) : 'Pending',
         'Net Payout': row.isFinalized ? row.netPayout.toFixed(2) : 'Pending',
-        'Finalized': row.isFinalized ? 'Yes' : 'No',
+        'Cash Owed': row.cashOwed.toFixed(2),
+        'Cash Paid': row.cashPaid.toFixed(2),
+        'Cash Balance': row.cashBalance.toFixed(2),
+        'Status': row.status,
       };
     });
 
     exportToCSV(csvData, `payout-history-${driverId}`);
     toast.success('Payout history exported');
   };
+
+  // ── Period detail overlay state ──
+  const [selectedRow, setSelectedRow] = useState<PayoutPeriodRow | null>(null);
 
   // ── Loading state ──
   if (!isReady) {
@@ -374,8 +462,8 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
                 </p>
                 <p className="text-xs text-slate-400">
                   {summaryTotals.finalizedCount > 0
-                    ? `From ${summaryTotals.finalizedCount} of ${summaryTotals.totalPeriods} ${periodType === 'daily' ? 'days' : periodType === 'monthly' ? 'months' : 'weeks'} finalized`
-                    : 'No finalized periods yet'}
+                    ? `From ${summaryTotals.finalizedCount} of ${summaryTotals.totalPeriods} ${periodType === 'daily' ? 'days' : periodType === 'monthly' ? 'months' : 'weeks'} fully settled`
+                    : 'No fully settled periods yet'}
                 </p>
               </div>
               <div className="rounded-lg bg-emerald-50 p-2.5">
@@ -405,34 +493,58 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
           </CardContent>
         </Card>
 
-        {/* Card 3 — Pending Reconciliation (amber / green if all done) */}
+        {/* Card 3 — Reconciliation status (3-state aware) */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-500">Pending Reconciliation</p>
-                {summaryTotals.unfinalizedCount > 0 ? (
+                {(summaryTotals.pendingCount > 0 && summaryTotals.awaitingCashCount > 0) ? (
                   <>
                     <p className="text-2xl font-bold text-amber-700">
-                      {summaryTotals.unfinalizedCount} {periodType === 'daily' ? 'day' : periodType === 'monthly' ? 'month' : 'week'}{summaryTotals.unfinalizedCount !== 1 ? 's' : ''}
+                      {summaryTotals.pendingCount + summaryTotals.awaitingCashCount} {periodType === 'daily' ? 'day' : periodType === 'monthly' ? 'month' : 'week'}{(summaryTotals.pendingCount + summaryTotals.awaitingCashCount) !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {summaryTotals.pendingCount} pending, {summaryTotals.awaitingCashCount} awaiting cash
+                    </p>
+                  </>
+                ) : summaryTotals.pendingCount > 0 ? (
+                  <>
+                    <p className="text-2xl font-bold text-amber-700">
+                      {summaryTotals.pendingCount} {periodType === 'daily' ? 'day' : periodType === 'monthly' ? 'month' : 'week'}{summaryTotals.pendingCount !== 1 ? 's' : ''}
                     </p>
                     <p className="text-xs text-slate-400">
                       Awaiting fuel report finalization
+                    </p>
+                  </>
+                ) : summaryTotals.awaitingCashCount > 0 ? (
+                  <>
+                    <p className="text-2xl font-bold text-blue-700">
+                      {summaryTotals.awaitingCashCount} {periodType === 'daily' ? 'day' : periodType === 'monthly' ? 'month' : 'week'}{summaryTotals.awaitingCashCount !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Awaiting cash return from driver
                     </p>
                   </>
                 ) : (
                   <>
                     <p className="text-2xl font-bold text-emerald-700">All clear</p>
                     <p className="text-xs text-slate-400">
-                      All {summaryTotals.totalPeriods} periods finalized
+                      All {summaryTotals.totalPeriods} periods fully settled
                     </p>
                   </>
                 )}
               </div>
-              <div className={`rounded-lg p-2.5 ${summaryTotals.unfinalizedCount > 0 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-                {summaryTotals.unfinalizedCount > 0
+              <div className={`rounded-lg p-2.5 ${
+                summaryTotals.pendingCount > 0 ? 'bg-amber-50' :
+                summaryTotals.awaitingCashCount > 0 ? 'bg-blue-50' :
+                'bg-emerald-50'
+              }`}>
+                {summaryTotals.pendingCount > 0
                   ? <Clock className="h-5 w-5 text-amber-600" />
-                  : <CheckCircle className="h-5 w-5 text-emerald-600" />}
+                  : summaryTotals.awaitingCashCount > 0
+                    ? <Wallet className="h-5 w-5 text-blue-600" />
+                    : <CheckCircle className="h-5 w-5 text-emerald-600" />}
               </div>
             </div>
           </CardContent>
@@ -480,28 +592,110 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead className="text-xs">Period</TableHead>
-                    <TableHead className="text-xs text-right">Trips</TableHead>
-                    <TableHead className="text-xs text-right">Gross Revenue</TableHead>
-                    <TableHead className="text-xs text-center">Tier</TableHead>
-                    <TableHead className="text-xs text-right">Driver Share</TableHead>
-                    <TableHead className="text-xs text-right">Deductions</TableHead>
-                    <TableHead className="text-xs text-right">Net Payout</TableHead>
-                    <TableHead className="text-xs text-center">Status</TableHead>
+                    <TableHead className="text-xs">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Period
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[280px] text-xs">
+                            The time period for this payout row. When in weekly mode, this is Monday–Sunday.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end">
+                              Gross Revenue
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[280px] text-xs">
+                            Total trip earnings before any commission split or deductions.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end">
+                              Driver Share
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[280px] text-xs">
+                            The driver's portion of gross revenue based on their tier commission split.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end">
+                              Deductions
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Total deductions subtracted from Driver Share (tolls + fuel). Shows '—' if the fuel report isn't finalized yet.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end">
+                              Net Payout
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Driver Share minus Deductions. This is what the company owes the driver before accounting for cash. Shows 'Pending' if expenses aren't finalized.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-center">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Status
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[340px] text-xs">
+                            The completion status of this period's payout. 'Pending' = the fuel report hasn't been finalized yet, so deductions can't be fully computed. 'Awaiting Cash' = all expenses are confirmed, but the driver still has unreturned cash for this period. 'Finalized' = expenses are confirmed AND all cash has been returned — this week is fully closed out.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visibleRows.map((row, idx) => (
-                    <TableRow key={idx} className={!row.isFinalized ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
+                    <TableRow key={idx} className={`cursor-pointer transition-colors hover:bg-slate-100/60 ${
+                      row.status === 'Pending' ? 'bg-amber-50/30' :
+                      row.status === 'Awaiting Cash' ? 'bg-blue-50/30' :
+                      ''
+                    }`}
+                      onClick={() => setSelectedRow(row)}
+                    >
                       <TableCell className="text-xs font-medium whitespace-nowrap">{formatPeriodLabel(row)}</TableCell>
-                      <TableCell className="text-xs text-right tabular-nums text-slate-600">{row.tripCount}</TableCell>
                       <TableCell className="text-xs text-right tabular-nums text-emerald-700 font-medium">
                         ${row.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-xs text-center">
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                          {row.tierName} <span className="ml-0.5 text-slate-400">({row.driverSharePercent}%)</span>
-                        </span>
                       </TableCell>
                       <TableCell className="text-xs text-right tabular-nums font-medium">
                         ${row.driverShare.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -521,9 +715,13 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
                           : <span className="text-amber-600 font-normal italic">Pending</span>}
                       </TableCell>
                       <TableCell className="text-xs text-center">
-                        {row.isFinalized ? (
+                        {row.status === 'Finalized' ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                             <CheckCircle className="h-3 w-3" /> Finalized
+                          </span>
+                        ) : row.status === 'Awaiting Cash' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                            <Wallet className="h-3 w-3" /> Awaiting Cash
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
@@ -559,6 +757,13 @@ export function DriverPayoutHistory({ driverId, transactions = [] }: DriverPayou
           )}
         </CardContent>
       </Card>
+
+      {/* ── Period detail overlay (Sheet) ── */}
+      <PayoutPeriodDetail
+        row={selectedRow}
+        open={!!selectedRow}
+        onOpenChange={(open) => { if (!open) setSelectedRow(null); }}
+      />
     </div>
   );
 }

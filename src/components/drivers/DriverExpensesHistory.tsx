@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
-import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2 } from "lucide-react";
+import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../types/data";
 import { api } from "../../services/api";
 import {
@@ -13,6 +13,7 @@ import {
 } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -255,7 +256,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         'Transactions': row.transactionCount,
         'Toll Expenses': row.tollExpenses.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
-        'Finalized': row.isFinalized ? 'Yes' : 'No',
+        'Status': row.isFinalized ? 'Finalized' : 'Pending',
         'Total Expenses': row.totalExpenses.toFixed(2),
       };
     });
@@ -395,11 +396,26 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                     <TableHead className="text-right">Tolls</TableHead>
                     <TableHead className="text-right">Fuel (Deduction)</TableHead>
                     <TableHead className="text-right">Total Expenses</TableHead>
+                    <TableHead className="text-xs text-center">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Status
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Whether all expenses for this period have been confirmed. "Finalized" means a fuel report has been reviewed and locked in, so toll and fuel deduction numbers are final. "Pending" means the fuel report hasn't been finalized yet — fuel deductions may still change.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visibleRows.map((row, idx) => (
-                    <TableRow key={idx}>
+                    <TableRow key={idx} className={!row.isFinalized ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
                       <TableCell className="font-medium text-xs whitespace-nowrap">
                         {formatPeriodLabel(row)}
                         {row.transactionCount > 0 && (
@@ -420,6 +436,17 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                       </TableCell>
                       <TableCell className="text-right font-bold text-rose-600">
                         ${row.totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-xs text-center">
+                        {row.isFinalized ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                            <CheckCircle className="h-3 w-3" /> Finalized
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <Clock className="h-3 w-3" /> Pending
+                          </span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

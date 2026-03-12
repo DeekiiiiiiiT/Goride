@@ -2,9 +2,10 @@ import React from 'react';
 import { useSafetyMetrics } from '../../hooks/useSafetyMetrics';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { 
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
     BarChart, Bar, Cell, ReferenceLine
 } from 'recharts';
+import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { AlertTriangle, ShieldCheck, Zap, Fuel, Activity, Clock, Moon, Calendar } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';

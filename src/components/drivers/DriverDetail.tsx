@@ -316,6 +316,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       initialAmount?: number;
       editingTransaction?: FinancialTransaction;
   }>({ isOpen: false });
+  const [settlementWeeks, setSettlementWeeks] = useState<Array<{ start: Date; end: Date; amountOwed: number; amountPaid: number; balance: number; status: string }>>([]);
   const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
   const [ledgerView, setLedgerView] = useState<'tolls' | 'payments' | 'fuel'>('tolls');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
@@ -3188,7 +3189,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          </TabsContent>
 
          <TabsContent value="financial" className="space-y-6">
-           <FinancialSubTabs driverId={driverId} transactions={transactions} allTrips={allTrips} quotaConfig={quotaConfig} platformBreakdownData={platformBreakdownData} platformTotalEarnings={platformTotalEarnings} />
+           <FinancialSubTabs driverId={driverId} transactions={transactions} allTrips={allTrips} quotaConfig={quotaConfig} platformBreakdownData={platformBreakdownData} platformTotalEarnings={platformTotalEarnings} csvMetrics={csvMetrics} />
             {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_1___ <Tabs defaultValue="earnings" className="space-y-4">
              <TabsList className="grid w-full grid-cols-3 max-w-[450px]">
                <TabsTrigger value="earnings">Earnings</TabsTrigger>
@@ -3401,6 +3402,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             trips={allTrips}
                             transactions={transactions}
                             csvMetrics={csvMetrics}
+                            onWeeksComputed={setSettlementWeeks}
                             onLogPayment={(start, end, amount) => setPaymentModalState({
                                 isOpen: true,
                                 initialWorkPeriodStart: start.toISOString(),
@@ -4776,6 +4778,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}
         initialAmount={paymentModalState.initialAmount}
         initialTransaction={paymentModalState.editingTransaction}
+        periods={settlementWeeks}
       />
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>

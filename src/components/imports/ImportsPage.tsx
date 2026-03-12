@@ -18,7 +18,7 @@ import {
   AlertCircle,
   ArrowRight,
   ArrowLeft,
-  X,
+  X as XIcon,
   Check,
   Info,
   Settings,
@@ -1195,7 +1195,7 @@ export function ImportsPage() {
             />
             {importSearch && (
               <button onClick={() => setImportSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Clear search">
-                <X className="h-4 w-4" />
+                <XIcon className="h-4 w-4" />
               </button>
             )}
           </div>
@@ -1367,7 +1367,7 @@ export function ImportsPage() {
                                   </div>
                               </div>
                               <Button variant="ghost" size="icon" onClick={() => removeFile(file.id)} className="text-slate-400 hover:text-red-500">
-                                  <X className="h-4 w-4" />
+                                  <XIcon className="h-4 w-4" />
                               </Button>
                           </div>
                       ))}

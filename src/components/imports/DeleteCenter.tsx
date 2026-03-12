@@ -11,7 +11,7 @@ import { api } from '../../services/api';
 import {
   MapPin, Car, Users, DollarSign, Fuel, Wrench, Gauge,
   ClipboardCheck, CreditCard, Building2, Tag, Package,
-  HardDrive, Search, ArrowLeft, X, AlertTriangle, Trash2,
+  HardDrive, Search, ArrowLeft, X as XIcon, AlertTriangle, Trash2,
   FileText, Calendar, Loader2, RefreshCw, CheckSquare, Square, CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
@@ -1177,7 +1177,7 @@ export function DeleteCenter() {
                 onClick={() => { setBatchDateFrom(''); setBatchDateTo(''); }}
                 className="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-0.5"
               >
-                <X className="h-3 w-3" /> Clear dates
+                <XIcon className="h-3 w-3" /> Clear dates
               </button>
             )}
           </div>
@@ -1573,7 +1573,7 @@ export function DeleteCenter() {
         />
         {searchQuery && (
           <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Clear search">
-            <X className="h-4 w-4" />
+            <XIcon className="h-4 w-4" />
           </button>
         )}
       </div>

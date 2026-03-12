@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { CheckCircle, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp, Edit2, Trash2, Check, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp, Edit2, Trash2, Check, X as XIcon } from 'lucide-react';
 import { Input } from '../ui/input';
 
 interface QuarantineListProps {
@@ -138,7 +138,7 @@ export function QuarantineList({ auditState, onDismiss, onExclude, onSave }: Qua
                                                                 <Check className="h-4 w-4" />
                                                             </Button>
                                                             <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 hover:bg-slate-100" onClick={cancelEdit}>
-                                                                <X className="h-4 w-4" />
+                                                                <XIcon className="h-4 w-4" />
                                                             </Button>
                                                         </>
                                                     ) : (

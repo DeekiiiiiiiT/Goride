@@ -2,7 +2,7 @@ import React from 'react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
-import { X } from 'lucide-react';
+import { X as XIcon } from 'lucide-react';
 
 interface DateRangeExportFilterProps {
   startDate: string;
@@ -38,7 +38,7 @@ export function DateRangeExportFilter({
             onClick={onClear}
             className="h-6 px-2 text-xs text-slate-400 hover:text-slate-600"
           >
-            <X className="h-3 w-3 mr-1" />
+            <XIcon className="h-3 w-3 mr-1" />
             Clear
           </Button>
         )}

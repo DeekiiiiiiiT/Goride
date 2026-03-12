@@ -38,6 +38,8 @@ import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { API_ENDPOINTS } from './services/apiConfig';
+import { publicAnonKey } from './utils/supabase/info';
 
 // Super Admin Portal Components
 import { AdminLoginPage } from './components/admin/AdminLoginPage';
@@ -63,6 +65,24 @@ function AppContent() {
   const [driverPage, setDriverPage] = useState('dashboard');
   const [isDriverMenuOpen, setDriverMenuOpen] = useState(false);
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
+
+  // ── Fix 4: Keep-alive ping ────────────────────────────────────────────
+  // Sends a lightweight /health request every 45 seconds to keep at least
+  // one warm edge-function instance alive, preventing cold-start stampedes.
+  useEffect(() => {
+    const PING_INTERVAL_MS = 45_000;
+    const healthUrl = `${API_ENDPOINTS.fleet}/health`;
+    const headers = { Authorization: `Bearer ${publicAnonKey}` };
+
+    // Fire one immediately on mount so the instance warms up right away
+    fetch(healthUrl, { headers }).catch(() => {});
+
+    const id = setInterval(() => {
+      fetch(healthUrl, { headers }).catch(() => {});
+    }, PING_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, []);
 
   // OAuth Callback Handler
   useEffect(() => {

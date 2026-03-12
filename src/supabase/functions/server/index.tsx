@@ -1266,6 +1266,132 @@ app.post("/make-server-37f42386/audit-config", async (c) => {
   }
 });
 
+// ── Dashboard Init Endpoint ───────────────────────────────────────────
+// Aggregates stats + trips + driverMetrics + vehicleMetrics into a single
+// response so the frontend only makes ONE request on dashboard load.
+app.get("/make-server-37f42386/dashboard/init", async (c) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayISO = today.toISOString();
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const endOfTodayISO = endOfToday.toISOString();
+
+    // Run all queries in parallel inside the server
+    const [tripStatsResult, activeDriverResult, tripsResult, driverMetricsResult, vehicleMetricsResult] = await Promise.all([
+      // 1) Dashboard stats — today's trips (aggregated)
+      supabase
+        .from("kv_store_37f42386")
+        .select("value->amount, value->driverId")
+        .like("key", "trip:%")
+        .or(`value->>date.gte.${todayISO},value->>requestTime.gte.${todayISO}`)
+        .or(`value->>date.lte.${endOfTodayISO},value->>requestTime.lte.${endOfTodayISO}`),
+
+      // 2) Active driver count
+      supabase
+        .from("kv_store_37f42386")
+        .select("*", { count: 'exact', head: true })
+        .like("key", "driver:%")
+        .eq("value->>status", "active"),
+
+      // 3) Full trip list (capped at 200, with retry)
+      (async () => {
+        let data: any[] | null = null;
+        let lastError: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const result = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "trip:%")
+            .order("value->>date", { ascending: false })
+            .range(0, 199);
+          if (!result.error) { data = result.data; lastError = null; break; }
+          lastError = result.error;
+          console.log(`[dashboard/init trips] attempt ${attempt + 1} failed: ${result.error.message}`);
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        }
+        if (lastError) throw lastError;
+        return data || [];
+      })(),
+
+      // 4) Driver metrics
+      supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "driver_metric:%")
+        .range(0, 99),
+
+      // 5) Vehicle metrics
+      supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "vehicle_metric:%")
+        .range(0, 99),
+    ]);
+
+    // ── Build stats ──
+    if (tripStatsResult.error) throw tripStatsResult.error;
+    if (activeDriverResult.error) throw activeDriverResult.error;
+
+    const todayTrips = tripStatsResult.data || [];
+    let revenueToday = 0;
+    const activeDriverIds = new Set<string>();
+    todayTrips.forEach((t: any) => {
+      revenueToday += (Number(t.amount) || 0);
+      if (t.driverId) activeDriverIds.add(t.driverId);
+    });
+    const activeDriverCount = activeDriverResult.count || 0;
+    const finalActiveDrivers = activeDriverCount;
+    const efficiency = finalActiveDrivers > 0 ? Math.round((activeDriverIds.size / finalActiveDrivers) * 100) : 0;
+
+    const stats = {
+      date: new Date().toISOString(),
+      activeDrivers: finalActiveDrivers,
+      trips: todayTrips.length,
+      revenue: revenueToday,
+      efficiency,
+    };
+
+    // ── Build trips ──
+    const tripsRaw = Array.isArray(tripsResult) ? tripsResult : (tripsResult as any)?.data || [];
+    const trips = tripsRaw.map((d: any) => {
+      const val = d.value || d;
+      const { route, stops, ...lightweight } = val;
+      const sanitized: Record<string, any> = {};
+      for (const [k, v2] of Object.entries(lightweight)) {
+        sanitized[k] = typeof v2 === 'string' ? v2.replace(/[\x00-\x1F\x7F]/g, ' ') : v2;
+      }
+      if (sanitized.platform === 'GoRide') sanitized.platform = 'Roam';
+      return sanitized;
+    });
+
+    // ── Build driver metrics ──
+    if (driverMetricsResult.error) throw driverMetricsResult.error;
+    const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
+    const driverMetrics = (driverMetricsResult.data || [])
+      .map((d: any) => d.value)
+      .filter((m: any) => m.driverId !== BANNED_UUID && m.id !== BANNED_UUID);
+
+    // ── Build vehicle metrics ──
+    if (vehicleMetricsResult.error) throw vehicleMetricsResult.error;
+    const vehicleMetrics = (vehicleMetricsResult.data || []).map((d: any) => d.value);
+
+    // Manual stringify for safety
+    let jsonStr: string;
+    try {
+      jsonStr = JSON.stringify({ stats, trips, driverMetrics, vehicleMetrics });
+    } catch (serErr: any) {
+      console.error("JSON serialization error in /dashboard/init:", serErr);
+      return c.json({ error: "Failed to serialize dashboard/init response" }, 500);
+    }
+    return new Response(jsonStr, { headers: { "Content-Type": "application/json" } });
+  } catch (e: any) {
+    console.error("Error in /dashboard/init:", e);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
+  }
+});
+
 // Dashboard Stats Endpoint (Aggregated) - Optimized
 app.get("/make-server-37f42386/dashboard/stats", async (c) => {
   try {

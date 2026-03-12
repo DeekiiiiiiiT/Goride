@@ -826,6 +826,7 @@ async function cleanupResolvedLearntLocations(
         let resolved = false;
         let resolvedBy = '';
         let resolvedStationName = '';
+        let resolvedStationId = '';
 
         // Check 1: Source fuel entry already matched to a station
         if (loc.sourceEntryId) {
@@ -835,6 +836,7 @@ async function cleanupResolvedLearntLocations(
                 resolvedBy = 'source_entry_matched';
                 const matchedStation = allStations.find((s: any) => s.id === entry.matchedStationId);
                 resolvedStationName = matchedStation?.name || entry.matchedStationId;
+                resolvedStationId = entry.matchedStationId;
             }
         }
 
@@ -849,6 +851,7 @@ async function cleanupResolvedLearntLocations(
                     resolved = true;
                     resolvedBy = 'geofence_match';
                     resolvedStationName = station.name;
+                    resolvedStationId = station.id;
 
                     // Also link the source fuel entry if it's orphaned
                     if (loc.sourceEntryId) {
@@ -880,6 +883,7 @@ async function cleanupResolvedLearntLocations(
                                 resolved = true;
                                 resolvedBy = 'gps_alias_match';
                                 resolvedStationName = station.name;
+                                resolvedStationId = station.id;
                                 break;
                             }
                         }
@@ -890,6 +894,27 @@ async function cleanupResolvedLearntLocations(
         }
 
         if (resolved) {
+            // Release any gate-held transactions tied to this learnt location.
+            // This is the critical step that was previously missing — without it,
+            // fuel entries submitted via DriverExpenses or FuelLogForm (no-GPS path)
+            // that were gate-held would never get their fuel_entry created when the
+            // admin adds a station manually instead of using the Learnt tab's Promote button.
+            if (resolvedStationId) {
+                try {
+                    const releasedCount = await releaseHeldTransaction(loc, resolvedStationId, resolvedStationName);
+                    if (releasedCount > 0) {
+                        console.log(`[Auto-Cleanup] Released ${releasedCount} gate-held transaction(s) for learnt "${loc.name || loc.id}" → station "${resolvedStationName}"`);
+                    }
+                    const linkedCount = await linkOrphanEntriesToStation(loc, resolvedStationId, resolvedStationName);
+                    if (linkedCount > 0) {
+                        console.log(`[Auto-Cleanup] Linked ${linkedCount} orphan fuel entry/entries for learnt "${loc.name || loc.id}" → station "${resolvedStationName}"`);
+                    }
+                } catch (releaseErr) {
+                    console.error(`[Auto-Cleanup] Error releasing held transactions for learnt ${loc.id}:`, releaseErr);
+                    // Don't block cleanup — the learnt location should still be removed
+                }
+            }
+
             await kv.del(`learnt_location:${loc.id}`);
             details.push({
                 learntId: loc.id,

@@ -29,7 +29,7 @@ import {
     YAxis, 
     CartesianGrid, 
     Tooltip as RechartsTooltip, 
-    ResponsiveContainer, 
+    // ResponsiveContainer replaced by SafeResponsiveContainer
     PieChart, 
     Pie, 
     Cell,
@@ -38,6 +38,7 @@ import {
     AreaChart,
     Area
 } from 'recharts';
+import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 
 export function IntegrityGapDashboard() {
     const [entries, setEntries] = useState<any[]>([]);

@@ -61,54 +61,71 @@ export function Dashboard() {
   const [reviewCheckInId, setReviewCheckInId] = useState<string | null>(null);
   const { reviewCheckIn } = useAdminCheckIn();
 
-  // 1. React Query Hooks
-  const { data: serverStats, isLoading: statsLoading } = useQuery({
-    queryKey: ['dashboard', 'stats'],
-    queryFn: () => api.getDashboardStats(),
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
+  // ── Fix 1 + Fix 2: Staggered waves with aggregated init ──────────────
+  // Wave 1 is a SINGLE /dashboard/init call that returns stats + trips +
+  // driverMetrics + vehicleMetrics in one response (Fix 2).  Waves 2 & 3
+  // fire sequentially after it settles (Fix 1 stagger).
+  const [wave, setWave] = useState(1);
 
-  const { data: trips = [], isLoading: tripsLoading } = useQuery({
-    queryKey: ['trips'],
-    queryFn: () => api.getTrips(),
+  // ── Wave 1 (single aggregated call — fires immediately) ─────────────
+  const { data: initBundle, isLoading: initLoading } = useQuery({
+    queryKey: ['dashboard', 'init'],
+    queryFn: () => api.getDashboardInit(),
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
-  const { data: driverMetrics = [], isLoading: driversLoading } = useQuery({
-    queryKey: ['driverMetrics'],
-    queryFn: () => api.getDriverMetrics(),
-    staleTime: 1000 * 60 * 5,
-  });
+  // Destructure the bundle (safe defaults when still loading)
+  const serverStats = initBundle?.stats ?? undefined;
+  const trips: any[] = initBundle?.trips ?? [];
+  const driverMetrics: any[] = initBundle?.driverMetrics ?? [];
+  const vehicleMetrics: any[] = initBundle?.vehicleMetrics ?? [];
 
-  const { data: vehicleMetrics = [], isLoading: vehiclesLoading } = useQuery({
-    queryKey: ['vehicleMetrics'],
-    queryFn: () => api.getVehicleMetrics(),
-    staleTime: 1000 * 60 * 5,
-  });
+  // Advance to Wave 2 once Wave 1 settles
+  useEffect(() => {
+    if (!initLoading && wave === 1) {
+      const t = setTimeout(() => setWave(2), 200);
+      return () => clearTimeout(t);
+    }
+  }, [initLoading, wave]);
 
-  const { data: batches = [], isLoading: batchesLoading } = useQuery({
+  // ── Wave 2 (secondary — fires after Wave 1) ────────────────────────
+  const { data: batches = [], isLoading: batchesLoading, isFetched: batchesFetched } = useQuery({
     queryKey: ['batches'],
     queryFn: () => api.getBatches(),
     staleTime: 1000 * 60 * 5,
+    enabled: wave >= 2,
   });
 
-  const { data: apiNotifications = [], isLoading: notificationsLoading } = useQuery({
+  const { data: apiNotifications = [], isLoading: notificationsLoading, isFetched: notificationsFetched } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => api.getNotifications(),
     staleTime: 1000 * 60 * 1,
+    enabled: wave >= 2,
   });
 
-  const { data: persistentAlerts = [] } = useQuery({
+  const { data: persistentAlerts = [], isFetched: alertsFetched } = useQuery({
     queryKey: ['persistent-alerts'],
     queryFn: () => api.getPersistentAlerts(),
     staleTime: 1000 * 60 * 1,
+    enabled: wave >= 2,
   });
 
-  const { data: rules = [] } = useQuery({
+  const { data: rules = [], isFetched: rulesFetched } = useQuery({
     queryKey: ['alertRules'],
     queryFn: () => api.getAlertRules(),
+    enabled: wave >= 2,
   });
 
+  // Advance to Wave 3 once Wave 2 settles
+  const wave2Done = batchesFetched && notificationsFetched && alertsFetched && rulesFetched;
+  useEffect(() => {
+    if (wave2Done && wave === 2) {
+      const t = setTimeout(() => setWave(3), 200);
+      return () => clearTimeout(t);
+    }
+  }, [wave2Done, wave]);
+
+  // ── Wave 3 (deferred — fires after Wave 2) ─────────────────────────
   // Phase 7: Fetch Fuel & Check-In Data for Alerts
   const currentWeekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString().split('T')[0], []);
   
@@ -116,27 +133,31 @@ export function Dashboard() {
     queryKey: ['fuelEntries'],
     queryFn: () => fuelService.getFuelEntries(),
     staleTime: 1000 * 60 * 5,
+    enabled: wave >= 3,
   });
 
   const { data: adjustments = [] } = useQuery({
     queryKey: ['adjustments'],
     queryFn: () => fuelService.getMileageAdjustments(),
     staleTime: 1000 * 60 * 5,
+    enabled: wave >= 3,
   });
 
   const { data: checkIns = [] } = useQuery({
     queryKey: ['checkIns', currentWeekStart],
     queryFn: () => api.getCheckIns(currentWeekStart),
     staleTime: 1000 * 60 * 5,
+    enabled: wave >= 3,
   });
 
   const { data: maintenanceLogs = [] } = useQuery({
     queryKey: ['maintenanceLogs'],
     queryFn: () => api.getAllMaintenanceLogs(),
     staleTime: 1000 * 60 * 5,
+    enabled: wave >= 3,
   });
 
-  // Phase 4: Fetch ledger-sourced fleet summary (runs in parallel, non-blocking)
+  // Phase 4: Fetch ledger-sourced fleet summary (runs in Wave 3, non-blocking)
   const { data: fleetSummary = null } = useQuery({
     queryKey: ['ledger', 'fleet-summary'],
     queryFn: async () => {
@@ -149,9 +170,10 @@ export function Dashboard() {
       return null;
     },
     staleTime: 1000 * 60 * 5,
+    enabled: wave >= 3,
   });
 
-  const loading = statsLoading || tripsLoading || driversLoading || vehiclesLoading || batchesLoading || notificationsLoading;
+  const loading = initLoading;
 
   // 2. Derived State (Memoized)
   const fleetMetrics = useMemo(() => {
