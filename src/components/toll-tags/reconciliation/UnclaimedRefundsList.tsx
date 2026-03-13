@@ -1,17 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { format } from "date-fns";
 import { Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronDown } from "lucide-react";
+import { Button } from "../../ui/button";
 
 interface UnclaimedRefundsListProps {
   trips: Trip[];
 }
 
 export function UnclaimedRefundsList({ trips }: UnclaimedRefundsListProps) {
+    const [visibleCount, setVisibleCount] = useState(25);
+
     if (trips.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-12 text-slate-500">
@@ -46,7 +49,7 @@ export function UnclaimedRefundsList({ trips }: UnclaimedRefundsListProps) {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {trips.map(trip => (
+                        {trips.slice(0, visibleCount).map(trip => (
                             <TableRow key={trip.id}>
                                 <TableCell>
                                     <div className="flex flex-col">
@@ -84,6 +87,19 @@ export function UnclaimedRefundsList({ trips }: UnclaimedRefundsListProps) {
                         ))}
                     </TableBody>
                 </Table>
+                {visibleCount < trips.length && (
+                    <div className="flex items-center justify-center pt-4 border-t mt-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setVisibleCount(prev => prev + 25)}
+                            className="text-slate-600 hover:text-slate-900"
+                        >
+                            <ChevronDown className="h-4 w-4 mr-1" />
+                            Show More ({visibleCount} of {trips.length})
+                        </Button>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

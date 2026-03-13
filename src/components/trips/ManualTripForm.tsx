@@ -38,6 +38,7 @@ interface ManualTripFormProps {
   vehicles?: { id: string; plate: string }[];
   currentDriverId?: string; // For Admin to default select
   defaultVehicleId?: string;
+  editingTrip?: any; // When set, form is in "Edit" mode — changes title/button labels
   initialData?: {
     date?: string;
     time?: string;
@@ -67,6 +68,7 @@ export function ManualTripForm({
   vehicles = [],
   currentDriverId,
   defaultVehicleId,
+  editingTrip,
   initialData
 }: ManualTripFormProps) {
   const { isOnline, addToQueue } = useOffline();
@@ -134,27 +136,30 @@ export function ManualTripForm({
           time: initialData.time || format(new Date(), 'HH:mm'),
           endTime: initialData.endTime,
           duration: initialData.duration,
-          amount: 0,
-          platform: initialData.isLiveRecorded ? 'Roam' : 'InDrive',
-          paymentMethod: 'Cash',
+          amount: editingTrip?.amount ?? 0,
+          platform: editingTrip?.platform ?? (initialData.isLiveRecorded ? 'Roam' : 'InDrive'),
+          paymentMethod: editingTrip?.paymentMethod ?? 'Cash',
           pickupLocation: initialData.pickupLocation || '',
           dropoffLocation: initialData.endLocation || '',
-          notes: '',
+          notes: editingTrip?.notes ?? '',
           distance: routeDistance,
-          vehicleId: defaultVehicleId || '',
+          vehicleId: editingTrip?.vehicleId ?? defaultVehicleId ?? '',
           route: initialData.route || [],
           stops: initialData.stops || [],
           totalWaitTime: initialData.totalWaitTime || 0,
-          isLiveRecorded: initialData.isLiveRecorded,
+          isLiveRecorded: editingTrip ? false : initialData.isLiveRecorded, // Always show all fields when editing
           pickupCoords: initialData.pickupCoords,
           dropoffCoords: initialData.dropoffCoords,
           resolutionMethod: initialData.resolutionMethod,
           resolutionTimestamp: initialData.resolutionTimestamp,
           geocodeError: initialData.geocodeError,
-          tripStatus: 'Completed' as const,
-          cancelledBy: undefined,
-          cancellationReason: undefined,
-          cancellationFee: undefined,
+          tripStatus: (editingTrip?.status as 'Completed' | 'Cancelled') ?? 'Completed',
+          cancelledBy: editingTrip?.cancelledBy,
+          cancellationReason: editingTrip?.cancellationReason,
+          cancellationFee: editingTrip?.cancellationFee,
+          indriveNetIncome: editingTrip?.indriveNetIncome,
+          indriveServiceFee: editingTrip?.indriveServiceFee,
+          indriveServiceFeePercent: editingTrip?.indriveServiceFeePercent,
         });
         if (initialData.pickupCoords) {
           setPickupCoords(initialData.pickupCoords);
@@ -300,9 +305,11 @@ export function ManualTripForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>
+          <DialogTitle>{editingTrip ? 'Edit Trip' : initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>
           <DialogDescription>
-            {initialData 
+            {editingTrip 
+              ? `Editing trip ${editingTrip.id?.slice(0, 12)}… — update any fields and save.`
+              : initialData 
               ? 'Review and confirm the details of your recorded trip.' 
               : 'Record a completed trip or log a cancelled trip for tracking.'}
           </DialogDescription>
@@ -929,7 +936,7 @@ export function ManualTripForm({
               }
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {formData.tripStatus === 'Cancelled' ? 'Log Cancelled Trip' : 'Save Trip'}
+              {editingTrip ? 'Save Changes' : formData.tripStatus === 'Cancelled' ? 'Log Cancelled Trip' : 'Save Trip'}
             </Button>
           </DialogFooter>
         </form>

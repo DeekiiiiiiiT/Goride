@@ -25,6 +25,8 @@ import {
   Award,
   Percent,
   Scale,
+  LinkIcon,
+  Unlink,
 } from 'lucide-react';
 
 // Mirror the types from DriverPayoutHistory — keep in sync
@@ -37,6 +39,8 @@ export interface PayoutPeriodRow {
   driverSharePercent: number;
   driverShare: number;
   tollExpenses: number;
+  tollReconciled: number;      // Phase 7: reconciled toll count
+  tollUnreconciled: number;    // Phase 7: unreconciled toll count
   fuelDeduction: number;
   totalDeductions: number;
   netPayout: number;
@@ -195,6 +199,13 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
             label="Toll Expenses"
             value={row.tollExpenses > 0.005 ? `−${fmt(row.tollExpenses)}` : '$0.00'}
             valueColor={row.tollExpenses > 0.005 ? 'text-rose-600' : 'text-slate-400'}
+            sub={
+              (row.tollReconciled + row.tollUnreconciled) > 0
+                ? row.tollUnreconciled === 0
+                  ? `${row.tollReconciled}/${row.tollReconciled} matched to trips`
+                  : `${row.tollReconciled}/${row.tollReconciled + row.tollUnreconciled} matched · ${row.tollUnreconciled} unmatched`
+                : undefined
+            }
           />
           <LineItem
             icon={<Fuel className="h-4 w-4" />}

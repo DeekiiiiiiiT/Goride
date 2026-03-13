@@ -17,6 +17,7 @@ import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
+import tollApp from "./toll_controller.tsx";
 
 // ---------------------------------------------------------------------------
 // Future-Date Guardrail
@@ -1234,6 +1235,7 @@ app.route("/", fuelApp);
 app.route("/", auditApp);
 app.route("/", safetyApp);
 app.route("/", syncApp);
+app.route("/", tollApp);
 
 // Google Maps Config Endpoint
 app.get("/make-server-37f42386/maps-config", (c) => {

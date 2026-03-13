@@ -312,7 +312,7 @@ export function WeeklyCheckInModal({ isOpen, onClose, onSubmit, isLoading, isFor
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !isForced && !open && onClose()}>
-            <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => (isForced || step === 'ANALYZING' || step === 'SUBMITTING') && e.preventDefault()}>
+            <DialogContent className="sm:max-w-md" hideCloseButton={isForced} onPointerDownOutside={(e) => (isForced || step === 'ANALYZING' || step === 'SUBMITTING') && e.preventDefault()} onEscapeKeyDown={(e) => isForced && e.preventDefault()}>
                 <DialogHeader>
                     <DialogTitle>Weekly Odometer Check-In</DialogTitle>
                     <DialogDescription>

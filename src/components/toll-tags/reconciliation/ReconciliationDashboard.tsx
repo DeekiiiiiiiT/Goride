@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { UnmatchedTollsList } from "./UnmatchedTollsList";
@@ -6,13 +6,15 @@ import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
 import { ReconciledTollsList } from "./ReconciledTollsList";
 import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
 import { useClaims } from "../../../hooks/useClaims";
-import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle } from "lucide-react";
+import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle, Filter } from "lucide-react";
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { DisputeModal } from "../../claimable-loss/DisputeModal";
 import { FinancialTransaction } from "../../../types/data";
 import { MatchResult, calculateTollFinancials } from "../../../utils/tollReconciliation";
 import { toast } from "sonner@2.0.3";
+import { Trip as TripType } from "../../../types/data";
+import { api } from "../../../services/api";
 
 export function ReconciliationDashboard() {
   const handleRunTest = () => {
@@ -20,6 +22,14 @@ export function ReconciliationDashboard() {
     console.log(result);
     alert(result);
   };
+
+  // Phase 5: Driver filter
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+
+  useEffect(() => {
+    api.getDrivers().then(setDrivers).catch(console.error);
+  }, []);
 
   const { 
     loading: tollsLoading, 
@@ -34,7 +44,7 @@ export function ReconciliationDashboard() {
     reject,
     autoMatchAll,
     refresh 
-  } = useTollReconciliation();
+  } = useTollReconciliation(selectedDriverId || undefined);
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim } = useClaims();
 
@@ -149,7 +159,18 @@ export function ReconciliationDashboard() {
       }
   };
 
-  // Filter out tolls that have an existing claim (Active, Resolved, or Rejected)
+  const handleEditToll = async (transactionId: string, updates: Record<string, any>) => {
+      try {
+          await api.editToll(transactionId, updates);
+          toast.success("Transaction updated successfully");
+          await refresh();
+      } catch (error) {
+          console.error("Edit toll failed", error);
+          toast.error("Failed to update transaction");
+      }
+  };
+
+  // Filter out tolls that have an existing claim
   // This ensures we don't double-process a toll or see items we've already handled.
   const claimedTransactionIds = new Set(claims.map(c => c.transactionId));
   const filteredUnreconciledTolls = unreconciledTolls.filter(tx => !claimedTransactionIds.has(tx.id));
@@ -237,7 +258,7 @@ export function ReconciliationDashboard() {
     .filter(matches => matches[0]?.confidence === 'high')
     .length;
 
-  const handleSmartReconcile = async (tx: FinancialTransaction, trip: Trip) => {
+  const handleSmartReconcile = async (tx: FinancialTransaction, trip: TripType) => {
       // Check if this is a personal match
       const match = suggestions.get(tx.id)?.find(m => m.trip.id === trip.id);
       
@@ -282,7 +303,21 @@ export function ReconciliationDashboard() {
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">Toll Reconciliation</h2>
             <p className="text-slate-500">Match toll expenses with trip refunds to identify leakage.</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex items-center space-x-2">
+            {/* Phase 5: Driver filter */}
+            <div className="flex items-center gap-1.5">
+                <Filter className="h-4 w-4 text-slate-400" />
+                <select
+                    value={selectedDriverId}
+                    onChange={(e) => setSelectedDriverId(e.target.value)}
+                    className="h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                    <option value="">All Drivers</option>
+                    {drivers.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                </select>
+            </div>
             <Button variant="ghost" size="sm" onClick={handleRunTest} className="text-slate-400 hover:text-slate-600">
                 Test
             </Button>
@@ -376,18 +411,18 @@ export function ReconciliationDashboard() {
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs font-medium text-yellow-600 uppercase tracking-wider">Unclaimed Refunds</h3>
+                        <h3 className="text-xs font-medium text-yellow-600 uppercase tracking-wider">Unlinked Refunds</h3>
                         <Tooltip>
                             <TooltipTrigger>
                                 <HelpCircle className="h-3.5 w-3.5 text-yellow-400 hover:text-yellow-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Refunds provided by the platform (e.g., Uber) where no matching toll expense was found.</p>
+                                <p className="max-w-[200px] text-xs">Trips where the platform reimbursed a toll through the fare, but no matching toll expense record exists. This usually means the toll tag charge hasn't been imported yet.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">${refundsAmount.toFixed(2)}</div>
-                    <div className="text-xs text-slate-500 mt-1">Pay to driver</div>
+                    <div className="text-xs text-slate-500 mt-1">Missing expense records</div>
                 </div>
                 <DollarSign className="h-5 w-5 text-yellow-400" />
             </div>
@@ -405,7 +440,7 @@ export function ReconciliationDashboard() {
             )}
           </TabsTrigger>
           <TabsTrigger value="unclaimed">
-            Unclaimed Refunds
+            Unlinked Refunds
             {unclaimedRefunds.length > 0 && (
                 <span className="ml-2 bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
                     {unclaimedRefunds.length}
@@ -431,6 +466,7 @@ export function ReconciliationDashboard() {
                 onReject={handleReject}
                 onFlag={handleFlag}
                 onManualResolve={handleManualResolve}
+                onEdit={handleEditToll}
             />
         </TabsContent>
         

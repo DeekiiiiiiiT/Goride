@@ -1476,6 +1476,10 @@
     height: calc(var(--spacing) * 40);
   }
 
+  .h-44 {
+    height: calc(var(--spacing) * 44);
+  }
+
   .h-48 {
     height: calc(var(--spacing) * 48);
   }
@@ -1758,6 +1762,10 @@
 
   .min-h-\[300px\] {
     min-height: 300px;
+  }
+
+  .min-h-\[350px\] {
+    min-height: 350px;
   }
 
   .min-h-\[400px\] {
@@ -2094,6 +2102,10 @@
 
   .max-w-\[150px\] {
     max-width: 150px;
+  }
+
+  .max-w-\[160px\] {
+    max-width: 160px;
   }
 
   .max-w-\[180px\] {
@@ -2758,6 +2770,10 @@
     row-gap: calc(var(--spacing) * 2);
   }
 
+  .gap-y-3 {
+    row-gap: calc(var(--spacing) * 3);
+  }
+
   :where(.divide-y > :not(:last-child)) {
     --tw-divide-y-reverse: 0;
     border-bottom-style: var(--tw-border-style);
@@ -2972,6 +2988,11 @@
     border-bottom-width: 2px;
   }
 
+  .border-b-4 {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 4px;
+  }
+
   .border-l {
     border-left-style: var(--tw-border-style);
     border-left-width: 1px;
@@ -3134,6 +3155,10 @@
     border-color: var(--color-emerald-600);
   }
 
+  .border-emerald-700 {
+    border-color: var(--color-emerald-700);
+  }
+
   .border-gray-200 {
     border-color: var(--color-gray-200);
   }
@@ -3262,6 +3287,10 @@
 
   .border-purple-200 {
     border-color: var(--color-purple-200);
+  }
+
+  .border-purple-500 {
+    border-color: var(--color-purple-500);
   }
 
   .border-red-100 {
@@ -4276,6 +4305,16 @@
     background-color: var(--color-purple-50);
   }
 
+  .bg-purple-50\/50 {
+    background-color: color-mix(in srgb, oklch(.977 .014 308.299) 50%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-purple-50\/50 {
+      background-color: color-mix(in oklab, var(--color-purple-50) 50%, transparent);
+    }
+  }
+
   .bg-purple-100 {
     background-color: var(--color-purple-100);
   }
@@ -4902,6 +4941,17 @@
     }
   }
 
+  .from-black\/40 {
+    --tw-gradient-from: #0006;
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .from-black\/40 {
+      --tw-gradient-from: color-mix(in oklab, var(--color-black) 40%, transparent);
+    }
+  }
+
   .from-black\/80 {
     --tw-gradient-from: #000c;
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -5521,6 +5571,10 @@
 
   .pl-6 {
     padding-left: calc(var(--spacing) * 6);
+  }
+
+  .pl-7 {
+    padding-left: calc(var(--spacing) * 7);
   }
 
   .pl-8 {
@@ -6645,6 +6699,10 @@
     }
   }
 
+  .ring-amber-200 {
+    --tw-ring-color: var(--color-amber-200);
+  }
+
   .ring-amber-400 {
     --tw-ring-color: var(--color-amber-400);
   }
@@ -7569,6 +7627,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:border-purple-300:hover {
+      border-color: var(--color-purple-300);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:border-red-300:hover {
       border-color: var(--color-red-300);
     }
@@ -7996,6 +8060,18 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:bg-primary\/90:hover {
         background-color: color-mix(in oklab, var(--primary) 90%, transparent);
+      }
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-purple-50\/30:hover {
+      background-color: color-mix(in srgb, oklch(.977 .014 308.299) 30%, transparent);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-purple-50\/30:hover {
+        background-color: color-mix(in oklab, var(--color-purple-50) 30%, transparent);
       }
     }
   }
@@ -8439,6 +8515,12 @@
   @media (hover: hover) {
     .hover\:text-blue-700:hover {
       color: var(--color-blue-700);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-blue-800:hover {
+      color: var(--color-blue-800);
     }
   }
 
@@ -9063,12 +9145,20 @@
     scale: .99;
   }
 
+  .active\:bg-emerald-800:active {
+    background-color: var(--color-emerald-800);
+  }
+
   .active\:bg-indigo-800:active {
     background-color: var(--color-indigo-800);
   }
 
   .active\:bg-red-700:active {
     background-color: var(--color-red-700);
+  }
+
+  .active\:bg-rose-300:active {
+    background-color: var(--color-rose-300);
   }
 
   .active\:bg-sidebar-accent:active {

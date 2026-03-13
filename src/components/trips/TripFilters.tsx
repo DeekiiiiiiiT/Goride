@@ -169,7 +169,7 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
               { value: 'today', label: 'Today' },
               { value: 'yesterday', label: 'Yesterday' },
               { value: 'week', label: 'This Week' },
-              { value: 'month', label: 'Last 30 Days' },
+              { value: 'month', label: 'This Month' },
               { value: 'custom', label: 'Custom' },
               { value: 'all', label: 'All Time' },
             ]}

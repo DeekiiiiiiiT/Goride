@@ -34,6 +34,13 @@ export interface MatchResult {
   timeDifferenceMinutes: number;
   matchType: MatchType;
   varianceAmount?: number;
+  // Phase 1: New fields from server-side scoring engine (IDEA_2)
+  confidenceScore?: number;       // 0-100 numeric score
+  vehicleMatch?: boolean;         // true if toll's vehicleId === trip's vehicleId
+  driverMatch?: boolean;          // true if toll's driverId === trip's driverId
+  dataQuality?: 'PRECISE' | 'TIMED' | 'DATE_ONLY';  // Trip timing data quality tier
+  windowHit?: 'ON_TRIP' | 'ENROUTE' | 'POST_TRIP' | 'NONE';  // Which time window the toll fell in
+  isAmbiguous?: boolean;          // true if multiple trips compete with similar scores
 }
 
 /**
@@ -58,6 +65,13 @@ function getTransactionDateTime(tx: FinancialTransaction): Date | null {
   }
 }
 
+/**
+ * @deprecated Server-side matching is now the primary engine (Phase 2 toll_controller.tsx).
+ * This function is retained only for:
+ *  - ManualMatchModal's client-side search fallback
+ *  - unreconcile() in useTollReconciliation.ts (re-generate suggestions locally)
+ * Do not use for new features — use the server endpoints instead.
+ */
 export function findTollMatches(
   transaction: FinancialTransaction,
   trips: Trip[]
@@ -67,14 +81,15 @@ export function findTollMatches(
 
   const matches: MatchResult[] = [];
 
-  // 1. Filter trips by Vehicle ID or Driver ID
-  // For Driver Expenses, we might match by Driver ID if Vehicle ID is ambiguous
-  const vehicleTrips = trips.filter(t => 
-    (t.vehicleId && transaction.vehicleId && t.vehicleId === transaction.vehicleId) || 
-    (t.driverId && transaction.driverId && t.driverId === transaction.driverId)
-  );
+  // Phase 8: Replace hard vehicle/driver gate with same-day pre-filter (+/- 2 days for safety)
+  const txTime = txDate.getTime();
+  const ONE_DAY_MS = 86_400_000;
+  const candidateTrips = trips.filter(t => {
+    const tripTime = new Date(t.dropoffTime || t.date).getTime();
+    return !isNaN(tripTime) && Math.abs(tripTime - txTime) <= ONE_DAY_MS * 2;
+  });
 
-  for (const trip of vehicleTrips) {
+  for (const trip of candidateTrips) {
     // 2. Calculate Precise Trip Times
     const tripTimes = calculateTripTimes(trip);
     if (!tripTimes.isValid) continue;

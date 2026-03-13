@@ -6,7 +6,7 @@ import { Checkbox } from "../../ui/checkbox";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip, Claim } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
-import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info } from "lucide-react";
+import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info, ChevronDown } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { calculateTollFinancials } from "../../../utils/tollReconciliation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
@@ -21,6 +21,7 @@ interface ReconciledTollsListProps {
 export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: ReconciledTollsListProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkUnmatching, setIsBulkUnmatching] = useState(false);
+    const [visibleCount, setVisibleCount] = useState(25);
 
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -113,7 +114,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {tolls.map(tx => {
+                        {tolls.slice(0, visibleCount).map(tx => {
                             const trip = trips.find(t => t.id === tx.tripId);
                             const claim = claims.find(c => c.transactionId === tx.id);
                             const isSelected = selectedIds.has(tx.id);
@@ -243,6 +244,19 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                         })}
                     </TableBody>
                 </Table>
+                {visibleCount < tolls.length && (
+                    <div className="flex items-center justify-center pt-4 border-t mt-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setVisibleCount(prev => prev + 25)}
+                            className="text-slate-600 hover:text-slate-900"
+                        >
+                            <ChevronDown className="h-4 w-4 mr-1" />
+                            Show More ({visibleCount} of {tolls.length})
+                        </Button>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

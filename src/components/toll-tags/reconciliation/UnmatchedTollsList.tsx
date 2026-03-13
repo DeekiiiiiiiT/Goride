@@ -6,10 +6,12 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from ".
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip } from "../../../types/data";
-import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus } from "lucide-react";
+import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil } from "lucide-react";
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
+import { TollDetailOverlay } from "./TollDetailOverlay";
+import { EditTollModal } from "./EditTollModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,12 +32,46 @@ interface UnmatchedTollsListProps {
   onReject?: (tx: FinancialTransaction) => void;
   onFlag?: (tx: FinancialTransaction) => void;
   onManualResolve?: (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => void;
+  onEdit?: (transactionId: string, updates: Record<string, any>) => Promise<void>;
 }
 
-export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag, onManualResolve }: UnmatchedTollsListProps) {
+export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag, onManualResolve, onEdit }: UnmatchedTollsListProps) {
     const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
+    const [visibleSmartMatches, setVisibleSmartMatches] = useState(10);
+    const [visibleOtherTolls, setVisibleOtherTolls] = useState(25);
+
+    // Detail overlay state
+    const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
+    const [detailMatch, setDetailMatch] = useState<MatchResult | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+    // Edit modal state
+    const [editTx, setEditTx] = useState<FinancialTransaction | null>(null);
+    const [isEditOpen, setIsEditOpen] = useState(false);
+
+    const openDetail = (tx: FinancialTransaction, match?: MatchResult) => {
+        setDetailTx(tx);
+        setDetailMatch(match || null);
+        setIsDetailOpen(true);
+    };
+
+    const closeDetail = () => {
+        setIsDetailOpen(false);
+        setDetailTx(null);
+        setDetailMatch(null);
+    };
+
+    const openEdit = (tx: FinancialTransaction) => {
+        setEditTx(tx);
+        setIsEditOpen(true);
+    };
+
+    const closeEdit = () => {
+        setIsEditOpen(false);
+        setEditTx(null);
+    };
 
     // Filter tolls based on source
     const filteredTolls = useMemo(() => {
@@ -119,6 +155,15 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                             <Briefcase className="mr-2 h-4 w-4 text-slate-600" />
                             Business Expense
                         </DropdownMenuItem>
+                        {onEdit && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => openEdit(tx)}>
+                                    <Pencil className="mr-2 h-4 w-4 text-indigo-600" />
+                                    Edit Transaction
+                                </DropdownMenuItem>
+                            </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -159,13 +204,13 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     const smartMatches = filteredTolls.filter(tx => {
         const matches = suggestions.get(tx.id);
         const best = matches?.[0];
-        // Include High Confidence, Deadhead, AND Personal matches in the cards view
-        // because our new logic is precise enough to trust "Personal" suggestions.
-        return best && (
-            best.confidence === 'high' || 
-            best.matchType === 'DEADHEAD_MATCH' || 
-            best.matchType === 'PERSONAL_MATCH'
-        ) && !hiddenSuggestions.has(tx.id);
+        // Phase 3: Use confidenceScore >= 50 when available, fall back to old logic
+        const hasHighScore = best?.confidenceScore != null ? best.confidenceScore >= 50 : (
+            best?.confidence === 'high' || 
+            best?.matchType === 'DEADHEAD_MATCH' || 
+            best?.matchType === 'PERSONAL_MATCH'
+        );
+        return best && hasHighScore && !hiddenSuggestions.has(tx.id);
     });
 
     const otherTolls = filteredTolls.filter(tx => !smartMatches.includes(tx));
@@ -188,6 +233,12 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         }
     };
 
+    const getScoreColor = (score: number) => {
+        if (score >= 80) return 'text-emerald-600';
+        if (score >= 50) return 'text-amber-600';
+        return 'text-rose-600';
+    };
+
     return (
         <div className="space-y-6">
             
@@ -199,7 +250,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                         <h3 className="font-semibold">Smart Suggestions ({smartMatches.length})</h3>
                     </div>
                     <div className="grid grid-cols-1 gap-4">
-                        {smartMatches.map(tx => {
+                        {smartMatches.slice(0, visibleSmartMatches).map(tx => {
                             const match = suggestions.get(tx.id)![0];
                             return (
                                 <SuggestedMatchCard 
@@ -211,10 +262,24 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                                     onApprove={onApprove ? () => onApprove(tx) : undefined}
                                     onReject={onReject ? () => onReject(tx) : undefined}
                                     onFlag={onFlag ? () => onFlag(tx) : undefined}
+                                    onClickDetail={() => openDetail(tx, match)}
                                 />
                             );
                         })}
                     </div>
+                    {visibleSmartMatches < smartMatches.length && (
+                        <div className="flex items-center justify-center">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setVisibleSmartMatches(prev => prev + 10)}
+                                className="text-slate-600 hover:text-slate-900"
+                            >
+                                <ChevronDown className="h-4 w-4 mr-1" />
+                                Show More ({visibleSmartMatches} of {smartMatches.length})
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -251,7 +316,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {otherTolls.map(tx => {
+                            {otherTolls.slice(0, visibleOtherTolls).map(tx => {
                                 const bestMatch = suggestions.get(tx.id)?.[0];
                                 const hasHiddenMatch = hiddenSuggestions.has(tx.id);
                                 const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
@@ -259,7 +324,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                                 const displayDriver = tx.driverName || bestMatch?.trip.driverName || inferredDriver;
 
                                 return (
-                                    <TableRow key={tx.id}>
+                                    <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined)}>
                                         <TableCell>
                                             <div className="flex flex-col">
                                                 {(() => {
@@ -298,6 +363,9 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                                                         </Badge>
                                                     </a>
                                                 )}
+                                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); openEdit(tx); }}>
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -324,12 +392,25 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                                         </TableCell>
                                         <TableCell>
                                             {bestMatch && !hasHiddenMatch ? (
-                                                getMatchBadge(bestMatch)
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    {getMatchBadge(bestMatch)}
+                                                    {bestMatch.confidenceScore != null && (
+                                                        <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${getScoreColor(bestMatch.confidenceScore)}`} title={`Confidence score: ${bestMatch.confidenceScore}/100`}>
+                                                            <Gauge className="h-3 w-3" />
+                                                            {bestMatch.confidenceScore}
+                                                        </span>
+                                                    )}
+                                                    {bestMatch.isAmbiguous && (
+                                                        <span title="Ambiguous — multiple trips compete with similar scores">
+                                                            <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                                                        </span>
+                                                    )}
+                                                </div>
                                             ) : (
                                                 <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50">Likely Personal</Badge>
                                             )}
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                             {hasHiddenMatch ? (
                                                 <Button size="sm" variant="ghost" disabled>Dismissed</Button>
                                             ) : (
@@ -341,6 +422,19 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                             })}
                         </TableBody>
                     </Table>
+                    {visibleOtherTolls < otherTolls.length && (
+                        <div className="flex items-center justify-center pt-4 border-t mt-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setVisibleOtherTolls(prev => prev + 25)}
+                                className="text-slate-600 hover:text-slate-900"
+                            >
+                                <ChevronDown className="h-4 w-4 mr-1" />
+                                Show More ({visibleOtherTolls} of {otherTolls.length})
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
@@ -355,6 +449,40 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                         setSelectedTxForManual(null);
                     }
                 }}
+            />
+
+            <TollDetailOverlay
+                isOpen={isDetailOpen}
+                onClose={closeDetail}
+                transaction={detailTx}
+                match={detailMatch}
+                onConfirm={detailTx && detailMatch ? () => {
+                    onReconcile(detailTx, detailMatch.trip);
+                    closeDetail();
+                } : undefined}
+                onDismiss={() => {
+                    if (detailTx) handleDismiss(detailTx.id);
+                    closeDetail();
+                }}
+                onApprove={detailTx && onApprove ? () => {
+                    onApprove(detailTx);
+                    closeDetail();
+                } : undefined}
+                onReject={detailTx && onReject ? () => {
+                    onReject(detailTx);
+                    closeDetail();
+                } : undefined}
+                onFlag={detailTx && onFlag ? () => {
+                    onFlag(detailTx);
+                    closeDetail();
+                } : undefined}
+            />
+
+            <EditTollModal
+                isOpen={isEditOpen}
+                onClose={closeEdit}
+                transaction={editTx}
+                onSave={onEdit || (async () => {})}
             />
         </div>
     );

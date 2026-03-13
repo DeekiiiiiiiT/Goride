@@ -2741,9 +2741,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardContent>
                </Card>
                <MetricCard 
-                  title="Toll Refunded"
+                  title="Platform Toll Refunds"
                   value={`$${resolvedFinancials.totalTolls.toFixed(2)}`}
-                  subtext="Added to Debt (Cash Risk)"
+                  subtext="From trip-level toll charges"
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   loading={localLoading}
                    breakdown={Object.entries(metrics.platformStats)

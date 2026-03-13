@@ -16,6 +16,7 @@ import {
   Fuel, 
   Wrench, 
   CheckCircle2,
+  Check,
   Clock,
   XCircle,
   Plus,
@@ -52,7 +53,7 @@ interface ExpenseLoggerProps {
   onBack?: () => void;
 }
 
-type ViewState = 'list' | 'category_select' | 'odometer_scan' | 'method_select' | 'entry_details';
+type ViewState = 'list' | 'category_select' | 'odometer_scan' | 'method_select' | 'entry_details' | 'toll_scan' | 'toll_review';
 
 import { useGeolocation } from '../../hooks/useGeolocation';
 
@@ -225,6 +226,78 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           toast.error("Could not auto-scan receipt. Please enter details manually.");
       } finally {
           setIsScanning(false);
+      }
+    }
+  };
+
+  const tollFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTollPhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setReceiptFile(file);
+      const reader = new FileReader();
+      reader.onload = (ev) => setReceiptPreview(ev.target?.result as string);
+      reader.readAsDataURL(file);
+
+      setIsScanning(true);
+
+      try {
+        const { data } = await api.scanReceipt(file);
+
+        if (data) {
+          if (data.amount) setAmount(data.amount.toString());
+
+          if (data.date) {
+            const parts = data.date.split('-');
+            if (parts.length === 3) {
+              const y = parseInt(parts[0]);
+              const m = parseInt(parts[1]) - 1;
+              const d = parseInt(parts[2]);
+              if (y > 2000) {
+                const localDate = new Date(y, m, d);
+                if (isValid(localDate)) {
+                  setDate(localDate);
+                }
+              }
+            }
+          }
+
+          if (data.time) {
+            let timeStr = data.time;
+            if (timeStr.length > 5) {
+              timeStr = timeStr.substring(0, 5);
+            }
+            setTime(timeStr);
+          } else if (!data.time && data.date) {
+            setTime("12:00");
+          }
+
+          setMerchant(data.merchant || '');
+          setPlaza(data.plaza || '');
+          setLane(data.lane || '');
+          setVehicleClass(data.vehicleClass || '');
+          setReferenceNumber(data.receiptNumber || '');
+          setCollector(data.collector || '');
+          if (data.notes) setNotes(data.notes);
+
+          toast.success("Receipt details extracted!");
+          setViewState('toll_review');
+        } else {
+          toast.error("Could not read receipt. Please try again.");
+        }
+      } catch (error) {
+        console.error("Toll scan error:", error);
+        toast.error("Could not scan receipt. Please try again.");
+        // Stay on toll_scan so driver can retry
+        setReceiptFile(null);
+        setReceiptPreview(null);
+      } finally {
+        setIsScanning(false);
+        // Reset the file input so the same file can be re-selected
+        if (tollFileInputRef.current) {
+          tollFileInputRef.current.value = '';
+        }
       }
     }
   };
@@ -434,6 +507,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           .then(setTankStatus)
           .catch(console.error);
       }
+    } else if (cat === 'Tolls') {
+      setViewState('toll_scan');
     } else {
       setViewState('entry_details');
     }
@@ -484,6 +559,21 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         break;
       case 'odometer_scan': setViewState('category_select'); break;
       case 'method_select': setViewState('odometer_scan'); break;
+      case 'toll_scan': setViewState('category_select'); break;
+      case 'toll_review': 
+        // Clear scanned data so they can re-scan
+        setReceiptFile(null);
+        setReceiptPreview(null);
+        setAmount('');
+        setMerchant('');
+        setPlaza('');
+        setLane('');
+        setVehicleClass('');
+        setReferenceNumber('');
+        setCollector('');
+        setNotes('');
+        setViewState('toll_scan'); 
+        break;
       case 'entry_details': 
         if (category === 'Fuel') setViewState('method_select');
         else setViewState('category_select');
@@ -585,6 +675,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 {viewState === 'odometer_scan' && "Scan Odometer"}
                 {viewState === 'method_select' && "Payment Method"}
                 {viewState === 'entry_details' && (category === 'Fuel' ? "Fuel Details" : "Expense Details")}
+                {viewState === 'toll_scan' && "Scan Toll Receipt"}
+                {viewState === 'toll_review' && "Review Toll Details"}
               </h2>
               {fuelEntry.locationMetadata && (
                 <div className="flex items-center gap-2 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full">
@@ -600,6 +692,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                   viewState === 'odometer_scan' ? '2' :
                   viewState === 'method_select' ? '3' : '4'
                 } of 4</>
+              ) : category === 'Tolls' ? (
+                <>Step {
+                  viewState === 'category_select' ? '1' :
+                  viewState === 'toll_scan' ? '1' :
+                  viewState === 'toll_review' ? '2' : '2'
+                } of 2</>
               ) : (
                 <>Step {
                   viewState === 'category_select' ? '1' : '2'
@@ -774,6 +872,170 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               </div>
             </form>
             )
+          )}
+
+          {viewState === 'toll_scan' && (
+            <div className="p-6 min-h-[350px] flex flex-col items-center justify-center relative">
+              {/* Scanning overlay — shown after photo is captured while AI processes */}
+              {isScanning && receiptPreview && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm rounded-xl">
+                  <div className="relative mb-4">
+                    <div className="h-20 w-20 rounded-full bg-purple-50 flex items-center justify-center">
+                      <Loader2 className="h-10 w-10 text-purple-600 animate-spin" />
+                    </div>
+                  </div>
+                  <p className="text-lg font-bold text-slate-900">Analyzing Receipt...</p>
+                  <p className="text-sm text-slate-500 mt-1">Extracting toll details automatically</p>
+                </div>
+              )}
+
+              {/* Main scan area — large tap target */}
+              <div
+                onClick={() => !isScanning && tollFileInputRef.current?.click()}
+                className={cn(
+                  "w-full flex flex-col items-center justify-center py-12 px-6 rounded-2xl border-2 border-dashed cursor-pointer transition-all",
+                  isScanning
+                    ? "border-purple-200 bg-purple-50/50 pointer-events-none"
+                    : "border-slate-200 hover:border-purple-300 hover:bg-purple-50/30 active:scale-[0.98]"
+                )}
+              >
+                <div className="h-20 w-20 rounded-full bg-purple-100 flex items-center justify-center mb-4">
+                  <Camera className="h-10 w-10 text-purple-600" />
+                </div>
+                <p className="text-lg font-bold text-slate-900">Take a Photo of Toll Receipt</p>
+                <p className="text-sm text-slate-500 mt-1 text-center">
+                  Position the receipt clearly in frame for automatic verification
+                </p>
+              </div>
+
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                ref={tollFileInputRef}
+                onChange={handleTollPhotoCapture}
+              />
+            </div>
+          )}
+
+          {/* Toll Review — read-only parsed fields with ✗ reject / ✓ accept buttons */}
+          {viewState === 'toll_review' && (
+            <div className="p-6 space-y-5">
+              {/* Receipt thumbnail */}
+              {receiptPreview && (
+                <div className="flex justify-center">
+                  <div className="relative w-32 h-44 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                    <img
+                      src={receiptPreview}
+                      alt="Toll receipt"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/40 to-transparent p-2">
+                      <p className="text-[10px] font-bold text-white text-center uppercase tracking-wide">Scanned Receipt</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Parsed fields — read-only display */}
+              <div className="space-y-1 bg-slate-50 rounded-xl p-4 border border-slate-100">
+                {/* Always-shown fields */}
+                <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                  <span className="text-sm font-medium text-slate-500">Merchant</span>
+                  <span className="text-sm font-bold text-slate-900">{merchant || <span className="text-slate-300 font-normal italic">Not detected</span>}</span>
+                </div>
+                <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                  <span className="text-sm font-medium text-slate-500">Date</span>
+                  <span className="text-sm font-bold text-slate-900">{isValid(date) ? format(date, 'MMM d, yyyy') : <span className="text-slate-300 font-normal italic">Not detected</span>}</span>
+                </div>
+                <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                  <span className="text-sm font-medium text-slate-500">Time</span>
+                  <span className="text-sm font-bold text-slate-900">{time || <span className="text-slate-300 font-normal italic">Not detected</span>}</span>
+                </div>
+                <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                  <span className="text-sm font-medium text-slate-500">Amount</span>
+                  <span className="text-lg font-bold text-purple-700">{amount ? `$${parseFloat(amount).toFixed(2)}` : <span className="text-slate-300 font-normal italic text-sm">Not detected</span>}</span>
+                </div>
+
+                {/* Conditional fields — only shown when populated */}
+                {plaza && (
+                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                    <span className="text-sm font-medium text-slate-500">Plaza</span>
+                    <span className="text-sm font-bold text-slate-900">{plaza}</span>
+                  </div>
+                )}
+                {lane && (
+                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                    <span className="text-sm font-medium text-slate-500">Lane</span>
+                    <span className="text-sm font-bold text-slate-900">{lane}</span>
+                  </div>
+                )}
+                {vehicleClass && (
+                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                    <span className="text-sm font-medium text-slate-500">Vehicle Class</span>
+                    <span className="text-sm font-bold text-slate-900">{vehicleClass}</span>
+                  </div>
+                )}
+                {referenceNumber && (
+                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                    <span className="text-sm font-medium text-slate-500">Reference #</span>
+                    <span className="text-sm font-bold text-slate-900">{referenceNumber}</span>
+                  </div>
+                )}
+                {collector && (
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm font-medium text-slate-500">Collector</span>
+                    <span className="text-sm font-bold text-slate-900">{collector}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Error message */}
+              {submitError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm font-medium">
+                  {submitError}
+                </div>
+              )}
+
+              {/* ✗ Reject / ✓ Accept buttons */}
+              <div className="flex items-center gap-4 pt-2 pb-28">
+                {/* ✗ Re-scan button */}
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    setReceiptFile(null);
+                    setReceiptPreview(null);
+                    setAmount('');
+                    setMerchant('');
+                    setPlaza('');
+                    setLane('');
+                    setVehicleClass('');
+                    setReferenceNumber('');
+                    setCollector('');
+                    setNotes('');
+                    setSubmitError(null);
+                    setViewState('toll_scan');
+                  }}
+                  className="flex-1 h-14 rounded-xl bg-rose-100 text-rose-700 border-2 border-rose-200 hover:bg-rose-200 active:bg-rose-300 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 font-bold text-lg transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                  Re-scan
+                </button>
+
+                {/* ✓ Accept & Save button */}
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => doSubmit()}
+                  className="flex-1 h-14 rounded-xl bg-emerald-600 text-white border-2 border-emerald-700 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 font-bold text-lg shadow-lg transition-colors"
+                >
+                  {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <Check className="h-6 w-6" />}
+                  {isSubmitting ? 'Saving...' : 'Accept'}
+                </button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

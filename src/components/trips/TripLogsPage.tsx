@@ -5,7 +5,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Loader2, Search, MapPin, MoreHorizontal, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Search, MapPin, MoreHorizontal, Plus, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -32,7 +32,7 @@ import { TripMapDialog } from './TripMapDialog';
 import { TripIssueDialog } from './TripIssueDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
-import { startOfDay, endOfDay, subDays, startOfWeek } from 'date-fns';
+import { startOfDay, endOfDay, subDays, startOfWeek, startOfMonth } from 'date-fns';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 
@@ -49,6 +49,7 @@ export function TripLogsPage() {
   const [isManualTripOpen, setIsManualTripOpen] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
   const [filters, setFilters] = useState<TripFilterState>({
     status: 'all',
@@ -129,7 +130,7 @@ export function TripLogsPage() {
         start = startOfWeek(today, { weekStartsOn: 1 }); 
         end = endOfDay(today);
     } else if (filters.dateRange === 'month') {
-        start = subDays(today, 30);
+        start = startOfMonth(today);
         end = endOfDay(today);
     } else if (filters.dateRange === 'custom' && filters.dateStart && filters.dateEnd) {
         start = startOfDay(parseLocalDate(filters.dateStart));
@@ -243,8 +244,87 @@ export function TripLogsPage() {
       setViewMode(null);
   };
 
-  // ... (Keep handleCopyDetails if needed, though unused in original JSX it seemed?)
-  
+  // Convert a Trip object → initialData for the ManualTripForm edit mode
+  const tripToInitialData = (trip: Trip) => {
+    const tripDate = new Date(trip.requestTime || trip.date);
+    const year = tripDate.getFullYear();
+    const month = String(tripDate.getMonth() + 1).padStart(2, '0');
+    const day = String(tripDate.getDate()).padStart(2, '0');
+    const hours = String(tripDate.getHours()).padStart(2, '0');
+    const minutes = String(tripDate.getMinutes()).padStart(2, '0');
+
+    let endTime: string | undefined;
+    let duration: number | undefined = trip.duration;
+    if (trip.dropoffTime) {
+      const dropoff = new Date(trip.dropoffTime);
+      endTime = `${String(dropoff.getHours()).padStart(2, '0')}:${String(dropoff.getMinutes()).padStart(2, '0')}`;
+      if (!duration) {
+        duration = Math.round((dropoff.getTime() - tripDate.getTime()) / 60000);
+      }
+    }
+
+    return {
+      date: `${year}-${month}-${day}`,
+      time: `${hours}:${minutes}`,
+      endTime,
+      duration,
+      pickupLocation: trip.pickupLocation || '',
+      pickupCoords: trip.startLat != null && trip.startLng != null ? { lat: trip.startLat, lon: trip.startLng } : undefined,
+      endLocation: trip.dropoffLocation || '',
+      dropoffCoords: trip.endLat != null && trip.endLng != null ? { lat: trip.endLat, lon: trip.endLng } : undefined,
+      route: trip.route || [],
+      stops: trip.stops || [],
+      totalWaitTime: trip.totalWaitTime || 0,
+      distance: trip.distance || 0,
+      isLiveRecorded: false, // Always show all editable fields
+      resolutionMethod: trip.resolutionMethod as any,
+      resolutionTimestamp: trip.resolutionTimestamp,
+      geocodeError: trip.geocodeError,
+    };
+  };
+
+  const handleEditTrip = (trip: Trip) => {
+    setEditingTrip(trip);
+    setIsManualTripOpen(true);
+  };
+
+  const handleEditFormClose = (open: boolean) => {
+    if (!open) {
+      setEditingTrip(null);
+    }
+    setIsManualTripOpen(open);
+  };
+
+  // Edit-aware submit: deletes the old trip, saves the updated one with the same ID
+  const handleEditTripSubmit = async (data: ManualTripInput, driverId?: string) => {
+    if (!driverId) {
+      toast.error("Driver must be selected");
+      return;
+    }
+    if (!editingTrip) return;
+
+    const driverName = availableDrivers.find((d: any) => d.id === driverId)?.name || 'Unknown';
+    try {
+      const newTrip = createManualTrip(data, driverId, driverName);
+      // Preserve the original trip ID so the KV upsert overwrites the old entry
+      newTrip.id = editingTrip.id;
+      // Preserve metadata from the original trip that the form doesn't cover
+      newTrip.batchId = editingTrip.batchId;
+      newTrip.isManual = editingTrip.isManual;
+
+      await api.saveTrips([newTrip]);
+      toast.success("Trip Updated", { description: `Trip ${editingTrip.id.slice(0, 12)}… saved.` });
+      setEditingTrip(null);
+      setIsManualTripOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
+      queryClient.invalidateQueries({ queryKey: ['tripStats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    } catch (e: any) {
+      console.error("Failed to update trip", e);
+      toast.error(e.message || "Failed to update trip");
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -498,6 +578,10 @@ export function TripLogsPage() {
                                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                     <DropdownMenuItem onClick={() => handleAction(trip, 'details')}>View Details</DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => handleAction(trip, 'map')}>Map Route</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleEditTrip(trip)}>
+                                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                                        Edit Trip
+                                    </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={() => handleContactDriver(trip)}>Contact Driver</DropdownMenuItem>
                                     <DropdownMenuItem className="text-rose-600" onClick={() => handleAction(trip, 'issue')}>Flag Issue</DropdownMenuItem>
@@ -573,11 +657,15 @@ export function TripLogsPage() {
       
       <ManualTripForm 
         open={isManualTripOpen}
-        onOpenChange={setIsManualTripOpen}
-        onSubmit={handleManualTripSubmit}
+        onOpenChange={handleEditFormClose}
+        onSubmit={editingTrip ? handleEditTripSubmit : handleManualTripSubmit}
         isAdmin={true}
         drivers={availableDrivers}
         vehicles={availableVehicles}
+        editingTrip={editingTrip}
+        initialData={editingTrip ? tripToInitialData(editingTrip) : undefined}
+        currentDriverId={editingTrip?.driverId}
+        defaultVehicleId={editingTrip?.vehicleId}
       />
       
       <TripDetailsDialog 

@@ -18,6 +18,7 @@ import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { computeWeeklyCashSettlement, CashWeekData } from "../../utils/cashSettlementCalc";
 import { PayoutPeriodDetail } from './PayoutPeriodDetail';
+import { isTollCategory } from '../../utils/tollCategoryHelper';
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -32,7 +33,9 @@ interface PayoutPeriodRow {
   grossRevenue: number;        // Total trip earnings in this period
   driverSharePercent: number;  // Tier % applied
   driverShare: number;         // grossRevenue * tier%
-  tollExpenses: number;        // Keyword-matched toll transactions
+  tollExpenses: number;        // Toll transactions (via isTollCategory)
+  tollReconciled: number;      // Phase 7: reconciled toll count
+  tollUnreconciled: number;    // Phase 7: unreconciled toll count
   fuelDeduction: number;       // driverShare from finalized report (0 if unfinalized)
   totalDeductions: number;     // tollExpenses + fuelDeduction
   netPayout: number;           // driverShare - totalDeductions
@@ -212,19 +215,21 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
     );
 
     // ── Shared: Toll expense calculator for a date range ──
-    const getTollsForPeriod = (pStartTime: number, pEndTime: number): number => {
-      let tollExpenses = 0;
+    const getTollsForPeriod = (pStartTime: number, pEndTime: number): { amount: number; reconciled: number; unreconciled: number } => {
+      let tollAmount = 0;
+      let reconciled = 0;
+      let unreconciled = 0;
       expenseTx.forEach(tx => {
         const d = new Date(tx.date).getTime();
         if (d >= pStartTime && d <= pEndTime) {
-          const amt = Math.abs(tx.amount);
-          const desc = ((tx as any).description || (tx as any).category || '').toLowerCase();
-          if (desc.includes('toll') || desc.includes('e-toll') || desc.includes('highway')) {
-            tollExpenses += amt;
+          if (isTollCategory(tx.category)) {
+            tollAmount += Math.abs(tx.amount);
+            if (tx.isReconciled) reconciled++;
+            else unreconciled++;
           }
         }
       });
-      return tollExpenses;
+      return { amount: tollAmount, reconciled, unreconciled };
     };
 
     // ══════════════════════════════════════════════════════════
@@ -296,7 +301,7 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
         const tierName = lr.tier?.name || 'Default';
 
         // Toll expenses via keyword matching (client-side, unchanged)
-        const tollExpenses = getTollsForPeriod(pStartTime, pEndTime);
+        const { amount: tollExpenses, reconciled: tollReconciled, unreconciled: tollUnreconciled } = getTollsForPeriod(pStartTime, pEndTime);
 
         // Fuel deduction from finalized reports (client-side, unchanged)
         const { deduction: fuelDeduction, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
@@ -315,6 +320,8 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
           driverSharePercent,
           driverShare,
           tollExpenses,
+          tollReconciled,
+          tollUnreconciled,
           fuelDeduction,
           totalDeductions,
           netPayout,

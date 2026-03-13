@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
-import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info } from "lucide-react";
+import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../types/data";
 import { api } from "../../services/api";
 import {
@@ -14,6 +14,7 @@ import {
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
+import { isTollCategory } from '../../utils/tollCategoryHelper';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -25,6 +26,8 @@ interface ExpensePeriodRow {
   isFinalized: boolean;        // true if this period has finalized fuel data
   totalExpenses: number;
   transactionCount: number;
+  tollReconciled: number;      // Phase 6: count of reconciled toll txns in this period
+  tollUnreconciled: number;    // Phase 6: count of unreconciled toll txns in this period
 }
 
 interface DriverExpensesHistoryProps {
@@ -176,14 +179,17 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         return d >= pStartTime && d <= pEndTime;
       });
 
-      // ── Tolls: keyword-based from transactions ──
+      // ── Tolls: from transaction category (Phase 6) ──
       let tollExpenses = 0;
+      let tollReconciled = 0;
+      let tollUnreconciled = 0;
 
       periodTx.forEach(tx => {
         const amt = Math.abs(tx.amount);
-        const desc = ((tx as any).description || (tx as any).category || '').toLowerCase();
-        if (desc.includes('toll') || desc.includes('e-toll') || desc.includes('highway')) {
+        if (isTollCategory(tx.category)) {
           tollExpenses += amt;
+          if (tx.isReconciled) tollReconciled++;
+          else tollUnreconciled++;
         }
       });
 
@@ -202,6 +208,8 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         isFinalized,
         totalExpenses,
         transactionCount: periodTx.length,
+        tollReconciled,
+        tollUnreconciled,
       };
     });
 
@@ -220,14 +228,17 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         fuel: acc.fuel + r.fuelDeduction,
         total: acc.total + r.totalExpenses,
         txCount: acc.txCount + r.transactionCount,
+        tollReconciled: acc.tollReconciled + r.tollReconciled,
+        tollUnreconciled: acc.tollUnreconciled + r.tollUnreconciled,
       }),
-      { toll: 0, fuel: 0, total: 0, txCount: 0 }
+      { toll: 0, fuel: 0, total: 0, txCount: 0, tollReconciled: 0, tollUnreconciled: 0 }
     );
 
     const finalizedPeriods = periodData.filter(r => r.isFinalized).length;
     const unfinalizedPeriods = periodData.length - finalizedPeriods;
+    const tollTotal = base.tollReconciled + base.tollUnreconciled;
 
-    return { ...base, totalPeriods: periodData.length, finalizedPeriods, unfinalizedPeriods };
+    return { ...base, totalPeriods: periodData.length, finalizedPeriods, unfinalizedPeriods, tollTotal };
   }, [periodData]);
 
   // ────────────────────────────────────────────────────────────
@@ -255,6 +266,11 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             : format(row.periodStart, 'MMMM yyyy'),
         'Transactions': row.transactionCount,
         'Toll Expenses': row.tollExpenses.toFixed(2),
+        'Toll Status': (row.tollReconciled + row.tollUnreconciled) === 0
+          ? 'N/A'
+          : row.tollUnreconciled === 0
+            ? `Reconciled (${row.tollReconciled})`
+            : `${row.tollUnreconciled} Unmatched`,
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
         'Status': row.isFinalized ? 'Finalized' : 'Pending',
         'Total Expenses': row.totalExpenses.toFixed(2),
@@ -313,6 +329,22 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                 <Navigation className="h-4 w-4 text-amber-500" />
               </div>
             </div>
+            {totals.tollTotal > 0 && (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                {totals.tollReconciled > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600">
+                    <LinkIcon className="h-2.5 w-2.5" />
+                    {totals.tollReconciled} matched
+                  </span>
+                )}
+                {totals.tollUnreconciled > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600">
+                    <Unlink className="h-2.5 w-2.5" />
+                    {totals.tollUnreconciled} unmatched
+                  </span>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -394,6 +426,21 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                   <TableRow>
                     <TableHead>{periodColumnLabel}</TableHead>
                     <TableHead className="text-right">Tolls</TableHead>
+                    <TableHead className="text-xs text-center">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Toll Status
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[250px] text-xs">
+                            Whether toll expenses for this period have been matched to a trip in the Toll Reconciliation system. "Reconciled" = all tolls linked; "X Unmatched" = some tolls still need matching.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
                     <TableHead className="text-right">Fuel (Deduction)</TableHead>
                     <TableHead className="text-right">Total Expenses</TableHead>
                     <TableHead className="text-xs text-center">
@@ -428,6 +475,19 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         {row.tollExpenses > 0
                           ? `$${row.tollExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                           : '-'}
+                      </TableCell>
+                      <TableCell className="text-xs text-center">
+                        {(row.tollReconciled + row.tollUnreconciled) === 0 ? (
+                          <span className="text-slate-300">-</span>
+                        ) : row.tollUnreconciled === 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                            <CheckCircle className="h-3 w-3" /> Reconciled
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className={`text-right ${row.isFinalized ? 'text-red-600' : 'text-slate-300'}`}>
                         {row.isFinalized && row.fuelDeduction > 0

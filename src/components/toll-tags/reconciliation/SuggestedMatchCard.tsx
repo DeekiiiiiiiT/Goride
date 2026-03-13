@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera } from "lucide-react";
+import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera, AlertTriangle, Car, User, Gauge } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
@@ -16,11 +16,18 @@ interface SuggestedMatchCardProps {
   onApprove?: () => void;
   onReject?: () => void;
   onFlag?: () => void;
+  onClickDetail?: () => void;
 }
 
-export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, onApprove, onReject, onFlag }: SuggestedMatchCardProps) {
-  const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount } = match;
+export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, onApprove, onReject, onFlag, onClickDetail }: SuggestedMatchCardProps) {
+  const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous } = match;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300', ring: 'ring-emerald-200' };
+    if (score >= 50) return { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-300', ring: 'ring-amber-200' };
+    return { bg: 'bg-rose-100', text: 'text-rose-700', border: 'border-rose-300', ring: 'ring-rose-200' };
+  };
 
   const getMatchBadge = () => {
     switch (matchType) {
@@ -88,12 +95,12 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
   };
 
   return (
-    <Card className={`border-l-4 bg-slate-50/50 ${getBorderColor()}`}>
+    <Card className={`border-l-4 bg-slate-50/50 ${getBorderColor()} ${onClickDetail ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
       <CardContent className="p-4">
         <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
             
             {/* Left: Transaction (The Problem) */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0" onClick={onClickDetail}>
                 <div className="flex items-center space-x-2 mb-2">
                     {transaction.receiptUrl ? (
                          <a href={transaction.receiptUrl} target="_blank" rel="noopener noreferrer" className="cursor-pointer hover:opacity-80 transition-opacity">
@@ -135,8 +142,16 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
             </div>
 
             {/* Middle: Connection Info */}
-            <div className="flex flex-col items-center justify-center px-4 py-2 bg-white rounded-lg border border-slate-100 shadow-sm min-w-[160px]">
+            <div className="flex flex-col items-center justify-center px-4 py-2 bg-white rounded-lg border border-slate-100 shadow-sm min-w-[160px]" onClick={onClickDetail}>
                 {getMatchBadge()}
+
+                {/* Confidence Score Pill */}
+                {confidenceScore != null && (
+                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold mb-1.5 border ${getScoreColor(confidenceScore).bg} ${getScoreColor(confidenceScore).text} ${getScoreColor(confidenceScore).border}`}>
+                    <Gauge className="h-3 w-3" />
+                    <span>{confidenceScore}</span>
+                  </div>
+                )}
                 
                 <div className="flex items-center text-xs text-slate-500 space-x-1">
                     <Clock className="h-3 w-3" />
@@ -145,10 +160,33 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
                     </span>
                 </div>
 
+                {/* Identity Indicators */}
+                {(vehicleMatch || driverMatch) && (
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {vehicleMatch && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <Car className="h-2.5 w-2.5" /> Vehicle ✓
+                      </span>
+                    )}
+                    {driverMatch && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <User className="h-2.5 w-2.5" /> Driver ✓
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {reason && (
                     <div className="text-[10px] text-slate-400 mt-1 max-w-[140px] text-center leading-tight">
                         {reason}
                     </div>
+                )}
+
+                {/* Data Quality Warning */}
+                {dataQuality === 'DATE_ONLY' && (
+                  <div className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded mt-1 text-center">
+                    Low timing precision
+                  </div>
                 )}
                 
                 {varianceAmount !== undefined && Math.abs(varianceAmount) > 0.005 && (
@@ -161,11 +199,19 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
                      </div>
                 )}
 
+                {/* Ambiguity Warning */}
+                {isAmbiguous && (
+                  <div className="flex items-center gap-1 text-[10px] text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded mt-1.5 max-w-[160px] text-center leading-tight">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    <span>Ambiguous — multiple trips compete</span>
+                  </div>
+                )}
+
                 <ArrowRight className="h-4 w-4 text-slate-300 mt-2" />
             </div>
 
             {/* Right: Trip (The Solution) */}
-            <div className="flex-1 min-w-0 text-right lg:text-left">
+            <div className="flex-1 min-w-0 text-right lg:text-left" onClick={onClickDetail}>
                 <div className="flex items-center justify-end lg:justify-start space-x-2 mb-2">
                     <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-700">
                         {normalizePlatform(trip.platform)} Trip

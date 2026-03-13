@@ -22,6 +22,7 @@ import { computeWeeklyCashSettlement, CashWeekData } from '../../utils/cashSettl
 import { exportToCSV } from '../../utils/csvHelpers';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { SettlementPeriodDetail } from './SettlementPeriodDetail';
+import { isTollCategory } from '../../utils/tollCategoryHelper';
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -36,6 +37,8 @@ export interface SettlementRow {
   grossRevenue: number;
   driverShare: number;
   tollExpenses: number;
+  tollReconciled: number;      // Phase 7: count of reconciled toll txns
+  tollUnreconciled: number;    // Phase 7: count of unreconciled toll txns
   fuelDeduction: number;
   totalDeductions: number;   // tolls + fuel
   netPayout: number;         // driverShare - totalDeductions
@@ -162,19 +165,21 @@ export function SettlementSummaryView({
     );
 
     // Helper: toll expenses for a date range
-    const getTollsForPeriod = (pStartTime: number, pEndTime: number): number => {
+    const getTollsForPeriod = (pStartTime: number, pEndTime: number): { amount: number; reconciled: number; unreconciled: number } => {
       let tollTotal = 0;
+      let reconciled = 0;
+      let unreconciled = 0;
       expenseTx.forEach(tx => {
         const d = new Date(tx.date).getTime();
         if (d >= pStartTime && d <= pEndTime) {
-          const amt = Math.abs(tx.amount);
-          const desc = ((tx as any).description || (tx as any).category || '').toLowerCase();
-          if (desc.includes('toll') || desc.includes('e-toll') || desc.includes('highway')) {
-            tollTotal += amt;
+          if (isTollCategory(tx.category)) {
+            tollTotal += Math.abs(tx.amount);
+            if (tx.isReconciled) reconciled++;
+            else unreconciled++;
           }
         }
       });
-      return tollTotal;
+      return { amount: tollTotal, reconciled, unreconciled };
     };
 
     // Helper: finalized fuel deduction for a date range (weekly-only, no daily proration)
@@ -257,7 +262,7 @@ export function SettlementSummaryView({
       const tripCount = lr?.tripCount || 0;
       const tollExpenses = getTollsForPeriod(pStartTime, pEndTime);
       const { deduction: fuelDeduction, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
-      const totalDeductions = tollExpenses + fuelDeduction;
+      const totalDeductions = tollExpenses.amount + fuelDeduction;
       const netPayout = driverShare - totalDeductions;
 
       // ── Cash side ──
@@ -289,7 +294,9 @@ export function SettlementSummaryView({
         periodEnd,
         grossRevenue,
         driverShare,
-        tollExpenses,
+        tollExpenses: tollExpenses.amount,
+        tollReconciled: tollExpenses.reconciled,
+        tollUnreconciled: tollExpenses.unreconciled,
         fuelDeduction,
         totalDeductions,
         netPayout,

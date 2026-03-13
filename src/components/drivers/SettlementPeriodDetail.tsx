@@ -25,6 +25,8 @@ import {
   DollarSign,
   Banknote,
   TrendingDown,
+  LinkIcon,
+  Unlink,
 } from 'lucide-react';
 import type { SettlementRow, SettlementStatus } from './SettlementSummaryView';
 
@@ -169,6 +171,13 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
             label="Toll Expenses"
             value={row.tollExpenses > 0.005 ? `−${fmt(row.tollExpenses)}` : '$0.00'}
             valueColor={row.tollExpenses > 0.005 ? 'text-rose-600' : 'text-slate-400'}
+            sub={
+              (row.tollReconciled + row.tollUnreconciled) > 0
+                ? row.tollUnreconciled === 0
+                  ? `${row.tollReconciled}/${row.tollReconciled} matched to trips`
+                  : `${row.tollReconciled}/${row.tollReconciled + row.tollUnreconciled} matched · ${row.tollUnreconciled} unmatched`
+                : undefined
+            }
           />
           <LineItem
             icon={<Fuel className="h-4 w-4" />}

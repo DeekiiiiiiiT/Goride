@@ -3,7 +3,29 @@ import { api } from '../services/api';
 import { FinancialTransaction, Trip } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
 
-// Helper to paginate through ALL trips (the /trips endpoint defaults to 500)
+/**
+ * Phase 4: Server-driven toll reconciliation hook.
+ *
+ * Data flow:
+ *   - Unreconciled tolls + match suggestions come from GET /toll-reconciliation/unreconciled
+ *   - Reconciled tolls come from GET /toll-reconciliation/reconciled
+ *   - Unclaimed refunds come from GET /toll-reconciliation/unclaimed-refunds
+ *   - Trips are still loaded client-side for ManualMatchModal + driver inference
+ *   - All mutation actions (reconcile, unreconcile, approve, reject) go through
+ *     the Phase 3 server endpoints which write ledger entries.
+ *
+ * The public API (return signature) is identical to the pre-Phase-4 hook,
+ * so zero UI component changes are needed.
+ */
+
+/**
+ * @internal Paginate through ALL trips.
+ * Still needed for:
+ *  - ManualMatchModal (client-side trip search)
+ *  - unreconcile() fallback (re-generate suggestions locally via findTollMatches)
+ * Phase 8 note: This is the only remaining full-data-dump call.
+ * If ManualMatchModal is ever given a server search endpoint, this can be removed.
+ */
 async function fetchAllTrips(): Promise<Trip[]> {
   const PAGE_SIZE = 500;
   let offset = 0;
@@ -17,21 +39,63 @@ async function fetchAllTrips(): Promise<Trip[]> {
   return all;
 }
 
-// Helper to paginate through ALL transactions (the /transactions endpoint defaults to only 100)
-async function fetchAllTransactions(): Promise<FinancialTransaction[]> {
-  const PAGE_SIZE = 1000;
-  let offset = 0;
-  const all: FinancialTransaction[] = [];
-  while (true) {
-    const batch: FinancialTransaction[] = await api.getTransactions(undefined, { limit: PAGE_SIZE, offset });
-    all.push(...batch);
-    if (batch.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
+/**
+ * Convert server-side suggestion format (flat trip fields) into the
+ * client-side MatchResult shape expected by SuggestedMatchCard et al.
+ */
+function convertServerSuggestions(
+  serverSuggestions: Record<string, any[]>,
+  unreconciledTolls: FinancialTransaction[]
+): Map<string, MatchResult[]> {
+  const txLookup = new Map(unreconciledTolls.map(tx => [tx.id, tx]));
+  const result = new Map<string, MatchResult[]>();
+
+  for (const [txId, matches] of Object.entries(serverSuggestions)) {
+    if (!matches || matches.length === 0) continue;
+    const tx = txLookup.get(txId);
+    if (!tx) continue;
+
+    const converted: MatchResult[] = matches.map((m: any) => ({
+      transaction: tx,
+      trip: {
+        id: m.tripId,
+        date: m.tripDate,
+        amount: m.tripAmount,
+        tollCharges: m.tripTollCharges,
+        pickupLocation: m.tripPickup,
+        dropoffLocation: m.tripDropoff,
+        platform: m.tripPlatform,
+        driverId: m.tripDriverId,
+        driverName: m.tripDriverName,
+        // Phase 3: Trip timing & detail fields for overlay display
+        requestTime: m.tripRequestTime,
+        dropoffTime: m.tripDropoffTime,
+        vehicleId: m.tripVehicleId,
+        duration: m.tripDuration,
+        distance: m.tripDistance,
+        serviceType: m.tripServiceType,
+      } as Trip,
+      confidence: m.confidence,
+      reason: m.reason,
+      timeDifferenceMinutes: m.timeDifferenceMinutes,
+      matchType: m.matchType,
+      varianceAmount: m.varianceAmount,
+      // Phase 1 enrichment fields (server-populated)
+      confidenceScore: m.confidenceScore,
+      vehicleMatch: m.vehicleMatch,
+      driverMatch: m.driverMatch,
+      dataQuality: m.dataQuality,
+      windowHit: m.windowHit,
+      isAmbiguous: m.isAmbiguous,
+    }));
+
+    result.set(txId, converted);
   }
-  return all;
+
+  return result;
 }
 
-export function useTollReconciliation() {
+export function useTollReconciliation(driverId?: string) {
   const [loading, setLoading] = useState(true);
   const [unreconciledTolls, setUnreconciledTolls] = useState<FinancialTransaction[]>([]);
   const [reconciledTolls, setReconciledTolls] = useState<FinancialTransaction[]>([]);
@@ -42,81 +106,38 @@ export function useTollReconciliation() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [rawTx, allTrips] = await Promise.all([
-        fetchAllTransactions(),
+      // Phase 4: Fetch from server endpoints (no more fetchAllTransactions!)
+      // Still fetch trips for ManualMatchModal + driver inference in UnmatchedTollsList
+      const filterParams = { limit: 1000, ...(driverId ? { driverId } : {}) };
+      const [unreconciledRes, reconciledRes, refundsRes, allTrips] = await Promise.all([
+        api.getTollUnreconciled(filterParams),
+        api.getTollReconciled(filterParams),
+        api.getTollUnclaimedRefunds(filterParams),
         fetchAllTrips()
       ]);
 
-      // Deduplicate transactions to prevent key collisions
-      const uniqueTxMap = new Map();
-      rawTx.forEach(tx => uniqueTxMap.set(tx.id, tx));
-      const allTx = Array.from(uniqueTxMap.values());
+      const unreconciled: FinancialTransaction[] = unreconciledRes.data || [];
+      const reconciled: FinancialTransaction[] = reconciledRes.data || [];
+      const refunds: Trip[] = refundsRes.data || [];
 
-      // 1. Identify Unreconciled Tolls
-      // We check for !isReconciled OR !tripId to catch legacy imports that were auto-marked as reconciled but have no link.
-      // We also include 'Pending' Cash Claims.
-      const tolls = allTx.filter(tx => {
-        const isToll = tx.category === 'Toll Usage' || tx.category === 'Tolls';
-        if (!isToll) return false;
-
-        // Identify Source: Cash Claim vs Tag Import
-        // If it has a receipt or marked as Cash, treat as Driver Claim
-        const isCashClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
-
-        if (isCashClaim) {
-            // For Cash Claims, we only want those explicitly waiting for approval
-            // If it's Approved/Rejected, it shouldn't appear in the "To Reconcile" list
-            // We also filter out items that are already Reconciled (Flagged for Claim), as they should move to the History/Loss list.
-            return tx.status === 'Pending' && !tx.isReconciled;
-        }
-
-        // For Tag Imports, we want anything that hasn't been linked/reconciled
-        return !tx.isReconciled || !tx.tripId;
-      });
-      
-      tolls.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setUnreconciledTolls(tolls);
-
-      // 1b. Identify Reconciled Tolls (for history/undo)
-      const reconciled = allTx.filter(tx => 
-        (tx.category === 'Toll Usage' || tx.category === 'Tolls') && 
-        (tx.isReconciled && tx.tripId)
-      );
-      reconciled.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setUnreconciledTolls(unreconciled);
       setReconciledTolls(reconciled);
-
-      // 2. Identify Linked Trips
-      const linkedTripIds = new Set(
-        allTx
-          .filter(tx => tx.tripId)
-          .map(tx => tx.tripId)
-      );
-
-      // 3. Identify Unclaimed Refunds (Trips with tollCharges > 0 but no linked transaction)
-      const refunds = allTrips.filter(t => 
-        (t.tollCharges && t.tollCharges > 0) &&
-        !linkedTripIds.has(t.id)
-      );
       setUnclaimedRefunds(refunds);
-
       setTrips(allTrips);
 
-      // Generate suggestions
-      const newSuggestions = new Map<string, MatchResult[]>();
-      tolls.forEach(toll => {
-        const matches = findTollMatches(toll, allTrips);
-        if (matches.length > 0) {
-          newSuggestions.set(toll.id, matches);
-        }
-      });
-      setSuggestions(newSuggestions);
+      // Convert server suggestions to client MatchResult format
+      if (unreconciledRes.suggestions) {
+        setSuggestions(convertServerSuggestions(unreconciledRes.suggestions, unreconciled));
+      } else {
+        setSuggestions(new Map());
+      }
 
     } catch (error) {
       console.error("Failed to fetch reconciliation data", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [driverId]);
 
   useEffect(() => {
     fetchData();
@@ -124,17 +145,19 @@ export function useTollReconciliation() {
 
   const reconcile = async (transaction: FinancialTransaction, trip: Trip) => {
     try {
-        const result = await api.reconcileTollTransaction(transaction, trip);
+        // Phase 4: Use server endpoint (writes ledger entry)
+        const result = await api.serverReconcileToll(transaction.id, trip.id);
+        const updatedTx = result.data?.transaction || { ...transaction, tripId: trip.id, isReconciled: true, driverId: trip.driverId, driverName: trip.driverName };
+        const updatedTrip = result.data?.trip || trip;
         
-        // Update local state
+        // Optimistic local state updates (identical shape to pre-Phase-4)
         setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
         setReconciledTolls(prev => {
-            // Prevent duplicates
-            const exists = prev.some(t => t.id === result.transaction.id);
+            const exists = prev.some(t => t.id === updatedTx.id);
             if (exists) {
-                return prev.map(t => t.id === result.transaction.id ? result.transaction : t);
+                return prev.map(t => t.id === updatedTx.id ? updatedTx : t);
             }
-            return [result.transaction, ...prev];
+            return [updatedTx, ...prev];
         });
         
         setSuggestions(prev => {
@@ -144,12 +167,12 @@ export function useTollReconciliation() {
         });
         
         // Update trips list
-        setTrips(prev => prev.map(t => t.id === trip.id ? result.trip : t));
+        setTrips(prev => prev.map(t => t.id === trip.id ? updatedTrip : t));
 
         // Update unclaimed refunds (if this trip was one, it is now linked)
         setUnclaimedRefunds(prev => prev.filter(t => t.id !== trip.id));
 
-        return result;
+        return { transaction: updatedTx, trip: updatedTrip };
     } catch (error) {
         console.error("Reconciliation failed", error);
         throw error;
@@ -160,51 +183,31 @@ export function useTollReconciliation() {
       try {
           if (!transaction.tripId) return;
           
-          const trip = trips.find(t => t.id === transaction.tripId);
-          if (!trip) throw new Error("Linked trip not found");
-
-          const result = await api.unreconcileTollTransaction(transaction, trip);
+          // Phase 4: Use server endpoint (writes reversal ledger entry)
+          const result = await api.serverUnreconcileToll(transaction.id);
+          const updatedTx = result.data?.transaction || { ...transaction, tripId: null, isReconciled: false };
+          const returnedTrip = result.data?.trip;
 
           // Update local state
           setReconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
           
           // Add back to unreconciled
-          const newUnreconciled = result.transaction;
           setUnreconciledTolls(prev => {
-              const next = [...prev, newUnreconciled];
+              const next = [...prev, updatedTx];
               return next.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           });
 
-          // Update trips
-          setTrips(prev => prev.map(t => t.id === trip.id ? result.trip : t));
-
-          // If trip still has toll charges > 0, it might be unclaimed? 
-          // But actually, if we just removed the only toll, it might go back to having 0 toll charges?
-          // Or if it had $50 and we removed $25, it still has $25.
-          // Wait, if we removed the toll, the tollCharges on the trip decreases.
-          // If it decreases to > 0 (meaning other tolls are linked), it is NOT an unclaimed refund (it is linked).
-          // If it decreases to 0 (or was unlinked entirely), it depends.
-          // "Unclaimed Refund" definition: t.tollCharges > 0 && !linkedTripIds.has(t.id).
-          // If we remove the link, does it go back to unclaimed?
-          // If the trip has tollCharges > 0 coming from the IMPORT (Uber says "Toll Surcharge: $5"), 
-          // then yes, it becomes Unclaimed Refund again because we haven't matched an expense to it.
-          
-          // Re-evaluate matches for this toll
-          const matches = findTollMatches(newUnreconciled, trips); // Note: trips here is stale, but might be okay for initial
-          // Ideally use updated trips.
-          // Let's just trigger a full suggestion regen or specific one.
+          // Re-generate suggestions for this one toll using client-side matching
+          // (trips array is available for ManualMatchModal anyway)
+          const matches = findTollMatches(updatedTx, trips);
           setSuggestions(prev => {
               const next = new Map(prev);
-              if (matches.length > 0) next.set(newUnreconciled.id, matches);
+              if (matches.length > 0) next.set(updatedTx.id, matches);
               return next;
           });
           
-          // To be safe and correct about "Unclaimed Refunds", we might want to just call fetchData or
-          // logic is complex to do purely client-side without full re-eval.
-          // For now, let's just refresh data after unmatching to be safe.
-          // Or, better, optimistic update + fetch.
-          
-          fetchData(); // Simplest way to ensure consistency
+          // Refresh to ensure consistency (unclaimed refunds may change)
+          fetchData();
 
       } catch (error) {
           console.error("Unreconcile failed", error);
@@ -214,8 +217,8 @@ export function useTollReconciliation() {
 
   const approve = async (transaction: FinancialTransaction, notes?: string) => {
       try {
-          const result = await api.approveExpense(transaction.id, notes);
-          const updatedTx = result.data;
+          // Phase 4: Use toll-specific approve (writes toll_approved ledger entry)
+          const updatedTx = await api.approveToll(transaction.id, notes);
 
           // Update local state
           setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
@@ -240,12 +243,12 @@ export function useTollReconciliation() {
 
   const reject = async (transaction: FinancialTransaction, reason?: string) => {
       try {
-          const result = await api.rejectExpense(transaction.id, reason);
-          const updatedTx = result.data;
+          // Phase 4: Use toll-specific reject (writes toll_rejected ledger entry)
+          const updatedTx = await api.rejectToll(transaction.id, reason);
 
           // Update local state
           setUnreconciledTolls(prev => prev.filter(t => t.id !== transaction.id));
-          // We add to reconciled list so it appears in history (marked as Rejected)
+          // Add to reconciled so it appears in history (marked as Rejected)
           setReconciledTolls(prev => {
               const exists = prev.some(t => t.id === updatedTx.id);
               if (exists) return prev.map(t => t.id === updatedTx.id ? updatedTx : t);
@@ -267,14 +270,14 @@ export function useTollReconciliation() {
 
   const autoMatchAll = async () => {
     // Filter for high confidence matches
-    const highConfidenceMatches: { tx: FinancialTransaction, trip: Trip }[] = [];
+    const highConfidenceMatches: { transactionId: string, tripId: string }[] = [];
     
     unreconciledTolls.forEach(tx => {
         const matches = suggestions.get(tx.id);
         if (matches && matches.length > 0) {
             const best = matches[0];
             if (best.confidence === 'high') {
-                highConfidenceMatches.push({ tx, trip: best.trip });
+                highConfidenceMatches.push({ transactionId: tx.id, tripId: best.trip.id });
             }
         }
     });
@@ -283,24 +286,14 @@ export function useTollReconciliation() {
 
     try {
         setLoading(true);
-        // Process sequentially to ensure data integrity
-        // In a real optimized scenario, we'd have a bulk endpoint
-        let updatedTrips = [...trips];
-        
-        for (const { tx, trip } of highConfidenceMatches) {
-            await api.reconcileTollTransaction(tx, trip);
-            
-            // Update local snapshot for next iteration if needed (though mostly independent)
-            // But we need to update the master list for the final state
-            updatedTrips = updatedTrips.map(t => {
-                if (t.id === trip.id) {
-                    return { ...t, tollCharges: (t.tollCharges || 0) + Math.abs(tx.amount) };
-                }
-                return t;
-            });
+        // Phase 4: Use bulk endpoint (1 call instead of N sequential calls)
+        const result = await api.bulkReconcileTolls(highConfidenceMatches);
+        console.log(`[AutoMatch] Bulk result: ${result.matched} matched, ${result.skipped} skipped, ${result.failed} failed`);
+        if (result.errors?.length > 0) {
+            console.warn('[AutoMatch] Errors:', result.errors);
         }
 
-        // Refresh all data
+        // Refresh all data to reflect server state
         await fetchData();
     } catch (e) {
         console.error("Auto-match failed", e);
