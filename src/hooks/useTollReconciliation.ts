@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
-import { FinancialTransaction, Trip } from '../types/data';
+import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
 import { toast } from 'sonner@2.0.3';
 
@@ -105,6 +105,8 @@ export function useTollReconciliation(driverId?: string) {
   const [suggestions, setSuggestions] = useState<Map<string, MatchResult[]>>(new Map());
   // Phase 6: Track auto-reconciled count for dashboard banner
   const [autoReconciledCount, setAutoReconciledCount] = useState(0);
+  // Phase 6 (Dispute Refunds): Imported Support Adjustment refunds
+  const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -143,6 +145,15 @@ export function useTollReconciliation(driverId?: string) {
           description: 'Perfect matches confirmed automatically. View in Matched History.',
           duration: 5000,
         });
+      }
+
+      // Phase 6 (Dispute Refunds): Fetch imported dispute refunds
+      try {
+        const drRes = await api.getDisputeRefunds();
+        setDisputeRefunds(drRes.data || []);
+      } catch (drErr) {
+        console.error('[Reconciliation] Failed to fetch dispute refunds:', drErr);
+        setDisputeRefunds([]);
       }
 
     } catch (error) {
@@ -320,6 +331,7 @@ export function useTollReconciliation(driverId?: string) {
     unreconciledTolls,
     reconciledTolls,
     unclaimedRefunds,
+    disputeRefunds,
     trips,
     suggestions,
     reconcile,

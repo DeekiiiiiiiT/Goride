@@ -1,6 +1,25 @@
 import * as kv from "./kv_store.tsx";
 import { Buffer } from "node:buffer";
 
+// --- Retry helper for transient Supabase connection resets ---
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, delayMs = 200): Promise<T> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const msg = String(err?.message || err || "");
+      const isTransient = msg.includes("connection reset") || msg.includes("connection error") || msg.includes("SendRequest");
+      if (isTransient && attempt < maxRetries) {
+        console.log(`[cache] Transient error on attempt ${attempt}/${maxRetries}, retrying in ${delayMs}ms: ${msg}`);
+        await new Promise(r => setTimeout(r, delayMs * attempt)); // linear backoff
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("[cache] withRetry exhausted (should not reach here)");
+}
+
 interface CacheEntry {
   data: any;
   timestamp: number;
@@ -49,7 +68,7 @@ export async function generateKey(prefix: string, params: any): Promise<string> 
  */
 export async function getCache(key: string): Promise<any | null> {
   try {
-    const entry = await kv.get(key);
+    const entry = await withRetry(() => kv.get(key));
     
     if (!entry) {
       return null;
@@ -83,7 +102,7 @@ export async function setCache(key: string, data: any, ttlSeconds: number): Prom
       timestamp: Date.now(),
       ttl: ttlSeconds
     };
-    await kv.set(key, entry);
+    await withRetry(() => kv.set(key, entry));
   } catch (e) {
     console.error(`Cache write error for key ${key}:`, e);
   }
@@ -95,10 +114,10 @@ export async function setCache(key: string, data: any, ttlSeconds: number): Prom
  */
 export async function getCacheVersion(scope: string): Promise<string> {
   const key = `config:cache_version:${scope}`;
-  let version = await kv.get(key);
+  let version = await withRetry(() => kv.get(key));
   if (!version) {
     version = "v1";
-    await kv.set(key, version);
+    await withRetry(() => kv.set(key, version));
   }
   return version;
 }
@@ -111,6 +130,6 @@ export async function invalidateCacheVersion(scope: string): Promise<string> {
   const key = `config:cache_version:${scope}`;
   const timestamp = Date.now();
   const newVersion = `v${timestamp}`; // Use timestamp to ensure uniqueness
-  await kv.set(key, newVersion);
+  await withRetry(() => kv.set(key, newVersion));
   return newVersion;
 }

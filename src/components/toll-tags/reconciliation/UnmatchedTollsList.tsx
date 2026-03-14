@@ -5,16 +5,17 @@ import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { format } from "date-fns";
-import { FinancialTransaction, Trip } from "../../../types/data";
+import { FinancialTransaction, Trip, DisputeRefund } from "../../../types/data";
 import { EditTollModal } from "./EditTollModal";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
-import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil, HelpCircle, DollarSign, Route, CarFront } from "lucide-react";
+import { DisputeRefundsList } from "./DisputeRefundsList";
+import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil, HelpCircle, DollarSign, Route, CarFront, ShieldCheck } from "lucide-react";
 
-type UnmatchedSubTab = 'needs-review' | 'underpaid' | 'deadhead' | 'personal-use';
+type UnmatchedSubTab = 'needs-review' | 'underpaid' | 'deadhead' | 'personal-use' | 'dispute-refunds';
 
 interface UnmatchedTollsListProps {
   tolls: FinancialTransaction[];
@@ -28,9 +29,12 @@ interface UnmatchedTollsListProps {
   onFlag?: (tx: FinancialTransaction) => void;
   onManualResolve?: (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => void;
   onEdit?: (transactionId: string, updates: Record<string, any>) => Promise<void>;
+  // Phase 6: Dispute refunds
+  disputeRefunds?: DisputeRefund[];
+  onRefundMatchComplete?: () => void;
 }
 
-export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag, onManualResolve, onEdit }: UnmatchedTollsListProps) {
+export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag, onManualResolve, onEdit, disputeRefunds = [], onRefundMatchComplete }: UnmatchedTollsListProps) {
     const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
@@ -103,6 +107,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
             'underpaid': [],
             'deadhead': [],
             'personal-use': [],
+            'dispute-refunds': [],
         };
         filteredTolls.forEach(tx => {
             const best = suggestions.get(tx.id)?.[0];
@@ -302,8 +307,9 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                     { key: 'underpaid' as UnmatchedSubTab, label: 'Underpaid', icon: DollarSign, color: 'text-orange-600 border-orange-500 bg-orange-50' },
                     { key: 'deadhead' as UnmatchedSubTab, label: 'Deadhead', icon: Route, color: 'text-blue-600 border-blue-500 bg-blue-50' },
                     { key: 'personal-use' as UnmatchedSubTab, label: 'Personal Use', icon: CarFront, color: 'text-purple-600 border-purple-500 bg-purple-50' },
+                    { key: 'dispute-refunds' as UnmatchedSubTab, label: 'Dispute Refunds', icon: ShieldCheck, color: 'text-teal-600 border-teal-500 bg-teal-50' },
                 ] as const).map(tab => {
-                    const count = classified[tab.key].length;
+                    const count = tab.key === 'dispute-refunds' ? disputeRefunds.length : classified[tab.key].length;
                     const isActive = activeSubTab === tab.key;
                     const Icon = tab.icon;
                     return (
@@ -335,7 +341,12 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
             </div>
 
             {/* Phase 4: Per-sub-tab empty state */}
-            {activeTabTolls.length === 0 ? (
+            {activeSubTab === 'dispute-refunds' ? (
+                <DisputeRefundsList 
+                    refunds={disputeRefunds} 
+                    onMatchComplete={onRefundMatchComplete || (() => {})} 
+                />
+            ) : activeTabTolls.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-500">
                     {activeSubTab === 'needs-review' && (
                         <>

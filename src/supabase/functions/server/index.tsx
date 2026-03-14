@@ -18,6 +18,7 @@ import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
 import tollApp from "./toll_controller.tsx";
+import disputeRefundApp from "./dispute_refund_controller.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 
 // ---------------------------------------------------------------------------
@@ -1249,6 +1250,7 @@ app.route("/", auditApp);
 app.route("/", safetyApp);
 app.route("/", syncApp);
 app.route("/", tollApp);
+app.route("/", disputeRefundApp);
 
 // Google Maps Config Endpoint
 app.get("/make-server-37f42386/maps-config", (c) => {
@@ -3289,6 +3291,35 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
     }
 
     // ── Assemble response ────────────────────────────────────────────
+    // Phase 8: Query dispute refund totals for this driver
+    let pDisputeRefunds = 0;
+    let ltDisputeRefunds = 0;
+    try {
+      const allDisputeRefunds = await paginatedFetch(() =>
+        supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "dispute-refund:%")
+      );
+      for (const d of allDisputeRefunds) {
+        const v = d.value;
+        if (!v || typeof v !== "object" || !v.id || !v.supportCaseId) continue;
+        if (v.status !== "matched" && v.status !== "auto_resolved") continue;
+        if (!allDriverIds.includes(v.driverId)) continue;
+        const amt = Math.abs(Number(v.amount) || 0);
+        ltDisputeRefunds += amt;
+        const refDate = v.date ? v.date.slice(0, 10) : null;
+        if (refDate && refDate >= startDate && refDate <= endDate) {
+          pDisputeRefunds += amt;
+        }
+      }
+      if (pDisputeRefunds > 0 || ltDisputeRefunds > 0) {
+        console.log(`[Ledger DriverOverview] Dispute refunds — period: $${pDisputeRefunds.toFixed(2)}, lifetime: $${ltDisputeRefunds.toFixed(2)}`);
+      }
+    } catch (drErr: any) {
+      console.log(`[Ledger DriverOverview] Dispute refund query warning: ${drErr.message}`);
+    }
+
     const result = {
       period: {
         earnings: Number(pEarnings.toFixed(2)),
@@ -3299,6 +3330,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
         platformFees: Number(pPlatformFees.toFixed(2)),
         tripCount: pTripCount,
         cancelledCount: pCancelledCount,
+        disputeRefunds: Number(pDisputeRefunds.toFixed(2)),
       },
       prevPeriod: {
         earnings: Number(prevEarnings.toFixed(2)),
@@ -3308,6 +3340,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", async (c) => {
         tripCount: ltTripCount,
         cashCollected: Number(ltCash.toFixed(2)),
         tolls: Number(ltTolls.toFixed(2)),
+        disputeRefunds: Number(ltDisputeRefunds.toFixed(2)),
         platformStats: Object.fromEntries(
           Object.entries(ltPlatformStats).map(([k, v]) => [k, {
             earnings: Number(v.earnings.toFixed(2)),

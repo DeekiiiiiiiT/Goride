@@ -70,6 +70,7 @@ export function BulkImportTollTransactionsModal({
   
   const [currentBatchId, setCurrentBatchId] = useState<string>('');
   const [currentBatchName, setCurrentBatchName] = useState<string>('');
+  const [detectedFormatLabel, setDetectedFormatLabel] = useState<string>('');
   
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -200,13 +201,62 @@ export function BulkImportTollTransactionsModal({
       
       const rows = result.data as string[][];
 
-      // Detect format: If header row contains 'Payment Method' or 'Vehicle Plate', it's the Universal Export
+      // Smart format detection: find the header row and identify the CSV format
       const headerIndex = rows.findIndex(row => 
-          row.some(cell => (cell || '').toLowerCase().includes('payment method') || (cell || '').toLowerCase().includes('vehicle plate'))
+          row.some(cell => {
+              const lower = (cell || '').trim().toLowerCase();
+              return lower === 'payment method' || lower === 'vehicle plate' || 
+                     lower === 'vehicle' || lower === 'highway' || 
+                     lower === 'vehicleid' || lower === 'vehicleplate' ||
+                     lower === 'reconciliationstatus' || lower === 'paymentmethod';
+          })
       );
       
-      const hasUniversalHeader = headerIndex !== -1;
-      const startIdx = hasUniversalHeader ? headerIndex + 1 : 0;
+      const hasHeader = headerIndex !== -1;
+      
+      // Build header name → column index map
+      type CsvFormat = 'current-export' | 'legacy-v1' | 'legacy-v2' | 'basic';
+      let detectedFormat: CsvFormat = 'basic';
+      const headerMap: Record<string, number> = {};
+      
+      if (hasHeader) {
+          const headerRow = rows[headerIndex];
+          headerRow.forEach((cell, idx) => {
+              const key = (cell || '').trim().toLowerCase();
+              if (key) headerMap[key] = idx;
+          });
+          
+          // Detect format by unique header signatures
+          if ('reconciliationstatus' in headerMap || 'matchedtripid' in headerMap || 'vehicleid' in headerMap) {
+              detectedFormat = 'current-export';
+          } else if ('highway' in headerMap || 'direction' in headerMap) {
+              detectedFormat = 'legacy-v2';
+          } else if ('category' in headerMap || 'lane id' in headerMap || 'vehicle plate' in headerMap) {
+              detectedFormat = 'legacy-v1';
+          } else {
+              detectedFormat = 'legacy-v1'; // fallback for any header-based format
+          }
+      }
+      
+      // Set human-readable format label for UI feedback
+      const formatLabels: Record<CsvFormat, string> = {
+          'current-export': 'Current System Export',
+          'legacy-v1': 'Legacy Format (v1)',
+          'legacy-v2': 'Legacy Format (v2)',
+          'basic': 'Basic (No Header)',
+      };
+      setDetectedFormatLabel(formatLabels[detectedFormat]);
+      
+      // Helper to get a column value by header name (tries multiple name variants)
+      const getCol = (row: string[], ...names: string[]): string => {
+          for (const name of names) {
+              const idx = headerMap[name.toLowerCase()];
+              if (idx !== undefined) return (row[idx] || '').trim();
+          }
+          return '';
+      };
+      
+      const startIdx = hasHeader ? headerIndex + 1 : 0;
 
       return rows.slice(startIdx)
         .filter(row => {
@@ -216,12 +266,8 @@ export function BulkImportTollTransactionsModal({
              return !firstCell.startsWith('tag id') && !firstCell.startsWith('plaza name') && !firstCell.startsWith('date');
         })
         .map(row => {
-             // Phase 3: Column Mapping & Schema Support
              const parts = row.map(cell => (cell || '').trim());
              
-             // Universal Schema: Date, Time, Amount, Type, Category, Description, Payment Method, Status, Vehicle Plate, Driver Name, Tag ID, Lane ID, Reference Number
-             const isUniversal = hasUniversalHeader || parts.length >= 8; 
-
              let tagId = '';
              let location = '';
              let laneId = '';
@@ -238,23 +284,60 @@ export function BulkImportTollTransactionsModal({
              let description = '';
              let referenceNumber = '';
 
-             if (isUniversal) {
-                 // 0: Date, 1: Time, 2: Amount, 3: Type, 4: Category, 5: Description, 6: Payment Method, 7: Status, 8: Plate, 9: Driver, 10: TagID, 11: LaneID, 12: Ref
-                 dateStr = `${parts[0]} ${parts[1]}`;
-                 amountStr = parts[2];
-                 typeStr = parts[3];
-                 category = parts[4];
-                 description = parts[5];
-                 location = description; 
-                 paymentMethod = parts[6];
-                 status = parts[7];
-                 vehiclePlate = parts[8];
-                 driverName = parts[9];
-                 tagId = parts[10] || '';
-                 laneId = parts[11] || '';
-                 referenceNumber = parts[12] || '';
+             if (hasHeader) {
+                 switch (detectedFormat) {
+                     case 'current-export':
+                         // Current system export: id, date, time, vehicleId, vehiclePlate, driverId, driverName, plaza, type, paymentMethod, amount, ...
+                         dateStr = `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
+                         amountStr = getCol(parts, 'amount');
+                         vehiclePlate = getCol(parts, 'vehicleplate', 'vehicleid');
+                         driverName = getCol(parts, 'drivername');
+                         tagId = getCol(parts, 'referencetagid');
+                         typeStr = getCol(parts, 'type');
+                         location = getCol(parts, 'plaza');
+                         description = getCol(parts, 'description') || location;
+                         paymentMethod = getCol(parts, 'paymentmethod') || 'Tag Balance';
+                         // IGNORE old status/reconciliation — import as fresh unreconciled
+                         break;
+                         
+                     case 'legacy-v2':
+                         // Old Format #2: Date, Time, Vehicle, Driver, Plaza, Highway, Direction, Type, Payment Method, Amount, Abs Amount, Status, Reference #, Tag ID, Description, Reconciled, Trip ID, Batch ID
+                         dateStr = `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
+                         amountStr = getCol(parts, 'amount');
+                         vehiclePlate = getCol(parts, 'vehicle');
+                         driverName = getCol(parts, 'driver');
+                         location = getCol(parts, 'plaza');
+                         const highway = getCol(parts, 'highway');
+                         const direction = getCol(parts, 'direction');
+                         description = getCol(parts, 'description') || [location, highway, direction].filter(Boolean).join(' — ');
+                         if (!description) description = location;
+                         typeStr = getCol(parts, 'type');
+                         paymentMethod = getCol(parts, 'payment method') || 'Tag Balance';
+                         tagId = getCol(parts, 'tag id');
+                         referenceNumber = getCol(parts, 'reference #');
+                         // IGNORE: Status, Reconciled, Trip ID, Batch ID — import as fresh unreconciled
+                         break;
+                         
+                     case 'legacy-v1':
+                     default:
+                         // Old Format #1: Date, Time, Amount, Type, Category, Description, Payment Method, Status, Vehicle Plate, Driver Name, Tag ID, Lane ID, Reference Number
+                         dateStr = `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
+                         amountStr = getCol(parts, 'amount');
+                         typeStr = getCol(parts, 'type');
+                         category = getCol(parts, 'category');
+                         description = getCol(parts, 'description');
+                         location = description;
+                         paymentMethod = getCol(parts, 'payment method') || 'Tag Balance';
+                         // IGNORE old status — import as fresh unreconciled
+                         vehiclePlate = getCol(parts, 'vehicle plate');
+                         driverName = getCol(parts, 'driver name');
+                         tagId = getCol(parts, 'tag id');
+                         laneId = getCol(parts, 'lane id');
+                         referenceNumber = getCol(parts, 'reference number');
+                         break;
+                 }
              } else {
-                 // Legacy Schema
+                 // No header — basic legacy schema (positional)
                  if (parts.length >= 5) {
                      tagId = parts[0];
                      location = parts[1];
@@ -279,7 +362,35 @@ export function BulkImportTollTransactionsModal({
                  isValid = false;
                  error = 'Missing Date';
              } else {
-                 const d = new Date(dateStr);
+                 // Smart date parsing: handle DD/MM/YYYY, MM/DD/YYYY, and ISO formats
+                 let d = new Date(dateStr);
+                 
+                 if (isNaN(d.getTime())) {
+                     // Try parsing DD/MM/YYYY or D/M/YYYY format (common in non-US locales)
+                     // Match patterns like "16/1/2026 7:29:32 am" or "16/1/2026"
+                     const dmyMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*(.*)?$/);
+                     if (dmyMatch) {
+                         const [, dayOrMonth, monthOrDay, year, timePart] = dmyMatch;
+                         const num1 = parseInt(dayOrMonth);
+                         const num2 = parseInt(monthOrDay);
+                         
+                         // If first number > 12, it MUST be a day (DD/MM/YYYY)
+                         // If second number > 12, it MUST be a day (MM/DD/YYYY) 
+                         // If both <= 12, assume DD/MM/YYYY (non-US default for this system)
+                         let day: number, month: number;
+                         if (num1 > 12) {
+                             day = num1; month = num2; // DD/MM/YYYY
+                         } else if (num2 > 12) {
+                             day = num2; month = num1; // MM/DD/YYYY
+                         } else {
+                             day = num1; month = num2; // Ambiguous — default DD/MM/YYYY
+                         }
+                         
+                         const reconstructed = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}${timePart ? ' ' + timePart.trim() : ''}`;
+                         d = new Date(reconstructed);
+                     }
+                 }
+                 
                  if (isNaN(d.getTime())) {
                      isValid = false;
                      error = 'Invalid Date format';
@@ -304,14 +415,14 @@ export function BulkImportTollTransactionsModal({
                  }
              }
 
-             if (mode === 'recovery' && !isUniversal) {
+             if (mode === 'recovery' && !hasHeader) {
                  isValid = false;
                  error = 'Format Mismatch: Recovery requires Disaster Recovery Export CSV';
              }
      
              let type: 'Usage' | 'Top-up' | 'Refund' | 'Expense' = 'Usage';
              
-             if (isUniversal) {
+             if (hasHeader) {
                  if (typeStr.toLowerCase().includes('usage')) type = 'Usage';
                  else if (typeStr.toLowerCase().includes('top')) type = 'Top-up';
                  else if (typeStr.toLowerCase().includes('refund')) type = 'Refund';
@@ -335,7 +446,7 @@ export function BulkImportTollTransactionsModal({
              // Phase 5: Vehicle Matching
              const match = matchVehicle(tagId, vehiclePlate, driverName, paymentMethod);
              
-             if (match.error && !isUniversal) {
+             if (match.error && !hasHeader) {
                  isValid = false;
                  error = match.error;
              }
@@ -528,7 +639,7 @@ export function BulkImportTollTransactionsModal({
             try {
                 const finalPaymentMethod = tx.paymentMethod || 'Tag Balance';
                 const finalStatus = tx.status || 'Completed';
-                const finalCategory = tx.category || (tx.type === 'Usage' ? 'Toll Usage' : 'Toll Top-up');
+                const finalCategory = tx.category || (tx.type === 'Usage' ? 'Toll Usage' : tx.type === 'Refund' ? 'Toll Refund' : 'Toll Top-up');
                 
                 // Construct description: Use provided description or fallback to Location + Lane
                 const finalDescription = tx.description || (
@@ -611,7 +722,12 @@ export function BulkImportTollTransactionsModal({
             setIsSubmitting(false); // Let user try again or fix
             setStep('preview');
         } else {
-            toast.success(`Import complete. ${successCount} imported.`);
+            const refundCount = parsedTx.filter(t => t.isValid && t.type === 'Refund').length;
+            const chargeCount = successCount - refundCount;
+            const toastMsg = refundCount > 0
+                ? `Import complete. ${chargeCount} charges, ${refundCount} refunds imported.`
+                : `Import complete. ${successCount} imported.`;
+            toast.success(toastMsg);
             onSuccess();
             
             // Allow animation to finish
@@ -635,7 +751,7 @@ export function BulkImportTollTransactionsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && onClose()}>
-      <DialogContent className="sm:max-w-[800px] max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[95vw] lg:max-w-[1200px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {mode === 'recovery' 
@@ -705,73 +821,107 @@ export function BulkImportTollTransactionsModal({
             )}
 
             {step === 'preview' && (
-                <div className="space-y-4">
-                     <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Preview</AlertTitle>
-                        <AlertDescription>
-                            Found {parsedTx.length} transactions. {parsedTx.filter(t => !t.isValid).length} invalid.
-                        </AlertDescription>
-                    </Alert>
+                <div className="space-y-3">
+                     {detectedFormatLabel && (
+                         <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
+                             <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                             <span className="text-xs text-indigo-800">
+                                 Detected format: <strong>{detectedFormatLabel}</strong>
+                                 {(detectedFormatLabel.includes('Legacy') || detectedFormatLabel.includes('Current')) && 
+                                     ' — Old status/reconciliation data ignored. All imported as fresh & unreconciled.'}
+                             </span>
+                         </div>
+                     )}
+                     <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-md">
+                         <AlertCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                         <span className="text-xs text-slate-600">
+                             Found <strong>{parsedTx.length}</strong> transactions
+                             {parsedTx.some(t => t.type === 'Refund') && (
+                                 <> (<strong>{parsedTx.filter(t => t.type !== 'Refund').length}</strong> charges, <strong className="text-emerald-600">{parsedTx.filter(t => t.type === 'Refund').length} refunds</strong>)</>
+                             )}
+                             . <strong>{parsedTx.filter(t => !t.isValid).length}</strong> invalid.
+                         </span>
+                     </div>
                     
-                    <div className="border rounded-md">
-                        <Table>
+                    <div className="border rounded-md overflow-x-auto">
+                        <Table className="text-xs">
                             <TableHeader>
-                                <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Tag ID / Vehicle</TableHead>
-                                    {(mode === 'usage' || mode === 'recovery') && <TableHead>Location</TableHead>}
-                                    {(mode === 'usage' || mode === 'recovery') && <TableHead>Lane</TableHead>}
-                                    <TableHead>Type</TableHead>
-                                    {mode === 'topup' && <TableHead className="text-right">Discount</TableHead>}
-                                    {mode === 'topup' && <TableHead className="text-right">Net Paid</TableHead>}
-                                    <TableHead className="text-right">Amount</TableHead>
-                                    <TableHead>Status</TableHead>
+                                <TableRow className="[&>th]:py-1.5 [&>th]:px-2 [&>th]:text-[11px] [&>th]:font-semibold [&>th]:text-slate-500 [&>th]:uppercase [&>th]:tracking-wider">
+                                    <TableHead className="whitespace-nowrap">Date</TableHead>
+                                    <TableHead className="whitespace-nowrap">Vehicle</TableHead>
+                                    <TableHead className="whitespace-nowrap">Driver</TableHead>
+                                    <TableHead className="whitespace-nowrap">Tag ID</TableHead>
+                                    <TableHead className="whitespace-nowrap">Location</TableHead>
+                                    <TableHead className="whitespace-nowrap">Lane</TableHead>
+                                    <TableHead className="whitespace-nowrap">Type</TableHead>
+                                    <TableHead className="whitespace-nowrap">Payment</TableHead>
+                                    <TableHead className="whitespace-nowrap">Description</TableHead>
+                                    <TableHead className="whitespace-nowrap">Ref #</TableHead>
+                                    {mode === 'topup' && <TableHead className="text-right whitespace-nowrap">Discount</TableHead>}
+                                    {mode === 'topup' && <TableHead className="text-right whitespace-nowrap">Net Paid</TableHead>}
+                                    <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                                    <TableHead className="whitespace-nowrap text-center">Valid</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {parsedTx.map((tx, i) => (
-                                    <TableRow key={i}>
+                                    <TableRow key={i} className={`[&>td]:py-1 [&>td]:px-2 ${!tx.isValid ? 'bg-red-50/50' : ''}`}>
+                                        <TableCell className="whitespace-nowrap text-slate-700">
+                                            {tx.isValid ? tx.date.toLocaleString() : <span className="text-red-500">{tx.rawDate || '—'}</span>}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap font-medium text-slate-800 max-w-[180px] truncate">
+                                            {tx.matchedVehicleName || tx.vehiclePlate || (tx.vehicleId ? 'Current' : <span className="text-slate-400">—</span>)}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-slate-600 max-w-[120px] truncate">
+                                            {tx.driverName || <span className="text-slate-400">—</span>}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap font-mono text-slate-500">
+                                            {tx.tagId || <span className="text-slate-300">—</span>}
+                                        </TableCell>
+                                        <TableCell className="text-slate-600 max-w-[140px] truncate">
+                                            {tx.location || <span className="text-slate-300">—</span>}
+                                        </TableCell>
+                                        <TableCell className="text-slate-500">
+                                            {tx.laneId || <span className="text-slate-300">—</span>}
+                                        </TableCell>
                                         <TableCell className="whitespace-nowrap">
-                                            {tx.isValid ? tx.date.toLocaleString() : tx.rawDate}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                <span className="text-xs font-mono text-slate-500">{tx.tagId || '-'}</span>
-                                                <span className="text-sm font-medium">
-                                                    {tx.matchedVehicleName || (tx.vehicleId ? 'Current Vehicle' : 'Unmatched')}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        {(mode === 'usage' || mode === 'recovery') && <TableCell>{tx.location}</TableCell>}
-                                        {(mode === 'usage' || mode === 'recovery') && <TableCell>{tx.laneId}</TableCell>}
-                                        <TableCell>
-                                            {tx.isValid && (
-                                                tx.type === 'Usage' ? 
-                                                <span className="text-slate-600 flex items-center gap-1 text-xs"><MinusCircle className="h-3 w-3" /> Usage</span> :
-                                                <span className="text-amber-600 flex items-center gap-1 text-xs"><ArrowUpRight className="h-3 w-3" /> Top-up</span>
+                                            {tx.type === 'Usage' ? (
+                                                <span className="text-slate-600 flex items-center gap-0.5"><MinusCircle className="h-3 w-3" /> Usage</span>
+                                            ) : tx.type === 'Top-up' ? (
+                                                <span className="text-amber-600 flex items-center gap-0.5"><ArrowUpRight className="h-3 w-3" /> Top-up</span>
+                                            ) : tx.type === 'Refund' ? (
+                                                <span className="text-blue-600 flex items-center gap-0.5"><ArrowDownLeft className="h-3 w-3" /> Refund</span>
+                                            ) : (
+                                                <span className="text-slate-500">{tx.type}</span>
                                             )}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-slate-500">
+                                            {tx.paymentMethod || <span className="text-slate-300">—</span>}
+                                        </TableCell>
+                                        <TableCell className="text-slate-500 max-w-[160px] truncate" title={tx.description || ''}>
+                                            {tx.description || <span className="text-slate-300">—</span>}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap font-mono text-slate-400">
+                                            {tx.referenceNumber || <span className="text-slate-300">—</span>}
                                         </TableCell>
                                         {mode === 'topup' && (
                                             <TableCell className="text-right text-slate-500">
-                                                {tx.discount && tx.discount > 0 ? `-$${tx.discount.toFixed(2)}` : '-'}
+                                                {tx.discount && tx.discount > 0 ? `-$${tx.discount.toFixed(2)}` : '—'}
                                             </TableCell>
                                         )}
                                         {mode === 'topup' && (
                                             <TableCell className="text-right text-slate-700">
-                                                {tx.paymentAfterDiscount && tx.paymentAfterDiscount > 0 ? `$${tx.paymentAfterDiscount.toFixed(2)}` : '-'}
+                                                {tx.paymentAfterDiscount && tx.paymentAfterDiscount > 0 ? `$${tx.paymentAfterDiscount.toFixed(2)}` : '—'}
                                             </TableCell>
                                         )}
-                                        <TableCell className={`text-right font-medium ${tx.amount < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                            {tx.isValid ? `$${tx.amount.toFixed(2)}` : '-'}
+                                        <TableCell className={`text-right font-medium whitespace-nowrap ${tx.amount < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                            {tx.isValid ? `$${tx.amount.toFixed(2)}` : '—'}
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="text-center">
                                             {tx.isValid ? (
-                                                <span className="text-emerald-600 flex items-center gap-1 text-xs font-medium">
-                                                    <CheckCircle2 className="h-3 w-3" /> OK
-                                                </span>
+                                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
                                             ) : (
-                                                <span className="text-red-600 text-xs font-medium">
+                                                <span className="text-red-500 text-[10px] font-medium leading-tight block max-w-[80px] mx-auto" title={tx.error}>
                                                     {tx.error}
                                                 </span>
                                             )}

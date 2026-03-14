@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview } from '../types/data';
+import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, DisputeRefund } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
@@ -1565,6 +1565,83 @@ export const api = {
     }
     const result = await response.json();
     return result.data || [];
+  },
+
+  // ── Dispute Refunds ────────────────────────────────────────────────────
+
+  async importDisputeRefunds(refunds: DisputeRefund[]): Promise<{ imported: number; skipped: number; total: number; message: string }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ refunds })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to import dispute refunds");
+    }
+    return response.json();
+  },
+
+  async getDisputeRefunds(params?: { status?: string; driverId?: string; dateFrom?: string; dateTo?: string }): Promise<{ data: DisputeRefund[]; total: number }> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.set('dateTo', params.dateTo);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch dispute refunds");
+    }
+    return response.json();
+  },
+
+  async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string): Promise<{ data: DisputeRefund }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/${refundId}/match`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ tollTransactionId, claimId })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to match dispute refund");
+    }
+    return response.json();
+  },
+
+  async unmatchDisputeRefund(refundId: string): Promise<{ data: DisputeRefund }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/${refundId}/unmatch`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to unmatch dispute refund");
+    }
+    return response.json();
+  },
+
+  async getDisputeRefundSuggestions(refundId: string): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null }> }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/suggestions/${refundId}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch dispute refund suggestions");
+    }
+    return response.json();
   },
 
   async getPerformanceReport(startDate: string, endDate: string, options?: { dailyRideTarget?: number, dailyEarningsTarget?: number, summaryOnly?: boolean, limit?: number, offset?: number }): Promise<{ data: any[], total: number, limit: number, offset: number }> {

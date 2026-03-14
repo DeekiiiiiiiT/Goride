@@ -1,321 +1,402 @@
-# Unmatched Tolls Sub-Tabs & Auto-Confirm Perfect Matches
+# Toll Dispute Refund Import & Reconciliation
 
-## Overview
+## Problem Statement
 
-Two major changes to the Toll Reconciliation system:
+When a driver disputes an underpaid toll with Uber and wins, Uber issues a "Support Adjustment" refund in the `payments_transaction` CSV. These rows have:
+- **Empty Trip UUID** (no direct trip link)
+- Description format: `Support Adjustment:  <support-case-UUID>`
+- Refund amount in the `Paid to you:Trip balance:Refunds:Toll` column
+- The support-case UUID is NOT a Trip UUID (cross-verified against all trip data)
 
-1. **Auto-confirm Perfect Matches** — Tolls with `PERFECT_MATCH` (active trip + amount matches within 5 cents) are auto-reconciled server-side and sent straight to Matched History, tagged as "Auto-matched" so the admin can distinguish them from manual confirmations.
+Currently, line 1176 of `csvHelpers.ts` (`if (!tripId) return;`) silently skips these rows during import, making dispute refunds completely invisible to the system. The Claimable Loss page's "Underpaid" tab permanently shows the loss even after Uber has paid it back.
 
-2. **Sub-tabs for Unmatched Tolls** — The single flat "Unmatched Tolls" tab is split into 4 sub-tabs based on the system's classification:
-   - **Needs Review** — No suggestion, low confidence, or possible match (admin must investigate)
-   - **Underpaid** — Platform reimbursed less than actual toll (file a claim)
-   - **Deadhead** — Business driving tolls not reimbursed (absorb or deduct; tax-deductible)
-   - **Personal Use** — High-confidence personal driving (charge the driver)
+## Architecture Decision
 
----
+- **New sub-tab** "Dispute Refunds" under the existing "Unmatched Tolls" tab in Toll Reconciliation
+- **New KV prefix** `dispute-refund:` for storing imported Support Adjustment records
+- **Smart matching**: Suggest links between refunds and underpaid tolls based on driver + amount + date proximity
+- **Auto-resolution**: When a refund is linked to a toll that has a Claimable Loss claim, auto-resolve the claim as "Reimbursed"
+- **Driver Detail card**: Enhance "Platform Toll Refunds" to show both trip-level refunds AND dispute refunds
 
-## Files Involved
+## Import Paths Affected
 
-| File | Role |
-|------|------|
-| `/supabase/functions/server/toll_controller.tsx` | Server — `/unreconciled` endpoint, `/reconcile` endpoint, matching engine |
-| `/hooks/useTollReconciliation.ts` | Client hook — fetches data, manages state, exposes `reconcile`/`autoMatchAll` |
-| `/components/toll-tags/reconciliation/UnmatchedTollsList.tsx` | UI — renders unmatched tolls, Smart Suggestions, "Other Unmatched" table |
-| `/components/toll-tags/reconciliation/ReconciledTollsList.tsx` | UI — renders Matched History table |
-| `/components/toll-tags/reconciliation/ReconciliationDashboard.tsx` | UI — parent component with top-level tabs + financial summary cards |
-| `/components/toll-tags/reconciliation/SuggestedMatchCard.tsx` | UI — individual Smart Suggestion card |
-| `/utils/tollReconciliation.ts` | Shared — `MatchType` type, `findTollMatches()`, `calculateTollFinancials()` |
+1. **Platform Imports** (Data Center > Platform Imports > Uber CSV) - `csvHelpers.ts` parses `payments_transaction` rows; must stop skipping Support Adjustment rows
+2. **Toll Usage** (Data Center > Toll Management > Toll Usage) - `BulkImportTollTransactionsModal.tsx` already has a `Refund` type concept; must ensure refund-type rows are properly stored and surfaced
 
 ---
 
-## Phase 1: Server-Side Auto-Confirm for PERFECT_MATCH
+## Phase 1: Data Model & KV Storage Design
 
-**Goal:** When the `/unreconciled` endpoint is called, the server automatically reconciles any `PERFECT_MATCH` tolls before returning results. These never appear in the Unmatched list.
+**Goal**: Define the `DisputeRefund` data type and KV key structure so all subsequent phases have a stable foundation.
 
-### Step 1.1: Add `autoMatched` flag to the reconcile logic
-- In `toll_controller.tsx`, inside the `/unreconciled` endpoint (around line 740), after `findTollMatchesServer()` generates suggestions:
-  - Loop through the `suggestionsMap` entries
-  - Identify entries where the best match (index 0) has `matchType === 'PERFECT_MATCH'`
-  - For each such entry, auto-reconcile by:
-    1. Loading the transaction via `kv.get(`transaction:${txId}`)`
-    2. Loading the trip via `kv.get(`trip:${match.tripId}`)`
-    3. Setting `tx.tripId = match.tripId`, `tx.isReconciled = true`, `tx.driverId`, `tx.driverName`
-    4. Setting `tx.metadata.reconciledBy = 'system-auto'` (instead of `'admin'`) — this is the key flag
-    5. Setting `tx.metadata.reconciledAt = new Date().toISOString()`
-    6. Setting `tx.metadata.autoMatchReason = match.reason` (preserve why it matched)
-    7. Setting `tx.metadata.autoMatchScore = match.confidenceScore` (preserve the score)
-    8. Writing to KV via `kv.set(`transaction:${txId}`, tx)`
-    9. Writing a ledger entry via `writeTollLedgerEntry()` with `matchedBy: 'system-auto'`
-  - Remove these auto-reconciled transactions from the `page` array before returning
-  - Remove them from `suggestionsMap` before returning
-  - Add an `autoReconciled: number` count to the response JSON so the frontend knows how many were auto-processed
+### Step 1.1: Define the DisputeRefund TypeScript interface
+- File: `/types/data.ts`
+- Add a new `DisputeRefund` interface with fields:
+  - `id`: string (generated UUID, unique per refund)
+  - `supportCaseId`: string (the UUID extracted from the Description field)
+  - `amount`: number (the refund amount, always positive)
+  - `date`: string (ISO timestamp from the `vs reporting` column)
+  - `driverId`: string (Driver UUID from the CSV row)
+  - `driverName`: string (constructed from first+last name columns)
+  - `platform`: string (always "Uber" for now)
+  - `source`: string (import path identifier: "platform_import" or "toll_usage")
+  - `status`: "unmatched" | "matched" | "auto_resolved" (lifecycle state)
+  - `matchedTollId`: string | null (the toll transaction ID it was linked to, if any)
+  - `matchedClaimId`: string | null (the Claimable Loss claim ID it resolved, if any)
+  - `importedAt`: string (ISO timestamp of when it was imported)
+  - `resolvedAt`: string | null (ISO timestamp of when it was matched/resolved)
+  - `resolvedBy`: string | null (admin who resolved it, or "auto" for auto-match)
+  - `rawDescription`: string (the full original Description field for audit trail)
 
-### Step 1.2: Guard against double-reconciliation
-- Before auto-reconciling, check `if (tx.isReconciled && tx.tripId)` — skip if already reconciled
-- This prevents issues if the endpoint is called multiple times in quick succession (e.g., page refresh)
+### Step 1.2: Define KV key structure
+- Key format: `dispute-refund:<id>` (e.g., `dispute-refund:abc123-def456`)
+- Value: JSON-serialized `DisputeRefund` object
+- This follows the existing KV prefix pattern used throughout the app (e.g., `toll:`, `trip:`, `claim:`)
 
-### Step 1.3: Add logging
-- Log each auto-reconciliation: `[TollReconciliation] Auto-confirmed PERFECT_MATCH: tx ${txId} -> trip ${tripId} (score: ${score})`
-- Log the total count: `[TollReconciliation] Auto-confirmed ${count} perfect matches`
+### Step 1.3: Add deduplication key
+- To prevent duplicate imports of the same Support Adjustment, use a composite dedup key:
+  - `dispute-refund-dedup:<supportCaseId>` → stores the `dispute-refund:<id>` key
+  - On import, check if `dispute-refund-dedup:<supportCaseId>` exists before creating a new record
+  - The `supportCaseId` is unique per Uber support case, so this guarantees no duplicates
 
-### Step 1.4: Update the response shape
-- The `/unreconciled` response currently returns `{ success, data, suggestions, total, limit, offset }`
-- Add `autoReconciled: number` to the response
-- Adjust `total` to reflect the count AFTER auto-reconciliation (so pagination remains accurate)
-
-### Verification:
-- After Phase 1, loading the Toll Reconciliation page should:
-  - Auto-reconcile any PERFECT_MATCH tolls server-side
-  - Return fewer items in the Unmatched list
-  - The auto-reconciled items should appear in the Reconciled list (but won't have the badge yet — that's Phase 2)
+### Step 1.4: Verify no type conflicts
+- Search existing codebase for any type named `DisputeRefund` or KV prefix `dispute-refund:` to confirm no collisions
+- Ensure the new type is exported from `/types/data.ts` so all files can import it
 
 ---
 
-## Phase 2: Auto-Matched Badge in Matched History
+## Phase 2: CSV Parser — Extract Support Adjustments from `payments_transaction`
 
-**Goal:** Show a visual indicator in the Matched History table so the admin can tell which matches were auto-confirmed vs manually confirmed.
+**Goal**: Modify `csvHelpers.ts` to detect and extract "Support Adjustment" rows instead of skipping them, and store them as `DisputeRefund` records.
 
-### Step 2.1: Surface the `reconciledBy` metadata in the UI
-- In `ReconciledTollsList.tsx`, each toll row already has access to the full transaction object (`tx`)
-- The `tx.metadata.reconciledBy` field will be either `'system-auto'` (from Phase 1) or `'admin'` (existing manual flow)
-- Add a new column or inline badge after the "Description" column
+### Step 2.1: Identify the extraction point
+- File: `/utils/csvHelpers.ts`, line ~1174
+- Currently: `if (file.type === 'uber_trip' || file.type === 'uber_payment')` block starts, then `if (!tripId) return;` skips empty Trip UUIDs
+- Change: Before the `if (!tripId) return;` skip, add a check for Support Adjustment rows
 
-### Step 2.2: Add the badge rendering
-- If `tx.metadata?.reconciledBy === 'system-auto'`:
-  - Show a small Badge: `<Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-200 text-[10px]">Auto-matched</Badge>`
-  - Include a bot icon (`Bot` from lucide-react) for visual clarity
-- If `tx.metadata?.reconciledBy === 'admin'` or no metadata:
-  - No badge needed (default = manually matched), OR optionally show a subtle "Manual" indicator
+### Step 2.2: Detect Support Adjustment rows
+- Check: `const desc = String(row['Description'] || ''); const isSupportAdj = desc.startsWith('Support Adjustment:');`
+- If `isSupportAdj && !tripId`:
+  - Extract the support case UUID from the Description: `const supportCaseId = desc.replace('Support Adjustment:', '').trim();`
+  - Extract the refund amount: `parseCurrency(row['Paid to you:Trip balance:Refunds:Toll'])`
+  - Extract driver info: `row['Driver UUID']`, `row['Driver first name']` + `row['Driver last name']`
+  - Extract date: `row['vs reporting']`
+  - Build a `DisputeRefund` object and add it to a separate collection (NOT the tripMap)
+  - Then `return;` (still skip adding to tripMap since there's no trip)
 
-### Step 2.3: Add a column header
-- Add "Source" or "Match Type" as a new `<TableHead>` in the Matched History table header
-- Keep it narrow (e.g., `w-[100px]`) so it doesn't take up too much space
+### Step 2.3: Add a `disputeRefunds` output array
+- The `processUberCSV` (or equivalent) function currently returns trips via `tripMap`
+- Add a parallel `disputeRefundsMap` (keyed by `supportCaseId` for dedup within a single import session)
+- Return it alongside the trip data so the import handler can store them
 
-### Step 2.4: Handle the toast notification
-- In `useTollReconciliation.ts`, after `fetchData()` completes, check if `unreconciledRes.autoReconciled > 0`
-- If so, show a toast: `toast.info(`${count} toll(s) auto-matched to trips`)`
-- This gives the admin passive awareness that auto-matching happened
+### Step 2.4: Handle edge cases
+- Support Adjustment with $0 amount → skip (no meaningful refund)
+- Support Adjustment with non-toll refund (if the `Refunds:Toll` column is 0 but `Paid to you` is non-zero) → still capture but flag as "non-toll adjustment" for future use
+- Multiple Support Adjustments in the same CSV → each gets its own record
+- Malformed Description (no UUID after colon) → still import, set supportCaseId to "unknown-<transaction-UUID>"
 
-### Verification:
-- After Phase 2, Matched History should show "Auto-matched" badges on items from Phase 1
-- A toast should appear when auto-matches are processed
-
----
-
-## Phase 3: Sub-Tab Infrastructure in UnmatchedTollsList
-
-**Goal:** Add the 4 sub-tab toggle buttons inside the Unmatched Tolls section. No filtering logic yet — just the visual tabs and state management.
-
-### Step 3.1: Define the sub-tab type and state
-- In `UnmatchedTollsList.tsx`, add a new type:
-  ```ts
-  type UnmatchedSubTab = 'needs-review' | 'underpaid' | 'deadhead' | 'personal-use';
-  ```
-- Add state: `const [activeSubTab, setActiveSubTab] = useState<UnmatchedSubTab>('needs-review');`
-
-### Step 3.2: Build the sub-tab bar UI
-- Place it above the Smart Suggestions section (around line 247)
-- Use plain HTML buttons styled with Tailwind (NOT Radix Tabs — to keep it simple and avoid nested tab issues)
-- Layout: a horizontal row of 4 toggle buttons, each showing label + count badge
-- Active button gets a colored underline/background; inactive buttons are muted
-- Example structure:
-  ```
-  [ Needs Review (12) ] [ Underpaid (3) ] [ Deadhead (5) ] [ Personal Use (8) ]
-  ```
-
-### Step 3.3: Pass counts as props (placeholder)
-- For now, compute placeholder counts using the `suggestions` map:
-  - **Needs Review**: tolls with no suggestion, or suggestion with `confidence === 'low'` or `confidence === 'medium'`, or `matchType === 'POSSIBLE_MATCH'`
-  - **Underpaid**: tolls with best match `matchType === 'AMOUNT_VARIANCE'`
-  - **Deadhead**: tolls with best match `matchType === 'DEADHEAD_MATCH'` OR (`matchType === 'PERSONAL_MATCH'` AND `reason` includes 'Approach')
-  - **Personal Use**: tolls with best match `matchType === 'PERSONAL_MATCH'` AND reason does NOT include 'Approach'
-- These counts are computed in a `useMemo` and displayed in each tab button
-
-### Step 3.4: Ensure the sub-tab bar is responsive
-- On mobile, the 4 buttons should wrap or scroll horizontally
-- Use `flex flex-wrap gap-1` or `overflow-x-auto` with `flex-nowrap`
-
-### Verification:
-- After Phase 3, the Unmatched Tolls tab should show the 4 sub-tab buttons with counts
-- Clicking a sub-tab should update the active state (visual highlight changes)
-- The actual toll list content does NOT change yet — that's Phase 4
+### Step 2.5: Update the return type of the CSV processing function
+- Ensure the function that calls the parser receives the `disputeRefunds` array
+- Add a count to the import summary (e.g., "Found 3 dispute refunds")
 
 ---
 
-## Phase 4: Classification Logic & Filtering Per Sub-Tab
+## Phase 3: Server Endpoints — CRUD for Dispute Refunds
 
-**Goal:** Wire up the sub-tabs so each one only shows tolls belonging to that category.
+**Goal**: Add server routes for storing, retrieving, and updating dispute refund records.
 
-### Step 4.1: Create the classification function
-- In `UnmatchedTollsList.tsx`, create a `useMemo` that classifies every toll into one of the 4 buckets:
-  ```ts
-  const classified = useMemo(() => {
-    const buckets = {
-      'needs-review': [] as FinancialTransaction[],
-      'underpaid': [] as FinancialTransaction[],
-      'deadhead': [] as FinancialTransaction[],
-      'personal-use': [] as FinancialTransaction[],
-    };
-    filteredTolls.forEach(tx => {
-      const best = suggestions.get(tx.id)?.[0];
-      if (!best) {
-        buckets['needs-review'].push(tx);
-        return;
-      }
-      switch (best.matchType) {
-        case 'AMOUNT_VARIANCE':
-          buckets['underpaid'].push(tx);
-          break;
-        case 'DEADHEAD_MATCH':
-          buckets['deadhead'].push(tx);
-          break;
-        case 'PERSONAL_MATCH':
-          if (best.reason?.includes('Approach')) {
-            buckets['deadhead'].push(tx); // Unreimbursed = Deadhead variant
-          } else {
-            buckets['personal-use'].push(tx);
-          }
-          break;
-        case 'POSSIBLE_MATCH':
-        default:
-          buckets['needs-review'].push(tx);
-          break;
-      }
-    });
-    return buckets;
-  }, [filteredTolls, suggestions]);
-  ```
+### Step 3.1: POST `/dispute-refunds/import` — Bulk import
+- Accepts: `{ refunds: DisputeRefund[] }`
+- For each refund:
+  - Check dedup key `dispute-refund-dedup:<supportCaseId>`
+  - If exists → skip (already imported)
+  - If new → generate ID, write `dispute-refund:<id>` and `dispute-refund-dedup:<supportCaseId>`
+- Returns: `{ imported: number, skipped: number, total: number }`
 
-### Step 4.2: Replace the flat list with the active sub-tab's filtered list
-- Currently, `smartMatches` and `otherTolls` are computed from `filteredTolls`
-- Change these to compute from `classified[activeSubTab]` instead of `filteredTolls`
-- The `smartMatches` filter still applies (confidence >= 50 and not hidden) but only within the active sub-tab's tolls
-- The `otherTolls` filter = remaining tolls in the active sub-tab that aren't smart matches
+### Step 3.2: GET `/dispute-refunds` — List all dispute refunds
+- Query: `getByPrefix('dispute-refund:')` (exclude dedup keys)
+- Filter by optional query params: `status`, `driverId`, `dateFrom`, `dateTo`
+- Sort by date descending
+- Returns: `{ data: DisputeRefund[] }`
 
-### Step 4.3: Update the "Show More" counters
-- `visibleSmartMatches` and `visibleOtherTolls` should reset to their defaults when the sub-tab changes
-- Add a `useEffect` that resets these when `activeSubTab` changes:
-  ```ts
-  useEffect(() => {
-    setVisibleSmartMatches(10);
-    setVisibleOtherTolls(25);
-  }, [activeSubTab]);
-  ```
+### Step 3.3: PATCH `/dispute-refunds/:id/match` — Link refund to toll
+- Accepts: `{ tollTransactionId: string, claimId?: string }`
+- Updates the dispute refund record:
+  - `status` → "matched"
+  - `matchedTollId` → the toll transaction ID
+  - `matchedClaimId` → the claim ID (if provided)
+  - `resolvedAt` → now
+  - `resolvedBy` → from auth header or "admin"
+- If `claimId` is provided:
+  - Also update the claim record to `status: 'Resolved'`, `resolutionReason: 'Reimbursed'`
+  - This is the auto-resolution that closes the Claimable Loss lifecycle
+- Returns: `{ data: DisputeRefund }`
 
-### Step 4.4: Update sub-tab counts from the classification
-- Replace the placeholder counts from Phase 3 Step 3.3 with actual `classified['needs-review'].length`, etc.
+### Step 3.4: PATCH `/dispute-refunds/:id/unmatch` — Unlink a matched refund
+- Resets: `status` → "unmatched", clears `matchedTollId`, `matchedClaimId`, `resolvedAt`, `resolvedBy`
+- Does NOT revert the claim (admin must manually re-open if needed)
+- Returns: `{ data: DisputeRefund }`
 
-### Step 4.5: Update the empty state
-- If the active sub-tab has 0 tolls, show a sub-tab-specific empty message:
-  - Needs Review: "No tolls pending review"
-  - Underpaid: "No underpaid tolls found"
-  - Deadhead: "No deadhead tolls found"
-  - Personal Use: "No personal use tolls detected"
+### Step 3.5: GET `/dispute-refunds/suggestions/:id` — Smart match suggestions
+- For a given dispute refund ID:
+  - Load the refund record (get driver, amount, date)
+  - Load all reconciled tolls for that driver (from `toll-reconciliation/reconciled`)
+  - Filter to tolls with a negative variance (underpaid)
+  - Score candidates by: amount similarity + date proximity
+  - Return top 5 suggestions with confidence scores
+- Returns: `{ suggestions: Array<{ tollId, tripId, tollAmount, uberRefund, variance, date, confidence }> }`
 
-### Verification:
-- After Phase 4, clicking each sub-tab should filter the toll list
-- Counts should match the actual number of items in each tab
-- Smart Suggestions should only show for the active sub-tab
-- All action buttons (Confirm, Dismiss, Resolve dropdown, etc.) should still work
+### Step 3.6: Add API client methods
+- File: `/services/api.ts`
+- Add methods: `importDisputeRefunds()`, `getDisputeRefunds()`, `matchDisputeRefund()`, `unmatchDisputeRefund()`, `getDisputeRefundSuggestions()`
 
 ---
 
-## Phase 5: Smart Suggestions Scoped to Sub-Tabs
+## Phase 4: Platform Imports Integration — Surface Dispute Refunds in Import Flow
 
-**Goal:** Ensure the Smart Suggestions cards and their action buttons behave correctly per sub-tab context.
+**Goal**: When an admin imports an Uber `payments_transaction` CSV via Platform Imports, the import summary should show how many dispute refunds were found, and automatically store them.
 
-### Step 5.1: Scope Smart Suggestions to the active sub-tab
-- Currently, Smart Suggestions show ALL high-confidence matches regardless of matchType
-- After Phase 4, they're already filtered by the classified bucket — but verify:
-  - **Needs Review tab**: Smart Suggestions should show `POSSIBLE_MATCH` items with score >= 50 (if any)
-  - **Underpaid tab**: Smart Suggestions should show `AMOUNT_VARIANCE` matches with score >= 50
-  - **Deadhead tab**: Smart Suggestions should show `DEADHEAD_MATCH` + `PERSONAL_MATCH` (Approach) with score >= 50
-  - **Personal Use tab**: Smart Suggestions should show `PERSONAL_MATCH` (non-Approach) with score >= 50
+### Step 4.1: Update the import summary UI
+- File: `/components/imports/ImportsPage.tsx`
+- After CSV processing completes, the summary panel shows trip counts, payment sources, etc.
+- Add a new line: "Dispute Refunds Found: X" with a teal/cyan badge
+- If X > 0, show a brief explanation: "Support Adjustment refunds detected — these will appear in Toll Reconciliation > Dispute Refunds"
 
-### Step 5.2: Customize the Smart Suggestion card action buttons per sub-tab
-- The `SuggestedMatchCard` currently shows different buttons based on match type and payment method
-- Verify that the correct actions appear in each sub-tab context:
-  - **Needs Review**: "Link" button (tag) or manual resolution dropdown
-  - **Underpaid**: "Flag" button (for filing a claim)
-  - **Deadhead**: "Link" button + context that it's a business expense
-  - **Personal Use**: "Reject" button (for cash claims) or "Link" (for tag — auto-charges driver)
+### Step 4.2: Wire the import handler to call the server
+- In the import flow's "Confirm Import" handler:
+  - After saving trips to KV, also call `POST /dispute-refunds/import` with the extracted refunds
+  - Show a toast: "Imported X dispute refunds"
+  - If some were skipped (duplicates): "Imported X dispute refunds (Y already existed)"
 
-### Step 5.3: Update the "Auto-match All" button scope
-- The "Auto-match All" button in `ReconciliationDashboard.tsx` currently processes ALL high-confidence matches
-- Since Perfect Matches are now auto-confirmed (Phase 1), this button effectively handles the remaining types
-- No code change needed here — it already filters by `confidence === 'high'`
-- But update the button label/count to reflect the new reality (fewer items since PERFECT_MATCHes are gone)
+### Step 4.3: Update the import activity log
+- The Data Center has an Activity Log section
+- Add an entry when dispute refunds are imported: "Imported X dispute refunds from Uber payments_transaction CSV"
 
-### Step 5.4: Verify the Resolve dropdown works in each sub-tab
-- The custom dropdown with "Find Match...", "Personal (Driver Pays)", "Write Off (Fleet Pays)", "Business Expense" should work in all sub-tabs
-- Test specifically that `onManualResolve` correctly processes items and removes them from the correct sub-tab bucket
-
-### Verification:
-- After Phase 5, each sub-tab's Smart Suggestions should only show relevant match types
-- Action buttons should be contextually appropriate
-- Auto-match button count should be correct (excluding already-auto-confirmed Perfect Matches)
+### Step 4.4: Handle the case where only dispute refunds exist (no trips)
+- If a `payments_transaction` CSV contains ONLY Support Adjustment rows (all trips filtered out because they're already imported), the import should still succeed and store the refunds
+- Currently, an import with 0 trips might show "No data found" — we need to check for this edge case
 
 ---
 
-## Phase 6: Dashboard Card Updates & Final Polish
+## Phase 5: Toll Usage Import Awareness
 
-**Goal:** Update the financial summary cards and overall UX to reflect the new architecture.
+**Goal**: Ensure the Toll Usage import path (`BulkImportTollTransactionsModal.tsx`) properly handles refund-type rows and stores them in a way that's compatible with the dispute refund system.
 
-### Step 6.1: Update financial summary calculations
-- In `ReconciliationDashboard.tsx`, the 4 summary cards currently calculate amounts from `filteredUnreconciledTolls`
-- Since PERFECT_MATCH tolls are now auto-reconciled (Phase 1), they no longer appear in `filteredUnreconciledTolls`
-- The "Recovered" card should now include auto-matched amounts (they're in `reconciledTolls`)
-- Verify that the "Claimable Loss" card correctly reflects only AMOUNT_VARIANCE items
-- Verify that the "Driver Liability" card correctly reflects only PERSONAL_MATCH items + unreconciled unknowns
+### Step 5.1: Audit current refund handling
+- The `ParsedTransaction` interface already has `type: 'Refund'` as a valid type
+- Check: When a toll CSV has a refund row, does it get stored? Where? With what prefix?
+- Currently, toll transactions are stored with prefix `toll-transaction:` regardless of type
 
-### Step 6.2: Add an auto-match summary indicator
-- Below the financial cards (or as a banner), show a subtle informational message when auto-matches occurred:
-  - e.g., "3 tolls were auto-matched this session" with an info icon
-  - This reinforces to the admin that the system is working without requiring manual intervention
+### Step 5.2: Distinguish toll-company refunds from platform dispute refunds
+- Toll company refunds (e.g., the toll authority reversed a charge) are different from Uber Support Adjustments
+- The Toll Usage import handles toll company CSVs, NOT Uber's `payments_transaction` format
+- Decision: Toll Usage refund rows stay as `toll-transaction:` records with `type: 'Refund'`
+- They should NOT be stored as `dispute-refund:` records (different data source, different meaning)
+- BUT: The "Dispute Refunds" sub-tab could optionally show toll-company refunds too, as a "related refunds" section
 
-### Step 6.3: Update the top-level tab counts
-- The "Unmatched Tolls" tab badge count should now be lower (since PERFECT_MATCHes are removed)
-- The "Matched History" tab badge count should be higher (since auto-matched items are included)
-- These counts are already computed from `filteredUnreconciledTolls.length` and `reconciledTolls.length` — they should auto-adjust since Phase 1 changes the underlying data
+### Step 5.3: Ensure refund rows are not silently dropped
+- In `BulkImportTollTransactionsModal.tsx`, verify that rows parsed as `type: 'Refund'` are included in the import (not filtered out)
+- Check the amount handling: refund amounts should be stored as positive values with a clear "Refund" type marker
+- Add a refund count to the import summary: "X charges, Y refunds imported"
 
-### Step 6.4: Verify the Unmatch flow for auto-matched items
-- In `ReconciledTollsList.tsx`, when an admin un-matches an auto-matched toll:
-  - The existing `onUnmatch` handler calls `unreconcile(tx)` which removes `tripId` and `isReconciled`
-  - The toll should reappear in the correct sub-tab of Unmatched Tolls
-  - The `autoMatched` metadata should be cleared so it doesn't get auto-matched again immediately
-  - **Important**: In the server's `/unreconcile` endpoint, add logic to set a flag like `tx.metadata.autoMatchOverridden = true` so the auto-confirm logic in Phase 1 skips this toll in future loads
-
-### Step 6.5: Update the source filter
-- The source filter (All Sources / Tag Imports Only / Cash Claims Only) in UnmatchedTollsList should still work across all sub-tabs
-- Verify the filter is applied BEFORE classification (it already is, since `filteredTolls` is used as input to the classifier)
-
-### Step 6.6: Final edge case testing checklist
-- [ ] Load page with 0 unmatched tolls — should show "All Tolls Reconciled" in Needs Review
-- [ ] Load page with only PERFECT_MATCH tolls — all auto-reconciled, Unmatched shows empty
-- [ ] Load page with mix of all match types — each sub-tab shows correct items
-- [ ] Click "Refresh Data" — auto-confirm runs again, no duplicates
-- [ ] Unmatch an auto-matched toll — it appears in Unmatched, does NOT get re-auto-matched
-- [ ] Use the source filter in each sub-tab — correctly filters tag vs cash
-- [ ] Pagination ("Show More") works correctly per sub-tab
-
-### Verification:
-- After Phase 6, the entire flow should work end-to-end:
-  1. Page loads -> PERFECT_MATCHes auto-confirmed -> toast notification
-  2. Unmatched Tolls shows 4 sub-tabs with correct counts
-  3. Each sub-tab shows only relevant tolls with correct actions
-  4. Matched History shows "Auto-matched" badge on auto-confirmed items
-  5. Unmatching an auto-confirmed item sends it back to Unmatched and prevents re-auto-matching
-  6. Financial cards reflect accurate numbers
+### Step 5.4: Add import summary enhancement
+- When the Toll Usage import detects refund rows, show them in the preview table with a green "Refund" badge
+- The admin can see exactly which rows are charges vs. refunds before confirming
 
 ---
 
-## Status Tracker
+## Phase 6: "Dispute Refunds" Sub-tab UI in Toll Reconciliation
 
-| Phase | Description | Status |
-|-------|------------|--------|
-| 1 | Server-side auto-confirm PERFECT_MATCH | COMPLETE |
-| 2 | Auto-matched badge in Matched History | COMPLETE |
-| 3 | Sub-tab infrastructure in UnmatchedTollsList | COMPLETE |
-| 4 | Classification logic & filtering per sub-tab | COMPLETE |
-| 5 | Smart Suggestions scoped to sub-tabs | COMPLETE |
-| 6 | Dashboard card updates & final polish | COMPLETE |
+**Goal**: Build the new sub-tab inside the Unmatched Tolls tab that displays imported dispute refunds and lets the admin match them to underpaid tolls.
+
+### Step 6.1: Add the sub-tab to UnmatchedTollsList
+- File: `/components/toll-tags/reconciliation/UnmatchedTollsList.tsx`
+- Update the `UnmatchedSubTab` type: add `'dispute-refunds'` to the union
+- Add a 5th sub-tab button: "Dispute Refunds" with a count badge
+- The sub-tab icon could be a shield or checkmark (representing recovered money)
+
+### Step 6.2: Fetch dispute refunds in useTollReconciliation hook
+- File: `/hooks/useTollReconciliation.ts`
+- Add `disputeRefunds` to the state
+- Fetch from `GET /dispute-refunds?status=unmatched` during data load
+- Expose `disputeRefunds` in the hook's return value
+
+### Step 6.3: Pass dispute refunds to UnmatchedTollsList
+- File: `/components/toll-tags/reconciliation/ReconciliationDashboard.tsx`
+- Pass `disputeRefunds` as a new prop to `UnmatchedTollsList`
+- Add handler functions: `handleMatchRefund()`, `handleUnmatchRefund()`
+
+### Step 6.4: Create DisputeRefundsList component
+- New file: `/components/toll-tags/reconciliation/DisputeRefundsList.tsx`
+- Table columns:
+  - Date (formatted in fleet timezone)
+  - Driver Name
+  - Refund Amount
+  - Support Case ID (truncated with copy button)
+  - Status (Unmatched / Matched)
+  - Actions (Match / View Suggestions)
+- Empty state: "No dispute refunds imported yet. Import an Uber payments_transaction CSV to detect Support Adjustment refunds."
+
+### Step 6.5: Smart match suggestion UI
+- When admin clicks "Match" on a refund row, show a popover/panel with suggested toll matches
+- Each suggestion shows: Toll date, amount, variance, Uber refund, trip route, confidence score
+- Admin clicks "Link" to confirm the match
+- After linking: row moves from "Unmatched" to "Matched" with green checkmark
+- Also provide a "Manual Search" option if suggestions don't match
+
+### Step 6.6: Update the "Recovered" summary card
+- File: `/components/toll-tags/reconciliation/ReconciliationDashboard.tsx`
+- The "Recovered" card (green, line ~364) currently shows `recoveredAmount` from reconciled tolls
+- Add matched dispute refund amounts to this total
+- Add a sub-line: "Including $X from dispute refunds"
+
+---
+
+## Phase 7: Linking Logic & Claimable Loss Auto-Resolution
+
+**Goal**: When a dispute refund is linked to an underpaid toll, automatically resolve any associated Claimable Loss claim.
+
+### Step 7.1: Implement the match handler in ReconciliationDashboard
+- When `handleMatchRefund(refundId, tollTransactionId)` is called:
+  1. Look up the toll transaction to find its `tripId`
+  2. Look up any Claimable Loss claim with `transactionId === tollTransactionId`
+  3. Call `PATCH /dispute-refunds/:id/match` with `{ tollTransactionId, claimId }`
+  4. The server handles both updates atomically
+
+### Step 7.2: Server-side auto-resolution logic
+- In the `PATCH /dispute-refunds/:id/match` endpoint:
+  - If `claimId` is provided:
+    - Load the claim from `claim:<claimId>`
+    - Update: `status: 'Resolved'`, `resolutionReason: 'Reimbursed'`, `disputeRefundId: refundId`
+    - Write back to KV
+  - This ensures Claimable Loss "Reimbursement Pending" items auto-close when proof arrives
+
+### Step 7.3: Handle partial amount matches
+- The refund amount ($10) might not exactly match the toll variance (e.g., variance was $15)
+- Decision: Still allow the match, but flag: "Refund covers $10 of $15 variance"
+- The remaining $5 stays as an open loss in Claimable Loss
+- UI shows: "Partial recovery — $10 of $15 recovered via dispute"
+
+### Step 7.4: Handle refunds with no matching toll
+- Some refunds may not correspond to any imported toll (e.g., from a period not yet imported)
+- These stay as "Unmatched" in the Dispute Refunds sub-tab
+- Admin can manually note: "No corresponding toll found" (write-off or hold for later)
+
+### Step 7.5: Claimable Loss "Refund Detected" badge
+- File: `/pages/ClaimableLoss.tsx` and `/components/claimable-loss/PendingReimbursementList.tsx`
+- When a pending claim has a matching dispute refund (same toll transaction ID):
+  - Show a green badge: "Uber Refund Detected"
+  - Change the "Mark as Reimbursed" button to "Confirm & Resolve (Refund Verified)"
+  - This gives the admin confidence that the refund actually happened
+
+### Step 7.6: Prevent double-counting
+- The `PATCH /dispute-refunds/:id/match` endpoint must check:
+  - Is this refund already matched to another toll? → Error
+  - Is this toll already matched to another refund? → Error
+  - Is the claim already resolved? → Skip claim update (but still link the refund)
+- The "Recovered" card must not count both the trip-level refund AND the dispute refund for the same toll
+
+---
+
+## Phase 8: Driver Detail "Platform Toll Refunds" Card Enhancement
+
+**Goal**: Update the driver detail page's toll card to show a complete picture of toll recovery including dispute refunds.
+
+### Step 8.1: Analyze current card data source
+- Currently: `resolvedFinancials.totalTolls` comes from `ledgerOverview.period.tolls`
+- This represents trip-level toll charges (what Uber auto-refunds in the fare)
+- It does NOT include Support Adjustment refunds
+- The card title is "Platform Toll Refunds" with subtext "From trip-level toll charges"
+
+### Step 8.2: Add dispute refund totals to the server overview endpoint
+- The ledger overview endpoint (`GET /ledger/driver-overview`) should include a new field: `disputeRefunds`
+- Calculate: Sum of all `dispute-refund:` records where `driverId` matches and `status === 'matched'` and falls within the period
+- Return: `{ period: { ...existing, disputeRefunds: number }, lifetime: { ...existing, disputeRefunds: number } }`
+
+### Step 8.3: Update the card UI
+- File: `/components/drivers/DriverDetail.tsx`, around line 2743
+- Change the card to show TWO lines:
+  - Line 1: "Trip Toll Refunds: $X" (existing — what Uber pays automatically)
+  - Line 2: "Dispute Refunds: $Y" (new — Support Adjustments won from disputes)
+  - Total header: "Total Toll Recovery: $(X+Y)"
+- Update subtext from "From trip-level toll charges" to "Trip refunds + dispute recoveries"
+- If dispute refunds are $0, just show the current single-line view (no visual change)
+
+### Step 8.4: Update the breakdown section
+- Currently shows per-platform breakdown (Uber/InDrive)
+- Add a new breakdown entry: "Dispute Recoveries" with a distinct color (e.g., teal)
+- This only appears when dispute refund total > 0
+
+### Step 8.5: Tooltip enhancement
+- Add a tooltip explaining the difference:
+  - "Trip Toll Refunds: Tolls automatically reimbursed by the platform in trip fares"
+  - "Dispute Refunds: Additional refunds won by disputing underpaid tolls with Uber Support"
+
+### Step 8.6: Edge case — Driver without any dispute refunds
+- Card should render identically to current behavior (no visual regression)
+- Only show the enhanced view when disputeRefunds > 0
+
+---
+
+## Phase 9: Testing & Validation
+
+**Goal**: Verify the entire flow end-to-end and ensure no regressions.
+
+### Step 9.1: Import path test
+- Upload a `payments_transaction` CSV containing Support Adjustment rows via Platform Imports
+- Verify: Refunds are extracted, stored in KV, import summary shows count
+- Verify: Regular trip rows still import correctly (no regression)
+- Verify: Duplicate import of same CSV doesn't create duplicate refund records
+
+### Step 9.2: Toll Reconciliation test
+- Open Toll Reconciliation > Unmatched Tolls > Dispute Refunds sub-tab
+- Verify: Imported refunds appear with correct data
+- Click "Match" on a refund > verify suggestions appear
+- Link a refund to an underpaid toll > verify status changes to "Matched"
+- Verify: "Recovered" card updates to include the refund amount
+
+### Step 9.3: Claimable Loss test
+- Create a claim for an underpaid toll (Reimbursement Pending status)
+- Import a Support Adjustment refund for that same toll
+- Match the refund to the toll in Toll Reconciliation
+- Verify: The claim in Claimable Loss auto-resolves to "Reimbursed"
+- Verify: History tab shows the resolution
+
+### Step 9.4: Driver Detail test
+- Open a driver's detail page
+- Verify: "Platform Toll Refunds" card shows updated totals including dispute refunds
+- Verify: Breakdown shows the new "Dispute Recoveries" line
+- Verify: Driver with no dispute refunds shows unchanged card
+
+### Step 9.5: Regression checks
+- Verify: All existing Toll Reconciliation functionality works (Unmatched, Unlinked Refunds, Matched History)
+- Verify: All existing Claimable Loss tabs work (Underpaid, Awaiting Driver, Reimbursement Pending, Dispute Lost, History)
+- Verify: Platform Imports still import all Uber CSV types correctly
+- Verify: Toll Usage import still works for toll company CSVs
+
+---
+
+## Key Files Affected (Reference)
+
+| File | Changes |
+|------|---------|
+| `/types/data.ts` | Add `DisputeRefund` interface |
+| `/utils/csvHelpers.ts` | Parse Support Adjustment rows (line ~1174) |
+| `/supabase/functions/server/index.tsx` | New dispute refund endpoints |
+| `/services/api.ts` | New API client methods |
+| `/hooks/useTollReconciliation.ts` | Fetch dispute refunds |
+| `/components/toll-tags/reconciliation/ReconciliationDashboard.tsx` | Pass dispute refunds, update Recovered card |
+| `/components/toll-tags/reconciliation/UnmatchedTollsList.tsx` | Add 5th sub-tab |
+| `/components/toll-tags/reconciliation/DisputeRefundsList.tsx` | **NEW** — Sub-tab content |
+| `/components/imports/ImportsPage.tsx` | Import summary shows dispute refund count |
+| `/components/vehicles/BulkImportTollTransactionsModal.tsx` | Refund row handling audit |
+| `/pages/ClaimableLoss.tsx` | "Refund Detected" badge logic |
+| `/components/claimable-loss/PendingReimbursementList.tsx` | "Refund Detected" badge UI |
+| `/components/drivers/DriverDetail.tsx` | Enhanced toll card |
+
+## Execution Rules
+
+- Each phase is implemented one at a time
+- Admin confirms completion before moving to next phase
+- Zero breakage tolerance — all changes must be backward-compatible
+- DriverDetail.tsx and VehicleDetail.tsx: only single-line `old_str` edits (known encoding issue)

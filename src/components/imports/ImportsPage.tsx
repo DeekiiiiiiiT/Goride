@@ -84,7 +84,7 @@ import {
     VehicleTimeDistance
 } from '../../utils/csvHelpers';
 import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpers';
-import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState } from '../../types/data';
+import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
 import { FuelEntry, FuelCard } from '../../types/fuel';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
@@ -160,6 +160,7 @@ export function ImportsPage() {
   // Phase 1: Time & Distance Data
   const [processedDriverTime, setProcessedDriverTime] = useState<DriverTimeDistance[]>([]);
   const [processedVehicleTime, setProcessedVehicleTime] = useState<VehicleTimeDistance[]>([]);
+  const [processedDisputeRefunds, setProcessedDisputeRefunds] = useState<DisputeRefund[]>([]);
 
   // UI States
   const [isParsing, setIsParsing] = useState(false);
@@ -325,7 +326,7 @@ export function ImportsPage() {
       // 1. Merge
       // Phase 1: Capture Organization Name
       const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats, driverTimeData, vehicleTimeData } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats, driverTimeData, vehicleTimeData, disputeRefunds } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
           localStorage.setItem('roam_fleet_name', organizationName);
@@ -361,6 +362,10 @@ export function ImportsPage() {
       setCalibrationStats(calibrationStats);
       setProcessedDriverTime(driverTimeData || []);
       setProcessedVehicleTime(vehicleTimeData || []);
+      setProcessedDisputeRefunds(disputeRefunds || []);
+      if ((disputeRefunds || []).length > 0) {
+          console.log(`[Import] Found ${disputeRefunds!.length} dispute refund(s) in CSV`);
+      }
       setStep('preview_merged');
   };
 
@@ -439,6 +444,10 @@ export function ImportsPage() {
         setProcessedFuelEntries(localResult.fuelEntries || []);
         setProcessedDriverTime(localResult.driverTimeData || []);
         setProcessedVehicleTime(localResult.vehicleTimeData || []);
+        setProcessedDisputeRefunds(localResult.disputeRefunds || []);
+        if ((localResult.disputeRefunds || []).length > 0) {
+            console.log(`[Import] Found ${localResult.disputeRefunds!.length} dispute refund(s) in CSV (AI flow)`);
+        }
         
         // Phase 1: Run AI Auditor
         if (aiData.drivers || aiData.vehicles || aiData.financials) {
@@ -598,6 +607,25 @@ export function ImportsPage() {
                   fuelService.createFuelEntry(entry)
               ));
           }
+
+          // Dispute Refunds: Persist to server
+          if (processedDisputeRefunds.length > 0) {
+              try {
+                  const drResult = await api.importDisputeRefunds(processedDisputeRefunds);
+                  if (drResult.imported > 0) {
+                      const msg = drResult.skipped > 0
+                          ? `Imported ${drResult.imported} dispute refund(s) (${drResult.skipped} already existed)`
+                          : `Imported ${drResult.imported} dispute refund(s)`;
+                      toast.success(msg);
+                  } else if (drResult.skipped > 0) {
+                      toast.info(`${drResult.skipped} dispute refund(s) already imported — no new refunds`);
+                  }
+                  console.log(`[Import] Dispute refunds: ${drResult.imported} imported, ${drResult.skipped} skipped`);
+              } catch (drErr: any) {
+                  console.error('[Import] Failed to import dispute refunds:', drErr);
+                  toast.error(`Dispute refund import failed: ${drErr.message}`);
+              }
+          }
           
           setStep('success');
       } catch (e: any) {
@@ -615,6 +643,7 @@ export function ImportsPage() {
       setImportSearch('');
       setError(null);
       setWarning(null);
+      setProcessedDisputeRefunds([]);
   };
 
   const handleTollBackup = async () => {
@@ -1496,6 +1525,22 @@ export function ImportsPage() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    {/* Dispute Refunds Detected */}
+                    {processedDisputeRefunds.length > 0 && (
+                        <Alert className="bg-teal-50 border-teal-200 text-teal-800">
+                            <DollarSign className="h-4 w-4 text-teal-600" />
+                            <AlertTitle className="flex items-center gap-2">
+                                Dispute Refunds Found
+                                <Badge className="bg-teal-600 text-white text-xs">{processedDisputeRefunds.length}</Badge>
+                            </AlertTitle>
+                            <AlertDescription>
+                                {processedDisputeRefunds.length} Support Adjustment refund{processedDisputeRefunds.length !== 1 ? 's' : ''} detected
+                                {' '}(${processedDisputeRefunds.reduce((s, r) => s + (r.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}).
+                                {' '}These will be saved to Toll Reconciliation &gt; Dispute Refunds on import.
+                            </AlertDescription>
+                        </Alert>
+                    )}
 
                     {/* Financial Health Checks (New Tiles) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -1,4 +1,4 @@
-import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics, VehicleMetrics, RentalContract, OrganizationMetrics } from '../types/data';
+import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics, VehicleMetrics, RentalContract, OrganizationMetrics, DisputeRefund } from '../types/data';
 import { FuelEntry, FuelCard } from '../types/fuel';
 import Papa from 'papaparse';
 
@@ -373,6 +373,7 @@ export interface ProcessedBatch {
         deductionPerTrip: number;
         phantomLagDetected: boolean;
     };
+    disputeRefunds?: DisputeRefund[];
 }
 
 // Helper to extract and clean driver name
@@ -984,6 +985,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     const driverTimeData: DriverTimeDistance[] = [];
     const vehicleTimeData: VehicleTimeDistance[] = [];
     let organizationName = knownFleetName || ''; // Phase 1: Track Fleet Owner Name
+    const disputeRefundsMap = new Map<string, DisputeRefund>(); // Dispute Refund: keyed by supportCaseId for dedup
     
     // Phase 2: Calculate Global Fleet Stats for Static Reconstruction
     const fleetStats = calculateFleetStats(files);
@@ -1173,6 +1175,72 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
              // ... existing trip logic ...
              if (file.type === 'uber_trip' || file.type === 'uber_payment') {
                 const tripId = cleanId(row['Trip UUID'] || row['trip uuid']);
+
+                // ── Dispute Refund Extraction ──
+                // Support Adjustment rows in payments_transaction CSV have NO Trip UUID
+                // but contain a refund amount in the Toll column. Capture these before skipping.
+                if (!tripId && file.type === 'uber_payment') {
+                    const desc = String(row['Description'] || '');
+                    const isSupportAdj = desc.startsWith('Support Adjustment');
+                    if (isSupportAdj) {
+                        const parseCurrencyLocal = (val: any) => parseFloat(String(val || '0').replace(/[^0-9.-]/g, '')) || 0;
+                        const tollRefundAmt = parseCurrencyLocal(row['Paid to you:Trip balance:Refunds:Toll'] || row['Paid to you : Trip balance : Refunds : Toll']);
+                        // Only capture if there's an actual toll refund amount
+                        if (tollRefundAmt !== 0) {
+                            // Extract support case UUID from description
+                            // Format: "Support Adjustment:  <UUID>" or "Support Adjustment: <UUID>"
+                            const supportCaseId = desc.replace(/^Support Adjustment:\s*/i, '').trim() || `unknown-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                            
+                            // Dedup by supportCaseId within this import session
+                            if (!disputeRefundsMap.has(supportCaseId)) {
+                                const driverId = String(row['Driver UUID'] || row['driver uuid'] || '').trim();
+                                const firstName = String(row['Driver first name'] || row['Driver First Name'] || '').trim();
+                                const lastName = String(row['Driver last name'] || row['Driver Last Name'] || '').trim();
+                                const driverName = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Driver';
+                                
+                                // Extract date
+                                let refundDate = '';
+                                if (row['vs reporting']) {
+                                    try { refundDate = new Date(String(row['vs reporting'])).toISOString(); } catch(e) {}
+                                }
+                                if (!refundDate) {
+                                    const dateKeys = ['Trip request time', 'Request Time', 'Date/Time', 'Date', 'Time'];
+                                    for (const k of dateKeys) {
+                                        if (row[k]) {
+                                            try {
+                                                const d = parseDateString(String(row[k]), isMMDD);
+                                                if (d && !isNaN(d.getTime())) { refundDate = d.toISOString(); break; }
+                                            } catch(e) {}
+                                        }
+                                    }
+                                }
+                                if (!refundDate) refundDate = new Date().toISOString();
+
+                                const refund: DisputeRefund = {
+                                    id: `dr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+                                    supportCaseId,
+                                    amount: Math.abs(tollRefundAmt),
+                                    date: refundDate,
+                                    driverId,
+                                    driverName,
+                                    platform: 'Uber',
+                                    source: 'platform_import',
+                                    status: 'unmatched',
+                                    matchedTollId: null,
+                                    matchedClaimId: null,
+                                    importedAt: new Date().toISOString(),
+                                    resolvedAt: null,
+                                    resolvedBy: null,
+                                    rawDescription: desc,
+                                };
+                                disputeRefundsMap.set(supportCaseId, refund);
+                                console.log(`[Import] Captured dispute refund: ${supportCaseId} → $${Math.abs(tollRefundAmt).toFixed(2)} for driver ${driverName} (${driverId})`);
+                            }
+                        }
+                    }
+                    return; // Still skip tripMap for rows with no Trip UUID
+                }
+
                 if (!tripId) return; 
 
                 const current = tripMap.get(tripId) || { id: tripId, platform: 'Uber' };
@@ -2200,7 +2268,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             fleetStats,
             deductionPerTrip,
             phantomLagDetected: deductionPerTrip > 0
-        }
+        },
+        disputeRefunds: Array.from(disputeRefundsMap.values()),
     };
 }
 

@@ -36,6 +36,7 @@ export function ReconciliationDashboard() {
     unreconciledTolls, 
     reconciledTolls,
     unclaimedRefunds, 
+    disputeRefunds,
     trips, 
     suggestions, 
     reconcile, 
@@ -253,6 +254,12 @@ export function ReconciliationDashboard() {
   // Yellow: Unclaimed Refunds (Money Uber paid you, but you haven't matched to an expense)
   const refundsAmount = unclaimedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
 
+  // Phase 6: Dispute refund recovery amount (matched/auto-resolved refunds)
+  const matchedDisputeRefundAmount = (disputeRefunds || [])
+    .filter(r => r.status === 'matched' || r.status === 'auto_resolved')
+    .reduce((sum, r) => sum + (r.amount || 0), 0);
+  const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
+
   // Count high confidence matches for auto-button
   // Phase 5: Scope to filteredUnreconciledTolls only (excludes claimed items)
   const filteredTollIds = new Set(filteredUnreconciledTolls.map(tx => tx.id));
@@ -377,8 +384,15 @@ export function ReconciliationDashboard() {
                             </TooltipContent>
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">${recoveredAmount.toFixed(2)}</div>
-                    <div className="text-xs text-slate-500 mt-1">Paid by Uber</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">${totalRecovered.toFixed(2)}</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                        Paid by Uber
+                        {matchedDisputeRefundAmount > 0 && (
+                            <span className="block text-teal-600 mt-0.5">
+                                Incl. ${matchedDisputeRefundAmount.toFixed(2)} from dispute refunds
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <TrendingUp className="h-5 w-5 text-emerald-400" />
             </div>
@@ -480,6 +494,8 @@ export function ReconciliationDashboard() {
                 onFlag={handleFlag}
                 onManualResolve={handleManualResolve}
                 onEdit={handleEditToll}
+                disputeRefunds={disputeRefunds}
+                onRefundMatchComplete={refresh}
             />
         </TabsContent>
         

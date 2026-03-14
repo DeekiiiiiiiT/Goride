@@ -150,9 +150,11 @@
     --color-teal-50: oklch(.984 .014 180.72);
     --color-teal-100: oklch(.953 .051 180.801);
     --color-teal-200: oklch(.91 .096 180.426);
+    --color-teal-300: oklch(.855 .138 181.071);
     --color-teal-500: oklch(.704 .14 182.503);
     --color-teal-600: oklch(.6 .118 184.704);
     --color-teal-700: oklch(.511 .096 186.391);
+    --color-teal-800: oklch(.437 .078 188.216);
     --color-cyan-100: oklch(.956 .045 203.388);
     --color-cyan-200: oklch(.917 .08 205.041);
     --color-cyan-400: oklch(.789 .154 211.53);
@@ -2097,6 +2099,10 @@
     max-width: 80%;
   }
 
+  .max-w-\[80px\] {
+    max-width: 80px;
+  }
+
   .max-w-\[120px\] {
     max-width: 120px;
   }
@@ -3453,6 +3459,14 @@
     border-color: var(--color-teal-200);
   }
 
+  .border-teal-300 {
+    border-color: var(--color-teal-300);
+  }
+
+  .border-teal-500 {
+    border-color: var(--color-teal-500);
+  }
+
   .border-transparent {
     border-color: #0000;
   }
@@ -4725,6 +4739,16 @@
 
   .bg-teal-50 {
     background-color: var(--color-teal-50);
+  }
+
+  .bg-teal-50\/30 {
+    background-color: color-mix(in srgb, oklch(.984 .014 180.72) 30%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-teal-50\/30 {
+      background-color: color-mix(in oklab, var(--color-teal-50) 30%, transparent);
+    }
   }
 
   .bg-teal-100 {
@@ -6362,6 +6386,10 @@
     color: var(--color-slate-950);
   }
 
+  .text-teal-300 {
+    color: var(--color-teal-300);
+  }
+
   .text-teal-500 {
     color: var(--color-teal-500);
   }
@@ -6372,6 +6400,10 @@
 
   .text-teal-700 {
     color: var(--color-teal-700);
+  }
+
+  .text-teal-800 {
+    color: var(--color-teal-800);
   }
 
   .text-violet-400 {
@@ -8375,8 +8407,20 @@
   }
 
   @media (hover: hover) {
+    .hover\:bg-teal-50:hover {
+      background-color: var(--color-teal-50);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-teal-200:hover {
       background-color: var(--color-teal-200);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-teal-700:hover {
+      background-color: var(--color-teal-700);
     }
   }
 
@@ -8723,6 +8767,12 @@
   @media (hover: hover) {
     .hover\:text-slate-900:hover {
       color: var(--color-slate-900);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-teal-700:hover {
+      color: var(--color-teal-700);
     }
   }
 
@@ -9878,6 +9928,12 @@
   }
 
   @media (width >= 40rem) {
+    .sm\:max-w-\[95vw\] {
+      max-width: 95vw;
+    }
+  }
+
+  @media (width >= 40rem) {
     .sm\:max-w-\[425px\] {
       max-width: 425px;
     }
@@ -10484,6 +10540,12 @@
   @media (width >= 64rem) {
     .lg\:w-auto {
       width: auto;
+    }
+  }
+
+  @media (width >= 64rem) {
+    .lg\:max-w-\[1200px\] {
+      max-width: 1200px;
     }
   }
 
@@ -12043,6 +12105,60 @@
 
   .\[\&\>svg\]\:text-sidebar-accent-foreground > svg {
     color: var(--sidebar-accent-foreground);
+  }
+
+  .\[\&\>td\]\:px-2 > td {
+    padding-inline: calc(var(--spacing) * 2);
+  }
+
+  .\[\&\>td\]\:px-3 > td {
+    padding-inline: calc(var(--spacing) * 3);
+  }
+
+  .\[\&\>td\]\:py-1 > td {
+    padding-block: calc(var(--spacing) * 1);
+  }
+
+  .\[\&\>td\]\:py-2 > td {
+    padding-block: calc(var(--spacing) * 2);
+  }
+
+  .\[\&\>th\]\:px-2 > th {
+    padding-inline: calc(var(--spacing) * 2);
+  }
+
+  .\[\&\>th\]\:px-3 > th {
+    padding-inline: calc(var(--spacing) * 3);
+  }
+
+  .\[\&\>th\]\:py-1\.5 > th {
+    padding-block: calc(var(--spacing) * 1.5);
+  }
+
+  .\[\&\>th\]\:py-2 > th {
+    padding-block: calc(var(--spacing) * 2);
+  }
+
+  .\[\&\>th\]\:text-\[11px\] > th {
+    font-size: 11px;
+  }
+
+  .\[\&\>th\]\:font-semibold > th {
+    --tw-font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .\[\&\>th\]\:tracking-wider > th {
+    --tw-tracking: var(--tracking-wider);
+    letter-spacing: var(--tracking-wider);
+  }
+
+  .\[\&\>th\]\:text-slate-500 > th {
+    color: var(--color-slate-500);
+  }
+
+  .\[\&\>th\]\:uppercase > th {
+    text-transform: uppercase;
   }
 
   .\[\&\>tr\]\:last\:border-b-0 > tr:last-child {

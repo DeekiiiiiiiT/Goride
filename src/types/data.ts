@@ -554,6 +554,7 @@ export interface LedgerDriverOverview {
     platformFees: number;
     tripCount: number;
     cancelledCount: number;
+    disputeRefunds?: number; // Phase 8: Support Adjustment refund totals
   };
   prevPeriod: {
     earnings: number;
@@ -563,6 +564,7 @@ export interface LedgerDriverOverview {
     tripCount: number;
     cashCollected: number;
     tolls: number;
+    disputeRefunds?: number; // Phase 8: Lifetime dispute refund totals
   };
   platformStats: Record<string, {
     earnings: number;
@@ -900,6 +902,27 @@ export interface Claim {
 
   // Resolution Tracking
   resolutionReason?: 'Charge Driver' | 'Write Off' | 'Reimbursed' | 'Other';
+  disputeRefundId?: string; // Phase 7: Links to dispute refund that auto-resolved this claim
+}
+
+// --- Dispute Refunds (Support Adjustment Import) ---
+
+export interface DisputeRefund {
+  id: string;                          // Generated UUID, unique per refund record
+  supportCaseId: string;               // UUID extracted from Description field (format: "Support Adjustment:  <UUID>")
+  amount: number;                      // Refund amount (always positive)
+  date: string;                        // ISO timestamp from the CSV row
+  driverId: string;                    // Driver UUID from CSV
+  driverName: string;                  // Driver first + last name from CSV
+  platform: string;                    // Source platform (e.g., "Uber")
+  source: 'platform_import' | 'toll_usage'; // Which import path created this record
+  status: 'unmatched' | 'matched' | 'auto_resolved'; // Lifecycle state
+  matchedTollId: string | null;        // Toll transaction ID this refund was linked to
+  matchedClaimId: string | null;       // Claimable Loss claim ID this refund resolved
+  importedAt: string;                  // ISO timestamp of import
+  resolvedAt: string | null;           // ISO timestamp of when matched/resolved
+  resolvedBy: string | null;           // Admin who resolved, or "auto" for auto-match
+  rawDescription: string;              // Full original Description field for audit trail
 }
 
 // --- Phase 1 Extension: Dynamic Tiers & Expenses ---

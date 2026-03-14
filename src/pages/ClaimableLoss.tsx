@@ -30,6 +30,7 @@ export function ClaimableLoss() {
     loading: loadingTolls, 
     unreconciledTolls,
     reconciledTolls,
+    disputeRefunds,
     trips,
     unreconcile
   } = useTollReconciliation();
@@ -78,6 +79,15 @@ export function ClaimableLoss() {
 
   // Create Trip Map for O(1) lookup
   const tripMap = React.useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
+
+  // Phase 7: Build lookup of dispute refunds by toll transaction ID for "Refund Detected" badges
+  const refundByTollId = React.useMemo(() => {
+    const map = new Map<string, typeof disputeRefunds[number]>();
+    (disputeRefunds || []).forEach(r => {
+      if (r.matchedTollId) map.set(r.matchedTollId, r);
+    });
+    return map;
+  }, [disputeRefunds]);
 
   // 1. Prepare Underpaid Tolls (Losses)
   // We filter out any transaction that already has an active claim associated with it.
@@ -525,6 +535,7 @@ export function ClaimableLoss() {
                 title="Awaiting Driver Submission"
                 description="Claims sent to drivers but not yet submitted to Uber."
                 getDriverName={getDriverName}
+                refundByTollId={refundByTollId}
              />
              <p className="text-xs text-slate-500 mt-2 text-center">
                 * These claims have been sent to drivers but they haven't submitted them to Uber yet.
@@ -540,6 +551,7 @@ export function ClaimableLoss() {
                 onBulkResolve={(claims) => handleBulkUpdateStatus(claims, 'Resolved', 'Reimbursed')}
                 onBulkRevert={(claims) => handleBulkUpdateStatus(claims, 'Rejected')}
                 getDriverName={getDriverName}
+                refundByTollId={refundByTollId}
             />
         </TabsContent>
 

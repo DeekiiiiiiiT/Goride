@@ -10,8 +10,8 @@ import {
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { CheckCircle, AlertTriangle, ArrowRight, Clock } from "lucide-react";
-import { Claim } from "../../types/data";
+import { CheckCircle, AlertTriangle, ArrowRight, Clock, ShieldCheck } from "lucide-react";
+import { Claim, DisputeRefund } from "../../types/data";
 import { calculateDaysRemaining } from "../../utils/timeUtils";
 
 interface PendingReimbursementListProps {
@@ -24,6 +24,7 @@ interface PendingReimbursementListProps {
   title?: string;
   description?: string;
   getDriverName?: (id: string) => string;
+  refundByTollId?: Map<string, DisputeRefund>; // Phase 7: Dispute refund lookup
 }
 
 export function PendingReimbursementList({ 
@@ -35,7 +36,8 @@ export function PendingReimbursementList({
   onBulkRevert,
   title = "Reimbursement Pending",
   description = "Claims submitted by drivers, waiting for Uber refund.",
-  getDriverName
+  getDriverName,
+  refundByTollId
 }: PendingReimbursementListProps) {
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
 
@@ -153,6 +155,9 @@ export function PendingReimbursementList({
                 ? calculateDaysRemaining(claim.tripDate)
                 : { daysRemaining: 10, status: 'active', isUrgent: false };
 
+            // Phase 7: Check if a matching dispute refund exists for this claim's toll transaction
+            const matchingRefund = claim.transactionId && refundByTollId ? refundByTollId.get(claim.transactionId) : undefined;
+
             return (
             <TableRow key={claim.id} data-state={selectedIds.has(claim.id) ? "selected" : undefined}>
               <TableCell>
@@ -197,15 +202,23 @@ export function PendingReimbursementList({
                 ${claim.amount.toFixed(2)}
               </TableCell>
               <TableCell className="text-right">
-                {claim.status === 'Sent_to_Driver' ? (
-                  <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200">
-                     Awaiting Driver
-                  </Badge>
-                ) : (
-                  <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">
-                     Pending Uber
-                  </Badge>
-                )}
+                <div className="flex flex-col items-end gap-1">
+                  {claim.status === 'Sent_to_Driver' ? (
+                    <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200">
+                       Awaiting Driver
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">
+                       Pending Uber
+                    </Badge>
+                  )}
+                  {matchingRefund && (
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] flex items-center gap-0.5">
+                      <ShieldCheck className="h-3 w-3" />
+                      Uber Refund Detected
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-right flex justify-end gap-2">
                 <Button 
@@ -219,11 +232,11 @@ export function PendingReimbursementList({
                 <Button 
                   variant="default" 
                   size="sm" 
-                  className="h-8 bg-emerald-600 hover:bg-emerald-700"
+                  className={`h-8 ${matchingRefund ? 'bg-teal-600 hover:bg-teal-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
                   onClick={() => onResolve(claim)}
                 >
                   <CheckCircle className="mr-2 h-3 w-3" />
-                  Verify Refund
+                  {matchingRefund ? 'Confirm & Resolve' : 'Verify Refund'}
                 </Button>
               </TableCell>
             </TableRow>

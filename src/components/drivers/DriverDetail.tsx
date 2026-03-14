@@ -133,6 +133,7 @@ import { WeeklySettlementView } from './WeeklySettlementView';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
+// TollRecoveryCard removed — Phase 8 uses platformStats injection instead
 // fetchDriverTrips.ts deleted in Phase 11 — logic inlined in the useEffect below
 import { DistanceByPlatform } from './DistanceByPlatform';
 import { FinancialSubTabs } from './FinancialSubTabs';
@@ -193,6 +194,7 @@ const PLATFORM_COLORS: Record<string, string> = {
 
   Private: '#f59e0b',
   Cash: '#84cc16',
+  'Dispute Recoveries': '#14b8a6',
   Other: '#64748b'
 };
 
@@ -2017,6 +2019,22 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         ? ((ledgerOverview.period.earnings - ledgerOverview.prevPeriod.earnings) / ledgerOverview.prevPeriod.earnings) * 100
         : ledgerOverview.period.earnings > 0 ? 100 : 0;
 
+      // Phase 8: Inject "Dispute Recoveries" into metrics.platformStats so the existing
+      // JSX breakdown (.filter stats.tolls > 0) naturally picks it up.
+      // NOTE: JSX reads metrics.platformStats, NOT resolvedFinancials.platformStats.
+      // Controlled mutation is safe — resolvedFinancials depends on metrics and both
+      // run in the same render cycle; metrics is recreated on every dep change.
+      const drAmt = Number(ledgerOverview.period.disputeRefunds) || 0;
+      if (drAmt > 0) {
+        metrics.platformStats['Dispute Recoveries'] = {
+          earnings: 0, trips: 0, completed: 0, distance: 0,
+          ratingSum: 0, ratingCount: 0, cashCollected: 0,
+          tolls: drAmt,
+        };
+      } else {
+        delete metrics.platformStats['Dispute Recoveries'];
+      }
+
       return {
         periodEarnings: ledgerOverview.period.earnings,
         prevPeriodEarnings: ledgerOverview.prevPeriod.earnings,
@@ -2024,6 +2042,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         trendUp: ledgerOverview.period.earnings >= ledgerOverview.prevPeriod.earnings,
         cashCollected: ledgerOverview.period.cashCollected,
         totalTolls: ledgerOverview.period.tolls,
+        disputeRefunds: ledgerOverview.period.disputeRefunds || 0,
         totalTips: ledgerOverview.period.tips,
         totalBaseFare: ledgerOverview.period.baseFare,
         platformStats,
@@ -2036,6 +2055,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         lifetimeTrips: ledgerOverview.lifetime.tripCount,
         lifetimeCashCollected: ledgerOverview.lifetime.cashCollected,
         lifetimeTolls: ledgerOverview.lifetime.tolls,
+        lifetimeDisputeRefunds: ledgerOverview.lifetime.disputeRefunds || 0,
         lifetimePlatformStats: ledgerOverview.lifetime.platformStats || {},
       };
     }
@@ -2052,6 +2072,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       trendUp: true,
       cashCollected: 0,
       totalTolls: 0,
+      disputeRefunds: 0,
       totalTips: 0,
       totalBaseFare: 0,
       platformStats: metrics.platformStats, // Keep operational fields (distance, completed, rating)
@@ -2065,6 +2086,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       lifetimeTrips: metrics.lifetimeTrips,
       lifetimeCashCollected: 0,
       lifetimeTolls: 0,
+      lifetimeDisputeRefunds: 0,
       lifetimePlatformStats: {} as Record<string, any>,
     };
   }, [ledgerOverview, ledgerOverviewLoaded, metrics]);
@@ -2741,9 +2763,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardContent>
                </Card>
                <MetricCard 
-                  title="Platform Toll Refunds"
-                  value={`$${resolvedFinancials.totalTolls.toFixed(2)}`}
-                  subtext="From trip-level toll charges"
+                  title={resolvedFinancials.disputeRefunds > 0 ? "Total Toll Recovery" : "Platform Toll Refunds"}
+                  value={`$${(resolvedFinancials.totalTolls + (resolvedFinancials.disputeRefunds || 0)).toFixed(2)}`}
+                  subtext={resolvedFinancials.disputeRefunds > 0 ? "Trip refunds + dispute recoveries" : "From trip-level toll charges"}
+                   tooltip={resolvedFinancials.disputeRefunds > 0 ? "Trip Toll Refunds: Tolls automatically reimbursed by the platform in trip fares. Dispute Refunds: Additional refunds won by disputing underpaid tolls with Uber Support." : undefined}
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   loading={localLoading}
                    breakdown={Object.entries(metrics.platformStats)
