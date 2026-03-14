@@ -6,7 +6,7 @@ import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
 import { ReconciledTollsList } from "./ReconciledTollsList";
 import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
 import { useClaims } from "../../../hooks/useClaims";
-import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle, Filter } from "lucide-react";
+import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle, Filter, Bot } from "lucide-react";
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { DisputeModal } from "../../claimable-loss/DisputeModal";
@@ -43,6 +43,7 @@ export function ReconciliationDashboard() {
     approve,
     reject,
     autoMatchAll,
+    autoReconciledCount,
     refresh 
   } = useTollReconciliation(selectedDriverId || undefined);
 
@@ -208,9 +209,8 @@ export function ReconciliationDashboard() {
       case 'PERSONAL_MATCH': // Purple
         unreconciledPersonal += amount;
         break;
-      case 'PERFECT_MATCH': // Green
-        // Will be recovered once reconciled
-        break;
+      // Phase 6: PERFECT_MATCH tolls are now auto-reconciled server-side (Phase 1)
+      // and never appear in filteredUnreconciledTolls, so no case needed.
       default:
         unknownAmount += amount;
     }
@@ -254,8 +254,10 @@ export function ReconciliationDashboard() {
   const refundsAmount = unclaimedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
 
   // Count high confidence matches for auto-button
-  const highConfidenceCount = Array.from(suggestions.values())
-    .filter(matches => matches[0]?.confidence === 'high')
+  // Phase 5: Scope to filteredUnreconciledTolls only (excludes claimed items)
+  const filteredTollIds = new Set(filteredUnreconciledTolls.map(tx => tx.id));
+  const highConfidenceCount = Array.from(suggestions.entries())
+    .filter(([txId, matches]) => filteredTollIds.has(txId) && matches[0]?.confidence === 'high')
     .length;
 
   const handleSmartReconcile = async (tx: FinancialTransaction, trip: TripType) => {
@@ -428,6 +430,17 @@ export function ReconciliationDashboard() {
             </div>
         </div>
       </div>
+
+      {/* Phase 6: Auto-match session banner */}
+      {autoReconciledCount > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-700">
+          <Bot className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>{autoReconciledCount}</strong> toll{autoReconciledCount === 1 ? ' was' : 's were'} auto-matched to trips this session.{' '}
+            <span className="text-indigo-500">View in Matched History.</span>
+          </span>
+        </div>
+      )}
 
       <Tabs defaultValue="unmatched" className="w-full">
         <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">

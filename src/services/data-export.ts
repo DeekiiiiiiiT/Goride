@@ -15,13 +15,14 @@ import {
     VEHICLE_CSV_COLUMNS, VEHICLE_METRICS_CSV_COLUMNS, TRANSACTION_CSV_COLUMNS,
     TOLL_TAG_CSV_COLUMNS, TOLL_PLAZA_CSV_COLUMNS, STATION_CSV_COLUMNS,
     CLAIM_CSV_COLUMNS, EQUIPMENT_CSV_COLUMNS, INVENTORY_CSV_COLUMNS,
+    TOLL_TRANSACTION_CSV_COLUMNS,
 } from '../types/csv-schemas';
 import { ImportType } from './import-validator';
 
 export type ExportType = 'fuel' | 'service' | 'odometer' | 'checkin' | 'trip'
     | 'drivers' | 'driverMetrics' | 'vehicles' | 'vehicleMetrics'
     | 'transactions' | 'tollTags' | 'tollPlazas' | 'stations'
-    | 'claims' | 'equipment' | 'inventory';
+    | 'claims' | 'equipment' | 'inventory' | 'tollTransactions';
 
 interface ExportState {
     fuel: boolean;
@@ -40,6 +41,7 @@ interface ExportState {
     claims: boolean;
     equipment: boolean;
     inventory: boolean;
+    tollTransactions: boolean;
 }
 
 /**
@@ -488,6 +490,20 @@ export async function fetchAllInventory(): Promise<any[]> {
 }
 
 /**
+ * Fetches all toll transactions (flattened with reconciliation data) via the server export endpoint.
+ * Data is already sorted by date descending from the server.
+ */
+export async function fetchAllTollTransactions(): Promise<any[]> {
+    try {
+        const data = await api.getTollTransactionsExport();
+        return data || [];
+    } catch (error) {
+        console.error("Error fetching toll transactions for export:", error);
+        throw error;
+    }
+}
+
+/**
  * Re-exports for ExportCenter.
  */
 export { fetchAllFuelLogs as exportFetchAllFuelLogs };
@@ -599,6 +615,12 @@ export async function generateBackupFiles(selections: ExportState) {
         const data = await fetchAllInventory();
         const content = jsonToCsv(data, INVENTORY_CSV_COLUMNS);
         files.push({ filename: 'inventory_backup.csv', content });
+    }
+
+    if (selections.tollTransactions) {
+        const data = await fetchAllTollTransactions();
+        const content = jsonToCsv(data, TOLL_TRANSACTION_CSV_COLUMNS);
+        files.push({ filename: 'toll_transactions_backup.csv', content });
     }
 
     return files;
@@ -743,6 +765,7 @@ const BACKUP_CATEGORIES: BackupCategory[] = [
     { key: 'claims',         filename: 'claims.csv',         fetch: () => fetchAllClaims(),    columns: CLAIM_CSV_COLUMNS },
     { key: 'equipment',      filename: 'equipment.csv',      fetch: fetchAllEquipment,         columns: EQUIPMENT_CSV_COLUMNS },
     { key: 'inventory',      filename: 'inventory.csv',      fetch: fetchAllInventory,         columns: INVENTORY_CSV_COLUMNS },
+    { key: 'tollTransactions', filename: 'toll_transactions.csv', fetch: fetchAllTollTransactions, columns: TOLL_TRANSACTION_CSV_COLUMNS },
 ];
 
 export { BACKUP_CATEGORIES };
@@ -757,7 +780,7 @@ export interface BackupManifest {
 
 /**
  * Generates a full system backup as a ZIP blob.
- * Fetches all 16 data categories in parallel, converts to CSV, bundles with manifest.json.
+ * Fetches all 17 data categories in parallel, converts to CSV, bundles with manifest.json.
  * @param onProgress — callback with (completedSteps, totalSteps, currentLabel)
  */
 export async function generateFullBackup(

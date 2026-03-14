@@ -10,11 +10,13 @@
  *   GET  /toll-reconciliation/unreconciled      – paginated unmatched tolls + suggestions
  *   GET  /toll-reconciliation/unclaimed-refunds – paginated trips with no matched expense
  *   GET  /toll-reconciliation/reconciled        – paginated matched history
+ *   GET  /toll-reconciliation/export            – all toll txns flattened for CSV export
  */
 
 import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { getFleetTimezone, naiveToUtc, hasTzSuffix } from "./timezone_helper.tsx";
 import {
   parseISO,
   subMinutes,
@@ -421,24 +423,20 @@ function isAmountMatch(a: number, b: number): boolean {
   return Math.abs(a - b) < VARIANCE_THRESHOLD;
 }
 
-function getTransactionDateTime(tx: any): Date | null {
+function getTransactionDateTime(tx: any, timezone: string): Date | null {
   try {
-    // Jamaica is UTC-5 year-round (no DST). Toll times from CSV/receipt
-    // imports are local Jamaica time, but lack a timezone suffix.
-    // Without this offset, Deno (UTC) mis-interprets them as UTC,
-    // shifting every toll by 5 hours and producing false matches.
-    const JAMAICA_OFFSET = "-05:00";
-    const hasTZ = (s: string) => /[Zz]|[+-]\d{2}:\d{2}$/.test(s);
-
+    // If the datetime already has a TZ suffix, parse directly
     if (tx.date && tx.date.includes("T")) {
-      // Full ISO-ish string — append offset only if missing
-      return new Date(hasTZ(tx.date) ? tx.date : tx.date + JAMAICA_OFFSET);
+      if (hasTzSuffix(tx.date)) {
+        return new Date(tx.date);
+      }
+      // Naive ISO-ish string — interpret in fleet timezone
+      return naiveToUtc(tx.date, timezone);
     }
+    // Separate date + time fields — combine and interpret in fleet timezone
     const timeStr = tx.time || "00:00:00";
-    const isoStr = `${tx.date}T${timeStr}${JAMAICA_OFFSET}`;
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return new Date(`${tx.date} ${timeStr}`);
-    return d;
+    const naiveStr = `${tx.date}T${timeStr}`;
+    return naiveToUtc(naiveStr, timezone);
   } catch {
     return null;
   }
@@ -447,8 +445,9 @@ function getTransactionDateTime(tx: any): Date | null {
 function findTollMatchesServer(
   transaction: any,
   trips: any[],
+  timezone: string,
 ): MatchResult[] {
-  const txDate = getTransactionDateTime(transaction);
+  const txDate = getTransactionDateTime(transaction, timezone);
   if (!txDate) return [];
 
   const matches: MatchResult[] = [];
@@ -740,21 +739,117 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     // Compute match suggestions for the current page
     const page = unreconciled.slice(offset, offset + limit);
 
+    const timezone = await getFleetTimezone();
     const suggestionsMap: Record<string, MatchResult[]> = {};
     for (const tx of page) {
-      const matches = findTollMatchesServer(tx, trips);
+      const matches = findTollMatchesServer(tx, trips, timezone);
       if (matches.length > 0) {
         suggestionsMap[tx.id] = matches;
       }
     }
 
+    // ── Phase 1: Auto-confirm PERFECT_MATCH suggestions ──────────────
+    // Tolls where the amount matches within 5 cents AND the toll occurred
+    // during an active trip are automatically reconciled server-side.
+    // They never appear in the Unmatched list — they go straight to
+    // Matched History tagged as "system-auto" so the admin can distinguish
+    // them from manual confirmations.
+    let autoReconciled = 0;
+    const autoReconciledIds = new Set<string>();
+
+    for (const [txId, matches] of Object.entries(suggestionsMap)) {
+      const best = matches[0];
+      if (best?.matchType !== "PERFECT_MATCH") continue;
+
+      // Find the tx object in the page array
+      const tx = page.find((t: any) => t.id === txId);
+      if (!tx) continue;
+
+      // Guard: skip if already reconciled (race condition protection)
+      if (tx.isReconciled && tx.tripId) continue;
+
+      // Guard: skip if admin previously un-matched this auto-match
+      if (tx.metadata?.autoMatchOverridden) continue;
+
+      const tripId = best.tripId;
+      const trip = trips.find((t: any) => t.id === tripId);
+      if (!trip) continue;
+
+      try {
+        // Update transaction fields
+        tx.tripId = tripId;
+        tx.isReconciled = true;
+        tx.driverId = trip.driverId || tx.driverId;
+        tx.driverName = trip.driverName || tx.driverName;
+        tx.metadata = {
+          ...tx.metadata,
+          reconciledAt: new Date().toISOString(),
+          reconciledBy: "system-auto",
+          matchedTripPlatform: trip.platform,
+          autoMatchReason: best.reason,
+          autoMatchScore: best.confidenceScore,
+        };
+
+        await kv.set(`transaction:${txId}`, tx);
+
+        // Write ledger entry (mirrors the manual /reconcile endpoint)
+        await writeTollLedgerEntry({
+          eventType: "toll_reconciled",
+          category: "Toll Reconciliation",
+          description: `Auto-matched toll to trip: ${(trip.pickupLocation || "").substring(0, 30)} \u2192 ${(trip.dropoffLocation || "").substring(0, 30)}`,
+          grossAmount: Math.abs(Number(tx.amount) || 0),
+          netAmount: 0,
+          direction: "neutral",
+          sourceType: "reconciliation",
+          sourceId: txId,
+          driverId: tx.driverId || trip.driverId || "unknown",
+          driverName: tx.driverName || trip.driverName || "Unknown",
+          vehicleId: tx.vehicleId || trip.vehicleId,
+          date: tx.date,
+          metadata: {
+            tripId,
+            matchedAt: new Date().toISOString(),
+            matchedBy: "system-auto",
+            tollAmount: Math.abs(Number(tx.amount) || 0),
+            tripTollCharges: trip.tollCharges || 0,
+          },
+        });
+
+        autoReconciledIds.add(txId);
+        autoReconciled++;
+        console.log(
+          `[TollReconciliation] Auto-confirmed PERFECT_MATCH: tx ${txId} \u2192 trip ${tripId} (score: ${best.confidenceScore})`,
+        );
+      } catch (err: any) {
+        console.log(
+          `[TollReconciliation] Auto-confirm failed for tx ${txId}: ${err.message}`,
+        );
+      }
+    }
+
+    if (autoReconciled > 0) {
+      console.log(
+        `[TollReconciliation] Auto-confirmed ${autoReconciled} perfect match(es)`,
+      );
+    }
+
+    // Remove auto-reconciled items from page & suggestions before returning
+    const finalPage = page.filter(
+      (tx: any) => !autoReconciledIds.has(tx.id),
+    );
+    for (const id of autoReconciledIds) {
+      delete suggestionsMap[id];
+    }
+    const adjustedTotal = total - autoReconciled;
+
     return c.json({
       success: true,
-      data: page,
+      data: finalPage,
       suggestions: suggestionsMap,
-      total,
+      total: adjustedTotal,
       limit,
       offset,
+      autoReconciled,
     });
   } catch (e: any) {
     console.log(
@@ -1064,6 +1159,9 @@ app.post(`${BASE}/unreconcile`, async (c) => {
       ...tx.metadata,
       unreconciledAt: new Date().toISOString(),
       previousTripId,
+      // Phase 6: If this was an auto-matched toll, set override flag so the
+      // auto-confirm logic in /unreconciled skips it on future page loads.
+      ...(tx.metadata?.reconciledBy === 'system-auto' ? { autoMatchOverridden: true } : {}),
     };
 
     await kv.set(`transaction:${transactionId}`, tx);
@@ -1569,6 +1667,178 @@ app.post(`${BASE}/resolve`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /resolve error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /export ───────────────────────────────────────────────────────
+// Returns ALL toll transactions with flattened reconciliation data for CSV export.
+// No pagination — dumps everything in one response.
+
+app.get(`${BASE}/export`, async (c) => {
+  try {
+    const [allTx, allTrips] = await Promise.all([
+      loadAllTransactions(),
+      loadAllTrips(),
+    ]);
+
+    // Filter to toll-category transactions only
+    const tollTx = allTx.filter((tx: any) => isTollCategory(tx.category));
+
+    if (tollTx.length === 0) {
+      return c.json({ success: true, data: [], total: 0 });
+    }
+
+    // ── Step 1: Classify reconciliation status ──
+    const matched: any[] = [];
+    const unmatched: any[] = [];
+
+    for (const tx of tollTx) {
+      if (tx.isReconciled && tx.tripId) {
+        (tx as any)._reconStatus = "Matched";
+        matched.push(tx);
+      } else if (tx.isReconciled && !tx.tripId) {
+        // Dismissed / Rejected / Resolved without trip link
+        (tx as any)._reconStatus = "Dismissed";
+      } else if (tx.status === "Approved") {
+        (tx as any)._reconStatus = "Approved";
+      } else {
+        (tx as any)._reconStatus = "Unmatched";
+        unmatched.push(tx);
+      }
+    }
+
+    // ── Step 2: Batch-fetch linked trips for matched transactions ──
+    const tripLookup: Record<string, any> = {};
+    const matchedTripIds = [...new Set(matched.map((tx: any) => tx.tripId).filter(Boolean))];
+    if (matchedTripIds.length > 0) {
+      const tripKeys = matchedTripIds.map((id: string) => `trip:${id}`);
+      try {
+        const tripValues = await kv.mget(tripKeys);
+        matchedTripIds.forEach((id: string, idx: number) => {
+          if (tripValues[idx]) {
+            tripLookup[id] = tripValues[idx];
+          }
+        });
+      } catch {
+        console.log("[TollReconciliation] GET /export: mget for linked trips failed, proceeding without trip enrichment");
+      }
+    }
+
+    // ── Step 3: Compute suggestions for unmatched transactions ──
+    const suggestionsMap: Record<string, MatchResult[]> = {};
+    if (unmatched.length > 0) {
+      const timezone = await getFleetTimezone();
+      for (const tx of unmatched) {
+        const matches = findTollMatchesServer(tx, allTrips, timezone);
+        if (matches.length > 0) {
+          suggestionsMap[tx.id] = matches;
+        }
+      }
+    }
+
+    // ── Step 4: Flatten each transaction into an export row ──
+    const rows = tollTx.map((tx: any) => {
+      const reconStatus: string = (tx as any)._reconStatus;
+      const absAmount = Math.abs(Number(tx.amount) || 0);
+
+      // Extract time from date if it contains "T", else use tx.time
+      let timeStr = tx.time || "";
+      if (!timeStr && tx.date && tx.date.includes("T")) {
+        const tPart = tx.date.split("T")[1];
+        if (tPart) timeStr = tPart.replace(/[Z+-].*$/, "");
+      }
+
+      // Base row — transaction fields
+      const row: Record<string, any> = {
+        id: tx.id || "",
+        date: tx.date || "",
+        time: timeStr,
+        vehicleId: tx.vehicleId || "",
+        vehiclePlate: tx.vehiclePlate || "",
+        driverId: tx.driverId || "",
+        driverName: tx.driverName || "",
+        plaza: tx.tollPlaza || tx.vendor || tx.description || "",
+        type: tx.type || "",
+        paymentMethod: tx.paymentMethod || "",
+        amount: tx.amount ?? "",
+        absAmount,
+        status: tx.status || "",
+        description: tx.description || "",
+        referenceTagId: tx.tollTagId || tx.metadata?.tagId || "",
+        batchId: tx.batchId || "",
+        // Reconciliation status
+        reconciliationStatus: reconStatus,
+        resolution: tx.metadata?.resolution || "",
+      };
+
+      // Match details (only for "Matched")
+      if (reconStatus === "Matched" && tx.tripId) {
+        const linkedTrip = tripLookup[tx.tripId];
+        row.matchedTripId = tx.tripId;
+        row.matchedTripDate = linkedTrip?.date || "";
+        row.matchedTripPlatform = linkedTrip?.platform || tx.metadata?.matchedTripPlatform || "";
+        row.matchedTripPickup = (linkedTrip?.pickupLocation || "").substring(0, 40);
+        row.matchedTripDropoff = (linkedTrip?.dropoffLocation || "").substring(0, 40);
+        row.reconciledAt = tx.metadata?.reconciledAt || tx.metadata?.matchedAt || "";
+        row.reconciledBy = tx.metadata?.reconciledBy || tx.metadata?.matchedBy || "";
+        // Financial
+        const tripTollCharges = linkedTrip?.tollCharges || 0;
+        const variance = tripTollCharges - absAmount;
+        row.tripTollCharges = tripTollCharges;
+        row.refundAmount = variance >= 0 ? variance : 0;
+        row.lossAmount = variance < 0 ? Math.abs(variance) : 0;
+      } else {
+        row.matchedTripId = "";
+        row.matchedTripDate = "";
+        row.matchedTripPlatform = "";
+        row.matchedTripPickup = "";
+        row.matchedTripDropoff = "";
+        row.reconciledAt = "";
+        row.reconciledBy = "";
+        row.tripTollCharges = "";
+        row.refundAmount = "";
+        row.lossAmount = "";
+      }
+
+      // Suggestion status (only for "Unmatched")
+      if (reconStatus === "Unmatched") {
+        const suggestions = suggestionsMap[tx.id];
+        row.hasSuggestions = suggestions && suggestions.length > 0 ? "Yes" : "No";
+        row.isAmbiguous = suggestions?.[0]?.isAmbiguous ? "Yes" : "No";
+        row.topSuggestionScore = suggestions?.[0]?.confidenceScore ?? "";
+        row.topSuggestionTripId = suggestions?.[0]?.tripId || "";
+        row.suggestionCount = suggestions?.length || 0;
+      } else {
+        row.hasSuggestions = "";
+        row.isAmbiguous = "";
+        row.topSuggestionScore = "";
+        row.topSuggestionTripId = "";
+        row.suggestionCount = "";
+      }
+
+      return row;
+    });
+
+    // Sort by date descending (most recent first)
+    rows.sort((a: any, b: any) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    // Clean up temporary _reconStatus property
+    for (const tx of tollTx) {
+      delete (tx as any)._reconStatus;
+    }
+
+    console.log(`[TollReconciliation] GET /export: returning ${rows.length} toll transactions`);
+
+    return c.json({
+      success: true,
+      data: rows,
+      total: rows.length,
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /export error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

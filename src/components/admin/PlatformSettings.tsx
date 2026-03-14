@@ -28,6 +28,7 @@ import { API_ENDPOINTS } from '../../services/apiConfig';
 interface PlatformSettingsData {
   platformName: string;
   defaultCurrency: string;
+  fleetTimezone: string;
   platformVersion: string;
   maintenanceMode: boolean;
   enabledBusinessTypes: Record<string, boolean>;
@@ -37,6 +38,7 @@ interface PlatformSettingsData {
 const DEFAULT_SETTINGS: PlatformSettingsData = {
   platformName: 'Roam Fleet',
   defaultCurrency: 'JMD',
+  fleetTimezone: 'America/Jamaica',
   platformVersion: '1.0.0',
   maintenanceMode: false,
   enabledBusinessTypes: {
@@ -64,6 +66,21 @@ const CURRENCY_OPTIONS = [
   { value: 'CAD', label: 'CAD — Canadian Dollar' },
   { value: 'TTD', label: 'TTD — Trinidad & Tobago Dollar' },
   { value: 'BBD', label: 'BBD — Barbados Dollar' },
+];
+
+const TIMEZONE_OPTIONS = [
+  { value: 'America/Jamaica', label: 'America/Jamaica — Jamaica (EST, no DST)' },
+  { value: 'America/New_York', label: 'America/New_York — US Eastern' },
+  { value: 'America/Chicago', label: 'America/Chicago — US Central' },
+  { value: 'America/Denver', label: 'America/Denver — US Mountain' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles — US Pacific' },
+  { value: 'America/Toronto', label: 'America/Toronto — Canada Eastern' },
+  { value: 'America/Port_of_Spain', label: 'America/Port_of_Spain — Trinidad & Tobago' },
+  { value: 'America/Barbados', label: 'America/Barbados — Barbados' },
+  { value: 'America/Panama', label: 'America/Panama — Panama' },
+  { value: 'America/Bogota', label: 'America/Bogota — Colombia' },
+  { value: 'Europe/London', label: 'Europe/London — United Kingdom' },
+  { value: 'UTC', label: 'UTC — Coordinated Universal Time' },
 ];
 
 // -------------------------------------------------------------------
@@ -250,6 +267,20 @@ export function PlatformSettings() {
             >
               {CURRENCY_OPTIONS.map(c => (
                 <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fleet Timezone */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">Fleet Timezone</label>
+            <select
+              value={settings.fleetTimezone}
+              onChange={e => updateField('fleetTimezone', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            >
+              {TIMEZONE_OPTIONS.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
           </div>

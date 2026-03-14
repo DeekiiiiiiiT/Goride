@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { FinancialTransaction, Trip } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
+import { toast } from 'sonner@2.0.3';
 
 /**
  * Phase 4: Server-driven toll reconciliation hook.
@@ -102,6 +103,8 @@ export function useTollReconciliation(driverId?: string) {
   const [unclaimedRefunds, setUnclaimedRefunds] = useState<Trip[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [suggestions, setSuggestions] = useState<Map<string, MatchResult[]>>(new Map());
+  // Phase 6: Track auto-reconciled count for dashboard banner
+  const [autoReconciledCount, setAutoReconciledCount] = useState(0);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -130,6 +133,16 @@ export function useTollReconciliation(driverId?: string) {
         setSuggestions(convertServerSuggestions(unreconciledRes.suggestions, unreconciled));
       } else {
         setSuggestions(new Map());
+      }
+
+      // Phase 2/6: Notify admin if auto-matching occurred + persist count for banner
+      const autoCount = unreconciledRes.autoReconciled;
+      setAutoReconciledCount(autoCount || 0);
+      if (autoCount && autoCount > 0) {
+        toast.info(`${autoCount} toll${autoCount === 1 ? '' : 's'} auto-matched to trips`, {
+          description: 'Perfect matches confirmed automatically. View in Matched History.',
+          duration: 5000,
+        });
       }
 
     } catch (error) {
@@ -314,6 +327,7 @@ export function useTollReconciliation(driverId?: string) {
     approve,
     reject,
     autoMatchAll,
+    autoReconciledCount,
     refresh: fetchData
   };
 }

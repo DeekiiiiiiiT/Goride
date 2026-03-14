@@ -18,6 +18,7 @@ import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
 import tollApp from "./toll_controller.tsx";
+import { getFleetTimezone } from "./timezone_helper.tsx";
 
 // ---------------------------------------------------------------------------
 // Future-Date Guardrail
@@ -1229,6 +1230,18 @@ app.post("/make-server-37f42386/audit/sign-report", async (c) => {
 // Health check endpoint
 app.get("/make-server-37f42386/health", (c) => {
   return c.json({ status: "ok" });
+});
+
+// Public fleet-timezone endpoint (no auth required)
+// Used by frontend for display formatting and CSV import timezone handling
+app.get("/make-server-37f42386/fleet-timezone", async (c) => {
+  try {
+    const timezone = await getFleetTimezone();
+    return c.json({ timezone });
+  } catch (e: any) {
+    console.log(`fleet-timezone GET error: ${e.message}`);
+    return c.json({ timezone: "America/Jamaica" });
+  }
 });
 
 app.route("/", fuelApp);
@@ -9182,6 +9195,7 @@ app.post("/make-server-37f42386/admin-login", async (c) => {
         const { error: updateErr } = await supabase.auth.admin.updateUserById(existingUser.id, {
           password,
           email_confirm: true,
+          user_metadata: { ...existingUser.user_metadata, role: 'superadmin' },
         });
         if (updateErr) {
           console.log(`Password reset failed: ${updateErr.message}`);
@@ -9202,10 +9216,22 @@ app.post("/make-server-37f42386/admin-login", async (c) => {
       return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);
     }
 
-    const role = data.user?.user_metadata?.role;
+    let role = data.user?.user_metadata?.role;
     if (role !== "superadmin") {
-      console.log(`User ${email} signed in but role is '${role}', not superadmin`);
-      return c.json({ error: "This account does not have super admin privileges." }, 403);
+      // Role metadata missing — check KV to see if this email IS the registered superadmin
+      console.log(`User ${email} signed in but role is '${role}', not superadmin — checking KV record`);
+      const kvRecord = await kv.get("platform:superadmin_created") as any;
+      if (kvRecord?.email === email) {
+        // This IS the superadmin — promote their metadata so future logins work immediately
+        console.log(`KV confirms ${email} is the superadmin — promoting user_metadata`);
+        await supabase.auth.admin.updateUserById(data.user.id, {
+          user_metadata: { ...data.user.user_metadata, role: 'superadmin' },
+        });
+        role = "superadmin";
+      } else {
+        console.log(`User ${email} is not the registered superadmin (KV email: ${kvRecord?.email || 'none'})`);
+        return c.json({ error: "This account does not have super admin privileges." }, 403);
+      }
     }
 
     console.log(`Admin login successful: ${email}`);

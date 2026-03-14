@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, fetchFleetTimezone } from './api';
 import { fuelService } from './fuelService';
 import { equipmentService } from './equipmentService';
 import { inventoryService } from './inventoryService';
@@ -398,6 +398,9 @@ export async function restoreFullBackup(
         skipped: [],
     };
 
+    // Fetch fleet timezone once for all CSV validations
+    const fleetTimezone = await fetchFleetTimezone();
+
     // Sort by stage to ensure dependency order
     const sortedFiles = [...RESTORE_FILE_MAP].sort((a, b) => a.stage - b.stage);
     const totalFiles = sortedFiles.length;
@@ -427,7 +430,7 @@ export async function restoreFullBackup(
 
             // Special handling for trips — use processTripBatch
             if (entry.importType === 'trip') {
-                const validated = validateImportFile(csvText, 'trip');
+                const validated = validateImportFile(csvText, 'trip', fleetTimezone);
                 if (validated.validRecords.length > 0) {
                     const tripResult = await importExecutor.processTripBatch(
                         validated.validRecords,
@@ -452,7 +455,7 @@ export async function restoreFullBackup(
             }
 
             // General path: validate then import
-            const validated = validateImportFile(csvText, entry.importType);
+            const validated = validateImportFile(csvText, entry.importType, fleetTimezone);
 
             if (validated.validRecords.length === 0) {
                 result.categories[entry.label] = {

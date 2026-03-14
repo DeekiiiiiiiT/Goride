@@ -9,6 +9,7 @@ import {
   fetchAllVehicles, fetchAllVehicleMetrics, fetchAllTransactions,
   fetchAllTollTags, fetchAllTollPlazas, fetchAllStations,
   fetchAllClaims, fetchAllEquipment, fetchAllInventory,
+  fetchAllTollTransactions,
   exportFetchAllFuelLogs, exportFetchAllServiceLogs,
   exportFetchAllOdometerReadings, exportFetchAllCheckIns,
 } from '../../services/data-export';
@@ -19,6 +20,7 @@ import {
   TOLL_TAG_CSV_COLUMNS, TOLL_PLAZA_CSV_COLUMNS, STATION_CSV_COLUMNS,
   CLAIM_CSV_COLUMNS, EQUIPMENT_CSV_COLUMNS, INVENTORY_CSV_COLUMNS,
   FUEL_CSV_COLUMNS, SERVICE_CSV_COLUMNS, ODOMETER_CSV_COLUMNS, CHECKIN_CSV_COLUMNS,
+  TOLL_TRANSACTION_CSV_COLUMNS,
 } from '../../types/csv-schemas';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
@@ -57,6 +59,7 @@ interface RecordCounts {
   claims: number | null;
   equipment: number | null;
   inventory: number | null;
+  tollTransactions: number | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -79,6 +82,7 @@ const CATEGORY_SEARCH_TERMS: Record<string, string> = {
   checkins: "weekly check-ins checkins submissions odometer vehicle condition inspection",
   tollTags: "toll tags inventory numbers providers statuses vehicle assignments ezpass",
   tollPlazas: "toll plazas highways gps coordinates rates locations database",
+  tollTransactions: "toll transactions reconciliation matched unmatched refunds charges amounts vehicles drivers export",
   stations: "gas stations fuel brands coordinates plus codes locations database verified",
   claims: "claims disputes losses resolution history claimable deductions",
   equipment: "equipment phones mounts cameras accessories assignments devices",
@@ -95,7 +99,7 @@ const EXPORT_GROUP_CARDS: Record<string, string[]> = {
   'drivers': ['drivers', 'driverMetrics'],
   'vehicles': ['vehicles', 'vehicleMetrics'],
   'fuel': ['fuel', 'stations'],
-  'toll': ['tollTags', 'tollPlazas'],
+  'toll': ['tollTags', 'tollPlazas', 'tollTransactions'],
   'finance': ['transactions', 'claims', 'equipment', 'inventory'],
   'maintenance': ['service', 'odometer', 'checkins'],
   'system': ['backup'],
@@ -175,6 +179,7 @@ export function ExportCenter() {
     fuel: null, service: null, odometer: null, checkins: null,
     tollTags: null, tollPlazas: null, stations: null,
     claims: null, equipment: null, inventory: null,
+    tollTransactions: null,
   });
 
   // Export All state
@@ -242,6 +247,7 @@ export function ExportCenter() {
       const { inventoryService } = await import('../../services/inventoryService');
       return inventoryService.getInventory();
     });
+    safeCount('tollTransactions', () => api.getTollTransactionsExport());
 
     return () => { cancelled = true; };
   }, []);
@@ -336,6 +342,9 @@ export function ExportCenter() {
   const exportInventory = useCallback((fmt?: ExportFormat) =>
     handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory', undefined, fmt), []);
 
+  const exportTollTransactions = useCallback((fmt?: ExportFormat) =>
+    handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions', undefined, fmt), []);
+
   // ─── Export All ────────────────────────────────────────────────────────
 
   const handleExportAll = useCallback(async () => {
@@ -359,6 +368,7 @@ export function ExportCenter() {
       { label: 'claims', fn: () => handleGenericExport('claims', fetchAllClaims, CLAIM_CSV_COLUMNS, 'claims') },
       { label: 'equipment', fn: () => handleGenericExport('equipment', fetchAllEquipment, EQUIPMENT_CSV_COLUMNS, 'equipment') },
       { label: 'inventory', fn: () => handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory') },
+      { label: 'toll transactions', fn: () => handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions') },
     ];
 
     let totalRecords = 0;
@@ -391,7 +401,7 @@ export function ExportCenter() {
     { id: 'drivers', title: 'Drivers & Staff', description: 'Export driver profiles and performance scorecards', icon: <Users className="h-5 w-5" />, iconColor: 'bg-teal-50 text-teal-600', itemCount: 2 },
     { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Export vehicle profiles and performance metrics', icon: <Car className="h-5 w-5" />, iconColor: 'bg-sky-50 text-sky-600', itemCount: 2 },
     { id: 'fuel', title: 'Fuel & Stations', description: 'Export fuel logs and gas station databases', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: 2 },
-    { id: 'toll', title: 'Toll Management', description: 'Export toll tag inventory and plaza databases', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: 2 },
+    { id: 'toll', title: 'Toll Management', description: 'Export toll tags, plazas, and transaction reconciliation data', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: 3 },
     { id: 'finance', title: 'Finance & Assets', description: 'Export transactions, claims, equipment, and inventory', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-700', itemCount: 4 },
     { id: 'maintenance', title: 'Maintenance & Ops', description: 'Export service logs, odometer history, and weekly check-ins', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-orange-50 text-orange-600', itemCount: 3 },
     { id: 'system', title: 'System & Backup', description: 'Full system backup as a compressed ZIP archive', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-slate-100 text-slate-600', itemCount: 1 },
@@ -431,7 +441,7 @@ export function ExportCenter() {
           ) : (
             <Download className="h-4 w-4 mr-2" />
           )}
-          {isExportingAll ? 'Exporting All...' : 'Export All (16 files)'}
+          {isExportingAll ? 'Exporting All...' : 'Export All (17 files)'}
         </Button>
       </div>
 
@@ -758,11 +768,24 @@ export function ExportCenter() {
             {isInActiveGroup('backup') && matchesSearch(CATEGORY_SEARCH_TERMS.backup) && (
             <ExportCategoryCard
               title="Full System Backup (ZIP)"
-              description="Download all 16 categories as a single compressed ZIP archive with manifest."
+              description="Download all 17 categories as a single compressed ZIP archive with manifest."
               icon={<HardDrive className="h-5 w-5" />}
               recordCount={null}
               badge="ZIP"
               onExport={async () => { setShowBackupRestore(true); }}
+            />
+            )}
+
+            {/* ═══ 18. TOLL TRANSACTIONS ═══ */}
+            {isInActiveGroup('tollTransactions') && matchesSearch(CATEGORY_SEARCH_TERMS.tollTransactions) && (
+            <ExportCategoryCard
+              title="Toll Transactions"
+              description="All toll transactions with reconciliation status, matched trips, confidence scores, and amounts."
+              icon={<CreditCard className="h-5 w-5" />}
+              recordCount={counts.tollTransactions}
+              badge="Reconciliation"
+              onExport={exportTollTransactions}
+              showFormatToggle
             />
             )}
           </div>

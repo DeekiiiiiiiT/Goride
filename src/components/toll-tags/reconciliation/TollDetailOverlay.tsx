@@ -18,6 +18,7 @@ import { FinancialTransaction, Trip } from "../../../types/data";
 import { MatchResult, MatchType } from "../../../utils/tollReconciliation";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
+import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
 interface TollDetailOverlayProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ export function TollDetailOverlay({
 }: TollDetailOverlayProps) {
   if (!transaction) return null;
 
+  const fleetTz = useFleetTimezone();
   const trip = match?.trip;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
 
@@ -52,11 +54,13 @@ export function TollDetailOverlay({
     try {
       const timeStr = transaction.time || '12:00:00';
       const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-      const localDate = new Date(`${transaction.date}T${cleanTime}`);
+      // Build a full ISO-ish string so formatInFleetTz can parse it
+      const combined = `${transaction.date}T${cleanTime}`;
+      const localDate = new Date(combined);
       if (!isNaN(localDate.getTime())) {
         return {
-          date: format(localDate, 'EEEE, MMMM d, yyyy'),
-          time: format(localDate, 'h:mm:ss a'),
+          date: formatInFleetTz(localDate, fleetTz, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+          time: formatInFleetTz(localDate, fleetTz, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }),
         };
       }
       return { date: transaction.date, time: transaction.time || 'N/A' };
@@ -73,9 +77,9 @@ export function TollDetailOverlay({
       const d = new Date(pickupSource);
       const hasRealPickupTime = !!trip.requestTime && trip.requestTime !== trip.date;
       return {
-        date: format(d, 'EEEE, MMMM d, yyyy'),
-        time: hasRealPickupTime ? format(d, 'h:mm:ss a') : 'N/A',
-        dropoff: trip.dropoffTime ? format(new Date(trip.dropoffTime), 'h:mm a') : 'N/A',
+        date: formatInFleetTz(d, fleetTz, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+        time: hasRealPickupTime ? formatInFleetTz(d, fleetTz, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }) : 'N/A',
+        dropoff: trip.dropoffTime ? formatInFleetTz(new Date(trip.dropoffTime), fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
       };
     } catch {
       return { date: trip.date, time: 'N/A', dropoff: 'N/A' };

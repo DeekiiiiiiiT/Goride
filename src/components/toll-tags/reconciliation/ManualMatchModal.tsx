@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { Trip, FinancialTransaction } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { Search, Loader2, MapPin, User, Car } from "lucide-react";
+import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
 interface ManualMatchModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export function ManualMatchModal({ isOpen, onClose, transaction, allTrips, onCon
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredTrips, setFilteredTrips] = useState<Trip[]>([]);
   const [searching, setSearching] = useState(false);
+  const fleetTimezone = useFleetTimezone();
 
   useEffect(() => {
     if (isOpen && transaction) {
@@ -79,7 +81,7 @@ export function ManualMatchModal({ isOpen, onClose, transaction, allTrips, onCon
         <DialogHeader className="px-6 py-4 border-b bg-white">
           <DialogTitle className="text-xl">Find Trip for Toll Transaction</DialogTitle>
           <DialogDescription className="mt-1">
-             Match the toll charge of <strong className="text-slate-900">${Math.abs(transaction.amount).toFixed(2)}</strong> on {format(new Date(transaction.date), 'MMM d, h:mm a')}
+             Match the toll charge of <strong className="text-slate-900">${Math.abs(transaction.amount).toFixed(2)}</strong> on {formatInFleetTz(new Date(transaction.date), fleetTimezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
           </DialogDescription>
         </DialogHeader>
 
@@ -128,8 +130,8 @@ export function ManualMatchModal({ isOpen, onClose, transaction, allTrips, onCon
                             <TableRow key={trip.id} className="hover:bg-slate-50 group">
                                 <TableCell>
                                     <div className="flex flex-col">
-                                        <span className="font-medium text-slate-900">{format(new Date(trip.date), 'MMM d, yyyy')}</span>
-                                        <span className="text-xs text-slate-500">{format(new Date(trip.date), 'h:mm a')}</span>
+                                        <span className="font-medium text-slate-900">{formatInFleetTz(new Date(trip.date), fleetTimezone, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                        <span className="text-xs text-slate-500">{formatInFleetTz(new Date(trip.date), fleetTimezone, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell>

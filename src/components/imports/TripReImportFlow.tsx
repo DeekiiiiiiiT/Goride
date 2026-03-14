@@ -16,6 +16,7 @@ import { toast } from 'sonner@2.0.3';
 import { validateImportFile, ValidationError } from '../../services/import-validator';
 import { importExecutor } from '../../services/data-import-executor';
 import { Trip } from '../../types/data';
+import { fetchFleetTimezone } from '../../services/api';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types & Steps
@@ -63,7 +64,7 @@ export function TripReImportFlow({ onBack, platformFilter }: TripReImportFlowPro
     setFlowStep('validating');
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const content = e.target?.result as string;
       if (!content) {
         toast.error('File is empty.');
@@ -71,8 +72,11 @@ export function TripReImportFlow({ onBack, platformFilter }: TripReImportFlowPro
         return;
       }
 
+      // Fetch fleet timezone for correct naive-timestamp interpretation
+      const fleetTimezone = await fetchFleetTimezone();
+
       // Validate
-      const result = validateImportFile(content, 'trip');
+      const result = validateImportFile(content, 'trip', fleetTimezone);
 
       // Apply platform filter if specified
       let filtered = result.validRecords;

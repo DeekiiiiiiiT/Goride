@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -6,20 +6,15 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from ".
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip } from "../../../types/data";
-import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil } from "lucide-react";
+import { EditTollModal } from "./EditTollModal";
+import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
-import { EditTollModal } from "./EditTollModal";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../ui/dropdown-menu";
+import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil, HelpCircle, DollarSign, Route, CarFront } from "lucide-react";
+
+type UnmatchedSubTab = 'needs-review' | 'underpaid' | 'deadhead' | 'personal-use';
 
 interface UnmatchedTollsListProps {
   tolls: FinancialTransaction[];
@@ -41,6 +36,8 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
     const [visibleSmartMatches, setVisibleSmartMatches] = useState(10);
     const [visibleOtherTolls, setVisibleOtherTolls] = useState(25);
+    const [activeSubTab, setActiveSubTab] = useState<UnmatchedSubTab>('needs-review');
+    const fleetTz = useFleetTimezone();
 
     // Detail overlay state
     const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
@@ -50,6 +47,22 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     // Edit modal state
     const [editTx, setEditTx] = useState<FinancialTransaction | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
+
+    // Custom dropdown state (replaces Radix DropdownMenu which crashes in Figma Make iframe)
+    const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setOpenDropdownId(null);
+            }
+        };
+        if (openDropdownId) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [openDropdownId]);
 
     const openDetail = (tx: FinancialTransaction, match?: MatchResult) => {
         setDetailTx(tx);
@@ -82,6 +95,49 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
             return true;
         });
     }, [tolls, sourceFilter]);
+
+    // Phase 3: Classify tolls into sub-tab buckets based on best match type
+    const classified = useMemo(() => {
+        const buckets: Record<UnmatchedSubTab, FinancialTransaction[]> = {
+            'needs-review': [],
+            'underpaid': [],
+            'deadhead': [],
+            'personal-use': [],
+        };
+        filteredTolls.forEach(tx => {
+            const best = suggestions.get(tx.id)?.[0];
+            if (!best) {
+                buckets['needs-review'].push(tx);
+                return;
+            }
+            switch (best.matchType) {
+                case 'AMOUNT_VARIANCE':
+                    buckets['underpaid'].push(tx);
+                    break;
+                case 'DEADHEAD_MATCH':
+                    buckets['deadhead'].push(tx);
+                    break;
+                case 'PERSONAL_MATCH':
+                    if (best.reason?.includes('Approach')) {
+                        buckets['deadhead'].push(tx);
+                    } else {
+                        buckets['personal-use'].push(tx);
+                    }
+                    break;
+                case 'POSSIBLE_MATCH':
+                default:
+                    buckets['needs-review'].push(tx);
+                    break;
+            }
+        });
+        return buckets;
+    }, [filteredTolls, suggestions]);
+
+    // Reset visible counts when sub-tab changes
+    useEffect(() => {
+        setVisibleSmartMatches(10);
+        setVisibleOtherTolls(25);
+    }, [activeSubTab]);
 
     // Group trips by vehicle for time-based driver inference
     // This allows us to handle shared vehicles (Day/Night shifts) accurately
@@ -126,46 +182,40 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
         
         if (!match) {
-             // Use Dropdown for Unmatched items
+             // Custom dropdown for Unmatched items (Radix DropdownMenu crashes in Figma Make iframe)
+             const isOpen = openDropdownId === tx.id;
              return (
-                <div className="flex items-center justify-end gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="gap-2">
-                            Resolve <MoreHorizontal className="h-3 w-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Manual Resolution</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setSelectedTxForManual(tx)}>
-                            <Search className="mr-2 h-4 w-4" />
-                            Find Match...
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'Personal')}>
-                            <UserMinus className="mr-2 h-4 w-4 text-orange-600" />
-                            Personal (Driver Pays)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'WriteOff')}>
-                            <FileText className="mr-2 h-4 w-4 text-blue-600" />
-                            Write Off (Fleet Pays)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'Business')}>
-                            <Briefcase className="mr-2 h-4 w-4 text-slate-600" />
-                            Business Expense
-                        </DropdownMenuItem>
-                        {onEdit && (
-                            <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => openEdit(tx)}>
-                                    <Pencil className="mr-2 h-4 w-4 text-indigo-600" />
-                                    Edit Transaction
-                                </DropdownMenuItem>
-                            </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                <div className="relative flex items-center justify-end gap-2" ref={isOpen ? dropdownRef : undefined}>
+                    <Button size="sm" variant="outline" className="gap-2" onClick={() => setOpenDropdownId(isOpen ? null : tx.id)}>
+                        Resolve <MoreHorizontal className="h-3 w-3" />
+                    </Button>
+                    {isOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-md border bg-white shadow-md py-1">
+                            <div className="px-2 py-1.5 text-xs font-semibold text-slate-500">Manual Resolution</div>
+                            <div className="h-px bg-slate-200 mx-1 my-1" />
+                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); setSelectedTxForManual(tx); }}>
+                                <Search className="mr-2 h-4 w-4" /> Find Match...
+                            </button>
+                            <div className="h-px bg-slate-200 mx-1 my-1" />
+                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); onManualResolve?.(tx, 'Personal'); }}>
+                                <UserMinus className="mr-2 h-4 w-4 text-orange-600" /> Personal (Driver Pays)
+                            </button>
+                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); onManualResolve?.(tx, 'WriteOff'); }}>
+                                <FileText className="mr-2 h-4 w-4 text-blue-600" /> Write Off (Fleet Pays)
+                            </button>
+                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); onManualResolve?.(tx, 'Business'); }}>
+                                <Briefcase className="mr-2 h-4 w-4 text-slate-600" /> Business Expense
+                            </button>
+                            {onEdit && (
+                                <>
+                                    <div className="h-px bg-slate-200 mx-1 my-1" />
+                                    <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); openEdit(tx); }}>
+                                        <Pencil className="mr-2 h-4 w-4 text-indigo-600" /> Edit Transaction
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -201,7 +251,10 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     }
 
     // Separate tolls into those with visible matches and others
-    const smartMatches = filteredTolls.filter(tx => {
+    // Phase 4: Scope to active sub-tab bucket instead of all filteredTolls
+    const activeTabTolls = classified[activeSubTab];
+
+    const smartMatches = activeTabTolls.filter(tx => {
         const matches = suggestions.get(tx.id);
         const best = matches?.[0];
         // Phase 3: Use confidenceScore >= 50 when available, fall back to old logic
@@ -213,7 +266,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         return best && hasHighScore && !hiddenSuggestions.has(tx.id);
     });
 
-    const otherTolls = filteredTolls.filter(tx => !smartMatches.includes(tx));
+    const otherTolls = activeTabTolls.filter(tx => !smartMatches.includes(tx));
 
     const getMatchBadge = (match: MatchResult) => {
         switch (match.matchType) {
@@ -242,6 +295,79 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     return (
         <div className="space-y-6">
             
+            {/* Phase 3: Sub-tab bar */}
+            <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-1">
+                {([
+                    { key: 'needs-review' as UnmatchedSubTab, label: 'Needs Review', icon: HelpCircle, color: 'text-amber-600 border-amber-500 bg-amber-50' },
+                    { key: 'underpaid' as UnmatchedSubTab, label: 'Underpaid', icon: DollarSign, color: 'text-orange-600 border-orange-500 bg-orange-50' },
+                    { key: 'deadhead' as UnmatchedSubTab, label: 'Deadhead', icon: Route, color: 'text-blue-600 border-blue-500 bg-blue-50' },
+                    { key: 'personal-use' as UnmatchedSubTab, label: 'Personal Use', icon: CarFront, color: 'text-purple-600 border-purple-500 bg-purple-50' },
+                ] as const).map(tab => {
+                    const count = classified[tab.key].length;
+                    const isActive = activeSubTab === tab.key;
+                    const Icon = tab.icon;
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveSubTab(tab.key)}
+                            className={`
+                                flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t-md border-b-2 transition-all
+                                ${isActive
+                                    ? `${tab.color} border-current`
+                                    : 'text-slate-500 border-transparent hover:text-slate-700 hover:bg-slate-50'
+                                }
+                            `}
+                        >
+                            <Icon className="h-4 w-4" />
+                            <span>{tab.label}</span>
+                            <span className={`
+                                ml-1 text-[11px] font-semibold rounded-full px-1.5 py-0.5 min-w-[20px] text-center
+                                ${isActive
+                                    ? 'bg-white/80 text-current'
+                                    : 'bg-slate-100 text-slate-500'
+                                }
+                            `}>
+                                {count}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Phase 4: Per-sub-tab empty state */}
+            {activeTabTolls.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-500">
+                    {activeSubTab === 'needs-review' && (
+                        <>
+                            <HelpCircle className="h-10 w-10 text-amber-300 mb-3" />
+                            <h3 className="text-base font-medium text-slate-700">No tolls pending review</h3>
+                            <p className="text-sm">All tolls have been classified into other categories.</p>
+                        </>
+                    )}
+                    {activeSubTab === 'underpaid' && (
+                        <>
+                            <DollarSign className="h-10 w-10 text-orange-300 mb-3" />
+                            <h3 className="text-base font-medium text-slate-700">No underpaid tolls found</h3>
+                            <p className="text-sm">All platform reimbursements match the actual toll amounts.</p>
+                        </>
+                    )}
+                    {activeSubTab === 'deadhead' && (
+                        <>
+                            <Route className="h-10 w-10 text-blue-300 mb-3" />
+                            <h3 className="text-base font-medium text-slate-700">No deadhead tolls found</h3>
+                            <p className="text-sm">No unreimbursed business driving tolls detected.</p>
+                        </>
+                    )}
+                    {activeSubTab === 'personal-use' && (
+                        <>
+                            <CarFront className="h-10 w-10 text-purple-300 mb-3" />
+                            <h3 className="text-base font-medium text-slate-700">No personal use tolls detected</h3>
+                            <p className="text-sm">No tolls were classified as personal driver use.</p>
+                        </>
+                    )}
+                </div>
+            ) : (
+                <>
             {/* Smart Matches Section */}
             {smartMatches.length > 0 && (
                 <div className="space-y-4">
@@ -284,6 +410,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
             )}
 
             {/* Standard List */}
+            {activeSubTab === 'needs-review' && (
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-4">
                     <div className="space-y-1">
@@ -337,8 +464,8 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                                                         const isFutureDate = validDate > new Date();
                                                         return (
                                                             <>
-                                                                <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{format(validDate, 'MMM d, yyyy')}</span>
-                                                                <span className="text-xs text-slate-500">{format(validDate, 'h:mm a')}</span>
+                                                                <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{formatInFleetTz(validDate, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                                <span className="text-xs text-slate-500">{formatInFleetTz(validDate, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                                                                 {isFutureDate && (
                                                                     <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>
                                                                 )}
@@ -437,6 +564,9 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                     )}
                 </CardContent>
             </Card>
+            )}
+                </>
+            )}
 
             <ManualMatchModal 
                 isOpen={!!selectedTxForManual}

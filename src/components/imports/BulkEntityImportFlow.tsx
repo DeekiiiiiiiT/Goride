@@ -16,6 +16,7 @@ import { toast } from 'sonner@2.0.3';
 import { validateImportFile, ImportType, ValidationError } from '../../services/import-validator';
 import { importExecutor, RestoreResult } from '../../services/data-import-executor';
 import { downloadImportTemplate } from '../../services/data-export';
+import { fetchFleetTimezone } from '../../services/api';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Config per entity type
@@ -176,7 +177,7 @@ export function BulkEntityImportFlow({ entityType, onBack }: BulkEntityImportFlo
     setFlowStep('validating');
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const content = e.target?.result as string;
       if (!content) {
         toast.error('File is empty.');
@@ -184,7 +185,10 @@ export function BulkEntityImportFlow({ entityType, onBack }: BulkEntityImportFlo
         return;
       }
 
-      const result = validateImportFile(content, config.importType);
+      // Fetch fleet timezone for correct naive-timestamp interpretation
+      const fleetTimezone = await fetchFleetTimezone();
+
+      const result = validateImportFile(content, config.importType, fleetTimezone);
       setValidRecords(result.validRecords);
       setErrors(result.errors);
       setTotalParsed(result.totalProcessed);

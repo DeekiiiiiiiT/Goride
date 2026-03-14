@@ -5,6 +5,73 @@ import { OdometerReading } from '../types/vehicle';
 import { FUEL_CSV_COLUMNS, SERVICE_CSV_COLUMNS, ODOMETER_CSV_COLUMNS, CHECKIN_CSV_COLUMNS, TRIP_CSV_COLUMNS } from '../types/csv-schemas';
 import { normalizePlatform } from '../utils/normalizePlatform';
 
+// ─── Browser-side timezone helpers (mirrors server-side timezone_helper.tsx) ───
+
+/** Returns true if the string already ends with Z or ±HH:MM */
+function hasTzSuffix(s: string): boolean {
+    return /[Zz]|[+-]\d{2}:\d{2}$/.test(s);
+}
+
+/**
+ * Browser-side equivalent of the server's naiveToUtc().
+ * Interprets a naive datetime string (no TZ suffix) as being in `timezone`,
+ * then returns an ISO-8601 UTC string. Uses Intl.DateTimeFormat for offset lookup.
+ *
+ * Two-pass DST correction: the first guess might land on the wrong side of a
+ * DST boundary, so we re-check the offset at the corrected instant.
+ */
+function naiveToUtcBrowser(naiveStr: string, timezone: string): string {
+    // Parse components: "2026-02-27T14:30:00" or "2026-02-27 14:30:00"
+    const cleaned = naiveStr.replace(' ', 'T');
+    const parts = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (!parts) throw new Error(`Cannot parse naive datetime: "${naiveStr}"`);
+
+    const [, ys, ms, ds, hs = '0', mins = '0', ss = '0'] = parts;
+    const y = Number(ys), m = Number(ms) - 1, d = Number(ds);
+    const h = Number(hs), min = Number(mins), s = Number(ss);
+
+    // First guess: treat components as UTC
+    const guess = new Date(Date.UTC(y, m, d, h, min, s));
+
+    // Find the UTC offset that `timezone` has at this instant
+    const getOffset = (instant: Date): number => {
+        const utcFmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'UTC', hour: 'numeric', minute: 'numeric', hour12: false,
+            year: 'numeric', month: 'numeric', day: 'numeric',
+        });
+        const tzFmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone, hour: 'numeric', minute: 'numeric', hour12: false,
+            year: 'numeric', month: 'numeric', day: 'numeric',
+        });
+
+        const parseFmtParts = (fmt: Intl.DateTimeFormat) => {
+            const p: Record<string, string> = {};
+            for (const { type, value } of fmt.formatToParts(instant)) p[type] = value;
+            return p;
+        };
+
+        const u = parseFmtParts(utcFmt);
+        const t = parseFmtParts(tzFmt);
+
+        const toMin = (p: Record<string, string>) => {
+            const dNum = new Date(Number(p.year), Number(p.month) - 1, Number(p.day)).getTime();
+            return dNum / 60000 + Number(p.hour) * 60 + Number(p.minute);
+        };
+
+        return toMin(t) - toMin(u); // offset in minutes (positive = east of UTC)
+    };
+
+    const off1 = getOffset(guess);
+    const corrected = new Date(guess.getTime() - off1 * 60000);
+
+    // Two-pass: re-check offset at the corrected time (DST edge case)
+    const off2 = getOffset(corrected);
+    if (off2 !== off1) {
+        return new Date(guess.getTime() - off2 * 60000).toISOString();
+    }
+    return corrected.toISOString();
+}
+
 // --- Types ---
 
 export type ImportType = 'fuel' | 'service' | 'odometer' | 'checkin' | 'trip' | 'driver' | 'vehicle' | 'transaction' | 'tollTag' | 'tollPlaza' | 'station' | 'equipment' | 'inventory' | 'claim';
@@ -26,7 +93,7 @@ export interface ValidationError {
 /**
  * Validates a CSV string against the expected schema for the given import type.
  */
-export function validateImportFile(content: string, type: ImportType): ValidationResult<any> {
+export function validateImportFile(content: string, type: ImportType, fleetTimezone?: string): ValidationResult<any> {
     const rawRecords = csvToJson(content);
     const errors: ValidationError[] = [];
     const validRecords: any[] = [];
@@ -58,7 +125,7 @@ export function validateImportFile(content: string, type: ImportType): Validatio
 
         // Trip type uses its own dedicated validator
         if (type === 'trip') {
-            const validation = validateTripRecord(record, rowNum);
+            const validation = validateTripRecord(record, rowNum, fleetTimezone);
             if (validation.isValid) {
                 validRecords.push(validation.record);
             } else {
@@ -70,9 +137,9 @@ export function validateImportFile(content: string, type: ImportType): Validatio
         // Phase 5: Driver, Vehicle, Transaction use dedicated validators
         if (type === 'driver' || type === 'vehicle' || type === 'transaction') {
             const validation =
-                type === 'driver' ? validateDriverRecord(record) :
-                type === 'vehicle' ? validateVehicleRecord(record) :
-                validateTransactionRecord(record);
+                type === 'driver' ? validateDriverRecord(record, fleetTimezone) :
+                type === 'vehicle' ? validateVehicleRecord(record, fleetTimezone) :
+                validateTransactionRecord(record, fleetTimezone);
             if (validation.isValid) {
                 validRecords.push(validation.record);
             } else {
@@ -84,7 +151,7 @@ export function validateImportFile(content: string, type: ImportType): Validatio
         // Phase 6: Infrastructure entity validators
         const phase6Types: ImportType[] = ['tollTag', 'tollPlaza', 'station', 'equipment', 'inventory', 'claim'];
         if (phase6Types.includes(type)) {
-            const validatorMap: Record<string, (r: Record<string, string>) => { isValid: boolean; record?: any; error?: string }> = {
+            const validatorMap: Record<string, (r: Record<string, string>, tz?: string) => { isValid: boolean; record?: any; error?: string }> = {
                 tollTag: validateTollTagRecord,
                 tollPlaza: validateTollPlazaRecord,
                 station: validateStationRecord,
@@ -92,7 +159,7 @@ export function validateImportFile(content: string, type: ImportType): Validatio
                 inventory: validateInventoryRecord,
                 claim: validateClaimRecord,
             };
-            const validation = validatorMap[type](record);
+            const validation = validatorMap[type](record, fleetTimezone);
             if (validation.isValid) {
                 validRecords.push(validation.record);
             } else {
@@ -145,20 +212,37 @@ export function validateImportFile(content: string, type: ImportType): Validatio
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Flexible date parser: DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, ISO 8601 */
-function parseFlexibleDate(value: string | undefined | null): string | null {
+function parseFlexibleDate(value: string | undefined | null, fleetTimezone?: string): string | null {
     if (!value || value.trim() === '') return null;
     const v = value.trim();
 
     // Try ISO / YYYY-MM-DD first
-    const isoTs = Date.parse(v);
-    if (!isNaN(isoTs) && (v.includes('-') || v.includes('T'))) {
-        return new Date(isoTs).toISOString();
+    if (v.includes('-') || v.includes('T')) {
+        // If fleet timezone is set and the value has no TZ suffix, use naiveToUtcBrowser
+        if (fleetTimezone && !hasTzSuffix(v)) {
+            try {
+                return naiveToUtcBrowser(v, fleetTimezone);
+            } catch {
+                // Fall through to Date.parse
+            }
+        }
+        const isoTs = Date.parse(v);
+        if (!isNaN(isoTs)) {
+            return new Date(isoTs).toISOString();
+        }
     }
 
     // Try DD/MM/YYYY (Jamaica standard)
     const ddMmYyyy = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (ddMmYyyy) {
         const [, d, m, y] = ddMmYyyy;
+        if (fleetTimezone) {
+            try {
+                return naiveToUtcBrowser(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T00:00:00`, fleetTimezone);
+            } catch {
+                // Fall through
+            }
+        }
         const dt = new Date(Number(y), Number(m) - 1, Number(d));
         if (!isNaN(dt.getTime())) return dt.toISOString();
     }
@@ -181,11 +265,12 @@ function cleanNumeric(value: string | undefined | null): number | undefined {
 function validateTripRecord(
     raw: Record<string, string>,
     _rowNum: number,
+    fleetTimezone?: string,
 ): { isValid: boolean; record?: Partial<Trip>; error?: string } {
     const result: any = {};
 
     // --- Required: date ---
-    const parsedDate = parseFlexibleDate(raw['date']);
+    const parsedDate = parseFlexibleDate(raw['date'], fleetTimezone);
     if (!parsedDate) {
         return { isValid: false, error: `Missing or invalid date: "${raw['date'] || ''}"` };
     }
@@ -218,11 +303,11 @@ function validateTripRecord(
 
     // --- Optional date fields ---
     if (raw['requestTime']) {
-        const rt = parseFlexibleDate(raw['requestTime']);
+        const rt = parseFlexibleDate(raw['requestTime'], fleetTimezone);
         if (rt) result.requestTime = rt;
     }
     if (raw['dropoffTime']) {
-        const dt = parseFlexibleDate(raw['dropoffTime']);
+        const dt = parseFlexibleDate(raw['dropoffTime'], fleetTimezone);
         if (dt) result.dropoffTime = dt;
     }
 
@@ -322,6 +407,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function validateDriverRecord(
     raw: Record<string, string>,
+    fleetTimezone?: string,
 ): { isValid: boolean; record?: any; error?: string } {
     const result: any = {};
 
@@ -358,7 +444,7 @@ function validateDriverRecord(
 
     // --- Optional date fields ---
     for (const field of ['licenseExpiry', 'hireDate']) {
-        const val = parseFlexibleDate(raw[field]);
+        const val = parseFlexibleDate(raw[field], fleetTimezone);
         if (val) result[field] = val;
     }
 
@@ -370,6 +456,7 @@ function validateDriverRecord(
 
 function validateVehicleRecord(
     raw: Record<string, string>,
+    fleetTimezone?: string,
 ): { isValid: boolean; record?: any; error?: string } {
     const result: any = {};
 
@@ -392,7 +479,7 @@ function validateVehicleRecord(
 
     // --- Optional date fields ---
     for (const field of ['insuranceExpiry', 'fitnessExpiry', 'registrationExpiry']) {
-        const val = parseFlexibleDate(raw[field]);
+        const val = parseFlexibleDate(raw[field], fleetTimezone);
         if (val) result[field] = val;
     }
 
@@ -404,11 +491,12 @@ function validateVehicleRecord(
 
 function validateTransactionRecord(
     raw: Record<string, string>,
+    fleetTimezone?: string,
 ): { isValid: boolean; record?: any; error?: string } {
     const result: any = {};
 
     // --- Required: date ---
-    const parsedDate = parseFlexibleDate(raw['date']);
+    const parsedDate = parseFlexibleDate(raw['date'], fleetTimezone);
     if (!parsedDate) {
         return { isValid: false, error: `Missing or invalid date: "${raw['date'] || ''}"` };
     }
@@ -588,11 +676,12 @@ function validateInventoryRecord(
 
 function validateClaimRecord(
     raw: Record<string, string>,
+    fleetTimezone?: string,
 ): { isValid: boolean; record?: any; error?: string } {
     const result: any = {};
 
     // --- Required: date ---
-    const parsedDate = parseFlexibleDate(raw['date']);
+    const parsedDate = parseFlexibleDate(raw['date'], fleetTimezone);
     if (!parsedDate) {
         return { isValid: false, error: `Missing or invalid date: "${raw['date'] || ''}"` };
     }

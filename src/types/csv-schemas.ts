@@ -250,3 +250,45 @@ export const INVENTORY_CSV_COLUMNS: CsvColumn<any>[] = [
     { key: 'description', label: 'description' },
     { key: 'lastRestockDate', label: 'lastRestockDate', formatter: formatDateJM },
 ];
+
+/** Toll transactions — all scanned receipts with reconciliation data from /toll-reconciliation/export */
+export const TOLL_TRANSACTION_CSV_COLUMNS: CsvColumn<any>[] = [
+    // Transaction basics
+    { key: 'id', label: 'id' },
+    { key: 'date', label: 'date', formatter: formatDateJM },
+    { key: 'time', label: 'time' },
+    { key: 'vehicleId', label: 'vehicleId' },
+    { key: 'vehiclePlate', label: 'vehiclePlate' },
+    { key: 'driverId', label: 'driverId' },
+    { key: 'driverName', label: 'driverName' },
+    { key: 'plaza', label: 'plaza' },
+    { key: 'type', label: 'type' },
+    { key: 'paymentMethod', label: 'paymentMethod' },
+    { key: 'amount', label: 'amount' },
+    { key: 'absAmount', label: 'absAmount' },
+    { key: 'status', label: 'status' },
+    { key: 'description', label: 'description' },
+    { key: 'referenceTagId', label: 'referenceTagId' },
+    { key: 'batchId', label: 'batchId' },
+    // Reconciliation status
+    { key: 'reconciliationStatus', label: 'reconciliationStatus' },
+    { key: 'resolution', label: 'resolution' },
+    // Match details (populated for "Matched" status)
+    { key: 'matchedTripId', label: 'matchedTripId' },
+    { key: 'matchedTripDate', label: 'matchedTripDate', formatter: formatDateJM },
+    { key: 'matchedTripPlatform', label: 'matchedTripPlatform' },
+    { key: 'matchedTripPickup', label: 'matchedTripPickup' },
+    { key: 'matchedTripDropoff', label: 'matchedTripDropoff' },
+    { key: 'reconciledAt', label: 'reconciledAt' },
+    { key: 'reconciledBy', label: 'reconciledBy' },
+    // Financial (populated for "Matched" status)
+    { key: 'tripTollCharges', label: 'tripTollCharges' },
+    { key: 'refundAmount', label: 'refundAmount' },
+    { key: 'lossAmount', label: 'lossAmount' },
+    // Suggestion status (populated for "Unmatched" status)
+    { key: 'hasSuggestions', label: 'hasSuggestions' },
+    { key: 'isAmbiguous', label: 'isAmbiguous' },
+    { key: 'topSuggestionScore', label: 'topSuggestionScore' },
+    { key: 'topSuggestionTripId', label: 'topSuggestionTripId' },
+    { key: 'suggestionCount', label: 'suggestionCount' },
+];

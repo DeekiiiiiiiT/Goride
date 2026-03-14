@@ -7,6 +7,7 @@ import { FinancialTransaction, Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { MatchResult } from "../../../utils/tollReconciliation";
+import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
 interface SuggestedMatchCardProps {
   transaction: FinancialTransaction;
@@ -22,6 +23,7 @@ interface SuggestedMatchCardProps {
 export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, onApprove, onReject, onFlag, onClickDetail }: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous } = match;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
+  const fleetTz = useFleetTimezone();
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300', ring: 'ring-emerald-200' };
@@ -85,7 +87,11 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
       // Logic for Tag Imports (Fleet Expenses)
       // For tags, we generally "Link" them. Personal tags mean deducting from driver.
       // Variance tags might need review, but usually just linking to track the loss.
-      const label = matchType === 'PERSONAL_MATCH' ? 'Mark Personal' : 'Link Trip';
+      // Phase 5: Contextual labels per matchType
+      let label = 'Link Trip';
+      if (matchType === 'PERSONAL_MATCH') label = 'Mark Personal';
+      else if (matchType === 'DEADHEAD_MATCH') label = 'Confirm Deadhead';
+      else if (matchType === 'AMOUNT_VARIANCE') label = 'Confirm & Flag';
       
       return (
           <Button size="sm" onClick={onConfirm} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
@@ -118,12 +124,11 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
                             try {
                                 const timeStr = transaction.time || '12:00:00';
                                 const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-                                // Force local date by appending time
                                 const localDate = new Date(`${transaction.date}T${cleanTime}`);
                                 if (!isNaN(localDate.getTime())) {
-                                    return format(localDate, 'MMM d, h:mm a');
+                                    return formatInFleetTz(localDate, fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
                                 }
-                                return format(new Date(transaction.date), 'MMM d, h:mm a');
+                                return formatInFleetTz(new Date(transaction.date), fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
                             } catch (e) {
                                 return transaction.date;
                             }
@@ -217,7 +222,7 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
                         {normalizePlatform(trip.platform)} Trip
                     </Badge>
                     <span className="text-sm text-slate-500">
-                        {format(new Date(trip.date), 'h:mm a')}
+                        {formatInFleetTz(new Date(trip.date), fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}
                     </span>
                 </div>
                 <div className="font-bold text-lg text-emerald-600">

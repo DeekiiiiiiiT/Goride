@@ -7,6 +7,7 @@ import { Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { Button } from "../../ui/button";
+import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
 interface UnclaimedRefundsListProps {
   trips: Trip[];
@@ -14,6 +15,7 @@ interface UnclaimedRefundsListProps {
 
 export function UnclaimedRefundsList({ trips }: UnclaimedRefundsListProps) {
     const [visibleCount, setVisibleCount] = useState(25);
+    const fleetTz = useFleetTimezone();
 
     if (trips.length === 0) {
         return (
@@ -58,8 +60,8 @@ export function UnclaimedRefundsList({ trips }: UnclaimedRefundsListProps) {
                                             const isFuture = tripDate > new Date();
                                             return (
                                                 <>
-                                                    <span className={`font-medium ${isFuture ? 'text-red-600' : ''}`}>{format(tripDate, 'MMM d, yyyy')}</span>
-                                                    <span className="text-xs text-slate-500">{format(tripDate, 'h:mm a')}</span>
+                                                    <span className={`font-medium ${isFuture ? 'text-red-600' : ''}`}>{formatInFleetTz(tripDate, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                    <span className="text-xs text-slate-500">{formatInFleetTz(tripDate, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                                                     {isFuture && <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>}
                                                 </>
                                             );

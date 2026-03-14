@@ -1554,6 +1554,19 @@ export const api = {
     return result.data || result;
   },
 
+  /** Fetch ALL toll transactions (flattened) for CSV export — no pagination. */
+  async getTollTransactionsExport(): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/export`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch toll transactions export");
+    }
+    const result = await response.json();
+    return result.data || [];
+  },
+
   async getPerformanceReport(startDate: string, endDate: string, options?: { dailyRideTarget?: number, dailyEarningsTarget?: number, summaryOnly?: boolean, limit?: number, offset?: number }): Promise<{ data: any[], total: number, limit: number, offset: number }> {
     const params = new URLSearchParams({ startDate, endDate });
     if (options?.dailyRideTarget) params.append('dailyRideTarget', options.dailyRideTarget.toString());
@@ -2264,3 +2277,24 @@ export const api = {
     }
   },
 };
+
+/**
+ * Fetches the configured fleet timezone from the server.
+ * Falls back to 'America/Jamaica' if the request fails.
+ */
+export async function fetchFleetTimezone(): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/fleet-timezone`,
+      {
+        headers: { Authorization: `Bearer ${publicAnonKey}` },
+      },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.timezone || 'America/Jamaica';
+  } catch (e) {
+    console.log('Failed to fetch fleet timezone, using default:', e);
+    return 'America/Jamaica';
+  }
+}

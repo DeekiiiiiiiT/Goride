@@ -6,10 +6,11 @@ import { Checkbox } from "../../ui/checkbox";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip, Claim } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
-import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info, ChevronDown } from "lucide-react";
+import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info, ChevronDown, Bot, UserCheck } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { calculateTollFinancials } from "../../../utils/tollReconciliation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
+import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
 interface ReconciledTollsListProps {
   tolls: FinancialTransaction[];
@@ -22,6 +23,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkUnmatching, setIsBulkUnmatching] = useState(false);
     const [visibleCount, setVisibleCount] = useState(25);
+    const fleetTz = useFleetTimezone();
 
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -108,6 +110,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                             <TableHead>Toll Date</TableHead>
                             <TableHead>Description</TableHead>
                             <TableHead>Platform</TableHead>
+                            <TableHead>Source</TableHead>
                             <TableHead>Recovered</TableHead>
                             <TableHead>Net Loss</TableHead>
                             <TableHead className="text-right">Action</TableHead>
@@ -141,8 +144,8 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                                     const isFutureDate = validDate > new Date();
                                                     return (
                                                         <>
-                                                            <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{format(validDate, 'MMM d, yyyy')}</span>
-                                                            <span className="text-xs text-slate-500">{format(validDate, 'h:mm a')}</span>
+                                                            <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{formatInFleetTz(validDate, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                            <span className="text-xs text-slate-500">{formatInFleetTz(validDate, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                                                             {isFutureDate && (
                                                                 <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>
                                                             )}
@@ -171,12 +174,43 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                                     {normalizePlatform(trip.platform)}
                                                 </Badge>
                                                 <span className="text-xs text-slate-500">
-                                                    {trip.requestTime ? format(new Date(trip.requestTime), 'MMM d, h:mm a') : 'Unknown Date'}
+                                                    {trip.requestTime ? formatInFleetTz(new Date(trip.requestTime), fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : 'Unknown Date'}
                                                 </span>
                                             </div>
                                         ) : (
                                             <Badge variant="secondary" className="bg-slate-100 text-slate-500 font-normal">
                                                 Unmatched
+                                            </Badge>
+                                        )}
+                                    </TableCell>
+
+                                    {/* Phase 2: Source badge — Auto-matched vs Manual */}
+                                    <TableCell>
+                                        {(tx as any).metadata?.reconciledBy === 'system-auto' ? (
+                                            <Tooltip>
+                                                <TooltipTrigger>
+                                                    <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-200 text-[10px] gap-1 cursor-help">
+                                                        <Bot className="h-3 w-3" />
+                                                        Auto-matched
+                                                    </Badge>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <div className="space-y-1 text-xs max-w-[220px]">
+                                                        <div className="font-semibold">Automatically Confirmed</div>
+                                                        <p>This toll was a perfect match (amount + timing) and was auto-confirmed by the system.</p>
+                                                        {(tx as any).metadata?.autoMatchScore != null && (
+                                                            <div className="flex justify-between gap-2">
+                                                                <span>Confidence:</span>
+                                                                <span className="font-medium">{(tx as any).metadata.autoMatchScore}/100</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        ) : (
+                                            <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[10px] gap-1">
+                                                <UserCheck className="h-3 w-3" />
+                                                Manual
                                             </Badge>
                                         )}
                                     </TableCell>
