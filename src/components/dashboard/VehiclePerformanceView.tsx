@@ -80,12 +80,16 @@ export function VehiclePerformanceView({ trips, vehicleMetrics }: VehiclePerform
   // --- 2. Utilization Heat Map Data (Mocked for now as Recharts doesn't strictly have a heatmap) ---
   // We will use a BarChart representing utilization per vehicle as a simple proxy
   const utilizationData = useMemo(() => {
+      const seen = new Map<string, number>();
       return tableData
         .sort((a, b) => (b.utilizationRate || 0) - (a.utilizationRate || 0))
-        .map(v => ({
-            name: v.plateNumber,
-            utilization: v.utilizationRate || 0
-        }));
+        .map(v => {
+            let label = v.plateNumber;
+            const count = seen.get(label) || 0;
+            seen.set(label, count + 1);
+            if (count > 0) label = `${label} (${count + 1})`;
+            return { name: label, utilization: v.utilizationRate || 0 };
+        });
   }, [tableData]);
 
   // --- 3. Maintenance Candidates ---

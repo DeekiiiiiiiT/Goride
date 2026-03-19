@@ -12,6 +12,7 @@ import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
 import { ParentCompanyManager } from './ParentCompanyManager';
 import { VerifiedStationsTab } from './VerifiedStationsTab';
 import { LearntLocationsTab } from './LearntLocationsTab';
+import { UnverifiedVendorsTab } from './UnverifiedVendorsTab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Switch } from '../../ui/switch';
 import { Label } from '../../ui/label';
@@ -447,6 +448,10 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                 Learnt
                 <Badge variant="outline" className="h-4 px-1 text-[8px] border-amber-200 text-amber-500">STAGING</Badge>
               </TabsTrigger>
+              <TabsTrigger value="unverified-vendors" className="flex items-center gap-1.5">
+                Unverified Vendors
+                <Badge variant="outline" className="h-4 px-1 text-[8px] border-red-200 text-red-500">GATE</Badge>
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -632,6 +637,17 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                }}
              />
           </TabsContent>
+
+          {/* --- Unverified Vendors Tab --- */}
+          <TabsContent value="unverified-vendors" className="m-0 p-0 border-0">
+             <UnverifiedVendorsTab 
+               onRefresh={() => fetchData()}
+               onSelectVendor={(vendor) => {
+                 // TODO: Open vendor detail modal
+                 console.log('Selected vendor:', vendor);
+               }}
+             />
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -768,9 +784,13 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                     icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
                   });
                 }
-              } catch (promoteErr) {
+              } catch (promoteErr: any) {
+                // Phase 7-8 fix: Show detailed error message
                 console.error('[Verify Learnt] Failed to promote learnt location:', promoteErr);
-                toast.warning('Station saved, but failed to clear the learnt location from Evidence Bridge.');
+                const errorMsg = promoteErr.message || String(promoteErr);
+                toast.warning('Station saved, but failed to clear the learnt location from Evidence Bridge.', {
+                  description: errorMsg
+                });
               }
               setVerifyingLearntId(null);
               // Refresh both station data and trigger learnt tab refresh

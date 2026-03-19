@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,16 @@ interface AddStationModalProps {
 }
 
 export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate, onMergeIntoExisting, initialNearbyStation }: AddStationModalProps) {
+  // Phase 5: Use React Query for parent companies caching
+  const { data: parentCompaniesData = [] } = useQuery({
+    queryKey: ['parentCompanies'],
+    queryFn: () => fuelService.getParentCompanies(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [addressGeocoding, setAddressGeocoding] = useState(false);
@@ -135,22 +146,12 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
 
   useEffect(() => {
     if (isOpen) {
-      const fetchCompanies = async () => {
-        setFetchingCompanies(true);
-        try {
-          const companies = await fuelService.getParentCompanies();
-          // Filter out "Independent" if it exists in the backend to prevent duplicate keys
-          const filtered = (companies || []).filter(c => c.name !== "Independent");
-          setParentCompanies(filtered);
-        } catch (error) {
-          console.error("Failed to fetch parent companies:", error);
-        } finally {
-          setFetchingCompanies(false);
-        }
-      };
-      fetchCompanies();
+      // Phase 5: Use cached parent companies from React Query
+      const filtered = (parentCompaniesData || []).filter(c => c.name !== "Independent");
+      setParentCompanies(filtered);
+      setFetchingCompanies(false);
     }
-  }, [isOpen]);
+  }, [isOpen, parentCompaniesData]);
 
   // Validate Plus Code as user types
   const handlePlusCodeChange = useCallback((value: string) => {

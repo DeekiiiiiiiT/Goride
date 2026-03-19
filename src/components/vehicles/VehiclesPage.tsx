@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { Vehicle } from '../../types/vehicle'; // New Type
@@ -62,15 +63,13 @@ import {
 } from "../ui/alert-dialog";
 import { isSameDay, subDays } from "date-fns";
 import { useVocab } from '../../utils/vocabulary';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export function VehiclesPage() {
   const { v } = useVocab();
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [manualVehicles, setManualVehicles] = useState<Vehicle[]>([]);
-  const [vehicleMetrics, setVehicleMetrics] = useState<import('../../types/data').VehicleMetrics[]>([]);
-  const [allDrivers, setAllDrivers] = useState<any[]>([]);
+  const { can } = usePermissions();
+  const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   
   // Navigation State
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -91,27 +90,47 @@ export function VehiclesPage() {
   const [serviceFilter, setServiceFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Toggle view (Future proofing)
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [tripsData, vehiclesData, metricsData, driversData] = await Promise.all([
-            api.getTrips(),
-            api.getVehicles().catch(() => []),
-            api.getVehicleMetrics().catch(() => []),
-            api.getDrivers().catch(() => [])
-        ]);
-        setTrips(tripsData);
-        setManualVehicles(vehiclesData);
-        setVehicleMetrics(metricsData);
-        setAllDrivers(driversData);
-      } catch (err) {
-        console.error("Failed to fetch data for vehicles page", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  // Phase 8: React Query for trips data
+  const { data: trips = [], isLoading: tripsLoading } = useQuery({
+    queryKey: ['trips'],
+    queryFn: () => api.getTrips(),
+    staleTime: 3 * 60 * 1000, // 3 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 8: React Query for vehicles
+  const { data: manualVehicles = [] } = useQuery({
+    queryKey: ['vehicles'],
+    queryFn: () => api.getVehicles().catch(() => []),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 8: React Query for vehicle metrics
+  const { data: vehicleMetrics = [] } = useQuery({
+    queryKey: ['vehicleMetrics'],
+    queryFn: () => api.getVehicleMetrics().catch(() => []),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 8: React Query for drivers
+  const { data: allDrivers = [] } = useQuery({
+    queryKey: ['drivers'],
+    queryFn: () => api.getDrivers().catch(() => []),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  const loading = tripsLoading;
 
   // Transform Trips into Rich Vehicle Objects
   const vehicles: Vehicle[] = useMemo(() => {
@@ -268,19 +287,14 @@ export function VehiclesPage() {
         status: 'Active' // Reactivate vehicle on assignment
     };
 
-    // 2. Optimistically update local state to reflect assignment immediately
-    setManualVehicles(prev => prev.map(v => {
-        if (v.id === vehicleId) {
-            return updatedVehicle;
-        }
-        return v;
-    }));
-
     try {
         // 3. Persist to API
         await api.saveVehicle(updatedVehicle);
         
         console.log(`Assigned driver ${resolvedDriverId} (${driverName}) to vehicle ${vehicleId} [passed ID: ${driverId}]`);
+        
+        // Phase 8: Invalidate cache after vehicle update
+        queryClient.invalidateQueries({ queryKey: ['vehicles'] });
         
         toast.success("Driver assigned successfully", {
             description: `${driverName} is now assigned to the vehicle.`
@@ -292,8 +306,6 @@ export function VehiclesPage() {
         toast.error("Failed to save assignment", {
             description: "The change could not be saved to the server."
         });
-        // Revert on failure
-        setManualVehicles(prev => prev.map(v => v.id === vehicleId ? vehicleToUpdate : v));
     }
   };
 
@@ -333,7 +345,10 @@ export function VehiclesPage() {
     if (!vehicleToDelete) return;
     try {
         await api.deleteVehicle(vehicleToDelete);
-        setManualVehicles(prev => prev.filter(v => v.id !== vehicleToDelete));
+        
+        // Phase 8: Invalidate cache after vehicle deletion
+        queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+        
         toast.success("Vehicle deleted successfully");
     } catch (error) {
         console.error("Failed to delete vehicle", error);
@@ -344,11 +359,13 @@ export function VehiclesPage() {
   };
 
   const handleVehicleAdded = (vehicle: Vehicle) => {
-    setManualVehicles(prev => [...prev, vehicle]);
+    // Phase 8: Invalidate cache after vehicle addition
+    queryClient.invalidateQueries({ queryKey: ['vehicles'] });
   };
 
   const handleVehicleUpdate = (updatedVehicle: Vehicle) => {
-    setManualVehicles(prev => prev.map(v => v.id === updatedVehicle.id ? updatedVehicle : v));
+    // Phase 8: Invalidate cache after vehicle update
+    queryClient.invalidateQueries({ queryKey: ['vehicles'] });
   };
 
   if (loading) {
@@ -380,10 +397,12 @@ export function VehiclesPage() {
                       <h1 className="text-2xl font-bold text-slate-900">{v('vehiclesPageTitle')}</h1>
                       <p className="text-slate-500">{v('vehiclesPageSubtitle')}</p>
                   </div>
+                  {can('vehicles.create') && (
                   <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Vehicle
                   </Button>
+                  )}
               </div>
 
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg border shadow-sm">
@@ -573,6 +592,7 @@ export function VehiclesPage() {
                                                 <DropdownMenuItem 
                                                     onClick={() => setVehicleToDelete(vehicle.id)}
                                                     className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                                    disabled={!can('vehicles.delete')}
                                                 >
                                                     <Trash2 className="mr-2 h-4 w-4" /> Delete Vehicle
                                                 </DropdownMenuItem>

@@ -2,22 +2,30 @@ import * as kv from "./kv_store.tsx";
 import { Buffer } from "node:buffer";
 
 // --- Retry helper for transient Supabase connection resets ---
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, delayMs = 200): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, delayMs = 200): Promise<T> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (err: any) {
-      const msg = String(err?.message || err || "");
-      const isTransient = msg.includes("connection reset") || msg.includes("connection error") || msg.includes("SendRequest");
+      const msg = String(err?.message || err || "").toLowerCase();
+      const isTransient =
+        msg.includes("connection reset") ||
+        msg.includes("connection error") ||
+        msg.includes("sendrequest") ||
+        msg.includes("tls handshake") ||
+        msg.includes("broken pipe") ||
+        msg.includes("close_notify") ||
+        msg.includes("eof") ||
+        msg.includes("connection closed");
       if (isTransient && attempt < maxRetries) {
-        console.log(`[cache] Transient error on attempt ${attempt}/${maxRetries}, retrying in ${delayMs}ms: ${msg}`);
+        console.log(`[withRetry] Transient error on attempt ${attempt}/${maxRetries}, retrying in ${delayMs * attempt}ms: ${String(err?.message || err).slice(0, 120)}`);
         await new Promise(r => setTimeout(r, delayMs * attempt)); // linear backoff
         continue;
       }
       throw err;
     }
   }
-  throw new Error("[cache] withRetry exhausted (should not reach here)");
+  throw new Error("[withRetry] exhausted (should not reach here)");
 }
 
 interface CacheEntry {

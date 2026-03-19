@@ -711,7 +711,9 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                  await api.saveTollTag({
                      ...tag,
                      assignedVehicleId: undefined,
-                     assignedVehicleName: undefined
+                     assignedVehicleName: undefined,
+                      assignmentHistory: (tag.assignmentHistory || []).map((e: any) => e.vehicleId === vehicle.id && !e.unassignedAt ? { ...e, unassignedAt: new Date().toISOString() } : e),
+                      updatedAt: new Date().toISOString()
                  });
              }
         }

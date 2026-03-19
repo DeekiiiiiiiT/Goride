@@ -3,14 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Loader2, ArrowUpRight, ArrowDownLeft, FileText, MinusCircle, Trash2, PlusCircle, Info } from "lucide-react";
+import { Loader2, ArrowUpRight, ArrowDownLeft, FileText, MinusCircle, Trash2, PlusCircle, Info, Tag as TagIcon } from "lucide-react";
 import { format } from 'date-fns';
 import { api } from '../../services/api';
-import { FinancialTransaction, Trip, Claim } from '../../types/data';
+import { FinancialTransaction, Claim } from '../../types/data';
 import { calculateTollFinancials } from '../../utils/tollReconciliation';
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { toast } from "sonner@2.0.3";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { TollTransactionDetailOverlay } from "./TollTransactionDetailOverlay";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,47 +25,35 @@ import {
 
 interface TollTopupHistoryProps {
   vehicleId: string;
+  tagNumber?: string; // Phase 4: Filter transactions to this specific tag
   refreshTrigger?: number; // Prop to force refresh when a new top-up is added
   onTransactionChange?: () => void;
 }
 
-export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChange }: TollTopupHistoryProps) {
+export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTransactionChange }: TollTopupHistoryProps) {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
-  const [trips, setTrips] = useState<Record<string, Trip>>({});
   const [claims, setClaims] = useState<Record<string, Claim>>({});
   const [loading, setLoading] = useState(true);
   const [internalRefresh, setInternalRefresh] = useState(0);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<FinancialTransaction | null>(null);
 
   useEffect(() => {
     async function fetchHistory() {
       setLoading(true);
       try {
-        // Fetch all transactions, trips, and claims in parallel
-        const [allTx, allTrips, allClaims] = await Promise.all([
-            api.getTransactions(),
-            api.getTrips(),
+        // Phase 7 refactor: Use server-side /toll-logs endpoint instead of
+        // fetching all transactions + trips and filtering client-side.
+        // The server already filters by vehicleId, tagNumber, and toll categories,
+        // sorts by date desc, and pre-embeds linkedTrip on each transaction.
+        const [tollResponse, allClaims] = await Promise.all([
+            api.getTollLogs({ vehicleId, tagNumber }),
             api.getClaims()
         ]);
 
-        // Filter for this vehicle AND category 'Toll Top-up' (or similar)
-        // We might also want to include 'Toll Refund' if we want a full ledger here later
-        const vehicleTollTx = allTx.filter(tx => 
-            tx.vehicleId === vehicleId && 
-            (tx.category === 'Toll Top-up' || tx.category === 'Tolls' || tx.category === 'Toll Usage')
-        );
-        
-        // Sort by date descending
-        vehicleTollTx.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        setTransactions(vehicleTollTx);
-
-        // Index trips by ID for faster lookup
-        const tripsMap: Record<string, Trip> = {};
-        allTrips.forEach(t => {
-            tripsMap[t.id] = t;
-        });
-        setTrips(tripsMap);
+        // Server returns pre-filtered, pre-sorted toll transactions
+        const filteredTx: FinancialTransaction[] = tollResponse?.data || [];
+        setTransactions(filteredTx);
 
         // Index claims by transaction ID for faster lookup
         const claimsMap: Record<string, Claim> = {};
@@ -85,7 +74,7 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
     if (vehicleId) {
         fetchHistory();
     }
-  }, [vehicleId, refreshTrigger, internalRefresh]);
+  }, [vehicleId, tagNumber, refreshTrigger, internalRefresh]);
 
   const handleDeleteClick = (id: string) => {
     setTransactionToDelete(id);
@@ -131,20 +120,38 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
       </TableHeader>
       <TableBody>
         {data.map((tx) => {
-          const linkedTrip = tx.tripId ? trips[tx.tripId] : undefined;
+          // Phase 7: Use linkedTrip pre-embedded by server instead of tripsMap lookup
+          const linkedTrip = (tx as any).linkedTrip || undefined;
           const linkedClaim = claims[tx.id];
           const financials = calculateTollFinancials(tx, linkedTrip, linkedClaim);
           
+          // Phase 4: Check if this transaction belongs to a different tag
+          const normalizeTag = (t: string) => t.trim().replace(/^0+/, '');
+          const txTagId = tx.metadata?.tollTagId || tx.metadata?.tagId;
+          const isDifferentTag = tagNumber && txTagId && normalizeTag(txTagId) !== normalizeTag(tagNumber);
+
           return (
-          <TableRow key={tx.id}>
+          <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50/80 transition-colors" onClick={() => setSelectedTransaction(tx)}>
             <TableCell className="font-medium text-slate-700">
                 {format(new Date(tx.date), 'MMM d, yyyy')}
                 <div className="text-xs text-slate-400">{format(new Date(tx.date), 'h:mm a')}</div>
             </TableCell>
             <TableCell>
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-0.5">
                     <span>{tx.category}</span>
                     <span className="text-xs text-slate-500">{tx.description}</span>
+                    {isDifferentTag && (
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <Badge variant="outline" className="w-fit bg-slate-50 text-slate-500 border-slate-200 text-[10px] px-1.5 py-0">
+                                    <TagIcon className="h-2.5 w-2.5 mr-0.5" /> Different Tag
+                                </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>This transaction is from tag {txTagId}, not the current tag ({tagNumber})</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
                 </div>
             </TableCell>
             <TableCell>
@@ -255,7 +262,7 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
                     variant="ghost" 
                     size="icon" 
                     className="h-8 w-8 text-slate-400 hover:text-red-600"
-                    onClick={() => handleDeleteClick(tx.id)}
+                    onClick={(e) => { e.stopPropagation(); handleDeleteClick(tx.id); }}
                 >
                     <Trash2 className="h-4 w-4" />
                 </Button>
@@ -266,7 +273,7 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
     </Table>
   );
 
-  const topUps = transactions.filter(t => t.amount > 0 || t.category === 'Toll Top-up' || t.description?.toLowerCase().includes('top-up'));
+  const topUps = transactions.filter(t => t.amount > 0 || t.category === 'Toll Top-up' || t.description?.toLowerCase().includes('top-up') || t.description?.toLowerCase().includes('top up'));
   const usage = transactions.filter(t => t.amount < 0 && t.category !== 'Toll Top-up');
 
   return (
@@ -336,6 +343,14 @@ export function TollTopupHistory({ vehicleId, refreshTrigger, onTransactionChang
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <TollTransactionDetailOverlay
+      isOpen={!!selectedTransaction}
+      onClose={() => setSelectedTransaction(null)}
+      transaction={selectedTransaction}
+      trip={(selectedTransaction as any)?.linkedTrip || null}
+      claim={selectedTransaction ? claims[selectedTransaction.id] : null}
+    />
     </>
   );
 }

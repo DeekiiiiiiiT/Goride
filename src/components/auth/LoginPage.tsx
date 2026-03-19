@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { Car, ArrowRight, ArrowLeft, Smartphone, Laptop, AlertCircle, Loader2, BarChart3, Shield, Zap, Package, Navigation, Truck, Ship, Check } from 'lucide-react';
+import { Car, ArrowRight, ArrowLeft, Laptop, AlertCircle, Loader2, BarChart3, Shield, Zap, Package, Navigation, Truck, Ship, Check } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { supabase } from '../../utils/supabase/client';
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { BUSINESS_TYPES } from '../../utils/businessTypes';
+import { LockoutCountdown } from './LockoutCountdown';
 
 // Map icon string names from BUSINESS_TYPES to actual lucide components
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
@@ -29,9 +29,28 @@ export function LoginPage() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Rate limiting: lockout countdown state
+  const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
+
   // Phase 2: Multi-step signup state (only used for admin/Fleet Manager registration)
   const [adminSignupStep, setAdminSignupStep] = useState<1 | 2>(1);
   const [selectedBusinessType, setSelectedBusinessType] = useState<string>('rideshare');
+
+  // Phase 4: Registration mode from platform settings
+  const [registrationMode, setRegistrationMode] = useState<'open' | 'invite_only' | 'domain_restricted'>('open');
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
+  const [passwordPolicy, setPasswordPolicy] = useState<{ minLength: number; requireUppercase: boolean; requireNumber: boolean; requireSpecialChar: boolean } | null>(null);
+
+  React.useEffect(() => {
+    fetch(`${API_ENDPOINTS.admin}/platform-status`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.registrationMode) setRegistrationMode(data.registrationMode);
+        if (data.allowedDomains) setAllowedDomains(data.allowedDomains);
+        if (data.passwordPolicy) setPasswordPolicy(data.passwordPolicy);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,29 +58,63 @@ export function LoginPage() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Enterprise: all login goes through server-side route with rate limiting & role gating
+      const res = await fetch(`${API_ENDPOINTS.admin}/fleet-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (error) {
-        throw error;
+      const data = await res.json().catch(() => null);
+
+      if (res.status === 429) {
+        // Rate limited — show lockout countdown
+        if (data?.retryAfterSec) {
+          setLockoutSeconds(data.retryAfterSec);
+          setError(null);
+        } else {
+          setError(data?.error || 'Too many login attempts. Please try again later.');
+        }
+        return;
       }
-      
+
+      if (!res.ok) {
+        const msg = data?.error || 'Login failed';
+        // If the server indicates we just got locked out (retryAfterSec in non-429 response)
+        if (data?.retryAfterSec) {
+          setLockoutSeconds(data.retryAfterSec);
+          setError(null);
+          return;
+        }
+        if (data?.attemptsRemaining !== undefined && data.attemptsRemaining <= 3) {
+          setError(`${msg} (${data.attemptsRemaining} attempt${data.attemptsRemaining !== 1 ? 's' : ''} remaining before lockout)`);
+        } else {
+          setError(msg === 'Invalid email or password.'
+            ? 'Invalid email or password. If you haven\'t created an account yet, please use the "Create an account" link below.'
+            : msg);
+        }
+        return;
+      }
+
+      // Set session client-side so AuthContext picks it up
+      await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+
       // AuthContext will handle the state change and redirect
     } catch (err: any) {
       console.error('Login error:', err);
-      if (err.message === 'Invalid login credentials') {
-          setError('Invalid email or password. If you haven\'t created an account yet, please use the "Create an account" link below.');
-      } else {
-          setError(err.message || 'Failed to sign in');
-      }
+      setError(err.message || 'Failed to sign in');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRegister = async (e: React.FormEvent | null, role: 'admin' | 'driver') => {
+  const handleRegister = async (e: React.FormEvent | null) => {
       if (e) e.preventDefault();
       setIsLoading(true);
       setError(null);
@@ -73,9 +126,9 @@ export function LoginPage() {
               email,
               password,
               name: name || email.split('@')[0],
-              role,
+              role: 'admin',
           };
-          if (role === 'admin' && selectedBusinessType) {
+          if (selectedBusinessType) {
               body.businessType = selectedBusinessType;
           }
 
@@ -100,7 +153,7 @@ export function LoginPage() {
               throw new Error(errorMessage);
           }
 
-          setSuccessMessage(`Account created successfully! You can now log in as ${role}.`);
+          setSuccessMessage(`Account created successfully! You can now log in.`);
           setIsRegistering(false);
           setAdminSignupStep(1);
           setSelectedBusinessType('rideshare');
@@ -201,7 +254,7 @@ export function LoginPage() {
       <Button
         className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm"
         disabled={isLoading}
-        onClick={() => handleRegister(null, 'admin')}
+        onClick={() => handleRegister(null)}
       >
         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {isLoading ? 'Creating account...' : 'Create Fleet Manager Account'}
@@ -318,6 +371,19 @@ export function LoginPage() {
               </div>
             )}
 
+            {/* Lockout countdown — replaces the form when rate-limited */}
+            {lockoutSeconds !== null && lockoutSeconds > 0 ? (
+              <LockoutCountdown
+                retryAfterSec={lockoutSeconds}
+                onExpired={() => {
+                  setLockoutSeconds(null);
+                  setError(null);
+                }}
+                portalName="the Fleet Manager Portal"
+                accentColor="bg-indigo-500"
+              />
+            ) : (
+            <>
             {/* Alerts */}
             {error && (
               <Alert variant="destructive" className="mb-6">
@@ -336,119 +402,37 @@ export function LoginPage() {
             )}
 
             {/* Tabs — hide tab switcher when on step 2 to keep focus */}
-            <Tabs defaultValue="admin" className="w-full">
-              {!(isRegistering && adminSignupStep === 2) && (
-                <TabsList className="grid w-full grid-cols-2 mb-6 h-11 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
-                  <TabsTrigger value="admin" className="rounded-md text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-700">
-                    Fleet Manager
-                  </TabsTrigger>
-                  <TabsTrigger value="driver" className="rounded-md text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-700">
-                    Driver Portal
-                  </TabsTrigger>
-                </TabsList>
-              )}
-
-              {/* ── Fleet Manager Tab ── */}
-              <TabsContent value="admin" className="space-y-4 mt-0">
-                {isRegistering && adminSignupStep === 2 ? (
-                  // Step 2: Business type picker
-                  renderBusinessTypePicker()
-                ) : (
-                  // Step 1 (or login mode): Credentials form
-                  <>
-                    <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 rounded-lg p-3.5 flex items-start gap-3">
-                      <div className="h-8 w-8 rounded-md bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">
-                        <Laptop className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-indigo-900 dark:text-indigo-200 text-sm">Admin Dashboard</h4>
-                        <p className="text-xs text-indigo-700/80 dark:text-indigo-400/70 mt-0.5 leading-relaxed">
-                          Fleet analytics, driver management, financial reports, and system settings.
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      if (isRegistering) {
-                        // Credentials validated by HTML5 required — advance to step 2
-                        setAdminSignupStep(2);
-                        setError(null);
-                      } else {
-                        handleLogin(e);
-                      }
-                    }} className="space-y-4">
-                        {isRegistering && (
-                             <div className="space-y-1.5">
-                                <Label htmlFor="admin-name" className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</Label>
-                                <Input 
-                                    id="admin-name" 
-                                    placeholder="John Doe" 
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    required
-                                    className="h-10"
-                                />
-                            </div>
-                        )}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="admin-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</Label>
-                            <Input 
-                                id="admin-email" 
-                                placeholder="you@company.com" 
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                                className="h-10"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                             <div className="flex items-center justify-between">
-                                <Label htmlFor="admin-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</Label>
-                                {!isRegistering && <a href="#" className="text-xs text-indigo-600 hover:text-indigo-500 font-medium">Forgot?</a>}
-                             </div>
-                            <Input 
-                                id="admin-password" 
-                                type="password" 
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                className="h-10"
-                            />
-                        </div>
-                        
-                        <Button className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm" type="submit" disabled={isLoading}>
-                            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {isLoading ? 'Processing...' : (isRegistering ? 'Next: Choose Your Industry' : 'Sign In as Manager')}
-                            <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                    </form>
-                  </>
-                )}
-              </TabsContent>
-
-              {/* ── Driver Portal Tab ── */}
-              <TabsContent value="driver" className="space-y-4 mt-0">
-                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3.5 flex items-start gap-3">
-                  <div className="h-8 w-8 rounded-md bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0">
-                    <Smartphone className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+            {isRegistering && adminSignupStep === 2 ? (
+              renderBusinessTypePicker()
+            ) : (
+              <>
+                <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 rounded-lg p-3.5 flex items-start gap-3">
+                  <div className="h-8 w-8 rounded-md bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">
+                    <Laptop className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900 dark:text-slate-200 text-sm">Driver App</h4>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
-                      Mobile-optimized for tracking earnings, trips, documents, and profile settings.
+                    <h4 className="font-semibold text-indigo-900 dark:text-indigo-200 text-sm">Admin Dashboard</h4>
+                    <p className="text-xs text-indigo-700/80 dark:text-indigo-400/70 mt-0.5 leading-relaxed">
+                      Fleet analytics, driver management, financial reports, and system settings.
                     </p>
                   </div>
                 </div>
-
-                <form onSubmit={(e) => isRegistering ? handleRegister(e, 'driver') : handleLogin(e)} className="space-y-4">
-                     {isRegistering && (
+                
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (isRegistering) {
+                    setAdminSignupStep(2);
+                    setError(null);
+                  } else {
+                    handleLogin(e);
+                  }
+                }} className="space-y-4 mt-4">
+                    {isRegistering && (
                          <div className="space-y-1.5">
-                            <Label htmlFor="driver-name" className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</Label>
+                            <Label htmlFor="admin-name" className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</Label>
                             <Input 
-                                id="driver-name" 
-                                placeholder="Jane Doe" 
+                                id="admin-name" 
+                                placeholder="John Doe" 
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 required
@@ -457,10 +441,10 @@ export function LoginPage() {
                         </div>
                     )}
                     <div className="space-y-1.5">
-                        <Label htmlFor="driver-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</Label>
+                        <Label htmlFor="admin-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</Label>
                         <Input 
-                            id="driver-email" 
-                            placeholder="driver@company.com" 
+                            id="admin-email" 
+                            placeholder="you@company.com" 
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -469,61 +453,83 @@ export function LoginPage() {
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="driver-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</Label>
+                         <div className="flex items-center justify-between">
+                            <Label htmlFor="admin-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</Label>
+                            {!isRegistering && <a href="#" className="text-xs text-indigo-600 hover:text-indigo-500 font-medium">Forgot?</a>}
+                         </div>
                         <Input 
-                            id="driver-password" 
+                            id="admin-password" 
                             type="password" 
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
                             className="h-10"
                         />
+                        {isRegistering && passwordPolicy && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            Password must be at least {passwordPolicy.minLength} characters
+                            {passwordPolicy.requireUppercase && ', include an uppercase letter'}
+                            {passwordPolicy.requireNumber && ', include a number'}
+                            {passwordPolicy.requireSpecialChar && ', include a special character'}
+                            .
+                          </p>
+                        )}
                     </div>
-
-                    <Button className="w-full h-10 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200" type="submit" disabled={isLoading}>
-                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {isLoading ? 'Processing...' : (isRegistering ? 'Create Driver Account' : 'Login to Driver Portal')}
-                        {!isLoading && !isRegistering && <ArrowRight className="ml-2 h-4 w-4" />}
+                    
+                    <Button className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm" type="submit" disabled={isLoading}>
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isLoading ? 'Processing...' : (isRegistering ? 'Next: Choose Your Industry' : 'Sign In as Manager')}
+                        <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                 </form>
-              </TabsContent>
-            </Tabs>
+              </>
+            )}
 
             {/* Toggle login / register */}
             <div className="mt-6 text-center">
-              <button 
-                onClick={() => {
-                    setIsRegistering(!isRegistering);
-                    setError(null);
-                    setSuccessMessage(null);
-                    setEmail('');
-                    setPassword('');
-                    setName('');
-                    setAdminSignupStep(1);
-                    setSelectedBusinessType('rideshare');
-                }}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-              >
-                {isRegistering ? 'Already have an account? Sign in' : 'New here? Create an account'}
-              </button>
+              {registrationMode === 'invite_only' && !isRegistering ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Registration is by invitation only. Contact your administrator.
+                </p>
+              ) : (
+                <button 
+                  onClick={() => {
+                      if (registrationMode === 'invite_only') return;
+                      setIsRegistering(!isRegistering);
+                      setError(null);
+                      setSuccessMessage(null);
+                      setEmail('');
+                      setPassword('');
+                      setName('');
+                      setAdminSignupStep(1);
+                      setSelectedBusinessType('rideshare');
+                  }}
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                >
+                  {isRegistering ? 'Already have an account? Sign in' : 'New here? Create an account'}
+                </button>
+              )}
+
+              {/* Domain restriction notice */}
+              {isRegistering && registrationMode === 'domain_restricted' && allowedDomains.length > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                  Registration is restricted to: {allowedDomains.map(d => '@' + d).join(', ')}
+                </p>
+              )}
             </div>
 
             {/* Footer */}
             <div className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600">
               Protected by reCAPTCHA and subject to the Privacy Policy and Terms of Service.
             </div>
+            </>
+            )}
           </div>
         </div>
 
         {/* Bottom branding bar (desktop only) */}
         <div className="hidden lg:flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800">
           <span className="text-xs text-slate-400 dark:text-slate-600">Roam Fleet &middot; Enterprise Fleet Management</span>
-          <a
-            href="/admin"
-            className="text-[11px] text-slate-400 dark:text-slate-600 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
-          >
-            Admin Portal &rarr;
-          </a>
         </div>
       </div>
     </div>

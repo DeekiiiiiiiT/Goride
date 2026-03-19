@@ -114,8 +114,12 @@ export function useTollReconciliation(driverId?: string) {
       // Phase 4: Fetch from server endpoints (no more fetchAllTransactions!)
       // Still fetch trips for ManualMatchModal + driver inference in UnmatchedTollsList
       const filterParams = { limit: 1000, ...(driverId ? { driverId } : {}) };
-      const [unreconciledRes, reconciledRes, refundsRes, allTrips] = await Promise.all([
-        api.getTollUnreconciled(filterParams),
+      
+      // Step 1: Fetch unreconciled FIRST (it performs auto-reconciliation server-side)
+      const unreconciledRes = await api.getTollUnreconciled(filterParams);
+      
+      // Step 2: Now fetch reconciled + refunds + trips (after auto-reconciliation writes have persisted)
+      const [reconciledRes, refundsRes, allTrips] = await Promise.all([
         api.getTollReconciled(filterParams),
         api.getTollUnclaimedRefunds(filterParams),
         fetchAllTrips()

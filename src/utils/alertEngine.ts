@@ -25,7 +25,7 @@ export const AlertEngine = {
         // ... (existing logic) ...
         driverMetrics.forEach(driver => {
             // Condition 1: Acceptance Rate < 50%
-            const acceptance = driver.acceptanceRate !== undefined ? driver.acceptanceRate : 1; 
+            const acceptance = driver.acceptanceRate != null ? driver.acceptanceRate : 1; 
             if (acceptance < 0.5) {
                 alerts.push({
                     id: `drv-acc-${driver.driverId}-${crypto.randomUUID()}`,
@@ -40,7 +40,7 @@ export const AlertEngine = {
             }
 
             // Condition 2: Cancellation Rate > 10%
-            const cancellation = driver.cancellationRate !== undefined ? driver.cancellationRate : 0;
+            const cancellation = driver.cancellationRate != null ? driver.cancellationRate : 0;
             if (cancellation > 0.1) {
                 alerts.push({
                     id: `drv-can-${driver.driverId}-${crypto.randomUUID()}`,
@@ -55,7 +55,7 @@ export const AlertEngine = {
             }
 
             // Condition 3: Rating < 4.5
-            const rating = driver.ratingLast500 !== undefined ? driver.ratingLast500 : 5;
+            const rating = driver.ratingLast500 != null ? driver.ratingLast500 : 5;
             if (rating < 4.5) {
                 alerts.push({
                     id: `drv-rat-${driver.driverId}-${crypto.randomUUID()}`,

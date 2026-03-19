@@ -27,6 +27,7 @@ import { startOfDay, endOfDay, format, subDays, differenceInDays } from "date-fn
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { api } from '../../services/api';
+import { usePlatformConfig } from '../auth/PlatformConfigContext';
 import { WeeklySettlementView } from '../drivers/WeeklySettlementView';
 import { TransactionLedgerView } from '../drivers/TransactionLedgerView';
 import { FuelWalletView } from '../drivers/FuelWalletView';
@@ -46,6 +47,7 @@ import { LedgerDriverOverview } from '../../types/data';
 export function DriverEarnings() {
   const { user } = useAuth();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
+  const { formatCurrency: fmtCurrency } = usePlatformConfig();
   const [loading, setLoading] = useState(true);
   const [cashWalletView, setCashWalletView] = useState<'settlements' | 'ledger' | 'fuel'>('settlements');
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -584,7 +586,7 @@ export function DriverEarnings() {
                     {date?.from ? `Estimated Payout (${format(date.from, 'MMM d')}${date.to ? ` - ${format(date.to, 'MMM d')}` : ''})` : 'Estimated Payout (All Time)'}
                 </span>
                 <div className="flex flex-col items-center mt-2">
-                    <h1 className="text-4xl font-bold tracking-tight">${netPayout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h1>
+                    <h1 className="text-4xl font-bold tracking-tight">{fmtCurrency(netPayout)}</h1>
                     {stats.trend !== null && (
                         <div className={cn("flex items-center text-sm font-medium mt-1", stats.trend >= 0 ? "text-emerald-400" : "text-rose-400")}>
                             <TrendingUp className={cn("h-4 w-4 mr-1", stats.trend < 0 && "rotate-180")} />
@@ -609,7 +611,7 @@ export function DriverEarnings() {
                 </div>
                 <div className="flex flex-col items-center mt-2">
                     <h1 className="text-4xl font-bold tracking-tight text-orange-500">
-                        ${netOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {fmtCurrency(netOutstanding)}
                     </h1>
                 </div>
             </div>
@@ -631,7 +633,7 @@ export function DriverEarnings() {
                  <div className="flex justify-between items-center">
                      <span className="font-semibold text-indigo-900">Estimated Payout</span>
                      <span className="text-xl font-bold text-indigo-700">
-                         ${tierState.projectedPayout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                         {fmtCurrency(tierState.projectedPayout)}
                      </span>
                  </div>
              </CardContent>

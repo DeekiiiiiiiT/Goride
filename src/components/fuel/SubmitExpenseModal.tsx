@@ -16,6 +16,7 @@ import { searchAddress, AddressResult, debounce } from '../../utils/locationServ
 import { cn } from "../ui/utils";
 import { fuelService } from '../../services/fuelService';
 import { StationProfile } from '../../types/station';
+import { useQuery } from '@tanstack/react-query';
 
 interface SubmitExpenseModalProps {
     isOpen: boolean;
@@ -27,6 +28,16 @@ interface SubmitExpenseModalProps {
 }
 
 export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles, initialData }: SubmitExpenseModalProps) {
+    // Phase 5: Use React Query for parent companies caching
+    const { data: parentCompaniesData = [] } = useQuery({
+        queryKey: ['parentCompanies'],
+        queryFn: () => fuelService.getParentCompanies(),
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        gcTime: 10 * 60 * 1000, // 10 minutes
+        refetchOnWindowFocus: false,
+        refetchOnMount: false,
+    });
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [activeTab, setActiveTab] = useState("single");
     const [isUploading, setIsUploading] = useState(false);
@@ -44,15 +55,15 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         if (!isOpen) return;
         let cancelled = false;
         setStationsLoading(true);
-        Promise.all([
-            fuelService.getStations(),
-            fuelService.getParentCompanies()
-        ])
-            .then(([allStations, companies]: [StationProfile[], any[]]) => {
+        // Phase 5: Only fetch stations, parent companies come from React Query cache
+        fuelService.getStations()
+            .then((allStations: StationProfile[]) => {
                 if (cancelled) return;
                 const verified = allStations.filter((s: StationProfile) => s.status === 'verified');
                 setVerifiedStations(verified);
-                const companyNames = (companies || [])
+                
+                // Phase 5: Use cached parent companies from React Query
+                const companyNames = (parentCompaniesData || [])
                     .map((c: any) => c.name)
                     .filter(Boolean)
                     .sort() as string[];
@@ -69,7 +80,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 if (!cancelled) setStationsLoading(false);
             });
         return () => { cancelled = true; };
-    }, [isOpen]);
+    }, [isOpen, parentCompaniesData]);
 
     // Use parent companies as the single source of truth for brand list
     const uniqueBrands = useMemo(() => {

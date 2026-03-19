@@ -185,11 +185,15 @@ export function FinancialsView({ trips, fleetSummary = null }: FinancialsViewPro
   const chartData = useMemo(() => {
     // Phase 6: Ledger is sole source — no trip fallback
     if (fleetSummary?.dailyTrend && fleetSummary.dailyTrend.length > 0) {
-      return fleetSummary.dailyTrend.map(d => ({
-        date: new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        revenue: d.earnings,
-        trips: d.tripCount,
-      }));
+      // Deduplicate by date label to avoid Recharts duplicate key warnings
+      const seen = new Map<string, number>();
+      return fleetSummary.dailyTrend.map(d => {
+        let label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const count = seen.get(label) || 0;
+        seen.set(label, count + 1);
+        if (count > 0) label = `${label} (${count + 1})`;
+        return { date: label, revenue: d.earnings, trips: d.tripCount };
+      });
     }
 
     // Phase 6: Return empty when ledger unavailable

@@ -1,17 +1,17 @@
-// cache-bust: force recompile — 2026-02-10
+// cache-bust: force recompile — 2026-03-17 Phase1
 import React, { useState, useRef } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
-import { Camera, AlertTriangle, ScanLine, CheckCircle, RotateCcw } from 'lucide-react';
+import { Camera, AlertTriangle, ScanLine, CheckCircle, RotateCcw, ShieldAlert } from 'lucide-react';
 import { api } from '../../../services/api';
 import { motion, AnimatePresence } from 'motion/react';
 
 export interface ScanResult {
     reading: number;
     photo: File;
-    method: 'ai_verified' | 'manual_override';
+    method: 'ai_verified' | 'manual_override' | 'photo_review';
     confidence?: string;
     manualReason?: string;
 }
@@ -23,7 +23,7 @@ interface OdometerScannerProps {
     className?: string;
 }
 
-type ScannerStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY';
+type ScannerStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY' | 'PHOTO_ONLY';
 
 export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, className }: OdometerScannerProps) {
     const [step, setStep] = useState<ScannerStep>('CAPTURE');
@@ -36,6 +36,10 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isVerifying, setIsVerifying] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const photoOnlyInputRef = useRef<HTMLInputElement>(null);
+
+    // Track whether a photo has been captured in PHOTO_ONLY mode
+    const [photoOnlyReady, setPhotoOnlyReady] = useState(false);
 
     const odometerValue = parseFloat(odometer) || 0;
     const isDecreasing = lastOdometer > 0 && odometerValue > 0 && odometerValue < lastOdometer;
@@ -74,10 +78,13 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
 
     const handleScanFailure = (msg: string) => {
         if (retryCount >= 1) {
-            // Second failure (or more), force manual
-            setErrorMsg("AI Verification failed multiple times. Please enter manually.");
+            // Second failure — route to PHOTO_ONLY (admin will review)
+            setErrorMsg("AI couldn't read the odometer. Please take a clear photo — an admin will review it.");
             setManualReason("AI Verification Failed: " + msg);
-            setStep('MANUAL_ENTRY');
+            setPhoto(null);
+            setPhotoPreview(null);
+            setPhotoOnlyReady(false);
+            setStep('PHOTO_ONLY');
         } else {
             // First failure, allow retry
             setErrorMsg(msg + " Please ensure the odometer is clearly visible.");
@@ -130,6 +137,32 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
             photo: photo,
             method: 'manual_override',
             manualReason: manualReason || 'User manual override'
+        });
+    };
+
+    // ── PHOTO_ONLY handlers ──
+
+    const handlePhotoOnlyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setPhoto(file);
+            setPhotoOnlyReady(true);
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPhotoPreview(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handlePhotoOnlySubmit = () => {
+        if (!photo) return;
+        onScanComplete({
+            reading: 0,               // No odometer reading — admin will enter it
+            photo: photo,
+            method: 'photo_review',
+            manualReason: 'AI scan failed — photo submitted for admin review'
         });
     };
 
@@ -356,6 +389,114 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
                                     ) : 'Submit'}
                                 </Button>
                             </div>
+                        </div>
+                    )}
+
+                    {step === 'PHOTO_ONLY' && (
+                        <div className="space-y-4">
+                            {/* Info Banner */}
+                            <div className="bg-amber-50/80 p-4 rounded-xl border border-amber-200 flex items-start gap-3">
+                                <div className="bg-amber-100 p-2 rounded-lg shadow-sm shrink-0">
+                                    <ShieldAlert className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div className="text-xs text-amber-900 leading-relaxed">
+                                    <p className="font-bold mb-1 uppercase tracking-wider">Admin Review Required</p>
+                                    <p className="opacity-90">
+                                        AI couldn't read the odometer. Please take a clear, well-lit photo of your dashboard — an admin will review it and enter the reading for you.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {!photoOnlyReady ? (
+                                /* Camera capture area — no photo taken yet */
+                                <div 
+                                    className="bg-slate-50 p-8 rounded-xl border-2 border-dashed border-amber-300 hover:border-amber-400 hover:bg-amber-50/30 transition-colors text-center space-y-4 cursor-pointer"
+                                    onClick={() => photoOnlyInputRef.current?.click()}
+                                >
+                                    <div className="mx-auto w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm border border-amber-200">
+                                        <Camera className="w-10 h-10 text-amber-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-lg text-slate-900">Take Odometer Photo</h3>
+                                        <p className="text-sm text-slate-500 mt-1">Make sure the numbers are clearly visible</p>
+                                    </div>
+                                    <Button 
+                                        variant="default" 
+                                        className="w-full max-w-xs mx-auto mt-4 bg-amber-600 hover:bg-amber-700"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            photoOnlyInputRef.current?.click();
+                                        }}
+                                    >
+                                        <Camera className="w-4 h-4 mr-2" />
+                                        Open Camera
+                                    </Button>
+                                    <Input 
+                                        ref={photoOnlyInputRef}
+                                        type="file" 
+                                        accept="image/*" 
+                                        capture="environment"
+                                        className="hidden" 
+                                        onChange={handlePhotoOnlyChange}
+                                    />
+                                </div>
+                            ) : (
+                                /* Photo captured — show preview + submit */
+                                <div className="space-y-4">
+                                    <div className="aspect-video w-full bg-slate-900 rounded-xl overflow-hidden relative">
+                                        {photoPreview && (
+                                            <img src={photoPreview} className="w-full h-full object-contain" alt="Odometer Photo" />
+                                        )}
+                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                                            <p className="text-white text-xs font-medium opacity-80">Odometer Photo — For Admin Review</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+                                        <CheckCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                                        <div className="text-xs text-blue-900 leading-relaxed">
+                                            <p className="font-semibold mb-0.5">Photo captured successfully</p>
+                                            <p className="opacity-80">An admin will review this photo and enter the odometer reading on your behalf. You can proceed to log the fuel amount and price.</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-1">
+                                        <Button 
+                                            variant="outline" 
+                                            className="flex-1"
+                                            onClick={() => {
+                                                setPhoto(null);
+                                                setPhotoPreview(null);
+                                                setPhotoOnlyReady(false);
+                                            }}
+                                        >
+                                            <RotateCcw className="w-4 h-4 mr-2" />
+                                            Retake
+                                        </Button>
+                                        <Button 
+                                            className="flex-1 bg-amber-600 hover:bg-amber-700"
+                                            onClick={handlePhotoOnlySubmit}
+                                        >
+                                            Submit for Review
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {errorMsg && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="flex items-center gap-3 p-4 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100"
+                                >
+                                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                                    {errorMsg}
+                                </motion.div>
+                            )}
+
+                            <Button variant="ghost" className="w-full" onClick={onCancel}>
+                                Cancel
+                            </Button>
                         </div>
                     )}
                 </motion.div>

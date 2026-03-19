@@ -58,6 +58,25 @@ export interface TollLogEntry {
 
   // --- Original record ---
   _raw: FinancialTransaction;         // Full original for detail panel
+
+  // --- Linked trip (from server-side /toll-logs endpoint) ---
+  linkedTrip?: {
+    id: string;
+    date: string;
+    platform: string;
+    pickupLocation: string;
+    dropoffLocation: string;
+    requestTime: string | null;
+    dropoffTime: string | null;
+    amount: number;
+    tollCharges: number;
+    driverId: string | null;
+    driverName: string | null;
+    vehicleId: string | null;
+    duration: string | null;
+    distance: string | null;
+    serviceType: string | null;
+  } | null;
 }
 
 // --- Filter state (used by Phase 5 Filters component) ---

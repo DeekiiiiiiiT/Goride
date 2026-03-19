@@ -10,8 +10,10 @@ import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { ReportGenerator, ReportSummary } from '../../utils/ReportGenerator';
 import { Loader2 } from 'lucide-react';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export function ReportsPage() {
+  const { can } = usePermissions();
   const [autoEmail, setAutoEmail] = useState(true);
   const [autoWeekly, setAutoWeekly] = useState(false);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
@@ -150,6 +152,7 @@ export function ReportsPage() {
 }
 
 function ReportCard({ title, description, date, onDownload, isGenerating }: { title: string, description: string, date: string, onDownload: () => void, isGenerating?: boolean }) {
+    const { can } = usePermissions();
     return (
         <Card className="flex flex-col h-full">
             <CardHeader>
@@ -162,10 +165,12 @@ function ReportCard({ title, description, date, onDownload, isGenerating }: { ti
             <CardContent className="mt-auto pt-0">
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">
                     <span className="text-xs text-slate-500">{date}</span>
+                    {can('reports.export') && (
                     <Button variant="outline" size="sm" onClick={onDownload} disabled={isGenerating}>
                         {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                         Export
                     </Button>
+                    )}
                 </div>
             </CardContent>
         </Card>

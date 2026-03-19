@@ -1,6 +1,8 @@
 import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import * as cache from "./cache.ts";
+import * as memCache from "./memory_cache.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
@@ -719,7 +721,17 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
 
         return c.json({ error: "Invalid action" }, 400);
     } catch (e: any) {
-        return c.json({ error: e.message }, 500);
+        // Phase 7-8 fix: Better error logging for promotion failures
+        const errorDetails = {
+            message: e.message || String(e),
+            name: e.name || 'UnknownError',
+            stack: e.stack?.split('\n').slice(0, 3).join('\n') // First 3 lines of stack
+        };
+        console.error("[Promote-Learnt] Promotion failed:", JSON.stringify(errorDetails, null, 2));
+        return c.json({ 
+            error: `Promotion failed: ${e.message || 'Unknown error'}`,
+            details: errorDetails.name 
+        }, 500);
     }
 });
 
@@ -3267,9 +3279,26 @@ app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
 // --- PARENT COMPANIES ---
 app.get(`${BASE_PATH}/parent-companies`, async (c) => {
   try {
-    const companies = await kv.get("parent_companies");
-    return c.json(companies || []);
+    const cacheKey = "parent_companies";
+    
+    // Try memory cache first (hot path - <5ms)
+    const cached = memCache.parentCompanyCache.get(cacheKey);
+    if (cached !== null) {
+      console.log("[ParentCompanies] Served from memory cache");
+      return c.json(cached);
+    }
+    
+    // Cache miss - fetch from KV with retry wrapper
+    console.log("[ParentCompanies] Cache miss, fetching from KV");
+    const companies = await cache.withRetry(() => kv.get(cacheKey));
+    const result = companies || [];
+    
+    // Store in memory cache for future requests
+    memCache.parentCompanyCache.set(cacheKey, result, 5 * 60 * 1000); // 5min TTL
+    
+    return c.json(result);
   } catch (e: any) {
+    console.error("[ParentCompanies] Error:", e.message);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -3277,7 +3306,12 @@ app.get(`${BASE_PATH}/parent-companies`, async (c) => {
 app.post(`${BASE_PATH}/parent-companies`, async (c) => {
   try {
     const companies = await c.req.json();
-    await kv.set("parent_companies", companies);
+    await cache.withRetry(() => kv.set("parent_companies", companies));
+    
+    // Invalidate memory cache so next GET fetches fresh data
+    memCache.parentCompanyCache.invalidate("parent_companies");
+    console.log("[ParentCompanies] Cache invalidated after update");
+    
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

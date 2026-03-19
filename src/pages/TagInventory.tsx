@@ -11,7 +11,7 @@ import { api } from "../services/api";
 import { TollTag, TollProvider, TollTagStatus, Vehicle } from "../types/vehicle";
 import { toast } from "sonner";
 
-export function TagInventory() {
+export function TagInventory({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const [tags, setTags] = useState<TollTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -97,7 +97,14 @@ export function TagInventory() {
       const updatedTag = {
         ...tag,
         assignedVehicleId: undefined,
-        assignedVehicleName: undefined
+        assignedVehicleName: undefined,
+        // Phase 8: Close current assignment in history
+        assignmentHistory: (tag.assignmentHistory || []).map((entry: any) =>
+          entry.vehicleId === tag.assignedVehicleId && !entry.unassignedAt
+            ? { ...entry, unassignedAt: new Date().toISOString() }
+            : entry
+        ),
+        updatedAt: new Date().toISOString(),
       };
       await api.saveTollTag(updatedTag);
 
@@ -121,7 +128,10 @@ export function TagInventory() {
           <div className="p-6">
               <TollTagDetail 
                   tag={selectedTag} 
-                  onBack={() => setSelectedTag(null)} 
+                  onBack={() => setSelectedTag(null)}
+                  onNavigateToReconciliation={onNavigate ? (_vehicleId: string) => {
+                      onNavigate('toll-tags');
+                  } : undefined}
               />
           </div>
       );

@@ -28,6 +28,8 @@ export interface ManualTripInput {
   indriveServiceFee?: number;   // Auto-calculated: amount - indriveNetIncome
   indriveServiceFeePercent?: number; // Auto-calculated: (fee / amount) * 100
   indriveBalanceDeduction?: number;  // Auto-calculated: fee from InDrive Balance (cash trips only)
+  // Service category (InDrive only: ride vs courier/delivery)
+  serviceCategory?: 'ride' | 'courier';
   // Cancellation tracking
   tripStatus?: 'Completed' | 'Cancelled'; // Default: 'Completed'
   cancelledBy?: 'rider' | 'driver';       // Only relevant when tripStatus === 'Cancelled'
@@ -156,6 +158,11 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     resolutionMethod: data.resolutionMethod,
     resolutionTimestamp: data.resolutionTimestamp,
     geocodeError: data.geocodeError,
+
+    // Service category (InDrive courier vs ride)
+    ...(data.platform === 'InDrive' && data.serviceCategory && {
+      serviceCategory: data.serviceCategory,
+    }),
 
     // InDrive fee tracking (only populated for InDrive trips with fee data)
     ...(isInDriveWithFeeData && {

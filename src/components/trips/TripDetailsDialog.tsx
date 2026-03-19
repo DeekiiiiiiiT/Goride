@@ -78,6 +78,11 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                 <div className="text-lg font-semibold text-slate-900 dark:text-slate-50">
                   {normalizePlatform(trip.platform)}
                 </div>
+                {trip.serviceCategory === 'courier' && (
+                  <div className="text-xs font-medium text-amber-600 dark:text-amber-400 mt-0.5">
+                    📦 Courier Delivery
+                  </div>
+                )}
                 {trip.paymentMethod && (
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     {trip.paymentMethod === 'Cash' ? '💵 Cash' : '💳 Card / Digital'}

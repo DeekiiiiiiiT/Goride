@@ -451,6 +451,11 @@ export function TripLogsPage() {
                                             {trip.productType}
                                         </Badge>
                                     )}
+                                    {trip.serviceCategory === 'courier' && (
+                                        <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 bg-amber-50 text-amber-600 border-amber-300">
+                                            📦 Courier
+                                        </Badge>
+                                    )}
                                 </div>
                               </TableCell>
 

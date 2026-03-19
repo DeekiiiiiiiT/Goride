@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   Loader2,
@@ -22,11 +23,19 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  UserPlus,
+  Copy,
+  Check,
+  X,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { resolveRole } from '../../utils/permissions';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { toast } from 'sonner@2.0.3';
 import { ConfirmationModal } from './ConfirmationModal';
+import { OrganizationDetail } from './OrganizationDetail';
+import { SetPasswordModal } from './SetPasswordModal';
 
 // -------------------------------------------------------------------
 // Types
@@ -101,10 +110,18 @@ function formatRelative(iso: string | null): string {
 // Component
 // -------------------------------------------------------------------
 export function CustomerAccounts() {
-  const { session } = useAuth();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { session, role } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Phase 11: Determine platform role capabilities
+  const resolved = resolveRole(role || (session?.user as any)?.user_metadata?.role);
+  const isPlatformOwner = resolved === 'platform_owner';
+  const isPlatformSupport = resolved === 'platform_support';
+  const canSuspend = isPlatformOwner || isPlatformSupport;    // owner + support can suspend
+  const canEdit = isPlatformOwner;                             // only owner can edit details
+  const canResetPassword = isPlatformOwner || isPlatformSupport;
+  // platform_analyst gets read-only (no actions at all)
+
   const [search, setSearch] = useState('');
   const [bizFilter, setBizFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -115,7 +132,6 @@ export function CustomerAccounts() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [editName, setEditName] = useState('');
   const [editBizType, setEditBizType] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
 
   // Dropdown state
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -137,6 +153,21 @@ export function CustomerAccounts() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
+  // Create customer modal state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createBizType, setCreateBizType] = useState('rideshare');
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createResult, setCreateResult] = useState<{ password: string; email: string } | null>(null);
+  const [createCopied, setCreateCopied] = useState(false);
+
+  // Phase 6: Organization detail drill-down
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+
+  // Phase 7: Set Password modal
+  const [setPasswordTarget, setSetPasswordTarget] = useState<Customer | null>(null);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -149,14 +180,10 @@ export function CustomerAccounts() {
 
   const accessToken = session?.access_token;
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  const loadCustomers = async () => {
-    setLoading(true);
-    setError(null);
-    try {
+  // Phase 6: React Query for admin customers caching
+  const { data: customers = [], isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['adminCustomers'],
+    queryFn: async () => {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin/customers`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -165,14 +192,16 @@ export function CustomerAccounts() {
         throw new Error(body.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      setCustomers(data.customers || []);
-    } catch (err: any) {
-      console.error('CustomerAccounts load error:', err);
-      setError(err.message || 'Failed to load customers');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return data.customers || [];
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes (fresher than other data since admin actions are frequent)
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    enabled: !!accessToken,
+  });
+
+  const error = queryError ? (queryError as Error).message : null;
 
   // Derived: all business types (always show every type in filter)
   const bizTypes = useMemo(() => {
@@ -259,7 +288,6 @@ export function CustomerAccounts() {
 
   const handleEditSave = async () => {
     if (!editingCustomer) return;
-    setEditSaving(true);
     try {
       const res = await fetch(`${API_ENDPOINTS.admin}/update-user`, {
         method: 'POST',
@@ -277,12 +305,10 @@ export function CustomerAccounts() {
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       toast.success('Customer updated successfully');
       setEditingCustomer(null);
-      loadCustomers();
+      refetch();
     } catch (err: any) {
       console.error('Edit customer error:', err);
       toast.error(err.message || 'Failed to update customer');
-    } finally {
-      setEditSaving(false);
     }
   };
 
@@ -337,7 +363,7 @@ export function CustomerAccounts() {
           if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
           toast.success(`All sessions terminated for ${customer.name || customer.email}`);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          loadCustomers();
+          refetch();
         } catch (err: any) {
           console.error('Force logout error:', err);
           toast.error(err.message || 'Failed to force logout');
@@ -371,7 +397,7 @@ export function CustomerAccounts() {
           if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
           toast.success(`${customer.name || customer.email} has been ${isSuspending ? 'suspended' : 'reactivated'}`);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          loadCustomers();
+          refetch();
         } catch (err: any) {
           console.error('Toggle suspend error:', err);
           toast.error(err.message || `Failed to ${isSuspending ? 'suspend' : 'reactivate'} account`);
@@ -415,9 +441,60 @@ export function CustomerAccounts() {
     URL.revokeObjectURL(url);
   };
 
+  // Create customer
+  const handleCreateCustomer = async () => {
+    setCreateLoading(true);
+    try {
+      const res = await fetch(`${API_ENDPOINTS.admin}/admin/create-customer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          name: createName.trim(),
+          email: createEmail.trim(),
+          businessType: createBizType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setCreateResult({ password: data.temporaryPassword, email: createEmail.trim() });
+      queryClient.invalidateQueries({ queryKey: ['adminCustomers'] });
+    } catch (err: any) {
+      console.error('Create customer error:', err);
+      toast.error(err.message || 'Failed to create customer');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const closeCreateModal = () => {
+    setCreateOpen(false);
+    setCreateName('');
+    setCreateEmail('');
+    setCreateBizType('rideshare');
+    setCreateResult(null);
+    setCreateCopied(false);
+  };
+
+  const handleCopyCreatePassword = () => {
+    if (!createResult) return;
+    navigator.clipboard.writeText(createResult.password);
+    setCreateCopied(true);
+    toast.success('Password copied to clipboard');
+    setTimeout(() => setCreateCopied(false), 2000);
+  };
+
   // ---------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------
+
+  // Phase 6: If an org is selected, show the detail view
+  if (selectedOrgId) {
+    return <OrganizationDetail orgId={selectedOrgId} onBack={() => setSelectedOrgId(null)} />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -430,6 +507,15 @@ export function CustomerAccounts() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isPlatformOwner && (
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-black text-sm font-medium rounded-lg transition-colors"
+            >
+              <UserPlus className="w-4 h-4" />
+              Create Customer
+            </button>
+          )}
           <button
             onClick={handleExport}
             disabled={displayed.length === 0}
@@ -439,7 +525,7 @@ export function CustomerAccounts() {
             Export
           </button>
           <button
-            onClick={loadCustomers}
+            onClick={refetch}
             disabled={loading}
             className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
           >
@@ -548,7 +634,7 @@ export function CustomerAccounts() {
                   const Icon = BIZ_ICON[c.businessType] || Car;
                   const colorCls = BIZ_COLOR[c.businessType] || BIZ_COLOR.rideshare;
                   return (
-                    <tr key={c.id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={c.id} className="hover:bg-slate-800/50 cursor-pointer transition-colors" onClick={() => setSelectedOrgId(c.id)}>
                       {/* Name */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-3">
@@ -599,15 +685,17 @@ export function CustomerAccounts() {
                         )}
                       </td>
                       {/* Actions */}
-                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <td className="px-4 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-1">
-                          <button
-                            onClick={() => openEditModal(c)}
-                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                            title="Edit customer"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => openEditModal(c)}
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                              title="Edit customer"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
                           <div className="relative" ref={openDropdown === c.id ? dropdownRef : undefined}>
                             <button
                               onClick={(e) => {
@@ -630,12 +718,22 @@ export function CustomerAccounts() {
                                 className="fixed w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1"
                                 style={{ top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
                               >
-                                <button
-                                  className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
-                                  onClick={() => handleResetPassword(c)}
-                                >
-                                  <Mail className="w-4 h-4" /> Reset Password
-                                </button>
+                                {canResetPassword && (
+                                  <button
+                                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                    onClick={() => handleResetPassword(c)}
+                                  >
+                                    <Mail className="w-4 h-4" /> Reset Password
+                                  </button>
+                                )}
+                                {isPlatformOwner && (
+                                  <button
+                                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                    onClick={() => { setOpenDropdown(null); setSetPasswordTarget(c); }}
+                                  >
+                                    <KeyRound className="w-4 h-4" /> Set New Password
+                                  </button>
+                                )}
                                 <button
                                   className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                   onClick={() => handleForceLogout(c)}
@@ -643,20 +741,24 @@ export function CustomerAccounts() {
                                   <LogOut className="w-4 h-4" /> Force Logout
                                 </button>
                                 <div className="border-t border-slate-700 my-1" />
-                                {c.isSuspended ? (
-                                  <button
-                                    className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-slate-700 flex items-center gap-2"
-                                    onClick={() => handleToggleSuspend(c)}
-                                  >
-                                    <ShieldCheck className="w-4 h-4" /> Reactivate Account
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-700 flex items-center gap-2"
-                                    onClick={() => handleToggleSuspend(c)}
-                                  >
-                                    <ShieldBan className="w-4 h-4" /> Suspend Account
-                                  </button>
+                                {canSuspend && (
+                                  <>
+                                    {c.isSuspended ? (
+                                      <button
+                                        className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-slate-700 flex items-center gap-2"
+                                        onClick={() => handleToggleSuspend(c)}
+                                      >
+                                        <ShieldCheck className="w-4 h-4" /> Reactivate Account
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-700 flex items-center gap-2"
+                                        onClick={() => handleToggleSuspend(c)}
+                                      >
+                                        <ShieldBan className="w-4 h-4" /> Suspend Account
+                                      </button>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             )}
@@ -751,20 +853,137 @@ export function CustomerAccounts() {
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setEditingCustomer(null)}
-                disabled={editSaving}
-                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSave}
-                disabled={editSaving || !editName.trim()}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-black bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors disabled:opacity-50"
+                disabled={!editName.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-black bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors"
               >
-                {editSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {editSaving ? 'Saving...' : 'Save Changes'}
+                Save Changes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Customer Modal */}
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            {!createResult ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-white">Create Customer Account</h2>
+                  <button onClick={closeCreateModal} className="p-1 text-slate-400 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    value={createName}
+                    onChange={e => setCreateName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+                    placeholder="e.g. Marcus Williams"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={createEmail}
+                    onChange={e => setCreateEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+                    placeholder="marcus@fleet.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Business Type</label>
+                  <select
+                    value={createBizType}
+                    onChange={e => setCreateBizType(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+                  >
+                    {Object.entries(BIZ_LABEL).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={closeCreateModal}
+                    className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateCustomer}
+                    disabled={!createName.trim() || !createEmail.trim() || createLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-black bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {createLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Create Account
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-white">Account Created Successfully</h2>
+                  <button onClick={closeCreateModal} className="p-1 text-slate-400 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+                  <p className="text-sm text-emerald-300">
+                    Customer account created for <strong>{createResult.email}</strong>. Share the temporary password below securely.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Temporary Password</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={createResult.password}
+                      className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono focus:outline-none"
+                    />
+                    <button
+                      onClick={handleCopyCreatePassword}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors"
+                    >
+                      {createCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                      {createCopied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                  <p className="text-xs text-amber-300">
+                    This password will not be shown again. Make sure to copy it and share it securely with the customer.
+                  </p>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={closeCreateModal}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-black bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -780,6 +999,18 @@ export function CustomerAccounts() {
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
         loading={confirmLoading}
       />
+
+      {/* Set Password Modal */}
+      {setPasswordTarget && (
+        <SetPasswordModal
+          isOpen={true}
+          userId={setPasswordTarget.id}
+          userName={setPasswordTarget.name}
+          userEmail={setPasswordTarget.email}
+          accessToken={accessToken || ''}
+          onClose={() => setSetPasswordTarget(null)}
+        />
+      )}
     </div>
   );
 

@@ -74,6 +74,8 @@ export function FuelAuditDashboard() {
     const [savedEfficiencyThreshold, setSavedEfficiencyThreshold] = useState(30);
     const [savingConfig, setSavingConfig] = useState(false);
     const [recalculating, setRecalculating] = useState(false);
+    const [showOrphanDetailModal, setShowOrphanDetailModal] = useState(false);
+    const [selectedOrphanTx, setSelectedOrphanTx] = useState<any>(null);
 
     // Step 1.3: URL Persistence
     useEffect(() => {
@@ -458,9 +460,13 @@ export function FuelAuditDashboard() {
             await api.promoteLearntLocation(payload);
             toast.success(action === 'create' ? "New station added to Master Ledger" : "Location merged into existing station");
             fetchData();
-        } catch (err) {
+        } catch (err: any) {
+            // Phase 7-8 fix: Show detailed error message
             console.error("Promotion failed:", err);
-            toast.error("Failed to promote location");
+            const errorMsg = err.message || String(err);
+            toast.error("Failed to promote location", {
+                description: errorMsg
+            });
         } finally {
             setLoading(false);
         }
@@ -1578,7 +1584,14 @@ export function FuelAuditDashboard() {
                                     </div>
                                     <div className="space-y-3">
                                         {orphanLedgerEntries.map((tx) => (
-                                            <div key={tx.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:border-indigo-300 transition-all shadow-sm">
+                                            <div 
+                                                key={tx.id} 
+                                                className="bg-white border border-slate-200 rounded-xl p-4 hover:border-indigo-300 transition-all shadow-sm cursor-pointer"
+                                                onClick={() => {
+                                                    setSelectedOrphanTx(tx);
+                                                    setShowOrphanDetailModal(true);
+                                                }}
+                                            >
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
                                                         <div className="p-3 bg-rose-50 rounded-xl">
@@ -1608,7 +1621,10 @@ export function FuelAuditDashboard() {
                                                         <Button 
                                                             size="sm" 
                                                             className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase tracking-wider h-8"
-                                                            onClick={() => handleRepairLog(tx)}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleRepairLog(tx);
+                                                            }}
                                                         >
                                                             Repair Log
                                                         </Button>
@@ -1966,6 +1982,165 @@ export function FuelAuditDashboard() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Orphan Transaction Detail - Slide-in Side Panel */}
+            <AnimatePresence>
+                {showOrphanDetailModal && selectedOrphanTx && (
+                    <>
+                        {/* Subtle backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-slate-900/20 z-40"
+                            onClick={() => setShowOrphanDetailModal(false)}
+                        />
+                        
+                        {/* Side panel */}
+                        <motion.div
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="fixed right-0 top-0 bottom-0 w-[500px] bg-white shadow-2xl z-50 overflow-y-auto"
+                        >
+                            {/* Header */}
+                            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex items-center justify-between z-10">
+                                <div className="flex items-center gap-2">
+                                    <Activity className="w-5 h-5 text-rose-600" />
+                                    <div>
+                                        <h3 className="font-bold text-slate-900">Orphaned Transaction</h3>
+                                        <p className="text-xs text-slate-500">Missing fuel log entry</p>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowOrphanDetailModal(false)}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="p-4 space-y-4">
+                                {/* Transaction Header */}
+                                <Card className="border-amber-200 bg-amber-50">
+                                    <CardContent className="p-4">
+                                        <div className="flex items-start justify-between mb-3">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h3 className="font-bold text-slate-900">
+                                                        {selectedOrphanTx.description || 'Fuel Purchase'}
+                                                    </h3>
+                                                    <Badge variant="outline" className="text-[10px] bg-red-100 text-red-700 border-red-200">
+                                                        ORPHAN
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-xs text-slate-600">{selectedOrphanTx.category}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-center py-3 border-y border-amber-200">
+                                            <p className="text-3xl font-black text-slate-900">
+                                                ${Math.abs(selectedOrphanTx.amount).toFixed(2)}
+                                            </p>
+                                            <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold">Financial Record</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3 text-sm pt-3">
+                                            <div className="flex items-center gap-2 text-slate-700">
+                                                <Clock className="h-4 w-4 text-slate-500" />
+                                                <span className="text-xs font-medium">{format(new Date(selectedOrphanTx.date), 'MMM dd, yyyy')}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-slate-700">
+                                                <Car className="h-4 w-4 text-slate-500" />
+                                                <span className="text-xs font-medium">
+                                                    {vehicles.find(v => v.id === selectedOrphanTx.vehicleId)?.licensePlate || 'Unknown'}
+                                                </span>
+                                            </div>
+                                            {selectedOrphanTx.paymentMethod && (
+                                                <div className="col-span-2">
+                                                    <Badge variant="outline" className="text-[10px]">
+                                                        {selectedOrphanTx.paymentMethod}
+                                                    </Badge>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Missing Data Alert */}
+                                <Card className="border-rose-200 bg-rose-50">
+                                    <CardContent className="p-4">
+                                        <div className="flex gap-3">
+                                            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-sm font-bold text-rose-900">Missing Operational Log</p>
+                                                <p className="text-xs text-rose-700 mt-1">
+                                                    No fuel entry with odometer, location, or gallons. Click "Repair Log" to auto-generate.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Transaction Metadata */}
+                                {selectedOrphanTx.metadata && Object.keys(selectedOrphanTx.metadata).length > 0 && (
+                                    <Card>
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-sm">Transaction Metadata</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="space-y-2 text-xs">
+                                                {Object.entries(selectedOrphanTx.metadata).map(([key, value]) => (
+                                                    <div key={key} className="flex justify-between py-1.5 border-b border-slate-100 last:border-0">
+                                                        <span className="text-slate-600 font-medium capitalize">
+                                                            {key.replace(/([A-Z])/g, ' $1').trim()}:
+                                                        </span>
+                                                        <span className="text-slate-900 font-semibold text-right max-w-[200px] truncate">
+                                                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )}
+
+                                {/* Raw Data (Debug) */}
+                                <details className="bg-slate-100 rounded-lg p-3 border border-slate-300">
+                                    <summary className="text-xs font-semibold text-slate-600 cursor-pointer hover:text-slate-900">
+                                        View Raw Transaction Data
+                                    </summary>
+                                    <pre className="text-[10px] text-slate-700 mt-2 overflow-x-auto whitespace-pre-wrap">
+                                        {JSON.stringify(selectedOrphanTx, null, 2)}
+                                    </pre>
+                                </details>
+                            </div>
+
+                            {/* Footer Actions */}
+                            <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 flex items-center justify-between">
+                                <Button 
+                                    variant="outline"
+                                    onClick={() => setShowOrphanDetailModal(false)}
+                                >
+                                    Close
+                                </Button>
+                                <Button 
+                                    className="bg-indigo-600 hover:bg-indigo-700"
+                                    onClick={() => {
+                                        setShowOrphanDetailModal(false);
+                                        handleRepairLog(selectedOrphanTx);
+                                    }}
+                                >
+                                    <Activity className="w-4 h-4 mr-2" />
+                                    Repair Log
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

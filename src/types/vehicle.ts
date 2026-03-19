@@ -12,6 +12,18 @@ export interface TollTag {
   assignedVehicleId?: string;
   assignedVehicleName?: string; // Denormalized for easier display
   dateAdded?: string; // Date added to inventory/fleet
+  providerBalance?: number;       // Phase 5: Manually entered balance from provider portal
+  providerBalanceDate?: string;   // Phase 5: When the provider balance was last checked
+  lowBalanceThreshold?: number;   // Phase 6: Alert when balance drops below this (default: 500)
+  lastCalculatedBalance?: number; // Phase 6: Cached calculated balance for list-view badges
+  lastUtilizationPercent?: number; // Phase 7: Cached tag utilization % for list-view badges
+  assignmentHistory?: Array<{     // Phase 8: Tag assignment audit trail
+    vehicleId: string;
+    vehicleName: string;
+    assignedAt: string;            // ISO date
+    unassignedAt?: string;         // ISO date (undefined = currently assigned)
+    assignedBy?: string;           // Admin name/ID (future use)
+  }>;
   createdAt: string;
   updatedAt?: string;
 }

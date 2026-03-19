@@ -599,6 +599,30 @@ async function loadAllTrips(): Promise<any[]> {
   return loadAllByPrefix("trip:");
 }
 
+/**
+ * Shared helper: loads ALL transactions then filters to toll-category only.
+ * Single source of truth for "what is a toll transaction" on the server.
+ */
+async function loadAllTollTransactions(): Promise<any[]> {
+  const allTx = await loadAllTransactions();
+  return allTx.filter((tx: any) => isTollCategory(tx.category));
+}
+
+/**
+ * Convenience: loads toll transactions + trips in parallel.
+ * Used by endpoints that need both (summary, unreconciled, unclaimed-refunds, export).
+ * Note: calls loadAllTransactions() (not loadAllTollTransactions()) to avoid
+ * double-awaiting — the toll filter is applied once after the parallel fetch.
+ */
+async function loadAllTollTransactionsWithTrips(): Promise<{ tollTx: any[]; trips: any[] }> {
+  const [allTx, trips] = await Promise.all([
+    loadAllTransactions(),
+    loadAllTrips(),
+  ]);
+  const tollTx = allTx.filter((tx: any) => isTollCategory(tx.category));
+  return { tollTx, trips };
+}
+
 // ─── Route Helpers ─────────────────────────────────────────────────────
 
 function parseQueryParams(c: any) {
@@ -619,14 +643,9 @@ app.get(`${BASE}/summary`, async (c) => {
   try {
     const { driverId } = parseQueryParams(c);
 
-    const [allTx, allTrips] = await Promise.all([
-      loadAllTransactions(),
-      loadAllTrips(),
-    ]);
-
-    // Filter to toll-category transactions
-    let tollTx = allTx.filter((tx: any) => isTollCategory(tx.category));
-    let trips = allTrips;
+    const loaded = await loadAllTollTransactionsWithTrips();
+    let tollTx = loaded.tollTx;
+    let trips = loaded.trips;
 
     if (driverId) {
       tollTx = filterByDriver(tollTx, driverId);
@@ -705,13 +724,9 @@ app.get(`${BASE}/unreconciled`, async (c) => {
   try {
     const { driverId, limit, offset } = parseQueryParams(c);
 
-    const [allTx, allTrips] = await Promise.all([
-      loadAllTransactions(),
-      loadAllTrips(),
-    ]);
-
-    let tollTx = allTx.filter((tx: any) => isTollCategory(tx.category));
-    let trips = allTrips;
+    const loaded = await loadAllTollTransactionsWithTrips();
+    let tollTx = loaded.tollTx;
+    let trips = loaded.trips;
 
     if (driverId) {
       tollTx = filterByDriver(tollTx, driverId);
@@ -865,16 +880,9 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
   try {
     const { driverId, limit, offset } = parseQueryParams(c);
 
-    const [allTx, allTrips] = await Promise.all([
-      loadAllTransactions(),
-      loadAllTrips(),
-    ]);
-
-    const tollTx = filterByDriver(
-      allTx.filter((tx: any) => isTollCategory(tx.category)),
-      driverId,
-    );
-    let trips = filterByDriver(allTrips, driverId);
+    const loaded = await loadAllTollTransactionsWithTrips();
+    const tollTx = filterByDriver(loaded.tollTx, driverId);
+    let trips = filterByDriver(loaded.trips, driverId);
 
     // Build linkedTripIds — only toll-category transactions with a tripId
     const linkedTripIds = new Set(
@@ -919,11 +927,10 @@ app.get(`${BASE}/reconciled`, async (c) => {
   try {
     const { driverId, limit, offset } = parseQueryParams(c);
 
-    const allTx = await loadAllTransactions();
+    const allTollTx = await loadAllTollTransactions();
 
-    let reconciled = allTx.filter(
-      (tx: any) =>
-        isTollCategory(tx.category) && tx.isReconciled && tx.tripId,
+    let reconciled = allTollTx.filter(
+      (tx: any) => tx.isReconciled && tx.tripId,
     );
 
     if (driverId) {
@@ -972,6 +979,9 @@ app.get(`${BASE}/reconciled`, async (c) => {
               dropoffLocation: (linkedTrip.dropoffLocation || "").substring(0, 40),
               platform: linkedTrip.platform || "Unknown",
               amount: linkedTrip.amount,
+              requestTime: linkedTrip.requestTime || null,
+              dropoffTime: linkedTrip.dropoffTime || null,
+              driverName: linkedTrip.driverName || null,
             }
           : null,
       };
@@ -988,6 +998,128 @@ app.get(`${BASE}/reconciled`, async (c) => {
     console.log(
       `[TollReconciliation] GET /reconciled error: ${e.message}`,
     );
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /toll-logs ────────────────────────────────────────────────────
+// Canonical toll data endpoint. Returns ALL toll-category transactions
+// with linked trip data pre-embedded. Supports filtering by vehicleId,
+// tagNumber, driverId, and category. Used by useTollLogs, TollTagDetail,
+// and TollTopupHistory.
+
+app.get(`${BASE}/toll-logs`, async (c) => {
+  try {
+    // ── Parse query filters ──
+    const vehicleId = c.req.query("vehicleId") || undefined;
+    const tagNumber = c.req.query("tagNumber") || undefined;
+    const driverId = c.req.query("driverId") || undefined;
+    const category = c.req.query("category") || undefined;
+    const limit = c.req.query("limit") ? parseInt(c.req.query("limit"), 10) : undefined;
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+
+    // ── Load all toll transactions ──
+    let tollTx = await loadAllTollTransactions();
+
+    // ── Apply filters ──
+    if (vehicleId) {
+      tollTx = tollTx.filter((tx: any) => tx.vehicleId === vehicleId);
+    }
+
+    if (tagNumber) {
+      const normalizedFilter = tagNumber.trim().replace(/^0+/, "");
+      tollTx = tollTx.filter((tx: any) => {
+        const txTag = (tx.metadata?.tollTagId || tx.metadata?.tagNumber || "")
+          .toString()
+          .trim()
+          .replace(/^0+/, "");
+        // Include if tag matches OR if no tag metadata (backwards compat)
+        return txTag === normalizedFilter || !txTag;
+      });
+    }
+
+    if (driverId) {
+      tollTx = tollTx.filter((tx: any) => tx.driverId === driverId);
+    }
+
+    if (category) {
+      tollTx = tollTx.filter((tx: any) => tx.category === category);
+    }
+
+    // ── Sort by date descending, secondary by createdAt ──
+    tollTx.sort((a: any, b: any) => {
+      const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+
+    // ── Record total before pagination ──
+    const total = tollTx.length;
+
+    // ── Apply pagination ──
+    const page = limit ? tollTx.slice(offset, offset + limit) : tollTx;
+
+    // ── Embed linked trip data ──
+    const tripIds = [...new Set(page.map((tx: any) => tx.tripId).filter(Boolean))];
+    const tripLookup: Record<string, any> = {};
+
+    if (tripIds.length > 0) {
+      const tripKeys = tripIds.map((id: string) => `trip:${id}`);
+      try {
+        const tripValues = await kv.mget(tripKeys);
+        tripIds.forEach((id: string, idx: number) => {
+          if (tripValues[idx]) {
+            tripLookup[id] = tripValues[idx];
+          }
+        });
+      } catch {
+        console.log("[TollLogs] mget for linked trips failed, proceeding without trip enrichment");
+      }
+    }
+
+    const enriched = page.map((tx: any) => {
+      const linkedTrip = tx.tripId ? tripLookup[tx.tripId] || null : null;
+      return {
+        ...tx,
+        linkedTrip: linkedTrip
+          ? {
+              id: linkedTrip.id,
+              date: linkedTrip.date,
+              platform: linkedTrip.platform || "Unknown",
+              pickupLocation: linkedTrip.pickupLocation || "",
+              dropoffLocation: linkedTrip.dropoffLocation || "",
+              requestTime: linkedTrip.requestTime || null,
+              dropoffTime: linkedTrip.dropoffTime || null,
+              amount: linkedTrip.amount,
+              tollCharges: linkedTrip.tollCharges || 0,
+              driverId: linkedTrip.driverId || null,
+              driverName: linkedTrip.driverName || null,
+              vehicleId: linkedTrip.vehicleId || null,
+              duration: linkedTrip.duration || null,
+              distance: linkedTrip.distance || null,
+              serviceType: linkedTrip.serviceType || null,
+            }
+          : null,
+      };
+    });
+
+    const withTrips = enriched.filter((tx: any) => tx.linkedTrip !== null).length;
+    console.log(
+      `[TollLogs] GET /toll-logs: Loaded ${total} toll transactions (${withTrips} with linked trips)` +
+        (vehicleId ? `, vehicleId=${vehicleId}` : "") +
+        (tagNumber ? `, tagNumber=${tagNumber}` : "") +
+        (driverId ? `, driverId=${driverId}` : "") +
+        (category ? `, category=${category}` : ""),
+    );
+
+    return c.json({
+      success: true,
+      data: enriched,
+      total,
+      filters: { vehicleId: vehicleId || null, tagNumber: tagNumber || null, driverId: driverId || null, category: category || null },
+    });
+  } catch (e: any) {
+    console.log(`[TollLogs] GET /toll-logs error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -1677,13 +1809,7 @@ app.post(`${BASE}/resolve`, async (c) => {
 
 app.get(`${BASE}/export`, async (c) => {
   try {
-    const [allTx, allTrips] = await Promise.all([
-      loadAllTransactions(),
-      loadAllTrips(),
-    ]);
-
-    // Filter to toll-category transactions only
-    const tollTx = allTx.filter((tx: any) => isTollCategory(tx.category));
+    const { tollTx, trips: allTrips } = await loadAllTollTransactionsWithTrips();
 
     if (tollTx.length === 0) {
       return c.json({ success: true, data: [], total: 0 });

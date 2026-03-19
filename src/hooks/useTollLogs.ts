@@ -5,9 +5,6 @@ import { Vehicle } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { TollLogEntry } from '../types/tollLog';
 
-// Categories that indicate a toll-related transaction
-const TOLL_CATEGORIES = ['Toll Usage', 'Tolls', 'Toll Top-up'];
-
 // Simple driver shape returned by api.getDrivers()
 interface DriverRecord {
   id: string;
@@ -113,8 +110,14 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 }
 
 /**
- * Custom hook: fetches all financial transactions, filters to toll-related ones,
- * and enriches each with resolved vehicle/driver/plaza names.
+ * Custom hook: fetches toll transactions from the server-side /toll-logs
+ * endpoint (which returns pre-filtered, pre-sorted toll-category transactions
+ * with linked trip data already embedded), then enriches each with resolved
+ * vehicle/driver/plaza names on the client side.
+ *
+ * Phase 5 refactor: replaced api.getTransactions() + client-side category
+ * filtering with api.getTollLogs() — server now handles filtering, sorting,
+ * deduplication, and trip embedding.
  */
 export function useTollLogs() {
   const [logs, setLogs] = useState<TollLogEntry[]>([]);
@@ -126,16 +129,19 @@ export function useTollLogs() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [rawTx, allVehicles, allDrivers, allPlazas] = await Promise.all([
-        api.getTransactions(),
+      const [tollResponse, allVehicles, allDrivers, allPlazas] = await Promise.all([
+        api.getTollLogs(),                                       // <-- Phase 5: server-side toll-logs endpoint
         api.getVehicles(),
         api.getDrivers(),
-        api.getTollPlazas().catch(() => [] as TollPlaza[]), // Graceful fallback if no plazas
+        api.getTollPlazas().catch(() => [] as TollPlaza[]),      // Graceful fallback if no plazas
       ]);
 
       setVehicles(allVehicles);
       setDrivers(allDrivers);
       setPlazas(allPlazas);
+
+      // Extract the toll transactions array from the server response
+      const tollTransactions: FinancialTransaction[] = tollResponse?.data || [];
 
       // Build lookup maps
       const vehicleMap = new Map<string, Vehicle>();
@@ -151,19 +157,10 @@ export function useTollLogs() {
         if (d.driverId && d.name) driverMap.set(d.driverId, d.name);
       });
 
-      // Deduplicate transactions
-      const uniqueTxMap = new Map<string, FinancialTransaction>();
-      (rawTx || []).forEach((tx: FinancialTransaction) => {
-        if (tx?.id) uniqueTxMap.set(tx.id, tx);
-      });
-
-      // Filter to toll-related
-      const tollTransactions = Array.from(uniqueTxMap.values()).filter(tx =>
-        TOLL_CATEGORIES.includes(tx.category as string)
-      );
-
       // Enrich each transaction into a TollLogEntry
-      const enriched: TollLogEntry[] = tollTransactions.map(tx => {
+      // Note: server already filters to toll categories and sorts by date desc,
+      // so we skip client-side filtering/deduplication/sorting.
+      const enriched: TollLogEntry[] = tollTransactions.map((tx: any) => {
         const isUsage = tx.category === 'Toll Usage' || tx.category === 'Tolls';
 
         // Resolve vehicle
@@ -214,15 +211,13 @@ export function useTollLogs() {
           tripId: tx.tripId || null,
           batchId: tx.batchId || null,
           notes: tx.notes || null,
+          linkedTrip: tx.linkedTrip || null,    // <-- Phase 5: pre-embedded by server
           _raw: tx,
         };
       });
 
-      // Sort by date descending (newest first)
-      enriched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
       setLogs(enriched);
-      console.log(`[useTollLogs] Loaded ${enriched.length} toll transactions (${tollTransactions.length} raw, ${uniqueTxMap.size} total tx)`);
+      console.log(`[useTollLogs] Loaded ${enriched.length} toll transactions via /toll-logs (server total: ${tollResponse?.total || '?'})`);
     } catch (err) {
       console.error('[useTollLogs] Failed to fetch toll logs:', err);
       setLogs([]);

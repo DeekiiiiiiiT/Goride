@@ -350,6 +350,13 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         locationMetadata: fuelEntry.locationMetadata,
         parentCompany: fuelEntry.parentCompany,
         paymentSource: isFuel ? (isGasCard ? 'company_card' : (fuelEntry.paymentMethod === 'rideshare_cash' ? 'rideshare_cash' : 'driver_cash')) : undefined,
+        // Flag for admin Log Review when odometer was not AI-verified
+        needsLogReview: (isFuel && fuelEntry.odometerMethod && fuelEntry.odometerMethod !== 'ai_verified') ? true : undefined,
+        logReviewReason: (isFuel && fuelEntry.odometerMethod === 'photo_review')
+            ? 'AI scan failed — odometer photo pending admin review'
+            : (isFuel && fuelEntry.odometerMethod === 'manual_override')
+                ? 'Manual odometer override — pending admin verification'
+                : undefined,
     };
 
     return {
@@ -474,7 +481,11 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, metadata?: any) => {
+    // Station-gate-held transactions: driver just waits for company to verify the gas station
+    if (status === 'Pending' && metadata?.stationGateHold) {
+      return <Badge className="bg-blue-100 text-blue-700 border-blue-200"><MapPin className="w-3 h-3 mr-1"/> Verifying Location</Badge>;
+    }
     switch(status) {
       case 'Completed':
       case 'Reconciled':
@@ -643,7 +654,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                                        </span>
                                        {tx.odometer && <span>• {tx.odometer} km</span>}
                                    </div>
-                                   {getStatusBadge(tx.status)}
+                                   {getStatusBadge(tx.status, tx.metadata)}
                                 </div>
                                 {tx.description && tx.description !== `${tx.category} Expense` && (
                                     <p className="text-xs text-slate-400 mt-1 truncate">{tx.description}</p>

@@ -15,8 +15,25 @@ import {
   BarChart3,
   CircleDollarSign,
   Info,
+  Car,
+  UsersRound,
+  UserCog,
+  ClipboardList,
+  Globe,
+  Zap,
+  UserPlus,
+  Megaphone,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { resolveRole } from '../../utils/permissions';
+
+// Phase 11: Define which admin pages each platform role can access
+const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
+  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger'],
+  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info'],
+  platform_analyst: ['dashboard'],
+};
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -26,12 +43,15 @@ interface AdminLayoutProps {
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'settings', label: 'Platform Settings', icon: Settings },
 ];
 
 // Collapsible section for User Management
 const USER_MANAGEMENT_CHILDREN = [
   { id: 'customers', label: 'Customer Accounts', icon: Users },
+  { id: 'platform-team', label: 'Platform Team', icon: Shield },
+  { id: 'drivers', label: 'Driver Accounts', icon: Car },
+  { id: 'team-members', label: 'Team Members', icon: UserCog },
+  { id: 'activity-log', label: 'Activity Log', icon: ClipboardList },
 ];
 
 // Collapsible section for Fuel Management
@@ -46,26 +66,53 @@ const TOLL_MANAGEMENT_CHILDREN = [
   { id: 'toll-info', label: 'Toll Info', icon: Info },
 ];
 
+// Collapsible section for Platform Settings
+const SETTINGS_CHILDREN = [
+  { id: 'settings-general', label: 'General', icon: Globe },
+  { id: 'settings-features', label: 'Features', icon: Zap },
+  { id: 'settings-registration', label: 'Registration', icon: UserPlus },
+  { id: 'settings-security', label: 'Security', icon: Shield },
+  { id: 'settings-announcements', label: 'Announcements', icon: Megaphone },
+  { id: 'settings-danger', label: 'Danger Zone', icon: AlertTriangle },
+];
+
 export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutProps) {
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isUserMgmtChild = USER_MANAGEMENT_CHILDREN.some(c => c.id === currentPage);
+
+  // Phase 11: Resolve platform role and determine allowed pages
+  const resolved = resolveRole(role || (user as any)?.user_metadata?.role);
+  const allowedPages = PLATFORM_ROLE_PAGES[resolved] || PLATFORM_ROLE_PAGES.platform_owner || [];
+  const canViewPage = (pageId: string) => allowedPages.includes(pageId);
+
+  // Filter sections by allowed pages
+  const visibleUserMgmtChildren = USER_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
+  const visibleFuelChildren = FUEL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
+  const visibleTollChildren = TOLL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
+  const visibleSettingsChildren = SETTINGS_CHILDREN.filter(c => canViewPage(c.id));
+
+  const isUserMgmtChild = visibleUserMgmtChildren.some(c => c.id === currentPage);
   const [userMgmtOpen, setUserMgmtOpen] = useState(isUserMgmtChild);
-  const isFuelChild = FUEL_MANAGEMENT_CHILDREN.some(c => c.id === currentPage);
+  const isFuelChild = visibleFuelChildren.some(c => c.id === currentPage);
   const [fuelOpen, setFuelOpen] = useState(isFuelChild);
-  const isTollChild = TOLL_MANAGEMENT_CHILDREN.some(c => c.id === currentPage);
+  const isTollChild = visibleTollChildren.some(c => c.id === currentPage);
   const [tollOpen, setTollOpen] = useState(isTollChild);
+  const isSettingsChild = visibleSettingsChildren.some(c => c.id === currentPage);
+  const [settingsOpen, setSettingsOpen] = useState(isSettingsChild);
 
   // Keep section open when navigating to a child
   React.useEffect(() => {
-    if (USER_MANAGEMENT_CHILDREN.some(c => c.id === currentPage)) {
+    if (visibleUserMgmtChildren.some(c => c.id === currentPage)) {
       setUserMgmtOpen(true);
     }
-    if (FUEL_MANAGEMENT_CHILDREN.some(c => c.id === currentPage)) {
+    if (visibleFuelChildren.some(c => c.id === currentPage)) {
       setFuelOpen(true);
     }
-    if (TOLL_MANAGEMENT_CHILDREN.some(c => c.id === currentPage)) {
+    if (visibleTollChildren.some(c => c.id === currentPage)) {
       setTollOpen(true);
+    }
+    if (visibleSettingsChildren.some(c => c.id === currentPage)) {
+      setSettingsOpen(true);
     }
   }, [currentPage]);
 
@@ -150,6 +197,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           })}
 
           {/* User Management collapsible section */}
+          {visibleUserMgmtChildren.length > 0 && (
           <div>
             <button
               onClick={() => setUserMgmtOpen(!userMgmtOpen)}
@@ -161,7 +209,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
                 }
               `}
             >
-              <Users className="w-4.5 h-4.5 shrink-0" />
+              <UsersRound className="w-4.5 h-4.5 shrink-0" />
               <span className="truncate">User Management</span>
               {userMgmtOpen
                 ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
@@ -170,7 +218,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             </button>
             {userMgmtOpen && (
               <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
-                {USER_MANAGEMENT_CHILDREN.map(child => {
+                {visibleUserMgmtChildren.map(child => {
                   const ChildIcon = child.icon;
                   const active = currentPage === child.id;
                   return (
@@ -194,8 +242,10 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               </div>
             )}
           </div>
+          )}
 
           {/* Fuel Management collapsible section */}
+          {visibleFuelChildren.length > 0 && (
           <div>
             <button
               onClick={() => setFuelOpen(!fuelOpen)}
@@ -216,7 +266,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             </button>
             {fuelOpen && (
               <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
-                {FUEL_MANAGEMENT_CHILDREN.map(child => {
+                {visibleFuelChildren.map(child => {
                   const ChildIcon = child.icon;
                   const active = currentPage === child.id;
                   return (
@@ -240,8 +290,10 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               </div>
             )}
           </div>
+          )}
 
           {/* Toll Management collapsible section */}
+          {visibleTollChildren.length > 0 && (
           <div>
             <button
               onClick={() => setTollOpen(!tollOpen)}
@@ -262,7 +314,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             </button>
             {tollOpen && (
               <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
-                {TOLL_MANAGEMENT_CHILDREN.map(child => {
+                {visibleTollChildren.map(child => {
                   const ChildIcon = child.icon;
                   const active = currentPage === child.id;
                   return (
@@ -286,29 +338,60 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               </div>
             )}
           </div>
+          )}
 
-          {/* Remaining items (Platform Settings) */}
-          {NAV_ITEMS.slice(1).map(item => {
-            const Icon = item.icon;
-            const active = currentPage === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNav(item.id)}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                  ${active
-                    ? 'bg-amber-500/15 text-amber-300'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }
-                `}
-              >
-                <Icon className="w-4.5 h-4.5 shrink-0" />
-                <span className="truncate">{item.label}</span>
-                {active && <ChevronRight className="w-3.5 h-3.5 ml-auto text-amber-400/60" />}
-              </button>
-            );
-          })}
+          {/* Platform Settings collapsible section */}
+          {visibleSettingsChildren.length > 0 && (
+          <div>
+            <button
+              onClick={() => setSettingsOpen(!settingsOpen)}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${isSettingsChild
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }
+              `}
+            >
+              <Settings className="w-4.5 h-4.5 shrink-0" />
+              <span className="truncate">Platform Settings</span>
+              {settingsOpen
+                ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
+                : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />
+              }
+            </button>
+            {settingsOpen && (
+              <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
+                {visibleSettingsChildren.map(child => {
+                  const ChildIcon = child.icon;
+                  const active = currentPage === child.id;
+                  const isDanger = child.id === 'settings-danger';
+                  return (
+                    <button
+                      key={child.id}
+                      onClick={() => handleNav(child.id)}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                        ${active
+                          ? isDanger
+                            ? 'bg-red-500/10 text-red-400'
+                            : 'bg-amber-500/10 text-amber-300'
+                          : isDanger
+                            ? 'text-slate-500 hover:text-red-400 hover:bg-red-500/5'
+                            : 'text-slate-500 hover:text-white hover:bg-slate-800'
+                        }
+                      `}
+                    >
+                      <ChildIcon className={`w-4 h-4 shrink-0 ${isDanger && active ? 'text-red-400' : ''}`} />
+                      <span className="truncate">{child.label}</span>
+                      {active && <ChevronRight className={`w-3 h-3 ml-auto ${isDanger ? 'text-red-400/60' : 'text-amber-400/60'}`} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          )}
         </nav>
 
         {/* Sidebar footer — user info + logout */}
@@ -324,7 +407,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded font-semibold">
-              Super Admin
+              {resolved === 'platform_support' ? 'Support' : resolved === 'platform_analyst' ? 'Analyst' : 'Super Admin'}
             </span>
             <button
               onClick={handleSignOut}
@@ -351,9 +434,10 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
 
           {/* Page title */}
           <h2 className="text-base font-semibold text-white">
-            {USER_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)?.label
+            {[...USER_MANAGEMENT_CHILDREN].find(c => c.id === currentPage)?.label
               || FUEL_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)?.label
               || TOLL_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)?.label
+              || (SETTINGS_CHILDREN.find(c => c.id === currentPage) ? `Platform Settings — ${SETTINGS_CHILDREN.find(c => c.id === currentPage)!.label}` : null)
               || NAV_ITEMS.find(i => i.id === currentPage)?.label
               || 'Dashboard'}
           </h2>

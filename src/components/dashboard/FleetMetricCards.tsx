@@ -4,6 +4,7 @@ import { Users, Car, Activity, DollarSign, ArrowUp, ArrowDown } from "lucide-rea
 import { DashboardMetrics, Trip } from '../../types/data';
 import { Line, LineChart } from "recharts";
 import { SafeResponsiveContainer } from '../ui/SafeResponsiveContainer';
+import { usePlatformConfig } from '../auth/PlatformConfigContext';
 
 interface FleetMetricCardsProps {
   metrics: DashboardMetrics;
@@ -25,6 +26,7 @@ const TinyChart = ({ data, color }: { data: any[], color: string }) => {
 )};
 
 export function FleetMetricCards({ metrics, trips = [], onNavigate }: FleetMetricCardsProps) {
+  const { formatCurrency } = usePlatformConfig();
   // Calculate hourly earnings for today
   const today = new Date().toISOString().split('T')[0];
   const tripsToday = trips.filter(t => t.date.startsWith(today) && t.status === 'Completed');
@@ -131,7 +133,7 @@ export function FleetMetricCards({ metrics, trips = [], onNavigate }: FleetMetri
         <CardContent>
           <div className="flex justify-between items-end">
               <div>
-                <div className="text-2xl font-bold">${metrics.earningsToday.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{formatCurrency(metrics.earningsToday)}</div>
                 <p className="text-xs text-muted-foreground flex items-center">
                     <span className="text-emerald-500 flex items-center mr-1">
                     <ArrowUp className="h-3 w-3" /> 8.5%

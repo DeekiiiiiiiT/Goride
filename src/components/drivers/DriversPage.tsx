@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { useVocab } from '../../utils/vocabulary';
@@ -68,6 +69,18 @@ import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { isSameMonth } from 'date-fns';
+import { isSidebarItemVisible } from '../../utils/businessTypes';
+import { usePermissions } from '../../hooks/usePermissions';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Label } from "../ui/label";
+import { Link2 } from 'lucide-react';
 
 // Interface for our View Model
 interface DriverProfile {
@@ -103,14 +116,15 @@ interface DriverProfile {
 
 export function DriversPage({ initialDriverId }: { initialDriverId?: string | null }) {
   const { v } = useVocab();
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [manualDrivers, setManualDrivers] = useState<DriverProfile[]>([]);
-  const [importedMetrics, setImportedMetrics] = useState<import('../../types/data').DriverMetrics[]>([]);
-  const [vehicleMetrics, setVehicleMetrics] = useState<import('../../types/data').VehicleMetrics[]>([]);
-  const [tiers, setTiers] = useState<TierConfig[]>([]);
+  const queryClient = useQueryClient();
+  const { can } = usePermissions();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   
+  // Phase 10: Claim Driver state
+  const [isClaimOpen, setIsClaimOpen] = useState(false);
+  const [claimEmail, setClaimEmail] = useState('');
+  const [claimLoading, setClaimLoading] = useState(false);
+
   // Navigation State
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(initialDriverId || null);
 
@@ -132,17 +146,79 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Phase 2: Ledger-sourced earnings
-  const [ledgerSummary, setLedgerSummary] = useState<Record<string, {
-    lifetimeEarnings: number;
-    monthlyEarnings: number;
-    todayEarnings: number;
-    lifetimeTripCount: number;
-    monthlyTripCount: number;
-    todayTripCount: number;
-  }>>({});
-  const [ledgerLoaded, setLedgerLoaded] = useState(false);
-  const [ledgerError, setLedgerError] = useState(false);
+  // Phase 7.1: React Query for trips data
+  const { data: trips = [], isLoading: tripsLoading } = useQuery({
+    queryKey: ['trips', 200],
+    queryFn: () => api.getTrips({ limit: 200 }),
+    staleTime: 3 * 60 * 1000, // 3 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 7.1: React Query for manual drivers
+  const { data: manualDrivers = [] } = useQuery({
+    queryKey: ['drivers'],
+    queryFn: () => api.getDrivers().catch(() => []),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 7.1: React Query for driver metrics
+  const { data: importedMetrics = [] } = useQuery({
+    queryKey: ['driverMetrics'],
+    queryFn: () => api.getDriverMetrics().catch(() => []),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 7.1: React Query for vehicle metrics
+  const { data: vehicleMetrics = [] } = useQuery({
+    queryKey: ['vehicleMetrics'],
+    queryFn: () => api.getVehicleMetrics().catch(() => []),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 7.1: React Query for tiers
+  const { data: tiers = [] } = useQuery({
+    queryKey: ['tiers'],
+    queryFn: () => tierService.getTiers().catch(() => []),
+    staleTime: 10 * 60 * 1000, // 10 minutes (tiers rarely change)
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  // Phase 7.1: React Query for ledger summary
+  const { data: ledgerData, isLoading: ledgerLoading, isError: ledgerErrorQuery } = useQuery({
+    queryKey: ['ledgerDriversSummary'],
+    queryFn: async () => {
+      const result = await api.getLedgerDriversSummary();
+      if (result.success && result.data) {
+        console.log(`[DriversPage] Ledger summary loaded: ${result.meta.totalDrivers} drivers, ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
+        return result.data;
+      } else {
+        console.error('[DriversPage] Ledger summary returned success=false');
+        throw new Error('Ledger summary failed');
+      }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes (financial data should be fresher)
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  const ledgerSummary = ledgerData || {};
+  const ledgerLoaded = !ledgerLoading && !ledgerErrorQuery;
+  const ledgerError = ledgerErrorQuery;
+  const loading = tripsLoading;
 
   const handleDeleteDriver = async () => {
     if (!driverToDelete) return;
@@ -162,7 +238,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         throw new Error(data.error || 'Failed to delete driver');
       }
       
-      setManualDrivers(prev => prev.filter(d => d.id !== driverToDelete));
+      // Phase 7.1: Invalidate React Query cache after deletion
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
       toast.success("Driver deleted successfully");
       setDriverToDelete(null);
     } catch (error: any) {
@@ -172,51 +249,6 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
       setIsDeleting(false);
     }
   };
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [tripsData, driversData, metricsData, vehicleMetricsData, tiersData] = await Promise.all([
-             api.getTrips({ limit: 200 }),
-             api.getDrivers().catch(() => []),
-             api.getDriverMetrics().catch(() => []),
-             api.getVehicleMetrics().catch(() => []),
-             tierService.getTiers().catch(() => [])
-        ]);
-        setTrips(tripsData);
-        setManualDrivers(driversData);
-        setImportedMetrics(metricsData);
-        setVehicleMetrics(vehicleMetricsData);
-        setTiers(tiersData);
-      } catch (err) {
-        console.error("Failed to fetch data for drivers page", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  // Phase 2: Fetch ledger-sourced driver earnings (runs in parallel with main fetch)
-  useEffect(() => {
-    const fetchLedger = async () => {
-      try {
-        const result = await api.getLedgerDriversSummary();
-        if (result.success && result.data) {
-          setLedgerSummary(result.data);
-          setLedgerLoaded(true);
-          console.log(`[DriversPage] Ledger summary loaded: ${result.meta.totalDrivers} drivers, ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
-        } else {
-          console.error('[DriversPage] Ledger summary returned success=false');
-          setLedgerError(true);
-        }
-      } catch (err: any) {
-        console.error('[DriversPage] Failed to load ledger summaries:', err.message || err);
-        setLedgerError(true);
-      }
-    };
-    fetchLedger();
-  }, []);
 
   // Transform Trips into Unique Drivers List with Real Metrics
   const drivers: DriverProfile[] = useMemo(() => {
@@ -591,8 +623,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   };
 
   const handleDriverAdded = (driver: any) => {
-    // @ts-ignore
-    setManualDrivers(prev => [...prev, driver]);
+    // Phase 7.1: Invalidate React Query cache to refetch drivers list
+    queryClient.invalidateQueries({ queryKey: ['drivers'] });
   };
 
   if (loading) {
@@ -644,10 +676,18 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{v('driversPageTitle')}</h2>
                <p className="text-slate-500 dark:text-slate-400">{v('driversPageSubtitle')}</p>
            </div>
-           <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
+           {can('drivers.create') && (
+           <div className="flex items-center gap-2">
+             <Button variant="outline" onClick={() => setIsClaimOpen(true)}>
+               <Link2 className="h-4 w-4 mr-2" />
+               Claim Driver
+             </Button>
+             <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                <Plus className="h-4 w-4 mr-2" />
                Add Driver
-           </Button>
+             </Button>
+           </div>
+           )}
         </div>
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -803,6 +843,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                                 <DropdownMenuItem onClick={() => setSelectedDriverId(driver.id)}>View Analysis</DropdownMenuItem>
                                                 <DropdownMenuItem>View History</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
+                                                {can('drivers.delete') && (
                                                 <DropdownMenuItem 
                                                     className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:focus:bg-rose-900/20 cursor-pointer"
                                                     onClick={(e) => {
@@ -812,6 +853,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                                 >
                                                     Delete Driver
                                                 </DropdownMenuItem>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -875,6 +917,56 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         onClose={() => setIsAddModalOpen(false)}
         onDriverAdded={handleDriverAdded}
       />
+
+      {/* Phase 10: Claim Driver Dialog */}
+      <Dialog open={isClaimOpen} onOpenChange={setIsClaimOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Claim Existing Driver</DialogTitle>
+            <DialogDescription>
+              Link a driver who registered independently to your organization. Enter their email address.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setClaimLoading(true);
+            try {
+              await api.claimDriver(claimEmail);
+              toast.success(`Driver ${claimEmail} has been linked to your organization`);
+              setIsClaimOpen(false);
+              setClaimEmail('');
+              queryClient.invalidateQueries({ queryKey: ['drivers'] });
+            } catch (error: any) {
+              console.error(error);
+              toast.error(error.message || "Failed to claim driver");
+            } finally {
+              setClaimLoading(false);
+            }
+          }} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="claim-email">Driver's Email</Label>
+              <Input
+                id="claim-email"
+                type="email"
+                placeholder="driver@example.com"
+                required
+                value={claimEmail}
+                onChange={(e) => setClaimEmail(e.target.value)}
+              />
+              <p className="text-xs text-slate-500">
+                The driver must have an existing account and not already be linked to another organization.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" type="button" onClick={() => setIsClaimOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={claimLoading}>
+                {claimLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Claim Driver
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!driverToDelete} onOpenChange={(open) => !open && setDriverToDelete(null)}>

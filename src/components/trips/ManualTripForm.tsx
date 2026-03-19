@@ -18,7 +18,7 @@ import {
   SelectValue 
 } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff, Info, XCircle, Plus, Trash2 } from "lucide-react";
+import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff, Info, XCircle, Plus, Trash2, Package } from "lucide-react";
 import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
 import { RoutePoint, TripStop } from '../../types/tripSession';
@@ -160,6 +160,7 @@ export function ManualTripForm({
           indriveNetIncome: editingTrip?.indriveNetIncome,
           indriveServiceFee: editingTrip?.indriveServiceFee,
           indriveServiceFeePercent: editingTrip?.indriveServiceFeePercent,
+          serviceCategory: editingTrip?.serviceCategory,
         });
         if (initialData.pickupCoords) {
           setPickupCoords(initialData.pickupCoords);
@@ -289,6 +290,7 @@ export function ManualTripForm({
         newData.indriveNetIncome = undefined;
         newData.indriveServiceFee = undefined;
         newData.indriveServiceFeePercent = undefined;
+        newData.serviceCategory = undefined; // Clear courier/ride when leaving InDrive
       }
       
       return newData;
@@ -504,6 +506,45 @@ export function ManualTripForm({
               </Select>
             </div>
           </div>
+
+          {/* InDrive Service Category Toggle — only shown when platform is InDrive */}
+          {formData.platform === 'InDrive' && !formData.isLiveRecorded && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                Service Type
+                <Package className="h-3.5 w-3.5 text-slate-400" />
+              </Label>
+              <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('serviceCategory', 'ride')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                    (!formData.serviceCategory || formData.serviceCategory === 'ride')
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  🚗 Ride
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('serviceCategory', 'courier')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                    formData.serviceCategory === 'courier'
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  📦 Courier
+                </button>
+              </div>
+              {formData.serviceCategory === 'courier' && (
+                <p className="text-[10px] text-amber-600 font-medium">
+                  This trip will be tagged as an InDrive Courier delivery.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Trip Status */}
           <div className="space-y-2">

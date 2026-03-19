@@ -12,6 +12,7 @@ import { StationProfile } from '../../types/station';
 import { Plus, X, History, Loader2, MapPin, Building2, Fuel } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { fuelService } from '../../services/fuelService';
+import { useQuery } from '@tanstack/react-query';
 
 const PAYMENT_SOURCE_MAP: Record<string, string> = {
     'driver_cash': 'Personal',
@@ -50,6 +51,16 @@ interface FuelLogModalProps {
 }
 
 export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, drivers, cards }: FuelLogModalProps) {
+    // Phase 5: Use React Query for parent companies caching
+    const { data: parentCompaniesData = [] } = useQuery({
+        queryKey: ['parentCompanies'],
+        queryFn: () => fuelService.getParentCompanies(),
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        gcTime: 10 * 60 * 1000, // 10 minutes
+        refetchOnWindowFocus: false,
+        refetchOnMount: false,
+    });
+
     const [activeTab, setActiveTab] = useState('single');
     const [time, setTime] = useState<string>('');
 
@@ -124,13 +135,11 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
         const loadData = async () => {
             setStationsLoading(true);
             try {
-                const [stations, companies] = await Promise.all([
-                    fuelService.getStations(),
-                    fuelService.getParentCompanies()
-                ]);
+                const stations = await fuelService.getStations();
                 setVerifiedStations((stations || []).filter((s: any) => s.status === 'verified'));
-                // Extract sorted company names, add "Independent / Other" at the end
-                const companyNames = (companies || [])
+                
+                // Phase 5: Use cached parent companies from React Query
+                const companyNames = (parentCompaniesData || [])
                     .map((c: any) => c.name)
                     .filter(Boolean)
                     .sort() as string[];
@@ -203,7 +212,7 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             setSelectedBrand('');
             setSelectedStationId('');
         }
-    }, [initialData, isOpen]);
+    }, [initialData, isOpen, parentCompaniesData]);
 
     // Resolve brand from matchedStationId once stations are loaded
     useEffect(() => {

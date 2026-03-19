@@ -144,41 +144,29 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const loadData = useCallback(async (silent = false) => {
       if (!silent) setIsRefreshing(true);
       try {
-          // Fetch critical configuration and identifiers first
-          const [vData, dData, scenariosData] = await Promise.all([
+          // Fetch all data in a single parallel batch for fastest load time.
+          // None of these calls depend on each other's results.
+          const [vData, dData, scenariosData, cardsData, logsData, adjsData, disputesData, txData, finalizedData] = await Promise.all([
               api.getVehicles().catch(() => []),
               api.getDrivers().catch(() => []),
-              fuelService.getFuelScenarios().catch(() => [])
-          ]);
-
-          setVehicles(vData);
-          setDrivers(dData);
-          setScenarios(scenariosData);
-
-          // Fetch operational data in secondary batch to prevent Edge Function timeout
-          // Note: Trips are now handled by the dateRange effect, but we fetch a small batch here for initial state if needed
-          // or just rely on the effect. To be safe and populate "Dashboard" stats immediately without waiting for date range effect:
-          const [cardsData, logsData, adjsData, disputesData, txData] = await Promise.all([
+              fuelService.getFuelScenarios().catch(() => []),
               fuelService.getFuelCards().catch(() => []),
               fuelService.getFuelEntries().catch(() => []),
               fuelService.getMileageAdjustments().catch(() => []),
               FuelDisputeService.getAllDisputes().catch(() => []),
               api.getTransactions().catch(() => []),
+              api.getFinalizedReports().catch(() => []),
           ]);
-          
+
+          setVehicles(vData);
+          setDrivers(dData);
+          setScenarios(scenariosData);
           setCards(cardsData);
           setLogs(logsData);
           setAdjustments(adjsData);
           setDisputes(disputesData);
           setTransactions(txData);
-
-          // Fetch finalized report count for the badge
-          try {
-            const finalizedData = await api.getFinalizedReports();
-            setFinalizedCount(Array.isArray(finalizedData) ? finalizedData.length : 0);
-          } catch {
-            // Non-critical — badge just won't show a count
-          }
+          setFinalizedCount(Array.isArray(finalizedData) ? finalizedData.length : 0);
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -249,6 +237,30 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                  Settlement is now handled via the "Finalize" flow in Reconciliation Table.
               */
               
+              // Phase 7: Bulk vendor creation for entries without GPS/verified stations
+              const vendorCreationPromises = savedLogs
+                  .filter(log => {
+                      const hasNoGPS = !log.geofenceMetadata || !log.geofenceMetadata.lat || !log.geofenceMetadata.lng;
+                      const hasNoVerifiedStation = !log.matchedStationId;
+                      const hasVendorName = log.location && log.location.trim() !== '';
+                      return log.transactionId && hasNoGPS && hasNoVerifiedStation && hasVendorName;
+                  })
+                  .map(log => 
+                      api.createUnverifiedVendor({
+                          transactionId: log.transactionId!,
+                          vendorName: log.location,
+                          sourceType: 'no_gps'
+                      }).catch(err => {
+                          console.warn(`[Vendor Gate] Failed to create vendor for ${log.location}:`, err);
+                          return null;
+                      })
+                  );
+              
+              if (vendorCreationPromises.length > 0) {
+                  await Promise.all(vendorCreationPromises);
+                  console.log(`[Vendor Gate] Created ${vendorCreationPromises.length} unverified vendors from bulk entry`);
+              }
+              
               setLogs(prev => [...savedLogs, ...prev]);
               toast.success(`Successfully recorded ${savedLogs.length} transactions (Pending Reconciliation)`);
           } else {
@@ -275,6 +287,29 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                  Phase 6: Legacy Auto-Settlement Disabled.
                  Settlement is now handled via the "Finalize" flow in Reconciliation Table.
               */
+
+              // Phase 7: Auto-create unverified vendor if entry lacks GPS and verified station match
+              if (!editingLog && savedLog.transactionId) {
+                  const hasNoGPS = !savedLog.geofenceMetadata || 
+                                   !savedLog.geofenceMetadata.lat || 
+                                   !savedLog.geofenceMetadata.lng;
+                  const hasNoVerifiedStation = !savedLog.matchedStationId;
+                  const hasVendorName = savedLog.location && savedLog.location.trim() !== '';
+                  
+                  if (hasNoGPS && hasNoVerifiedStation && hasVendorName) {
+                      try {
+                          await api.createUnverifiedVendor({
+                              transactionId: savedLog.transactionId,
+                              vendorName: savedLog.location,
+                              sourceType: 'no_gps'
+                          });
+                          console.log(`[Vendor Gate] Created unverified vendor for: ${savedLog.location}`);
+                      } catch (vendorError: any) {
+                          console.warn('[Vendor Gate] Failed to create unverified vendor:', vendorError);
+                          // Don't block the main flow - just log the error
+                      }
+                  }
+              }
 
               if (editingLog) {
                   // Phase 13: Financial Ledger Sync Hardening (Step 13.1)
@@ -367,6 +402,20 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           toast.error("Failed to verify log. Reverting changes.");
       }
   };
+
+  const handleApproveLogReview = useCallback(async (id: string, odometer: number, notes?: string) => {
+      try {
+          const updated = await api.approveExpense(id, notes, odometer);
+          setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+          // Refresh logs to pick up the new fuel_entry created by server
+          const freshLogs = await fuelService.getFuelEntries();
+          setLogs(freshLogs);
+          toast.success("Fuel log reviewed and approved");
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to approve log review");
+      }
+  }, []);
 
   // Reimbursement Handlers
   const handleApproveReimbursement = useCallback(async (id: string, notes?: string) => {
@@ -801,8 +850,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       pageTitle = "Consumption Reconciliation";
       pageDescription = "Compare actual gas card charges against estimated operating costs.";
   } else if (activeTab === 'reimbursements') {
-      pageTitle = "Reimbursement Queue";
-      pageDescription = "Review and approve driver reimbursement requests.";
+      pageTitle = "Review Queue";
+      pageDescription = "Review and approve driver fuel submissions.";
   } else if (activeTab === 'cards') {
       pageTitle = "Card Inventory";
       pageDescription = "Manage gas cards and their assignments.";
@@ -909,6 +958,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               onEdit={handleEditExpense}
               onDelete={handleDeleteExpense}
               onViewDriverLedger={onViewDriverLedger}
+              onApproveLogReview={handleApproveLogReview}
               dateRange={reimbursementDateRange}
               onDateRangeChange={setReimbursementDateRange}
               isRefreshing={isRefreshing}

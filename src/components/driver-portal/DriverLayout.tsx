@@ -29,6 +29,7 @@ import { useOffline } from "../providers/OfflineProvider";
 import { useCurrentDriver } from "../../hooks/useCurrentDriver";
 import { useWeeklyCheckIn } from "../../hooks/useWeeklyCheckIn";
 import { WeeklyCheckInModal } from "./WeeklyCheckInModal";
+import { AnnouncementBanner } from '../layout/AnnouncementBanner';
 
 interface DriverLayoutProps {
   children: React.ReactNode;
@@ -49,6 +50,7 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMe
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
+      <AnnouncementBanner />
       <WeeklyCheckInModal 
           isOpen={needsCheckIn} 
           onClose={() => {}} 

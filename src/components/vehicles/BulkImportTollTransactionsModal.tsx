@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Label } from "../ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { Loader2, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownLeft, MinusCircle, Sparkles, UploadCloud } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownLeft, MinusCircle, Sparkles, UploadCloud, Copy } from "lucide-react";
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
 import Papa from 'papaparse';
@@ -46,6 +46,7 @@ interface ParsedTransaction {
   vehiclePlate?: string;
   description?: string;
   referenceNumber?: string;
+  isDuplicate?: boolean;
 }
 
 export function BulkImportTollTransactionsModal({ 
@@ -71,6 +72,9 @@ export function BulkImportTollTransactionsModal({
   const [currentBatchId, setCurrentBatchId] = useState<string>('');
   const [currentBatchName, setCurrentBatchName] = useState<string>('');
   const [detectedFormatLabel, setDetectedFormatLabel] = useState<string>('');
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  const [csvHasPaymentMethod, setCsvHasPaymentMethod] = useState(true);
+  const [paymentMethodOverride, setPaymentMethodOverride] = useState<'Tag Balance' | 'Cash'>('Tag Balance');
   
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -114,7 +118,14 @@ export function BulkImportTollTransactionsModal({
 
       // 1. Tag ID Match (Highest Priority)
       if (tagId) {
-          const tag = tollTags.find((t: any) => t.tagNumber === tagId);
+          // Normalize tag IDs: trim whitespace, strip leading zeros for comparison
+          const normalizeTagId = (id: string) => id.trim().replace(/^0+/, '');
+          const normalizedInput = normalizeTagId(tagId);
+          const tag = tollTags.find((t: any) => {
+              if (!t.tagNumber) return false;
+              // Try exact match first, then normalized match
+              return t.tagNumber === tagId || normalizeTagId(t.tagNumber) === normalizedInput;
+          });
           if (tag) {
               if (tag.assignedVehicleId) {
                   matchedVehicleId = tag.assignedVehicleId;
@@ -192,6 +203,20 @@ export function BulkImportTollTransactionsModal({
       return { matchedVehicleId, matchedVehicleName, matchedDriverId, matchedDriverName, error };
   };
 
+  // Helper: parse a row in "tag-statement" format (Tag ID, Plaza Name, Plaza Lane ID, Date & Time, Topup Amount)
+  const parseTagStatementRow = (parts: string[], getCol: (row: string[], ...names: string[]) => string) => {
+      const tagId = getCol(parts, 'tag id');
+      const location = getCol(parts, 'plaza name');
+      const laneId = getCol(parts, 'plaza lane id');
+      const dateStr = getCol(parts, 'date & time');
+      const amountStr = getCol(parts, 'topup amount');
+      const paymentMethod = 'Tag Balance';
+      const description = location;
+      const rawAmtCheck = parseFloat(amountStr.replace(/[^0-9.\-]/g, ''));
+      const typeStr = (!isNaN(rawAmtCheck) && rawAmtCheck > 0) ? 'Top-up' : 'Usage';
+      return { tagId, location, laneId, dateStr, amountStr, paymentMethod, description, typeStr, category: '', status: '', vehiclePlate: '', driverName: '', referenceNumber: '' };
+  };
+
   const parseTransactionsFromText = (text: string): ParsedTransaction[] => {
       // Phase 2: Logic Replacement - Parsing with PapaParse
       const result = Papa.parse(text, { 
@@ -208,14 +233,16 @@ export function BulkImportTollTransactionsModal({
               return lower === 'payment method' || lower === 'vehicle plate' || 
                      lower === 'vehicle' || lower === 'highway' || 
                      lower === 'vehicleid' || lower === 'vehicleplate' ||
-                     lower === 'reconciliationstatus' || lower === 'paymentmethod';
+                     lower === 'reconciliationstatus' || lower === 'paymentmethod' ||
+                     lower === 'topup amount' || lower === 'product account number' ||
+                     lower === 'plaza name' || lower === 'plaza lane id';
           })
       );
       
       const hasHeader = headerIndex !== -1;
       
-      // Build header name → column index map
-      type CsvFormat = 'current-export' | 'legacy-v1' | 'legacy-v2' | 'basic';
+      // Build header name -> column index map
+      type CsvFormat = 'current-export' | 'legacy-v1' | 'legacy-v2' | 'topup-provider' | 'tag-statement' | 'basic';
       let detectedFormat: CsvFormat = 'basic';
       const headerMap: Record<string, number> = {};
       
@@ -229,6 +256,10 @@ export function BulkImportTollTransactionsModal({
           // Detect format by unique header signatures
           if ('reconciliationstatus' in headerMap || 'matchedtripid' in headerMap || 'vehicleid' in headerMap) {
               detectedFormat = 'current-export';
+          } else if (('topup amount' in headerMap) && ('plaza name' in headerMap || 'date & time' in headerMap || 'plaza lane id' in headerMap)) {
+              detectedFormat = 'tag-statement';
+          } else if ('topup amount' in headerMap || 'product account number' in headerMap) {
+              detectedFormat = 'topup-provider';
           } else if ('highway' in headerMap || 'direction' in headerMap) {
               detectedFormat = 'legacy-v2';
           } else if ('category' in headerMap || 'lane id' in headerMap || 'vehicle plate' in headerMap) {
@@ -243,10 +274,20 @@ export function BulkImportTollTransactionsModal({
           'current-export': 'Current System Export',
           'legacy-v1': 'Legacy Format (v1)',
           'legacy-v2': 'Legacy Format (v2)',
+          'topup-provider': 'Toll Tag Top-up Provider',
+          'tag-statement': 'Toll Tag Account Statement',
           'basic': 'Basic (No Header)',
       };
       setDetectedFormatLabel(formatLabels[detectedFormat]);
       
+      // Detect if CSV has a Payment Method column
+      const hasPaymentMethodCol = hasHeader && (
+          'payment method' in headerMap || 
+          'paymentmethod' in headerMap ||
+          detectedFormat === 'topup-provider' // Top-ups are always Tag Balance by definition
+      );
+      setCsvHasPaymentMethod(hasPaymentMethodCol || detectedFormat === 'topup-provider');
+
       // Helper to get a column value by header name (tries multiple name variants)
       const getCol = (row: string[], ...names: string[]): string => {
           for (const name of names) {
@@ -297,7 +338,7 @@ export function BulkImportTollTransactionsModal({
                          location = getCol(parts, 'plaza');
                          description = getCol(parts, 'description') || location;
                          paymentMethod = getCol(parts, 'paymentmethod') || 'Tag Balance';
-                         // IGNORE old status/reconciliation — import as fresh unreconciled
+                         // IGNORE old status/reconciliation -- import as fresh unreconciled
                          break;
                          
                      case 'legacy-v2':
@@ -307,15 +348,17 @@ export function BulkImportTollTransactionsModal({
                          vehiclePlate = getCol(parts, 'vehicle');
                          driverName = getCol(parts, 'driver');
                          location = getCol(parts, 'plaza');
-                         const highway = getCol(parts, 'highway');
-                         const direction = getCol(parts, 'direction');
-                         description = getCol(parts, 'description') || [location, highway, direction].filter(Boolean).join(' — ');
-                         if (!description) description = location;
+                         {
+                             const highway = getCol(parts, 'highway');
+                             const direction = getCol(parts, 'direction');
+                             description = getCol(parts, 'description') || [location, highway, direction].filter(Boolean).join(' -- ');
+                             if (!description) description = location;
+                         }
                          typeStr = getCol(parts, 'type');
                          paymentMethod = getCol(parts, 'payment method') || 'Tag Balance';
                          tagId = getCol(parts, 'tag id');
                          referenceNumber = getCol(parts, 'reference #');
-                         // IGNORE: Status, Reconciled, Trip ID, Batch ID — import as fresh unreconciled
+                         // IGNORE: Status, Reconciled, Trip ID, Batch ID -- import as fresh unreconciled
                          break;
                          
                      case 'legacy-v1':
@@ -328,16 +371,54 @@ export function BulkImportTollTransactionsModal({
                          description = getCol(parts, 'description');
                          location = description;
                          paymentMethod = getCol(parts, 'payment method') || 'Tag Balance';
-                         // IGNORE old status — import as fresh unreconciled
+                         // IGNORE old status -- import as fresh unreconciled
                          vehiclePlate = getCol(parts, 'vehicle plate');
                          driverName = getCol(parts, 'driver name');
                          tagId = getCol(parts, 'tag id');
                          laneId = getCol(parts, 'lane id');
                          referenceNumber = getCol(parts, 'reference number');
                          break;
+
+                     case 'tag-statement': {
+                         // Toll Tag Account Statement Format:
+                         // Tag ID, Plaza Name, Plaza Lane ID, Date & Time, Topup Amount
+                         const tsResult = parseTagStatementRow(parts, getCol);
+                         tagId = tsResult.tagId;
+                         location = tsResult.location;
+                         laneId = tsResult.laneId;
+                         dateStr = tsResult.dateStr;
+                         amountStr = tsResult.amountStr;
+                         paymentMethod = tsResult.paymentMethod;
+                         description = tsResult.description;
+                         typeStr = tsResult.typeStr;
+                         break;
+                     }
+
+                     case 'topup-provider': {
+                         // Toll Tag Top-up Provider Format:
+                         // Product Account Number, Transactions ID, Payment, Top Up Status, Top Up Type, Date, Time, Discount / Bonus, Payment After Discount / Bonus, Topup Amount
+                         tagId = getCol(parts, 'product account number');
+                         referenceNumber = getCol(parts, 'transactions id');
+                         dateStr = `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
+                         amountStr = getCol(parts, 'topup amount');
+                         paymentMethod = 'Tag Balance';
+                         typeStr = 'Top-up';
+                         description = `Balance Top-up`;
+                         category = 'Toll Top-up';
+                         location = getCol(parts, 'top up type') || 'Top-up';
+                         // Mark failed transactions
+                         const paymentStatus = getCol(parts, 'payment');
+                         const topUpStatus = getCol(parts, 'top up status');
+                         if (paymentStatus.toLowerCase() === 'failure' || topUpStatus.toLowerCase() === 'failure') {
+                             status = 'Failed';
+                         } else {
+                             status = 'Completed';
+                         }
+                         break;
+                     }
                  }
              } else {
-                 // No header — basic legacy schema (positional)
+                 // No header -- basic legacy schema (positional)
                  if (parts.length >= 5) {
                      tagId = parts[0];
                      location = parts[1];
@@ -362,8 +443,35 @@ export function BulkImportTollTransactionsModal({
                  isValid = false;
                  error = 'Missing Date';
              } else {
-                 // Smart date parsing: handle DD/MM/YYYY, MM/DD/YYYY, and ISO formats
+                 // Smart date parsing: handle DD/MM/YYYY, MM/DD/YYYY, DD-Mon-YY, and ISO formats
                  let d = new Date(dateStr);
+                 
+                 if (isNaN(d.getTime())) {
+                     // Try DD-Mon-YY format (e.g. "24-Dec-25 11:26 am")
+                     const monMatch = dateStr.match(/^(\d{1,2})[\-\/]([A-Za-z]{3})[\-\/](\d{2,4})\s*(.*)?$/);
+                     if (monMatch) {
+                         const [, dayStr, monStr, yearStr, timePart] = monMatch;
+                         const months: Record<string, number> = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+                         const mon = months[monStr.toLowerCase()];
+                         if (mon !== undefined) {
+                             let year = parseInt(yearStr);
+                             if (year < 100) year += 2000; // 25 -> 2025
+                             d = new Date(year, mon, parseInt(dayStr));
+                             // Parse time part if present (e.g. "11:26 am" or "6:11 am")
+                             if (timePart && !isNaN(d.getTime())) {
+                                 const timeMatch = timePart.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+                                 if (timeMatch) {
+                                     let hours = parseInt(timeMatch[1]);
+                                     const mins = parseInt(timeMatch[2]);
+                                     const ampm = (timeMatch[3] || '').toLowerCase();
+                                     if (ampm === 'pm' && hours < 12) hours += 12;
+                                     if (ampm === 'am' && hours === 12) hours = 0;
+                                     d.setHours(hours, mins, 0, 0);
+                                 }
+                             }
+                         }
+                     }
+                 }
                  
                  if (isNaN(d.getTime())) {
                      // Try parsing DD/MM/YYYY or D/M/YYYY format (common in non-US locales)
@@ -383,7 +491,7 @@ export function BulkImportTollTransactionsModal({
                          } else if (num2 > 12) {
                              day = num2; month = num1; // MM/DD/YYYY
                          } else {
-                             day = num1; month = num2; // Ambiguous — default DD/MM/YYYY
+                             day = num1; month = num2; // Ambiguous -- default DD/MM/YYYY
                          }
                          
                          const reconstructed = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}${timePart ? ' ' + timePart.trim() : ''}`;
@@ -419,6 +527,12 @@ export function BulkImportTollTransactionsModal({
                  isValid = false;
                  error = 'Format Mismatch: Recovery requires Disaster Recovery Export CSV';
              }
+
+             // Mark failed top-ups as invalid (e.g. topup-provider rows with Payment=Failure)
+             if (status === 'Failed' && isValid) {
+                 isValid = false;
+                 error = 'Transaction Failed';
+             }
      
              let type: 'Usage' | 'Top-up' | 'Refund' | 'Expense' = 'Usage';
              
@@ -427,6 +541,11 @@ export function BulkImportTollTransactionsModal({
                  else if (typeStr.toLowerCase().includes('top')) type = 'Top-up';
                  else if (typeStr.toLowerCase().includes('refund')) type = 'Refund';
                  else if (typeStr.toLowerCase().includes('expense')) type = 'Expense';
+                 
+                 // Ensure correct amount sign for header-based formats:
+                 // Top-ups must always be positive, Usage must always be negative
+                 if (type === 'Top-up' && amount < 0) amount = Math.abs(amount);
+                 if (type === 'Usage' && amount > 0) amount = -amount;
              } else {
                  if (mode === 'usage') {
                      type = 'Usage';
@@ -446,7 +565,10 @@ export function BulkImportTollTransactionsModal({
              // Phase 5: Vehicle Matching
              const match = matchVehicle(tagId, vehiclePlate, driverName, paymentMethod);
              
-             if (match.error && !hasHeader) {
+             // For ALL formats (header and no-header): if match failed and no vehicleId, mark invalid
+             // Previously, header formats silently swallowed the error, causing rows to be
+             // skipped during import with no explanation shown to the admin.
+             if (match.error && !match.matchedVehicleId) {
                  isValid = false;
                  error = match.error;
              }
@@ -475,6 +597,90 @@ export function BulkImportTollTransactionsModal({
         });
   };
 
+  // Duplicate detection: checks parsed transactions against existing KV store data + intra-batch duplicates
+  const checkForDuplicates = async (parsed: ParsedTransaction[]): Promise<ParsedTransaction[]> => {
+    try {
+      // Fetch existing transactions from the KV store
+      const existingTx = await api.getTransactions(undefined, { limit: 5000 });
+      
+      // Build a Set of existing reference numbers (Transaction IDs) for fast lookup
+      const existingRefNumbers = new Set<string>();
+      // Build a Set of existing date+amount+vehicleId fingerprints as fallback
+      const existingFingerprints = new Set<string>();
+      
+      existingTx.forEach((tx: any) => {
+        const refNum = tx.metadata?.referenceNumber;
+        if (refNum) {
+          existingRefNumbers.add(refNum.toString().trim().toUpperCase());
+        }
+        // Build fingerprint: date (day-level) + amount + vehicleId
+        if (tx.date && tx.amount !== undefined && tx.vehicleId) {
+          const dateKey = new Date(tx.date).toISOString().split('T')[0]; // YYYY-MM-DD
+          const fp = `${dateKey}|${tx.amount}|${tx.vehicleId}`;
+          existingFingerprints.add(fp);
+        }
+      });
+      
+      // Track intra-batch reference numbers to catch duplicates within the same CSV
+      const batchRefNumbers = new Set<string>();
+      let dupCount = 0;
+      
+      const result = parsed.map(tx => {
+        if (!tx.isValid) return tx; // Already invalid, skip
+        
+        let isDuplicate = false;
+        let dupReason = '';
+        
+        // Check 1: Transaction ID / Reference Number match (primary)
+        if (tx.referenceNumber) {
+          const normalizedRef = tx.referenceNumber.trim().toUpperCase();
+          if (existingRefNumbers.has(normalizedRef)) {
+            isDuplicate = true;
+            dupReason = `Duplicate (Txn ID: ${tx.referenceNumber})`;
+          } else if (batchRefNumbers.has(normalizedRef)) {
+            isDuplicate = true;
+            dupReason = `Duplicate in CSV (Txn ID: ${tx.referenceNumber})`;
+          } else {
+            batchRefNumbers.add(normalizedRef);
+          }
+        }
+        
+        // Check 2: Fingerprint match (fallback -- same day, same amount, same vehicle)
+        if (!isDuplicate && tx.vehicleId && !isNaN(tx.date.getTime())) {
+          const dateKey = tx.date.toISOString().split('T')[0];
+          const fp = `${dateKey}|${tx.amount}|${tx.vehicleId}`;
+          if (existingFingerprints.has(fp)) {
+            isDuplicate = true;
+            dupReason = `Likely duplicate (same date, amount & vehicle)`;
+          }
+        }
+        
+        if (isDuplicate) {
+          dupCount++;
+          return {
+            ...tx,
+            isValid: false,
+            isDuplicate: true,
+            error: dupReason,
+          };
+        }
+        
+        return tx;
+      });
+      
+      setDuplicateCount(dupCount);
+      if (dupCount > 0) {
+        toast.warning(`${dupCount} duplicate${dupCount > 1 ? 's' : ''} detected and blocked.`);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Duplicate check failed, proceeding without:', error);
+      setDuplicateCount(0);
+      return parsed; // If check fails, allow import (don't block)
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -494,7 +700,8 @@ export function BulkImportTollTransactionsModal({
           
           // If we have valid results, use them
           if (localParsed.length > 0 && localParsed.some(t => t.isValid)) {
-              setParsedTx(localParsed);
+              const deduped = await checkForDuplicates(localParsed);
+              setParsedTx(deduped);
               setStep('preview');
               toast.success("File parsed successfully");
               if (fileInputRef.current) fileInputRef.current.value = '';
@@ -564,7 +771,12 @@ export function BulkImportTollTransactionsModal({
                        referenceNumber: tx.referenceNumber
                    };
                });
-               setParsedTx(parsed);
+               // Check if AI returned payment method info for any row
+               const aiHasPaymentMethod = res.data.some((tx: any) => tx.paymentMethod);
+               setCsvHasPaymentMethod(aiHasPaymentMethod);
+               
+               const deduped = await checkForDuplicates(parsed);
+               setParsedTx(deduped);
                setStep('preview');
                toast.success("AI Analysis Complete");
           }
@@ -577,7 +789,7 @@ export function BulkImportTollTransactionsModal({
       }
   };
 
-  const handleManualParse = () => {
+  const handleManualParse = async () => {
     if (!csvContent.trim()) {
       toast.error("Please enter some data");
       return;
@@ -593,11 +805,21 @@ export function BulkImportTollTransactionsModal({
         return;
     }
 
-    setParsedTx(parsed);
+    const deduped = await checkForDuplicates(parsed);
+    setParsedTx(deduped);
     setStep('preview');
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Handler: when admin changes payment method override, apply to all parsed rows
+  const handlePaymentMethodOverride = (method: 'Tag Balance' | 'Cash') => {
+    setPaymentMethodOverride(method);
+    setParsedTx(prev => prev.map(tx => ({
+      ...tx,
+      paymentMethod: method,
+    })));
+  };
 
   const handleImport = async () => {
     if (isSubmitting) return;
@@ -739,6 +961,9 @@ export function BulkImportTollTransactionsModal({
             setCsvContent('');
             setParsedTx([]);
             setIsSubmitting(false);
+            setCsvHasPaymentMethod(true);
+            setPaymentMethodOverride('Tag Balance');
+            setDuplicateCount(0);
         }
 
     } catch (e) {
@@ -828,7 +1053,7 @@ export function BulkImportTollTransactionsModal({
                              <span className="text-xs text-indigo-800">
                                  Detected format: <strong>{detectedFormatLabel}</strong>
                                  {(detectedFormatLabel.includes('Legacy') || detectedFormatLabel.includes('Current')) && 
-                                     ' — Old status/reconciliation data ignored. All imported as fresh & unreconciled.'}
+                                     ' \u2014 Old status/reconciliation data ignored. All imported as fresh & unreconciled.'}
                              </span>
                          </div>
                      )}
@@ -842,7 +1067,54 @@ export function BulkImportTollTransactionsModal({
                              . <strong>{parsedTx.filter(t => !t.isValid).length}</strong> invalid.
                          </span>
                      </div>
-                    
+                     {duplicateCount > 0 && (
+                         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-md">
+                             <Copy className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                             <span className="text-xs text-amber-800">
+                                 <strong>{duplicateCount}</strong> duplicate{duplicateCount > 1 ? 's' : ''} detected and blocked. These transactions already exist in the system (matched by Transaction ID or date+amount+vehicle).
+                             </span>
+                         </div>
+                     )}
+                     
+                     {/* Payment Method Override Prompt -- shown when CSV has no Payment Method column */}
+                     {!csvHasPaymentMethod && mode === 'usage' && (
+                         <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-md">
+                             <div className="flex items-center gap-2">
+                                 <AlertCircle className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                                 <span className="text-xs text-blue-800 font-medium">
+                                     How were these tolls paid?
+                                 </span>
+                                 <span className="text-xs text-blue-600">
+                                     (No payment method column detected)
+                                 </span>
+                             </div>
+                             <div className="flex items-center gap-1 bg-white rounded-md border border-blue-200 p-0.5">
+                                 <button
+                                     type="button"
+                                     onClick={() => handlePaymentMethodOverride('Tag Balance')}
+                                     className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                                         paymentMethodOverride === 'Tag Balance'
+                                             ? 'bg-blue-600 text-white shadow-sm'
+                                             : 'text-slate-600 hover:bg-slate-100'
+                                     }`}
+                                 >
+                                     Tag Balance
+                                 </button>
+                                 <button
+                                     type="button"
+                                     onClick={() => handlePaymentMethodOverride('Cash')}
+                                     className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                                         paymentMethodOverride === 'Cash'
+                                             ? 'bg-blue-600 text-white shadow-sm'
+                                             : 'text-slate-600 hover:bg-slate-100'
+                                     }`}
+                                 >
+                                     Cash
+                                 </button>
+                             </div>
+                         </div>
+                     )}
+
                     <div className="border rounded-md overflow-x-auto">
                         <Table className="text-xs">
                             <TableHeader>
@@ -865,24 +1137,24 @@ export function BulkImportTollTransactionsModal({
                             </TableHeader>
                             <TableBody>
                                 {parsedTx.map((tx, i) => (
-                                    <TableRow key={i} className={`[&>td]:py-1 [&>td]:px-2 ${!tx.isValid ? 'bg-red-50/50' : ''}`}>
+                                    <TableRow key={i} className={`[&>td]:py-1 [&>td]:px-2 ${tx.isDuplicate ? 'bg-amber-50/60' : !tx.isValid ? 'bg-red-50/50' : ''}`}>
                                         <TableCell className="whitespace-nowrap text-slate-700">
-                                            {tx.isValid ? tx.date.toLocaleString() : <span className="text-red-500">{tx.rawDate || '—'}</span>}
+                                            {tx.isValid ? tx.date.toLocaleString() : <span className="text-red-500">{tx.rawDate || '\u2014'}</span>}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap font-medium text-slate-800 max-w-[180px] truncate">
-                                            {tx.matchedVehicleName || tx.vehiclePlate || (tx.vehicleId ? 'Current' : <span className="text-slate-400">—</span>)}
+                                            {tx.matchedVehicleName || tx.vehiclePlate || (tx.vehicleId ? 'Current' : <span className="text-slate-400">\u2014</span>)}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-slate-600 max-w-[120px] truncate">
-                                            {tx.driverName || <span className="text-slate-400">—</span>}
+                                            {tx.driverName || <span className="text-slate-400">\u2014</span>}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap font-mono text-slate-500">
-                                            {tx.tagId || <span className="text-slate-300">—</span>}
+                                            {tx.tagId || <span className="text-slate-300">\u2014</span>}
                                         </TableCell>
                                         <TableCell className="text-slate-600 max-w-[140px] truncate">
-                                            {tx.location || <span className="text-slate-300">—</span>}
+                                            {tx.location || <span className="text-slate-300">\u2014</span>}
                                         </TableCell>
                                         <TableCell className="text-slate-500">
-                                            {tx.laneId || <span className="text-slate-300">—</span>}
+                                            {tx.laneId || <span className="text-slate-300">\u2014</span>}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap">
                                             {tx.type === 'Usage' ? (
@@ -896,30 +1168,34 @@ export function BulkImportTollTransactionsModal({
                                             )}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-slate-500">
-                                            {tx.paymentMethod || <span className="text-slate-300">—</span>}
+                                            {tx.paymentMethod || <span className="text-slate-300">\u2014</span>}
                                         </TableCell>
                                         <TableCell className="text-slate-500 max-w-[160px] truncate" title={tx.description || ''}>
-                                            {tx.description || <span className="text-slate-300">—</span>}
+                                            {tx.description || <span className="text-slate-300">\u2014</span>}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap font-mono text-slate-400">
-                                            {tx.referenceNumber || <span className="text-slate-300">—</span>}
+                                            {tx.referenceNumber || <span className="text-slate-300">\u2014</span>}
                                         </TableCell>
                                         {mode === 'topup' && (
                                             <TableCell className="text-right text-slate-500">
-                                                {tx.discount && tx.discount > 0 ? `-$${tx.discount.toFixed(2)}` : '—'}
+                                                {tx.discount && tx.discount > 0 ? `-$${tx.discount.toFixed(2)}` : '\u2014'}
                                             </TableCell>
                                         )}
                                         {mode === 'topup' && (
                                             <TableCell className="text-right text-slate-700">
-                                                {tx.paymentAfterDiscount && tx.paymentAfterDiscount > 0 ? `$${tx.paymentAfterDiscount.toFixed(2)}` : '—'}
+                                                {tx.paymentAfterDiscount && tx.paymentAfterDiscount > 0 ? `$${tx.paymentAfterDiscount.toFixed(2)}` : '\u2014'}
                                             </TableCell>
                                         )}
                                         <TableCell className={`text-right font-medium whitespace-nowrap ${tx.amount < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                            {tx.isValid ? `$${tx.amount.toFixed(2)}` : '—'}
+                                            {tx.isValid ? `$${tx.amount.toFixed(2)}` : '\u2014'}
                                         </TableCell>
                                         <TableCell className="text-center">
                                             {tx.isValid ? (
                                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                                            ) : tx.isDuplicate ? (
+                                                <span className="text-amber-600 text-[10px] font-medium leading-tight block max-w-[100px] mx-auto flex items-center gap-0.5 justify-center" title={tx.error}>
+                                                    <Copy className="h-3 w-3 shrink-0" /> Duplicate
+                                                </span>
                                             ) : (
                                                 <span className="text-red-500 text-[10px] font-medium leading-tight block max-w-[80px] mx-auto" title={tx.error}>
                                                     {tx.error}

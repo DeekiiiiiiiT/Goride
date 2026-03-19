@@ -10,7 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { FinancialTransaction } from '../../types/data';
-import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, RefreshCw, Loader2, Camera, AlertTriangle } from "lucide-react";
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Input } from "../ui/input";
@@ -24,6 +24,7 @@ import { FuelEntry } from '../../types/fuel';
 
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface FuelReimbursementTableProps {
     transactions: FinancialTransaction[];
@@ -34,6 +35,7 @@ interface FuelReimbursementTableProps {
     onEdit?: (transaction: FinancialTransaction) => void;
     onDelete?: (id: string) => void;
     onViewDriverLedger?: (driverId: string) => void;
+    onApproveLogReview?: (id: string, odometer: number, notes?: string) => void;
     dateRange?: DateRange;
     onDateRangeChange?: (range: DateRange | undefined) => void;
     isRefreshing?: boolean;
@@ -49,15 +51,25 @@ export function FuelReimbursementTable({
     onEdit, 
     onDelete,
     onViewDriverLedger,
+    onApproveLogReview,
     dateRange,
     onDateRangeChange,
     isRefreshing = false,
     onRefresh
 }: FuelReimbursementTableProps) {
+    const { can } = usePermissions();
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [notes, setNotes] = useState('');
     const [action, setAction] = useState<'approve' | 'reject' | null>(null);
+
+    // Phase 6: Log Review Dialog state
+    const [logReviewTx, setLogReviewTx] = useState<FinancialTransaction | null>(null);
+    const [isLogReviewOpen, setIsLogReviewOpen] = useState(false);
+    const [adminOdometer, setAdminOdometer] = useState('');
+    const [adminNotes, setAdminNotes] = useState('');
+    const [isLogReviewSubmitting, setIsLogReviewSubmitting] = useState(false);
+    const [odometerError, setOdometerError] = useState('');
 
     // Find the settlement transaction for a given source ID
     const findSettlementTx = (sourceId: string) => {
@@ -81,7 +93,7 @@ export function FuelReimbursementTable({
     // as settlements are linked to and visible within the primary log entry.
     const isFuelReimbursement = (t: FinancialTransaction) => {
         const isStandardSource = !t.metadata?.automated || t.metadata?.source === 'Manual' || t.metadata?.source === 'Bulk Manual';
-        const isReimbursementType = (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || t.type === 'Manual_Entry' || (t.type === 'Expense' && t.paymentMethod === 'Cash'));
+        const isReimbursementType = (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || t.type === 'Manual_Entry' || (t.type === 'Expense' && (t.paymentMethod === 'Cash' || t.paymentMethod === 'RideShare Cash' || isFuelCategory)));
         const isFuelCategory = (t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
         
         return isStandardSource && isReimbursementType && isFuelCategory;
@@ -118,7 +130,29 @@ export function FuelReimbursementTable({
         return true;
     };
 
-    const pending = transactions.filter(t => t.status === 'Pending' && isFuelReimbursement(t));
+    const pending = transactions.filter(t => {
+        if (t.status !== 'Pending' || !isFuelReimbursement(t)) return false;
+        // Exclude station-gate-held transactions — handled by Super Admin via Learnt Locations
+        if (t.metadata?.stationGateHold) return false;
+        // Exclude items that belong in Log Review tab
+        if (t.metadata?.needsLogReview) return false;
+        const method = t.metadata?.odometerMethod;
+        if ((t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && (!method || method !== 'ai_verified')) return false;
+        return true;
+    });
+
+    const logReview = transactions.filter(t => {
+        // Must be Fuel + Pending
+        if (t.status !== 'Pending') return false;
+        if (!isFuelReimbursement(t)) return false;
+        // Flagged for log review (new submissions will have this)
+        if (t.metadata?.needsLogReview) return true;
+        // Fallback for legacy: Fuel + Pending + non-AI odometer method
+        const method = t.metadata?.odometerMethod;
+        if ((t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && (!method || method !== 'ai_verified')) return true;
+        return false;
+    });
+
     const history = transactions.filter(t => (t.status === 'Approved' || t.status === 'Rejected') && isFuelReimbursement(t) && isWithinRange(t));
 
     const handleAction = (type: 'approve' | 'reject') => {
@@ -136,6 +170,39 @@ export function FuelReimbursementTable({
         setIsDetailsOpen(false);
         setAction(null);
         setSelectedTx(null);
+    };
+
+    // Phase 6: Open Log Review dialog
+    const openLogReview = (tx: FinancialTransaction) => {
+        setLogReviewTx(tx);
+        setAdminOdometer('');
+        setAdminNotes('');
+        setOdometerError('');
+        setIsLogReviewOpen(true);
+    };
+
+    // Phase 6: Confirm & Approve log review
+    const confirmLogReview = async () => {
+        if (!logReviewTx || !onApproveLogReview) return;
+
+        const odoValue = Number(adminOdometer);
+        if (!adminOdometer || isNaN(odoValue) || odoValue <= 0) {
+            setOdometerError('Please enter a valid odometer reading greater than 0.');
+            return;
+        }
+
+        setOdometerError('');
+        setIsLogReviewSubmitting(true);
+        try {
+            await onApproveLogReview(logReviewTx.id, odoValue, adminNotes || undefined);
+            setIsLogReviewOpen(false);
+            setLogReviewTx(null);
+        } catch (e) {
+            // Error handling is in the parent handler
+            console.error('[LogReview] Approval failed:', e);
+        } finally {
+            setIsLogReviewSubmitting(false);
+        }
     };
 
     const formatDate = (dateString: string) => {
@@ -159,6 +226,30 @@ export function FuelReimbursementTable({
             case 'Rejected': return <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200">Rejected</Badge>;
             default: return <Badge variant="outline">{status}</Badge>;
         }
+    };
+
+    // Phase 6: Helper to get a human-readable odometer method label
+    const getOdometerMethodLabel = (method?: string) => {
+        switch (method) {
+            case 'ai_verified': return 'AI Verified';
+            case 'manual_override': return 'Manual Override';
+            case 'photo_review': return 'Photo Review';
+            case 'manual_entry': return 'Manual Entry';
+            default: return method || 'Unknown';
+        }
+    };
+
+    // Phase 6: Helper to resolve station name for log review
+    const resolveStationName = (tx: FinancialTransaction) => {
+        if (tx.vendor && !tx.vendor.toLowerCase().includes('unknown')) return tx.vendor;
+        if ((tx as any).merchant && !(tx as any).merchant.toLowerCase().includes('unknown')) return (tx as any).merchant;
+        if (tx.metadata?.parentCompany) return tx.metadata.parentCompany;
+        const linkedLog = logs.find(l => l.transactionId === tx.id || l.id === tx.metadata?.sourceId);
+        if (linkedLog) {
+            const name = linkedLog.vendor || linkedLog.location || linkedLog.stationName;
+            if (name && !name.toLowerCase().includes('unknown')) return name;
+        }
+        return 'Unverified Station';
     };
 
     const renderTable = (data: FinancialTransaction[], showActions = false) => {
@@ -187,7 +278,7 @@ export function FuelReimbursementTable({
                     return `${tx.category || 'Fuel'} Expense - ${name}`;
                 }
             }
-            // Last resort — show a cleaner label than "Unknown"
+            // Last resort -- show a cleaner label than "Unknown"
             return `${tx.category || 'Fuel'} Expense - Unverified Station`;
         };
 
@@ -385,11 +476,115 @@ export function FuelReimbursementTable({
         );
     };
 
+    // Phase 6: Dedicated Log Review table
+    const renderLogReviewTable = (data: FinancialTransaction[]) => {
+        return (
+            <div className="rounded-md border bg-white">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Driver</TableHead>
+                            <TableHead>Vehicle</TableHead>
+                            <TableHead>Amount</TableHead>
+                            <TableHead>Volume</TableHead>
+                            <TableHead>Station</TableHead>
+                            <TableHead>Capture Method</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {data.map((tx) => {
+                            const method = tx.metadata?.odometerMethod;
+                            const reason = tx.metadata?.logReviewReason || tx.metadata?.odometerManualReason || '';
+                            return (
+                                <TableRow key={tx.id} className="hover:bg-amber-50/30">
+                                    <TableCell className="font-medium">
+                                        {formatDate(tx.date)}
+                                        <div className="text-xs text-slate-500">{tx.time}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-medium">
+                                                {tx.driverName?.charAt(0) || 'D'}
+                                            </div>
+                                            <span className="font-medium">{tx.driverName || 'Unknown'}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-1.5 text-sm">
+                                            <Truck className="h-3.5 w-3.5 text-slate-400" />
+                                            <span>{tx.vehicleId ? (tx.metadata?.vehiclePlate || tx.vehicleId.substring(0, 8)) : '-'}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="font-semibold text-slate-900">
+                                        ${Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0).toFixed(2)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {tx.quantity ? `${tx.quantity} L` : '-'}
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-sm truncate max-w-[140px] block">{resolveStationName(tx)}</span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Badge variant="outline" className={cn(
+                                                    "text-[10px] px-2 py-0.5",
+                                                    method === 'photo_review' 
+                                                        ? "bg-purple-50 text-purple-700 border-purple-200" 
+                                                        : method === 'manual_override'
+                                                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                                                        : "bg-slate-50 text-slate-600 border-slate-200"
+                                                )}>
+                                                    {getOdometerMethodLabel(method)}
+                                                </Badge>
+                                            </TooltipTrigger>
+                                            {reason && (
+                                                <TooltipContent>
+                                                    <p className="text-xs max-w-[200px]">{reason}</p>
+                                                </TooltipContent>
+                                            )}
+                                        </Tooltip>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
+                                            Needs Review
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button 
+                                            size="sm" 
+                                            className="bg-amber-600 hover:bg-amber-700 text-white"
+                                            onClick={() => openLogReview(tx)}
+                                        >
+                                            <Eye className="h-4 w-4 mr-1.5" />
+                                            Review
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6">
-            <Tabs defaultValue="pending" className="w-full">
+            <Tabs defaultValue={logReview.length > 0 ? "log-review" : "pending"} className="w-full">
                 <div className="flex items-center justify-between mb-4">
                     <TabsList>
+                        <TabsTrigger value="log-review">
+                            Log Review
+                            {logReview.length > 0 && (
+                                <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">
+                                    {logReview.length}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
                         <TabsTrigger value="pending">
                             Pending
                             {pending.length > 0 && (
@@ -430,6 +625,17 @@ export function FuelReimbursementTable({
                     </div>
                 </div>
 
+                <TabsContent value="log-review" className="space-y-4">
+                    {logReview.length === 0 ? (
+                        <div className="rounded-md border bg-white p-8 text-center text-slate-500">
+                            <p className="text-sm">No fuel submissions awaiting odometer review.</p>
+                            <p className="text-xs text-slate-400 mt-1">Items appear here when the AI scanner fails and the driver submits an odometer photo for admin review.</p>
+                        </div>
+                    ) : (
+                        renderLogReviewTable(logReview)
+                    )}
+                </TabsContent>
+
                 <TabsContent value="pending" className="space-y-4">
                     {isRefreshing && (
                         <div className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50/50 p-2 rounded-md border border-blue-100 animate-pulse">
@@ -445,7 +651,7 @@ export function FuelReimbursementTable({
                 </TabsContent>
             </Tabs>
 
-            {/* Details Modal */}
+            {/* Details Modal (existing Pending/History detail view) */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>
                 <DialogContent className="sm:max-w-[600px]">
                     <DialogHeader>
@@ -624,8 +830,8 @@ export function FuelReimbursementTable({
                                 <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setIsDetailsOpen(false)}>Close</Button>
                             </div>
                             <div className="flex gap-2 w-full sm:w-auto">
-                                <Button variant="destructive" className="flex-1 sm:flex-none" onClick={() => setAction('reject')}>Reject</Button>
-                                <Button className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none" onClick={() => setAction('approve')}>Approve</Button>
+                                {can('fuel.reject') && <Button variant="destructive" className="flex-1 sm:flex-none" onClick={() => setAction('reject')}>Reject</Button>}
+                                {can('fuel.approve') && <Button className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none" onClick={() => setAction('approve')}>Approve</Button>}
                             </div>
                         </DialogFooter>
                     )}
@@ -635,6 +841,204 @@ export function FuelReimbursementTable({
                             <Button variant="outline" onClick={() => setIsDetailsOpen(false)}>Close</Button>
                         </DialogFooter>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Phase 6: Log Review Detail Dialog */}
+            <Dialog open={isLogReviewOpen} onOpenChange={(open) => { if (!open && !isLogReviewSubmitting) { setIsLogReviewOpen(false); setLogReviewTx(null); } }}>
+                <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Camera className="h-5 w-5 text-amber-600" />
+                            Review Fuel Log {logReviewTx?.driverName ? `\u2014 ${logReviewTx.driverName}` : ''}
+                        </DialogTitle>
+                        <DialogDescription>
+                            The AI odometer scanner was unable to read this submission. Review the photo and enter the correct odometer reading to approve.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {logReviewTx && (
+                        <div className="space-y-6 py-2">
+                            {/* Odometer Photo Section */}
+                            <div className="space-y-2">
+                                <Label className="text-slate-500 text-xs uppercase tracking-wider">Odometer Photo</Label>
+                                {logReviewTx.metadata?.odometerProofUrl ? (
+                                    <div className="relative rounded-lg border-2 border-amber-200 bg-amber-50/30 overflow-hidden">
+                                        <a href={logReviewTx.metadata.odometerProofUrl} target="_blank" rel="noopener noreferrer" className="block">
+                                            <ImageWithFallback 
+                                                src={logReviewTx.metadata.odometerProofUrl} 
+                                                alt="Odometer Photo" 
+                                                className="w-full max-h-[300px] object-contain bg-black/5" 
+                                            />
+                                        </a>
+                                        <div className="absolute top-2 right-2">
+                                            <Badge className="bg-amber-600 text-white text-[10px]">
+                                                Click to enlarge
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-40 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200 text-slate-400">
+                                        <Camera className="h-10 w-10 mb-2 opacity-40" />
+                                        <span className="text-sm font-medium">No odometer photo available</span>
+                                        <span className="text-xs mt-1">The driver may not have submitted a photo for this entry.</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Receipt Photo (if available) */}
+                            {logReviewTx.receiptUrl && (
+                                <div className="space-y-2">
+                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Receipt Photo</Label>
+                                    <div className="rounded-lg border border-slate-200 overflow-hidden">
+                                        <a href={logReviewTx.receiptUrl} target="_blank" rel="noopener noreferrer" className="block">
+                                            <ImageWithFallback 
+                                                src={logReviewTx.receiptUrl} 
+                                                alt="Receipt" 
+                                                className="w-full max-h-[200px] object-contain bg-black/5" 
+                                            />
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Transaction Info Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Date</Label>
+                                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                                        {formatDate(logReviewTx.date)}
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Amount</Label>
+                                    <div className="flex items-center gap-1.5 text-sm font-bold text-emerald-600">
+                                        <DollarSign className="h-3.5 w-3.5" />
+                                        {Math.abs(Number(logReviewTx.amount) || Number(logReviewTx.metadata?.totalCost) || 0).toFixed(2)}
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Volume</Label>
+                                    <span className="text-sm font-medium font-mono">
+                                        {logReviewTx.quantity ? `${logReviewTx.quantity} L` : '-'}
+                                    </span>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Station</Label>
+                                    <span className="text-sm font-medium truncate block">{resolveStationName(logReviewTx)}</span>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Vehicle</Label>
+                                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                                        <Truck className="h-3.5 w-3.5 text-slate-400" />
+                                        {logReviewTx.metadata?.vehiclePlate || logReviewTx.vehicleId?.substring(0, 8) || '-'}
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Payment</Label>
+                                    <span className="text-sm font-medium">
+                                        {logReviewTx.paymentMethod || logReviewTx.metadata?.paymentSource || 'Cash'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Capture Method Badge */}
+                            {logReviewTx.metadata?.odometerMethod && (
+                                <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                                    <AlertTriangle className="h-4 w-4 text-purple-600 shrink-0" />
+                                    <div>
+                                        <span className="text-xs font-semibold text-purple-700">
+                                            Capture Method: {getOdometerMethodLabel(logReviewTx.metadata.odometerMethod)}
+                                        </span>
+                                        {(logReviewTx.metadata?.logReviewReason || logReviewTx.metadata?.odometerManualReason) && (
+                                            <p className="text-xs text-purple-600 mt-0.5">
+                                                Reason: {logReviewTx.metadata.logReviewReason || logReviewTx.metadata.odometerManualReason}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Admin Odometer Input */}
+                            <div className="space-y-2 p-4 bg-amber-50/50 rounded-lg border-2 border-amber-200">
+                                <Label htmlFor="admin-odometer" className="text-sm font-semibold text-amber-900">
+                                    Enter Odometer Reading (km) <span className="text-red-500">*</span>
+                                </Label>
+                                <p className="text-xs text-amber-700 mb-2">
+                                    Read the odometer value from the photo above and enter it here. This will be recorded as the official reading.
+                                </p>
+                                <Input 
+                                    id="admin-odometer"
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={adminOdometer}
+                                    onChange={(e) => { setAdminOdometer(e.target.value); setOdometerError(''); }}
+                                    placeholder="e.g. 145320"
+                                    className={cn(
+                                        "font-mono text-lg h-12 bg-white",
+                                        odometerError && "border-red-500 focus-visible:ring-red-500"
+                                    )}
+                                />
+                                {odometerError && (
+                                    <p className="text-xs text-red-600 flex items-center gap-1">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        {odometerError}
+                                    </p>
+                                )}
+
+                                {/* Warning if entered value seems low compared to existing odometer on tx */}
+                                {adminOdometer && Number(adminOdometer) > 0 && logReviewTx.odometer && Number(adminOdometer) < logReviewTx.odometer && (
+                                    <p className="text-xs text-amber-700 flex items-center gap-1 mt-1">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        This reading ({adminOdometer} km) is lower than the existing odometer ({logReviewTx.odometer} km). Please double-check.
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Admin Notes */}
+                            <div className="space-y-2">
+                                <Label htmlFor="admin-log-notes" className="text-sm font-medium text-slate-700">
+                                    Admin Notes (Optional)
+                                </Label>
+                                <Textarea 
+                                    id="admin-log-notes"
+                                    value={adminNotes}
+                                    onChange={(e) => setAdminNotes(e.target.value)}
+                                    placeholder="E.g. Photo slightly blurry but reading is clearly 145,320 km."
+                                    rows={2}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => { setIsLogReviewOpen(false); setLogReviewTx(null); }}
+                            disabled={isLogReviewSubmitting}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            onClick={confirmLogReview}
+                            disabled={isLogReviewSubmitting || !adminOdometer}
+                        >
+                            {isLogReviewSubmitting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Approving...
+                                </>
+                            ) : (
+                                <>
+                                    <Check className="h-4 w-4 mr-2" />
+                                    Confirm & Approve
+                                </>
+                            )}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

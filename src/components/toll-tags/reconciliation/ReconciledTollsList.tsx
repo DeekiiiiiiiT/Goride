@@ -6,11 +6,12 @@ import { Checkbox } from "../../ui/checkbox";
 import { format } from "date-fns";
 import { FinancialTransaction, Trip, Claim } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
-import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info, ChevronDown, Bot, UserCheck } from "lucide-react";
+import { History, Undo2, Loader2, TrendingUp, TrendingDown, AlertCircle, Info, ChevronDown, Bot, UserCheck, CreditCard, Banknote } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { calculateTollFinancials } from "../../../utils/tollReconciliation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { MatchedTollDetailOverlay } from './MatchedTollDetailOverlay';
 
 interface ReconciledTollsListProps {
   tolls: FinancialTransaction[];
@@ -24,6 +25,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
     const [isBulkUnmatching, setIsBulkUnmatching] = useState(false);
     const [visibleCount, setVisibleCount] = useState(25);
     const fleetTz = useFleetTimezone();
+    const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
 
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -111,6 +113,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                             <TableHead>Description</TableHead>
                             <TableHead>Platform</TableHead>
                             <TableHead>Source</TableHead>
+                            <TableHead>Paid Via</TableHead>
                             <TableHead>Recovered</TableHead>
                             <TableHead>Net Loss</TableHead>
                             <TableHead className="text-right">Action</TableHead>
@@ -118,14 +121,24 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                     </TableHeader>
                     <TableBody>
                         {tolls.slice(0, visibleCount).map(tx => {
-                            const trip = trips.find(t => t.id === tx.tripId);
+                            const trip = trips.find(t => t.id === tx.tripId) || (tx as any).linkedTrip || null;
                             const claim = claims.find(c => c.transactionId === tx.id);
                             const isSelected = selectedIds.has(tx.id);
                             
                             const financials = calculateTollFinancials(tx, trip, claim);
 
                             return (
-                                <TableRow key={tx.id} data-state={isSelected ? "selected" : undefined}>
+                                <TableRow 
+                                    key={tx.id} 
+                                    data-state={isSelected ? "selected" : undefined}
+                                    className="cursor-pointer hover:bg-slate-50/80 transition-colors"
+                                    onClick={(e) => {
+                                        // Don't open detail if clicking checkbox or unmatch button
+                                        const target = e.target as HTMLElement;
+                                        if (target.closest('button') || target.closest('[role="checkbox"]') || target.tagName === 'INPUT') return;
+                                        setDetailTx(tx);
+                                    }}
+                                >
                                     <TableCell>
                                         <Checkbox 
                                             checked={isSelected}
@@ -215,6 +228,32 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                         )}
                                     </TableCell>
 
+                                    {/* Payment Method column */}
+                                    <TableCell>
+                                        {(() => {
+                                            const method = tx.paymentMethod || (tx as any).metadata?.paymentMethod;
+                                            if (method === 'Cash') {
+                                                return (
+                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] gap-1">
+                                                        <Banknote className="h-3 w-3" />
+                                                        Cash
+                                                    </Badge>
+                                                );
+                                            }
+                                            if (method === 'Tag Balance') {
+                                                return (
+                                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] gap-1">
+                                                        <CreditCard className="h-3 w-3" />
+                                                        Tag
+                                                    </Badge>
+                                                );
+                                            }
+                                            return (
+                                                <span className="text-slate-300 text-xs">—</span>
+                                            );
+                                        })()}
+                                    </TableCell>
+
                                     <TableCell>
                                         {financials.totalRecovered > 0 ? (
                                             <Tooltip>
@@ -292,6 +331,16 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                     </div>
                 )}
             </CardContent>
+
+            {/* Detail Overlay */}
+            <MatchedTollDetailOverlay
+                isOpen={!!detailTx}
+                onClose={() => setDetailTx(null)}
+                transaction={detailTx}
+                trip={detailTx ? trips.find(t => t.id === detailTx.tripId) || (detailTx as any).linkedTrip || null : null}
+                claim={detailTx ? claims.find(c => c.transactionId === detailTx.id) || null : null}
+                onUnmatch={onUnmatch}
+            />
         </Card>
     );
 }

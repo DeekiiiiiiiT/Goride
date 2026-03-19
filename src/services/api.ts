@@ -33,7 +33,9 @@ export interface PaginatedTripResponse {
     total: number;
 }
 
-export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
+// Performance optimization: Reduced to 1 retry (2 total attempts)
+// Server already retries 2x, so total attempts = 2 server × 2 frontend = 4
+export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 1, backoff = 500): Promise<Response> {
   try {
     const response = await fetch(url, options);
     // If 5xx error, retry
@@ -889,7 +891,11 @@ export const api = {
         headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error("Promotion failed");
+    if (!response.ok) {
+      // Phase 7-8 fix: Show actual error message from server
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Promotion failed with status ${response.status}`);
+    }
     return response.json();
   },
 
@@ -1262,6 +1268,77 @@ export const api = {
     return response.json();
   },
 
+  // ─── Phase 9: Team Management API ──────────────────────────────────────────
+
+  async teamInvite(data: { email: string; name: string; role: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/invite`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to invite team member");
+    }
+    return response.json();
+  },
+
+  async getTeamMembers() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/members`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch team members");
+    return response.json();
+  },
+
+  async updateTeamMemberRole(userId: string, role: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/members/${userId}/role`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ role })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update role");
+    }
+    return response.json();
+  },
+
+  async removeTeamMember(userId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/members/${userId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to remove team member");
+    }
+    return response.json();
+  },
+
+  // Phase 10: Claim an unlinked driver by email
+  async claimDriver(driverEmail: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/claim-driver`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ driverEmail })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to claim driver");
+    }
+    return response.json();
+  },
+
   async parseTollCsvWithAI(csvContent: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-toll-csv`, {
       method: 'POST',
@@ -1375,14 +1452,14 @@ export const api = {
     return { transaction: updatedTx, trip };
   },
 
-  async approveExpense(id: string, notes?: string) {
+  async approveExpense(id: string, notes?: string, odometerReading?: number) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/expenses/approve`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify({ id, notes })
+        body: JSON.stringify({ id, notes, odometerReading })
     });
     if (!response.ok) throw new Error("Failed to approve expense");
     const result = await response.json();
@@ -1418,6 +1495,28 @@ export const api = {
   },
 
   // ── Phase 4: Server-side Toll Reconciliation API ──────────────────────
+
+  async getTollLogs(params?: {
+    vehicleId?: string;
+    tagNumber?: string;
+    driverId?: string;
+    category?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.vehicleId) qs.set('vehicleId', params.vehicleId);
+    if (params?.tagNumber) qs.set('tagNumber', params.tagNumber);
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.category) qs.set('category', params.category);
+    if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
+    if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-logs?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll logs");
+    return response.json();
+  },
 
   async getTollUnreconciled(params?: { driverId?: string; limit?: number; offset?: number }) {
     const qs = new URLSearchParams();
@@ -2352,6 +2451,413 @@ export const api = {
         },
       };
     }
+  },
+
+  // ========================================================================
+  // Unverified Vendors API
+  // ========================================================================
+
+  async getUnverifiedVendors(status?: 'pending' | 'resolved'): Promise<{
+    vendors: any[];
+    summary: {
+      total: number;
+      pending: number;
+      resolved: number;
+      totalAmountAtRisk: number;
+    };
+  }> {
+    const url = status 
+      ? `${API_ENDPOINTS.fuel}/unverified-vendors?status=${status}`
+      : `${API_ENDPOINTS.fuel}/unverified-vendors`;
+    
+    const response = await fetchWithRetry(url, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to fetch unverified vendors: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async getUnverifiedVendorById(vendorId: string): Promise<{
+    vendor: any;
+    transactions: any[];
+    drivers: any[];
+    vehicles: any[];
+    suggestedMatches: any[];
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}`,
+      {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to fetch vendor details: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async createUnverifiedVendor(data: {
+    transactionId: string;
+    vendorName: string;
+    sourceType: 'no_gps' | 'unmatched_name' | 'manual_entry';
+  }): Promise<{ success: boolean; vendor: any }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(data)
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to create vendor: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async bulkCreateUnverifiedVendors(transactions: Array<{
+    id: string;
+    vendor: string;
+    sourceType: 'no_gps' | 'unmatched_name' | 'manual_entry';
+  }>): Promise<{
+    success: boolean;
+    vendors: any[];
+    summary: {
+      processedTransactions: number;
+      uniqueVendors: number;
+    };
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/bulk`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ transactions })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to bulk create vendors: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async resolveVendorToStation(
+    vendorId: string,
+    stationId: string,
+    resolvedBy: string
+  ): Promise<{
+    success: boolean;
+    vendor: any;
+    station: any;
+    updatedTransactions: any[];
+    summary: {
+      transactionsUpdated: number;
+      totalAmount: number;
+      resolvedAt: string;
+    };
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/resolve`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ stationId, resolvedBy })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to resolve vendor: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async createStationFromVendor(
+    vendorId: string,
+    stationData: {
+      name: string;
+      brand?: string;
+      address?: string;
+      location?: { lat: number; lng: number };
+      phone?: string;
+      services?: string[];
+    },
+    resolvedBy: string
+  ): Promise<{
+    success: boolean;
+    newStationCreated: boolean;
+    vendor: any;
+    station: any;
+    updatedTransactions: any[];
+    summary: {
+      transactionsUpdated: number;
+    };
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/create-station`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ stationData, resolvedBy })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to create station: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async rejectUnverifiedVendor(
+    vendorId: string,
+    rejectedBy: string,
+    reason: string,
+    action: 'flag' | 'dismiss' = 'flag'
+  ): Promise<{
+    success: boolean;
+    vendor: any;
+    updatedTransactions: any[];
+    summary: {
+      transactionsAffected: number;
+      action: string;
+      rejectedAt: string;
+    };
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ rejectedBy, reason, action })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to reject vendor: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  // ========================================================================
+  // Transaction-Level Resolution API (Individual Transaction Handling)
+  // ========================================================================
+
+  async resolveTransactionToStation(
+    vendorId: string,
+    transactionId: string,
+    stationId: string
+  ): Promise<{
+    success: boolean;
+    transaction: any;
+    vendor: any;
+    remainingTransactions: number;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/transactions/${transactionId}/resolve`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ stationId })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to resolve transaction: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async createStationFromTransaction(
+    vendorId: string,
+    transactionId: string,
+    stationData: {
+      name: string;
+      brand?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    station: any;
+    transaction: any;
+    vendor: any;
+    remainingTransactions: number;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/transactions/${transactionId}/create-station`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(stationData)
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to create station: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async rejectTransaction(
+    vendorId: string,
+    transactionId: string,
+    reason: string
+  ): Promise<{
+    success: boolean;
+    transaction: any;
+    vendor: any;
+    remainingTransactions: number;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/transactions/${transactionId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ reason })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to reject transaction: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  async searchStations(query: string): Promise<{ stations: any[] }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/stations/search?q=${encodeURIComponent(query)}`,
+      {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to search stations: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  // Phase 8: Legacy Data Migration - Scan for orphaned transactions
+  async scanLegacyTransactions(): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    preview: {
+      totalOrphanedTransactions: number;
+      totalOrphanedFuelLogs: number;
+      reviewQueueCount: number;
+      totalAmountAffected: number;
+      transactions: any[];
+    };
+    message: string;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/migrate-legacy-vendors`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ dryRun: true })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Scan failed: ${errText}`);
+    }
+    
+    return response.json();
+  },
+
+  // Phase 8: Process individual migration transaction
+  async processMigrationTransaction(
+    transactionId: string,
+    action: 'create_vendor' | 'match_station' | 'skip' | 'reject',
+    data?: {
+      stationId?: string;
+      vendorName?: string;
+      resolvedBy?: string;
+      reason?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    action: string;
+    message: string;
+    vendor?: any;
+    station?: any;
+    transaction?: any;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/process-migration-transaction`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ transactionId, action, data })
+      }
+    );
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to process transaction: ${errText}`);
+    }
+    
+    return response.json();
   },
 };
 

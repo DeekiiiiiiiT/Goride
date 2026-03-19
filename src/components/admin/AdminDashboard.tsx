@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity } from 'lucide-react';
+import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity, Car, UserCog, Shield } from 'lucide-react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 
@@ -42,6 +42,11 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
     customerCount: 0,
     fuelStationCount: 0,
     tollStationCount: 0,
+    driverCount: 0,
+    linkedDriverCount: 0,
+    unlinkedDriverCount: 0,
+    teamMemberCount: 0,
+    platformStaffCount: 0,
     loading: true,
   });
   const [platformName, setPlatformName] = useState('Roam Fleet');
@@ -66,6 +71,11 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           customerCount: data.customerCount || 0,
           fuelStationCount: data.fuelStationCount || 0,
           tollStationCount: data.tollStationCount || 0,
+          driverCount: data.driverCount || 0,
+          linkedDriverCount: data.linkedDriverCount || 0,
+          unlinkedDriverCount: data.unlinkedDriverCount || 0,
+          teamMemberCount: data.teamMemberCount || 0,
+          platformStaffCount: data.platformStaffCount || 0,
           loading: false,
         });
       } else {
@@ -123,6 +133,30 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           onClick={() => onNavigate('customers')}
         />
         <DashboardCard
+          icon={<Car className="w-5 h-5 text-amber-400" />}
+          color="bg-amber-500/15"
+          label="Total Drivers"
+          value={stats.driverCount}
+          subtitle={`${stats.linkedDriverCount} linked, ${stats.unlinkedDriverCount} unlinked`}
+          onClick={() => onNavigate('drivers')}
+        />
+        <DashboardCard
+          icon={<UserCog className="w-5 h-5 text-cyan-400" />}
+          color="bg-cyan-500/15"
+          label="Team Members"
+          value={stats.teamMemberCount}
+          subtitle="Across all fleets"
+          onClick={() => onNavigate('team-members')}
+        />
+        <DashboardCard
+          icon={<Shield className="w-5 h-5 text-rose-400" />}
+          color="bg-rose-500/15"
+          label="Platform Staff"
+          value={stats.platformStaffCount}
+          subtitle="Support & Analyst accounts"
+          onClick={() => onNavigate('platform-team')}
+        />
+        <DashboardCard
           icon={<Fuel className="w-5 h-5 text-emerald-400" />}
           color="bg-emerald-500/15"
           label="Gas Stations"
@@ -139,8 +173,8 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           onClick={() => onNavigate('toll-stations')}
         />
         <DashboardCard
-          icon={<Activity className="w-5 h-5 text-amber-400" />}
-          color="bg-amber-500/15"
+          icon={<Activity className="w-5 h-5 text-slate-400" />}
+          color="bg-slate-500/15"
           label="Platform Settings"
           value={platformName}
           subtitle={`Version ${platformVersion}`}

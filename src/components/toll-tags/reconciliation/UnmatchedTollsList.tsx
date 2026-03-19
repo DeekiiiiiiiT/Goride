@@ -421,7 +421,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
             )}
 
             {/* Standard List */}
-            {activeSubTab === 'needs-review' && (
+            {activeSubTab !== 'dispute-refunds' && activeTabTolls.length > 0 && (
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-4">
                     <div className="space-y-1">

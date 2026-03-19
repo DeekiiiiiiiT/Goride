@@ -195,6 +195,11 @@ export const TripManifestSheet: React.FC<TripManifestSheetProps> = ({
                                             <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded w-fit mt-1 uppercase tracking-wide">
                                                 {normalizePlatform(trip.platform)}
                                             </span>
+                                            {trip.serviceCategory === 'courier' && (
+                                                <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded w-fit mt-0.5">
+                                                    📦 Courier
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="text-right">
                                             <span className="text-sm font-mono font-bold text-indigo-600 block">

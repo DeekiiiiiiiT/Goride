@@ -130,10 +130,15 @@ export function ExecutiveDashboard({
   const earningsTrend = useMemo(() => {
       // Phase 6: Ledger is sole source — no trip fallback
       if (fleetSummary?.dailyTrend && fleetSummary.dailyTrend.length > 0) {
-        return fleetSummary.dailyTrend.map(d => ({
-          name: new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }),
-          value: d.earnings,
-        }));
+        // Use month+day format to avoid duplicate keys when data spans >7 days
+        const seen = new Map<string, number>();
+        return fleetSummary.dailyTrend.map(d => {
+          let label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const count = seen.get(label) || 0;
+          seen.set(label, count + 1);
+          if (count > 0) label = `${label} (${count + 1})`;
+          return { name: label, value: d.earnings };
+        });
       }
 
       // Phase 6: Return empty when ledger unavailable
@@ -145,10 +150,14 @@ export function ExecutiveDashboard({
   const topDrivers = useMemo(() => {
       // Phase 6: Ledger is sole source — no trip fallback
       if (fleetSummary?.topDrivers && fleetSummary.topDrivers.length > 0) {
-        return fleetSummary.topDrivers.slice(0, 5).map(d => ({
-          name: (d.driverName || d.driverId).split(' ')[0],
-          earnings: d.earnings,
-        }));
+        const seen = new Map<string, number>();
+        return fleetSummary.topDrivers.slice(0, 5).map(d => {
+          let label = (d.driverName || d.driverId).split(' ')[0];
+          const count = seen.get(label) || 0;
+          seen.set(label, count + 1);
+          if (count > 0) label = `${label} (${count + 1})`;
+          return { name: label, earnings: d.earnings };
+        });
       }
 
       // Phase 6: Return empty when ledger unavailable

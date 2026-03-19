@@ -3,6 +3,7 @@ import { Shield, Loader2, AlertCircle, KeyRound, UserPlus } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { publicAnonKey } from '../../utils/supabase/info';
+import { LockoutCountdown } from '../auth/LockoutCountdown';
 
 /**
  * AdminLoginPage — shown at /admin when no user is logged in.
@@ -20,15 +21,28 @@ export function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [adminExists, setAdminExists] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
 
   // Check if superadmin already exists
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_ENDPOINTS.admin}/admin-check`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        });
-        const data = await res.json();
+        let res: Response | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            res = await fetch(`${API_ENDPOINTS.admin}/admin-check`, {
+              headers: { Authorization: `Bearer ${publicAnonKey}` },
+            });
+            break; // success
+          } catch (fetchErr) {
+            if (attempt < 2) {
+              await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+              continue;
+            }
+            throw fetchErr; // exhausted retries
+          }
+        }
+        const data = await res!.json();
         setAdminExists(data.exists === true);
       } catch (e) {
         console.error('Admin check failed:', e);
@@ -103,6 +117,17 @@ export function AdminLoginPage() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
+
+      if (res.status === 429 || data?.retryAfterSec) {
+        if (data?.retryAfterSec) {
+          setLockoutSeconds(data.retryAfterSec);
+          setError(null);
+        } else {
+          setError(data?.error || 'Too many login attempts. Please try again later.');
+        }
+        return;
+      }
+
       if (!res.ok) throw new Error(data.error || 'Login failed');
 
       // Set session client-side so AuthContext picks it up
@@ -185,6 +210,18 @@ export function AdminLoginPage() {
             </div>
 
             {/* Error */}
+            {lockoutSeconds !== null && lockoutSeconds > 0 ? (
+              <LockoutCountdown
+                retryAfterSec={lockoutSeconds}
+                onExpired={() => {
+                  setLockoutSeconds(null);
+                  setError(null);
+                }}
+                portalName="the Admin Portal"
+                accentColor="bg-amber-500"
+              />
+            ) : (
+            <>
             {error && (
               <div className="mb-4 flex items-start gap-2 bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg px-3 py-2.5 text-sm">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -253,6 +290,8 @@ export function AdminLoginPage() {
                 )}
               </button>
             </form>
+            </>
+            )}
 
             {/* Footer link back to regular app */}
             <div className="mt-6 pt-4 border-t border-slate-800 text-center">

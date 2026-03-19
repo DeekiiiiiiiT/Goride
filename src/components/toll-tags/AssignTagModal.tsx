@@ -62,7 +62,17 @@ export function AssignTagModal({ isOpen, onClose, tag, onAssign }: AssignTagModa
       const updatedTag = {
         ...tag,
         assignedVehicleId: vehicle.id,
-        assignedVehicleName: vehicle.licensePlate
+        assignedVehicleName: vehicle.licensePlate,
+        // Phase 8: Record assignment in history
+        assignmentHistory: [
+          ...(tag.assignmentHistory || []),
+          {
+            vehicleId: vehicle.id,
+            vehicleName: vehicle.licensePlate,
+            assignedAt: new Date().toISOString(),
+          },
+        ],
+        updatedAt: new Date().toISOString(),
       };
       await api.saveTollTag(updatedTag);
 

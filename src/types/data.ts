@@ -8,6 +8,7 @@ export interface Trip {
   requestTime?: string; // ISO date string
   dropoffTime?: string; // ISO date string
   serviceType?: string; // e.g. UberX
+  serviceCategory?: 'ride' | 'courier'; // ride = normal trip, courier = delivery (e.g. InDrive Courier)
   driverId: string;
   driverName?: string;
   amount: number;
@@ -216,10 +217,13 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'viewer' | 'driver';
+  role: string; // 'admin' | 'fleet_owner' | 'fleet_manager' | 'fleet_accountant' | 'fleet_viewer' | 'driver'
   status: 'active' | 'invited' | 'disabled';
   lastActive?: string;
   avatarUrl?: string;
+  isOwner?: boolean;
+  invitedBy?: string | null;
+  invitedAt?: string | null;
 }
 
 export type BusinessType = 'rideshare' | 'delivery' | 'taxi' | 'trucking' | 'shipping';
@@ -650,6 +654,13 @@ export interface FinancialTransaction {
     // Phase 1: Ledger Accounting
     isDebit?: boolean;
     isCredit?: boolean;
+    
+    // Phase 1 (Unverified Vendor System): Gate-Hold & Vendor Verification
+    stationGateHold?: boolean;           // Gate-hold flag for unverified vendors
+    gateReason?: string;                 // Reason for gate-hold
+    unverifiedVendorId?: string;         // Link to unverified_vendor:* entry
+    vendorVerificationStatus?: 'pending' | 'verified' | 'rejected';
+    vendorMatchedAt?: string;            // ISO timestamp when vendor was verified
     
     [key: string]: any;
   };

@@ -25,6 +25,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { TollPlaza } from '../../types/toll';
+import { usePlatformConfig } from '../auth/PlatformConfigContext';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function formatDate(iso?: string) {

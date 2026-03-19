@@ -60,6 +60,7 @@ import { DatePickerWithRange } from "../ui/date-range-picker";
 import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
 import { FUEL_CSV_COLUMNS } from '../../types/csv-schemas';
 import { Download } from 'lucide-react';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface FuelLogTableProps {
     entries: FuelEntry[];
@@ -86,6 +87,7 @@ export function FuelLogTable({
     dateRange,
     onDateRangeChange
 }: FuelLogTableProps) {
+    const { can } = usePermissions();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<string>('all');
     const [filterVehicle, setFilterVehicle] = useState<string>('all');
@@ -472,6 +474,7 @@ export function FuelLogTable({
                         <Input placeholder="Search..." className="pl-8 h-9 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
                     <div className="flex gap-2">
+                        {can('fuel.export') && (
                         <Button 
                             variant="outline" 
                             size="sm" 
@@ -485,6 +488,7 @@ export function FuelLogTable({
                             <Download className="h-3.5 w-3.5" />
                             Export
                         </Button>
+                        )}
                         <Popover>
                             <PopoverTrigger asChild><Button variant="outline" size="sm" className="gap-2 h-9 border-dashed"><FilterIcon className="h-3.5 w-3.5" /> Filters</Button></PopoverTrigger>
                             <PopoverContent className="w-80"><div className="grid gap-2">
@@ -790,7 +794,7 @@ export function FuelLogTable({
                                                         <Eye className="h-3.5 w-3.5 text-slate-500" />
                                                         View Details
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={isLocked} className="gap-2 text-xs cursor-pointer">
+                                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={isLocked || !can('fuel.edit_entry')} className="gap-2 text-xs cursor-pointer">
                                                         <Pencil className="h-3.5 w-3.5 text-slate-500" />
                                                         Edit Log
                                                     </DropdownMenuItem>
@@ -927,7 +931,7 @@ export function FuelLogTable({
                                                         </TableCell>
                                                         <TableCell className="py-2 text-xs font-mono">{tx.odometer?.toLocaleString() || '-'}</TableCell>
                                                         <TableCell className="py-2 text-right">
-                                                            {!tx.isCarryover && (
+                                                            {!tx.isCarryover && can('fuel.edit_entry') && (
                                                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(tx)}>
                                                                     <Pencil className="h-3 w-3" />
                                                                 </Button>
@@ -1120,9 +1124,11 @@ export function FuelLogTable({
 
                             {/* Footer */}
                             <div className="border-t border-slate-100 p-4 flex justify-between items-center bg-slate-50/50">
+                                {can('fuel.edit_entry') && (
                                 <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => { setViewingEntry(null); onEdit(entry); }}>
                                     <Pencil className="h-3 w-3" /> Edit This Log
                                 </Button>
+                                )}
                                 <Button variant="ghost" size="sm" className="text-xs" onClick={() => setViewingEntry(null)}>
                                     Close
                                 </Button>
