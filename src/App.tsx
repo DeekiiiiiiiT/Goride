@@ -183,55 +183,62 @@ function AppContent() {
       return <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-500">Authenticating with Uber...</div>;
   }
 
+  // ---------------------------------------------------------------------------
+  // Session Isolation & Role Gating (Enterprise)
+  // ---------------------------------------------------------------------------
+  // Super Admin Portal — /admin path detection
+  const isAdminPath = window.location.pathname.startsWith('/admin');
+  const isDriverPath = window.location.pathname.startsWith('/driver');
+
+  // Handle role-based session isolation via useEffect to avoid render-phase state updates.
+  // Supabase shares one session across all paths, so we must manually kick users
+  // who are at the "wrong" portal for their role.
+  useEffect(() => {
+    if (!user || loading) return;
+
+    const platformRoles = ['platform_owner', 'platform_support', 'platform_analyst'];
+    const isPlatformUser = role === 'superadmin' || platformRoles.includes(resolvedRole || '');
+
+    if (isAdminPath && !isPlatformUser) {
+      console.warn('[AuthGate] Non-platform user on /admin path — signing out');
+      signOut();
+    } else if (isDriverPath && role !== 'driver') {
+      console.warn('[AuthGate] Non-driver user on /driver path — signing out');
+      signOut();
+    } else if (!isAdminPath && !isDriverPath && role !== 'admin') {
+      // Regular fleet portal at "/" — only 'admin' (fleet manager) allowed
+      console.warn('[AuthGate] Non-manager user on fleet path — signing out');
+      signOut();
+    }
+  }, [user, role, resolvedRole, isAdminPath, isDriverPath, loading, signOut]);
+
+  // ---------------------------------------------------------------------------
+  // Rendering Branches
+  // ---------------------------------------------------------------------------
+
   if (loading) {
       return <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-500">Loading application...</div>;
   }
 
-  // Handle logout (declared early so all branches can use it)
-  const handleLogout = async () => {
-    await signOut();
-  };
-
-  // ---------------------------------------------------------------------------
-  // Super Admin Portal — /admin path detection
-  // Completely separate rendering branch. The regular fleet app at "/" is untouched.
-  // SESSION ISOLATION: Supabase stores one session in localStorage shared across
-  // all paths. If a non-platform user navigates here, we sign them out globally.
-  // This is intentional — true per-portal session isolation would require separate
-  // Supabase client instances with distinct storage keys (future enhancement).
-  // ---------------------------------------------------------------------------
-  const isAdminPath = window.location.pathname.startsWith('/admin');
+  // Super Admin Portal
   if (isAdminPath) {
-    if (!user) return <AdminLoginPage />;
-    // Phase 11: Allow platform_owner, platform_support, platform_analyst
     const platformRoles = ['platform_owner', 'platform_support', 'platform_analyst'];
-    if (role !== 'superadmin' && !platformRoles.includes(resolvedRole || '')) {
-      signOut();
-      return <AdminLoginPage />;
-    }
+    const isPlatformUser = role === 'superadmin' || platformRoles.includes(resolvedRole || '');
+    
+    if (!user || !isPlatformUser) return <AdminLoginPage />;
     return <AdminPortal />;
   }
 
-  // ---------------------------------------------------------------------------
-  // Driver Portal — /driver path detection
-  // Completely separate rendering branch with its own login page.
-  // SESSION ISOLATION: Same global sign-out strategy as /admin (see comment above).
-  // ---------------------------------------------------------------------------
-  const isDriverPath = window.location.pathname.startsWith('/driver');
+  // Driver Portal
   if (isDriverPath) {
-    if (!user) return <DriverLoginPage />;
-    if (role !== 'driver') {
-      // Non-driver logged in at /driver — sign them out silently and show login with generic error
-      signOut();
-      return <DriverLoginPage />;
-    }
+    if (!user || role !== 'driver') return <DriverLoginPage />;
     // Driver user on /driver path — render driver portal
     return (
       <ErrorBoundary name="DriverPortal" userId={user?.id}>
         <DriverLayout 
           currentPage={driverPage} 
           onNavigate={setDriverPage} 
-          onLogout={handleLogout}
+          onLogout={signOut}
           isMenuOpen={isDriverMenuOpen}
           onMenuOpenChange={setDriverMenuOpen}
         >
@@ -241,19 +248,18 @@ function AppContent() {
           {driverPage === 'trips' && <DriverTrips />}
           {driverPage === 'claims' && <DriverClaims />}
           {driverPage === 'equipment' && <DriverEquipment onBack={() => setDriverPage('profile')} />}
-          {driverPage === 'profile' && <DriverProfile onLogout={handleLogout} onNavigate={setDriverPage} />}
+          {driverPage === 'profile' && <DriverProfile onLogout={signOut} onNavigate={setDriverPage} />}
         </DriverLayout>
       </ErrorBoundary>
     );
   }
 
-  if (!user) {
+  // Main Fleet Portal — Shared Gates
+  if (!user || role !== 'admin') {
     return <LoginPage />;
   }
 
-  // ---------------------------------------------------------------------------
   // Maintenance Mode Gate — block non-platform users when maintenance is active
-  // ---------------------------------------------------------------------------
   const isPlatformUser = role === 'superadmin' || ['platform_owner', 'platform_support', 'platform_analyst'].includes(resolvedRole || '');
   if (maintenanceStatus.checked && maintenanceStatus.active && !isPlatformUser) {
     return (
@@ -280,7 +286,7 @@ function AppContent() {
             Your account has been created but is awaiting approval from a platform administrator. You'll be able to access your fleet dashboard once approved.
           </p>
           <button
-            onClick={handleLogout}
+            onClick={signOut}
             className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-medium rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors"
           >
             Sign Out
@@ -290,18 +296,9 @@ function AppContent() {
     );
   }
 
-  // Enterprise gate: WHITELIST — only 'admin' (fleet manager) role allowed on fleet portal.
-  // All other roles (driver, superadmin, platform_owner, platform_support, platform_analyst)
-  // are silently signed out. Global sign-out is intentional — Supabase shares one session
-  // across all paths, so clearing it here means the user must re-login at their correct portal.
-  if (role !== 'admin') {
-    signOut();
-    return <LoginPage />;
-  }
-
   // Fleet Manager View (Default)
   return (
-    <AppLayout currentPage={currentPage} onNavigate={setCurrentPage} onLogout={handleLogout}>
+    <AppLayout currentPage={currentPage} onNavigate={setCurrentPage} onLogout={signOut}>
       <ErrorBoundary name={`MainContent:${currentPage}`} userId={user?.id}>
         {currentPage === 'dashboard' && <Dashboard />}
         {currentPage === 'imports' && (

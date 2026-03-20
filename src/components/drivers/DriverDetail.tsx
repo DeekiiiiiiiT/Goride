@@ -1772,7 +1772,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      const approvedFuelCredits = (transactions || [])
         .filter(t => {
             if (!t) return false;
-            return t.category === 'Fuel Reimbursement Credit' && t.amount > 0;
+            const isFuelCredit = t.category === 'Fuel Reimbursement Credit' || t.category === 'Fuel Reimbursement';
+            return isFuelCredit && t.amount > 0;
         })
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
 

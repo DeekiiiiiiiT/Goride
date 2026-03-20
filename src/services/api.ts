@@ -1,10 +1,27 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase/client';
 import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, DisputeRefund } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
 import { compressImage } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
+
+// Helper to get authorization headers (JWT if logged in, else anon key)
+async function getHeaders(contentType: string | null = 'application/json') {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || publicAnonKey;
+  
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`
+  };
+  
+  if (contentType) {
+    headers['Content-Type'] = contentType;
+  }
+  
+  return headers;
+}
 
 export interface TripFilterParams {
     driverId?: string;
@@ -1233,7 +1250,7 @@ export const api = {
 
   async getUsers() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/users`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch users");
     return response.json();
@@ -1242,10 +1259,7 @@ export const api = {
   async updateUserPassword(userId: string, password: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/update-password`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify({ userId, password })
     });
     if (!response.ok) throw new Error("Failed to update password");
@@ -1255,10 +1269,7 @@ export const api = {
   async updateUser(userId: string, fields: { name?: string; role?: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/update-user`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify({ userId, ...fields })
     });
     if (!response.ok) {
@@ -1273,10 +1284,7 @@ export const api = {
   async teamInvite(data: { email: string; name: string; role: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/invite`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(data)
     });
     if (!response.ok) {
@@ -1288,7 +1296,7 @@ export const api = {
 
   async getTeamMembers() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/members`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch team members");
     return response.json();
@@ -1297,10 +1305,7 @@ export const api = {
   async updateTeamMemberRole(userId: string, role: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/members/${userId}/role`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify({ role })
     });
     if (!response.ok) {
@@ -1313,7 +1318,7 @@ export const api = {
   async removeTeamMember(userId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/members/${userId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));

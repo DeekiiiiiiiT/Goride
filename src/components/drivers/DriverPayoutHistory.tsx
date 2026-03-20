@@ -37,6 +37,7 @@ interface PayoutPeriodRow {
   tollReconciled: number;      // Phase 7: reconciled toll count
   tollUnreconciled: number;    // Phase 7: unreconciled toll count
   fuelDeduction: number;       // driverShare from finalized report (0 if unfinalized)
+  fuelCredits: number;         // New: fleet share credited back to wallet
   totalDeductions: number;     // tollExpenses + fuelDeduction
   netPayout: number;           // driverShare - totalDeductions
   isFinalized: boolean;        // true if a finalized fuel report covers this period
@@ -184,8 +185,9 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
   const periodData: PayoutPeriodRow[] = useMemo(() => {
 
     // ── Shared helper: finalized fuel deduction lookup ──
-    const getDeductionForPeriod = (periodStart: Date, periodEnd: Date): { deduction: number; finalized: boolean } => {
+    const getDeductionForPeriod = (periodStart: Date, periodEnd: Date): { deduction: number; fleetShare: number; finalized: boolean } => {
       let totalDeduction = 0;
+      let totalFleetShare = 0;
       let hasFinalized = false;
 
       for (const report of finalizedReports) {
@@ -198,15 +200,18 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
           if (periodType === 'daily') {
             const weekDays = Math.max(1, differenceInCalendarDays(rEnd, rStart) + 1);
             const dailyShare = (report.driverShare ?? 0) / weekDays;
+            const dailyFleet = (report.companyShare ?? 0) / weekDays;
             totalDeduction += dailyShare;
+            totalFleetShare += dailyFleet;
           } else {
             totalDeduction += (report.driverShare ?? 0);
+            totalFleetShare += (report.companyShare ?? 0);
           }
           hasFinalized = true;
         }
       }
 
-      return { deduction: totalDeduction, finalized: hasFinalized };
+      return { deduction: totalDeduction, fleetShare: totalFleetShare, finalized: hasFinalized };
     };
 
     // ── Shared: Pre-filter expense transactions (for toll keyword matching) ──
@@ -245,25 +250,26 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
       }
 
       // ── Helper: look up cash for a period (weekly exact match, fuzzy ±2 days, monthly sum) ──
-      const getCashForPeriod = (periodStart: Date, periodEnd: Date): { cashOwed: number; cashPaid: number; cashBalance: number } => {
+      const getCashForPeriod = (periodStart: Date, periodEnd: Date): { cashOwed: number; cashPaid: number; cashBalance: number; fuelCredits: number } => {
         if (periodType === 'daily') {
           // Cash is tracked weekly — daily rows show 0 (per plan Step 4.5)
-          return { cashOwed: 0, cashPaid: 0, cashBalance: 0 };
+          return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
         }
 
         if (periodType === 'monthly') {
           // Sum all cash weeks whose start falls within this month
           const mStart = startOfMonth(periodStart);
           const mEnd = endOfMonth(periodStart);
-          let owed = 0, paid = 0, bal = 0;
+          let owed = 0, paid = 0, bal = 0, fCred = 0;
           for (const cw of cashWeeks) {
             if (cw.start >= mStart && cw.start <= mEnd) {
               owed += cw.amountOwed;
               paid += cw.amountPaid;
               bal += cw.balance;
+              fCred += cw.weeklyFuelCredits;
             }
           }
-          return { cashOwed: owed, cashPaid: paid, cashBalance: bal };
+          return { cashOwed: owed, cashPaid: paid, cashBalance: bal, fuelCredits: fCred };
         }
 
         // Weekly: exact match first, then fuzzy ±2 days (same as Settlement tab)
@@ -280,9 +286,9 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
           }
         }
         if (cw) {
-          return { cashOwed: cw.amountOwed, cashPaid: cw.amountPaid, cashBalance: cw.balance };
+          return { cashOwed: cw.amountOwed, cashPaid: cw.amountPaid, cashBalance: cw.balance, fuelCredits: cw.weeklyFuelCredits };
         }
-        return { cashOwed: 0, cashPaid: 0, cashBalance: 0 };
+        return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
       };
 
       let matchedCashCount = 0;
@@ -304,14 +310,19 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
         const { amount: tollExpenses, reconciled: tollReconciled, unreconciled: tollUnreconciled } = getTollsForPeriod(pStartTime, pEndTime);
 
         // Fuel deduction from finalized reports (client-side, unchanged)
-        const { deduction: fuelDeduction, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
+        const { deduction: fuelDeduction, fleetShare, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
 
         const totalDeductions = tollExpenses + fuelDeduction;
         const netPayout = driverShare - totalDeductions;
 
         // Cash data from precomputed cashWeeks
-        const { cashOwed, cashPaid, cashBalance } = getCashForPeriod(periodStart, periodEnd);
+        const { cashOwed, cashPaid, cashBalance, fuelCredits: txFuelCredits } = getCashForPeriod(periodStart, periodEnd);
         if (cashOwed > 0 || cashPaid > 0) matchedCashCount++;
+
+        // Enterprise Sync: If the report is finalized and has a fleet share,
+        // but no explicit fuel credit transaction exists yet, show it as a pending credit
+        // so the settlement amount is correct for the driver.
+        const effectiveFuelCredits = txFuelCredits > 0 ? txFuelCredits : (isFinalized ? fleetShare : 0);
 
         return {
           periodStart,
@@ -323,6 +334,7 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
           tollReconciled,
           tollUnreconciled,
           fuelDeduction,
+          fuelCredits: effectiveFuelCredits,
           totalDeductions,
           netPayout,
           isFinalized,
@@ -331,7 +343,7 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
           cashOwed,
           cashPaid,
           cashBalance,
-          status: (!isFinalized ? 'Pending' : cashBalance > 0.005 ? 'Awaiting Cash' : 'Finalized') as PayoutStatus,
+          status: (!isFinalized ? 'Pending' : (cashBalance - effectiveFuelCredits) > 0.005 ? 'Awaiting Cash' : 'Finalized') as PayoutStatus,
         };
       });
 

@@ -8081,24 +8081,40 @@ app.delete("/make-server-37f42386/claims/:id", async (c) => {
 // Admin: List Users (org-scoped)
 app.get("/make-server-37f42386/users", requireAuth(), async (c) => {
   try {
+    const rbacUser = c.get('rbacUser') as any;
     const { data: { users }, error } = await supabase.auth.admin.listUsers();
     
     if (error) throw error;
     
     // Filter users by organizationId for data isolation
     const orgId = getOrgId(c);
-    const orgUsers = orgId
-      ? users.filter((u: any) => {
-          const uOrgId = u.user_metadata?.organizationId;
-          const uRole = u.user_metadata?.role || '';
-          // Never include platform-level users in any customer's user list
-          const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-          if (platformRoles.includes(uRole)) return false;
-          // Only include users explicitly belonging to this org
-          // Never include users without an organizationId (prevents cross-tenant data leak)
-          return uOrgId === orgId || u.id === orgId;
-        })
-      : users;
+
+    // Determine who we should show based on context
+    const orgUsers = (users || []).filter((u: any) => {
+      const uOrgId = u.user_metadata?.organizationId;
+      const uRole = u.user_metadata?.role || '';
+      
+      // Always hide platform-level users from anyone who isn't a platform role themselves
+      const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+      const isPlatformUser = platformRoles.includes(uRole);
+      const isRequestersPlatform = rbacUser?.resolvedRole && platformRoles.includes(rbacUser.resolvedRole);
+
+      // If requester is NOT a platform user, they can NEVER see platform users
+      if (isPlatformUser && !isRequestersPlatform) return false;
+
+      // If we have an orgId (legit customer session), only show users in that org
+      if (orgId) {
+        return uOrgId === orgId || u.id === orgId;
+      }
+
+      // If no orgId (anon passthrough), they should see NOTHING
+      if (rbacUser?.userId === '_anon_passthrough') return false;
+
+      // Platform users with no orgId (seeing everyone)
+      if (isRequestersPlatform) return true;
+
+      return false;
+    });
     
     // Transform to TeamMember format
     const members = orgUsers.map((u: any) => ({
@@ -8407,22 +8423,38 @@ app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('
 // Step 9.2: GET /team/members — List team members in same org
 app.get("/make-server-37f42386/team/members", requireAuth(), async (c) => {
   try {
+    const rbacUser = c.get('rbacUser') as any;
     const orgId = getOrgId(c);
     const { data: { users }, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (error) throw error;
 
-    const orgUsers = orgId
-      ? (users || []).filter((u: any) => {
-          const uOrgId = u.user_metadata?.organizationId;
-          const uRole = u.user_metadata?.role || '';
-          // Never include platform-level users in any customer's team list
-          const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-          if (platformRoles.includes(uRole)) return false;
-          // Only include users explicitly belonging to this org (matching orgId or IS the org owner)
-          // Never include users without an organizationId (platform staff, unlinked drivers)
-          return uOrgId === orgId || u.id === orgId;
-        })
-      : users || [];
+    // Determine who we should show based on context
+    const orgUsers = (users || []).filter((u: any) => {
+      const uOrgId = u.user_metadata?.organizationId;
+      const uRole = u.user_metadata?.role || '';
+      
+      // Always hide platform-level users from anyone who isn't a platform role themselves
+      const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+      const isPlatformUser = platformRoles.includes(uRole);
+      const isRequestersPlatform = platformRoles.includes(rbacUser?.resolvedRole);
+
+      // If requester is NOT a platform user, they can NEVER see platform users
+      if (isPlatformUser && !isRequestersPlatform) return false;
+
+      // If we have an orgId (legit customer session), only show users in that org
+      if (orgId) {
+        return uOrgId === orgId || u.id === orgId;
+      }
+
+      // If no orgId (anon passthrough or something else), and NOT a platform user, 
+      // they should see NOTHING (or at most themselves if they were a user, but anon is not).
+      if (rbacUser?.userId === '_anon_passthrough') return false;
+
+      // Platform users with no orgId (seeing everyone)
+      if (isRequestersPlatform) return true;
+
+      return false;
+    });
 
     const members = orgUsers.map((u: any) => ({
       id: u.id,
@@ -10845,7 +10877,8 @@ app.post("/make-server-37f42386/admin-login", async (c) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const anonClient = createAnonClient(anonUrl, anonKey);
 
-    const { data, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
+    let signInResult = await anonClient.auth.signInWithPassword({ email, password });
+    let { data, error: signInError } = signInResult;
 
     if (signInError) {
       // Auto-recovery removed (Phase 4): wrong password = fail. No password overwrite, no role promotion.
@@ -10871,6 +10904,13 @@ app.post("/make-server-37f42386/admin-login", async (c) => {
           user_metadata: { ...data.user.user_metadata, role: 'superadmin' },
         });
         role = "superadmin";
+
+        // IMPORTANT: Re-authenticate to get a FRESH session with the new role in the JWT
+        const fresh = await anonClient.auth.signInWithPassword({ email, password });
+        if (fresh.data?.session) {
+          data = fresh.data;
+          console.log(`Fresh session obtained for promoted superadmin: ${email}`);
+        }
       } else {
         console.log(`User ${email} is not the registered superadmin (KV email: ${kvRecord?.email || 'none'})`);
         await recordFailedAttempt(clientIp, 'admin');

@@ -42,6 +42,7 @@ export interface PayoutPeriodRow {
   tollReconciled: number;      // Phase 7: reconciled toll count
   tollUnreconciled: number;    // Phase 7: unreconciled toll count
   fuelDeduction: number;
+  fuelCredits: number;         // New: fleet share credited back to wallet
   totalDeductions: number;
   netPayout: number;
   isFinalized: boolean;
@@ -284,8 +285,18 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
                 label="Cash Paid"
                 value={row.cashPaid > 0.005 ? fmt(row.cashPaid) : '$0.00'}
                 valueColor={row.cashPaid > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
-                sub="Returned to company"
+                sub="Direct cash returns to company"
               />
+
+              {row.fuelCredits > 0.005 && (
+                <LineItem
+                  icon={<Fuel className="h-4 w-4" />}
+                  label="Fuel Credits"
+                  value={fmt(row.fuelCredits)}
+                  valueColor="text-emerald-700"
+                  sub="Fleet share of cash fuel (credited to wallet)"
+                />
+              )}
 
               <Separator className="my-1" />
 
@@ -306,10 +317,12 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
           {/* ── Settlement Bottom Line ── */}
           {/* Only shown when there's cash activity — combines Net Payout and Cash Balance
               into the true settlement figure, matching the Settlement tab's formula:
-              Settlement = Cash Balance − Net Payout */}
+              Settlement = (Cash Balance − Fuel Credits) − Net Payout */}
           {(row.cashOwed > 0.005 || row.cashPaid > 0.005 || row.cashBalance > 0.005) && (() => {
             const netPayout = row.isFinalized ? row.netPayout : 0;
-            const settlement = row.cashBalance - netPayout;
+            // Enterprise Sync: Account for fuel credits if not already in cashBalance
+            const actualCashBalance = row.cashBalance - (row.fuelCredits || 0);
+            const settlement = actualCashBalance - netPayout;
             // Positive settlement = driver owes the fleet
             // Negative settlement = fleet owes the driver
             // Zero = fully settled
@@ -328,9 +341,10 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
 
                 <LineItem
                   icon={<Banknote className="h-4 w-4" />}
-                  label="Cash Balance"
-                  value={fmt(row.cashBalance)}
+                  label="Adj. Cash Balance"
+                  value={fmt(actualCashBalance)}
                   valueColor="text-slate-700"
+                  sub={row.fuelCredits > 0 ? `Original: ${fmt(row.cashBalance)} minus ${fmt(row.fuelCredits)} fuel credit` : "Cash balance for this period"}
                 />
                 <LineItem
                   icon={<DollarSign className="h-4 w-4" />}

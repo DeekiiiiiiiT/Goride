@@ -66,66 +66,51 @@ export const settlementService = {
             // Skip already reconciled
             if (entry.reconciliationStatus === 'Verified' || entry.reconciliationStatus === 'Archived') continue;
 
-            // Determine usage category (simplified for 1-to-1 based on entry type/metadata if available, 
-            // but normally classification happens at aggregate level.
-            // For 1-to-1, we might assume a default split or try to infer.
-            // However, FuelCalculationService calculates 'rideShareCost', 'personalCost' based on TRIPS and MILEAGE,
-            // not strictly per FuelEntry. 
-            // Strategy: Apply the 'Generic' split unless we can map specific fuel to specific miles.
-            // Since we can't map specific liters to specific miles easily without the 'Bucket' logic,
-            // we will use the Report's aggregate ratios to split this specific receipt?
-            // OR simpler: Just apply the "RideShare Coverage" rule to everything? 
-            // NO, that would be wrong for Personal trips.
+            // Apply the 'rideShare' rule as the primary split for the entry
+            const split = getCoverage('rideShare', entry.amount); 
             
-            // CORRECT APPROACH FOR STAGED RECONCILIATION:
-            // The "Weekly Report" has the TOTALS. The "Entries" are just the funding source.
-            // If we want 1-to-1, we are forcing a square peg in a round hole if the usage is mixed.
-            // BUT, usually a driver pays for ALL fuel, or Company pays for ALL fuel.
-            // The "Split" is the net result.
-            
-            // If we commit 1-to-1, we are saying "This receipt is 60% company".
-            // Let's assume the "Ride Share Coverage" applies to the entry if we lack granularity.
-            // BETTER: Use the `FuelRule.coverageValue` (Base Percentage) as the default split for the entry.
-            // If the report shows significant personal usage, the "Deduction" might be a separate bulk transaction?
-            // The prompt says: "Iterate through the `entries`... Apply the active scenario split to EACH entry."
-            
-            // Let's calculate the split based on the Base Rule for now.
-            const split = getCoverage('rideShare', entry.amount); // Defaulting to RideShare rule for the entry
-            
-            let txToCreate: Partial<FinancialTransaction> | null = null;
+            let walletPayment: Partial<FinancialTransaction> | null = null;
+            let payoutDeduction: Partial<FinancialTransaction> | null = null;
             
             if (entry.paymentSource === 'Gas_Card') {
-                // Company Paid.
-                // If Driver has a share, we deduct it.
+                // Case A: Company Paid (Gas Card)
+                // We only need to deduct the driver's portion from their paycheck.
                 if (split.driver > 0.01) {
-                    txToCreate = {
-                        type: 'Expense', // Deduction is an Expense (Credit to Company, Debit to Driver)
+                    payoutDeduction = {
+                        type: 'Expense',
                         category: 'Fuel Deduction',
-                        description: `Fuel Deduction: Share of ${entry.location || 'Fuel'}`,
-                        amount: -Math.abs(split.driver), // Negative = Deduction from Pay
-                        paymentMethod: 'Cash', // Adjustment
+                        description: `Fuel Deduction: Driver Share of ${entry.location || 'Fuel'}`,
+                        amount: -Math.abs(split.driver),
+                        paymentMethod: 'Cash',
                     };
                 }
             } else {
-                // Driver Paid (Personal/Cash).
-                // If Company has a share, we reimburse it.
-                if (split.company > 0.01) {
-                    txToCreate = {
-                        type: 'Reimbursement',
-                        category: 'Fuel Reimbursement',
-                        description: `Fuel Reimbursement: ${entry.location || 'Fuel'}`,
-                        amount: Math.abs(split.company), // Positive = Add to Pay
+                // Case B: Driver Paid (RideShare Cash)
+                // 1. Credit the WALLET for the FULL amount spent (because that cash is gone).
+                walletPayment = {
+                    type: 'Payment_Received',
+                    category: 'Fuel Reimbursement',
+                    description: `Fuel Credit: Spent cash on ${entry.location || 'Fuel'}`,
+                    amount: Math.abs(entry.amount),
+                    paymentMethod: 'Cash',
+                    metadata: { isFuelCredit: true }
+                };
+
+                // 2. Deduct the DRIVER'S SHARE from their payout.
+                if (split.driver > 0.01) {
+                    payoutDeduction = {
+                        type: 'Expense',
+                        category: 'Fuel Deduction',
+                        description: `Fuel Deduction: Driver Share of ${entry.location || 'Fuel'}`,
+                        amount: -Math.abs(split.driver),
                         paymentMethod: 'Cash',
                     };
                 }
             }
 
-            let savedTxId: string | undefined = undefined;
-
-            if (txToCreate) {
-                // Fill common fields
-                txToCreate = {
-                    ...txToCreate,
+            const processTx = async (tx: Partial<FinancialTransaction>) => {
+                const fullTx = {
+                    ...tx,
                     id: crypto.randomUUID(),
                     date: entry.date.split('T')[0],
                     time: entry.time,
@@ -134,18 +119,30 @@ export const settlementService = {
                     status: 'Approved',
                     isReconciled: true,
                     metadata: {
+                        ...tx.metadata,
                         sourceId: entry.id,
                         scenarioId: activeScenario.id,
-                        settlementType: 'Staged_Reconciliation',
+                        settlementType: 'Enterprise_Fuel_Sync',
                         totalCost: entry.amount,
                         companyShare: split.company,
                         driverShare: split.driver,
-                        reportId: report.id
+                        reportId: report.id,
+                        // Enterprise Sync: Attach work period for correct weekly bucketing
+                        workPeriodStart: report.weekStart,
+                        workPeriodEnd: report.weekEnd
                     }
                 };
+                return await api.saveTransaction(fullTx);
+            };
 
-                const saved = await api.saveTransaction(txToCreate);
+            let savedTxId: string | undefined = undefined;
+
+            if (walletPayment) {
+                const saved = await processTx(walletPayment);
                 savedTxId = saved.id;
+            }
+            if (payoutDeduction) {
+                await processTx(payoutDeduction);
             }
 
             // 4. Update Fuel Entry

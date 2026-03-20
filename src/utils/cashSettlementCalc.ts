@@ -154,13 +154,35 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
         // 3. Approved Fuel Reimbursement Credits in this week
+        // Includes both explicit 'Fuel Reimbursement Credit' and the standard 'Fuel Reimbursement'
+        // created during reconciliation finalization.
         const weeklyFuelCredits = safeTransactions
             .filter(t => {
-                if (!t || !t.date) return false;
+                if (!t) return false;
+                const isFuelCredit = t.category === 'Fuel Reimbursement Credit' || t.category === 'Fuel Reimbursement';
+                if (!isFuelCredit || (t.amount || 0) <= 0) return false;
+
+                // Priority 1: Work Period Metadata (Enterprise Sync)
+                if (t.metadata?.workPeriodStart) {
+                    const startStr = t.metadata.workPeriodStart.split('T')[0];
+                    const payStart = new Date(startStr + 'T12:00:00');
+                    return isWithinInterval(payStart, { start: weekStart, end: weekEnd });
+                }
+
+                // Priority 2: Report ID Parsing (Fuzzy match for existing entries)
+                if (t.metadata?.reportId) {
+                    const parts = t.metadata.reportId.split('_');
+                    const dateStr = parts[parts.length - 1]; // e.g. "2026-03-09"
+                    if (dateStr && dateStr.length === 10 && dateStr.includes('-')) {
+                        const reportStart = new Date(dateStr + 'T12:00:00');
+                        return isWithinInterval(reportStart, { start: weekStart, end: weekEnd });
+                    }
+                }
+
+                // Priority 3: Transaction Date (Fallback for legacy entries)
+                if (!t.date) return false;
                 const tDate = new Date(t.date);
-                return t.category === 'Fuel Reimbursement Credit'
-                    && t.amount > 0
-                    && isWithinInterval(tDate, { start: weekStart, end: weekEnd });
+                return isWithinInterval(tDate, { start: weekStart, end: weekEnd });
             })
             .reduce((sum, t) => sum + (t.amount || 0), 0);
 
@@ -191,8 +213,8 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         if (!t) return false;
         // Exclude Float Issue (Debt)
         if (t.category === 'Float Issue') return false;
-        // Exclude Fuel Credits (already date-allocated above)
-        if (t.category === 'Fuel Reimbursement Credit') return false;
+        // Exclude Fuel Credits (already date-allocated above in Phase 1)
+        if (t.category === 'Fuel Reimbursement Credit' || t.category === 'Fuel Reimbursement') return false;
 
         // Strict Safety: Never include Tag Balance operations as Driver Credits
         if (t.paymentMethod === 'Tag Balance') return false;
