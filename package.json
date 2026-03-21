@@ -47,7 +47,6 @@
     "lucide-react": "^0.487.0",
     "motion": "*",
     "next-themes": "^0.4.6",
-    "node:buffer": "*",
     "openai": "*",
     "papaparse": "*",
     "pdfjs-dist": "*",
