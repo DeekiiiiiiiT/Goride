@@ -2013,7 +2013,9 @@ export const api = {
   },
 
   async deleteFinalizedReport(weekStart: string, vehicleId: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekStart)}/${encodeURIComponent(vehicleId)}`, {
+    // Same date key as POST/snapshot: YYYY-MM-DD only (avoids colons in URL path + matches KV key)
+    const weekKey = String(weekStart).split('T')[0];
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekKey)}/${encodeURIComponent(vehicleId)}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

@@ -71,7 +71,7 @@ export function DriverLoginPage() {
           setError(`${msg} (${data.attemptsRemaining} attempt${data.attemptsRemaining !== 1 ? 's' : ''} remaining before lockout)`);
         } else {
           setError(msg === 'Invalid email or password.'
-            ? 'Invalid email or password. If you haven\'t created an account yet, tap "Create an account" below.'
+            ? 'Invalid email or password. Contact your fleet manager if you need an account.'
             : msg);
         }
         return;
@@ -320,27 +320,12 @@ export function DriverLoginPage() {
               </Button>
             </form>
 
-            {/* Toggle login / register */}
+            {/* Invite-only notice (create-account link removed for simpler driver login) */}
             <div className="mt-6 text-center">
-              {registrationMode === 'invite_only' && !isRegistering ? (
+              {registrationMode === 'invite_only' && !isRegistering && (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Registration is by invitation only. Contact your fleet manager.
                 </p>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (registrationMode === 'invite_only') return;
-                    setIsRegistering(!isRegistering);
-                    setError(null);
-                    setSuccessMessage(null);
-                    setEmail('');
-                    setPassword('');
-                    setName('');
-                  }}
-                  className="text-sm font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300"
-                >
-                  {isRegistering ? 'Already have an account? Sign in' : 'New here? Create an account'}
-                </button>
               )}
             </div>
 

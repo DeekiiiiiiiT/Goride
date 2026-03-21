@@ -91,9 +91,11 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
 
 app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => {
   try {
-    const weekStart = c.req.param("weekStart");
-    const vehicleId = c.req.param("vehicleId");
-    const key = `finalized_report:${weekStart}:${vehicleId}`;
+    // Must match POST key: `finalized_report:${report.weekStart.split('T')[0]}:${vehicleId}`
+    const weekStartRaw = decodeURIComponent(c.req.param("weekStart"));
+    const vehicleId = decodeURIComponent(c.req.param("vehicleId"));
+    const weekKey = weekStartRaw.split("T")[0];
+    const key = `finalized_report:${weekKey}:${vehicleId}`;
     await kv.del(key);
     console.log(`[FinalizedReports] Deleted ${key}`);
     return c.json({ success: true });
