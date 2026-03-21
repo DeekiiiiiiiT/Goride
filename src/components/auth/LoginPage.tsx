@@ -485,32 +485,14 @@ export function LoginPage() {
               </>
             )}
 
-            {/* Toggle login / register */}
+            {/* Invite-only notice (create-account link removed for simpler manager login) */}
             <div className="mt-6 text-center">
-              {registrationMode === 'invite_only' && !isRegistering ? (
+              {registrationMode === 'invite_only' && !isRegistering && (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Registration is by invitation only. Contact your administrator.
                 </p>
-              ) : (
-                <button 
-                  onClick={() => {
-                      if (registrationMode === 'invite_only') return;
-                      setIsRegistering(!isRegistering);
-                      setError(null);
-                      setSuccessMessage(null);
-                      setEmail('');
-                      setPassword('');
-                      setName('');
-                      setAdminSignupStep(1);
-                      setSelectedBusinessType('rideshare');
-                  }}
-                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-                >
-                  {isRegistering ? 'Already have an account? Sign in' : 'New here? Create an account'}
-                </button>
               )}
 
-              {/* Domain restriction notice */}
               {isRegistering && registrationMode === 'domain_restricted' && allowedDomains.length > 0 && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
                   Registration is restricted to: {allowedDomains.map(d => '@' + d).join(', ')}
