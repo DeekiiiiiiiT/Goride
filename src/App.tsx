@@ -29,6 +29,7 @@ import { DatabaseLedgerPage } from './components/database/DatabaseLedgerPage';
 import { TripLedgerPage } from './components/database/TripLedgerPage';
 import { FuelLedgerPage } from './components/database/FuelLedgerPage';
 import { TollLedgerPage } from './components/database/TollLedgerPage';
+import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 
 // Driver Portal Components
 import { DriverLayout } from './components/driver-portal/DriverLayout';
@@ -374,6 +375,11 @@ function AppContent() {
         {currentPage === 'tier-config' && (
           <PermissionGate permission="nav.tier_config" onNavigate={setCurrentPage}>
             <TierConfigPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'driver-ledger' && (
+          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+            <DriverLedgerPage />
           </PermissionGate>
         )}
         

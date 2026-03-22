@@ -99,7 +99,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const { isModuleEnabled } = useFeatureFlags();
   const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'claimable-loss', 'toll-analytics'].includes(currentPage);
   const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage);
-  const isDriverOpsOpen = ['drivers', 'performance', 'tier-config'].includes(currentPage);
+  const isDriverOpsOpen = ['drivers', 'performance', 'tier-config', 'driver-ledger'].includes(currentPage);
   const isDatabaseOpen = ['db-main-ledger', 'db-trip-ledger', 'db-fuel-ledger', 'db-toll-ledger'].includes(currentPage);
 
   return (
@@ -164,6 +164,15 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                     <SidebarMenuSubButton asChild isActive={currentPage === 'tier-config'} onClick={() => onNavigate?.('tier-config')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Tier Config</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('drivers') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'driver-ledger'} onClick={() => onNavigate?.('driver-ledger')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Driver Ledger</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
