@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Card, CardContent } from "../../ui/card";
-import { Loader2, ShieldCheck, Copy, Check, LinkIcon, Unlink, Search, ChevronDown, Sparkles, ExternalLink } from "lucide-react";
+import { Loader2, ShieldCheck, Copy, Check, LinkIcon, Unlink, Search, ChevronDown, Sparkles, CalendarRange } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
+import { groupDisputeRefundsByWeek } from "../../../utils/tollWeekPeriod";
 import { DisputeRefund } from "../../../types/data";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
@@ -34,13 +36,20 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [matchingId, setMatchingId] = useState<string | null>(null);
   const [unmatchingId, setUnmatchingId] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(25);
+  const [visibleWeekCount, setVisibleWeekCount] = useState(12);
   const [statusFilter, setStatusFilter] = useState<'all' | 'unmatched' | 'matched'>('all');
 
   const filtered = useMemo(() => {
     if (statusFilter === 'all') return refunds;
     return refunds.filter(r => r.status === statusFilter);
   }, [refunds, statusFilter]);
+
+  const weekGroups = useMemo(() => groupDisputeRefundsByWeek(filtered), [filtered]);
+  const visibleWeekGroups = weekGroups.slice(0, visibleWeekCount);
+
+  useEffect(() => {
+    setVisibleWeekCount(12);
+  }, [statusFilter]);
 
   const unmatchedCount = refunds.filter(r => r.status === 'unmatched').length;
   const matchedCount = refunds.filter(r => r.status === 'matched' || r.status === 'auto_resolved').length;
@@ -163,173 +172,202 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.slice(0, visibleCount).map(refund => (
-              <React.Fragment key={refund.id}>
-                <TableRow className="[&>td]:py-2 [&>td]:px-3 hover:bg-slate-50/50">
-                  <TableCell className="whitespace-nowrap text-slate-700">
-                    {formatInFleetTz(refund.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap font-medium text-slate-800">
-                    {refund.driverName || <span className="text-slate-400">Unknown</span>}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold text-emerald-600 whitespace-nowrap">
-                    ${refund.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <code className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 max-w-[120px] truncate" title={refund.supportCaseId}>
-                        {refund.supportCaseId.slice(0, 12)}...
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard(refund.supportCaseId, refund.id)}
-                        className="text-slate-400 hover:text-slate-600 transition-colors"
-                        title="Copy full ID"
-                      >
-                        {copiedId === refund.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                      </button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-[10px] font-normal">{refund.platform}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {refund.status === 'unmatched' ? (
-                      <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Unmatched</Badge>
-                    ) : refund.status === 'matched' ? (
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]">Matched</Badge>
-                    ) : (
-                      <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">Auto-Resolved</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {refund.status === 'unmatched' ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs text-teal-600 hover:text-teal-700 hover:bg-teal-50"
-                          onClick={() => loadSuggestions(refund.id)}
-                        >
-                          {expandedRefundId === refund.id ? (
-                            <><ChevronDown className="h-3 w-3 mr-1 rotate-180" /> Close</>
-                          ) : (
-                            <><Sparkles className="h-3 w-3 mr-1" /> Match</>
-                          )}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleUnmatch(refund.id)}
-                          disabled={unmatchingId === refund.id}
-                        >
-                          {unmatchingId === refund.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <><Unlink className="h-3 w-3 mr-1" /> Unlink</>
-                          )}
-                        </Button>
-                      )}
-                    </div>
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-10 text-sm text-slate-500">
+                  No refunds match this filter.
+                </TableCell>
+              </TableRow>
+            ) : (
+              visibleWeekGroups.map((week) => (
+                <TableRow key={week.key} className="border-0 hover:bg-transparent">
+                  <TableCell colSpan={7} className="p-0 align-top">
+                    <Collapsible defaultOpen={false} className="group border-b border-slate-200 last:border-b-0">
+                      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left bg-slate-50/80 dark:bg-slate-900/40 hover:bg-slate-100/90 dark:hover:bg-slate-800/50 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                          <CalendarRange className="h-4 w-4 text-slate-500 shrink-0" />
+                          <span className="font-semibold text-slate-800 dark:text-slate-100">{week.label}</span>
+                          <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
+                          <Badge variant="secondary" className="text-[11px]">{week.items.length} refund{week.items.length !== 1 ? 's' : ''}</Badge>
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <table className="w-full text-xs caption-bottom">
+                          <tbody className="[&_tr:last-child]:border-0">
+                            {week.items.map((refund) => (
+                              <React.Fragment key={refund.id}>
+                                <TableRow className="[&>td]:py-2 [&>td]:px-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                                  <TableCell className="whitespace-nowrap text-slate-700">
+                                    {formatInFleetTz(refund.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                                  </TableCell>
+                                  <TableCell className="whitespace-nowrap font-medium text-slate-800">
+                                    {refund.driverName || <span className="text-slate-400">Unknown</span>}
+                                  </TableCell>
+                                  <TableCell className="text-right font-semibold text-emerald-600 whitespace-nowrap">
+                                    ${refund.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-1">
+                                      <code className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 max-w-[120px] truncate" title={refund.supportCaseId}>
+                                        {refund.supportCaseId.slice(0, 12)}...
+                                      </code>
+                                      <button
+                                        type="button"
+                                        onClick={() => copyToClipboard(refund.supportCaseId, refund.id)}
+                                        className="text-slate-400 hover:text-slate-600 transition-colors"
+                                        title="Copy full ID"
+                                      >
+                                        {copiedId === refund.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                      </button>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-[10px] font-normal">{refund.platform}</Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {refund.status === 'unmatched' ? (
+                                      <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Unmatched</Badge>
+                                    ) : refund.status === 'matched' ? (
+                                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]">Matched</Badge>
+                                    ) : (
+                                      <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">Auto-Resolved</Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      {refund.status === 'unmatched' ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-xs text-teal-600 hover:text-teal-700 hover:bg-teal-50"
+                                          onClick={() => loadSuggestions(refund.id)}
+                                        >
+                                          {expandedRefundId === refund.id ? (
+                                            <><ChevronDown className="h-3 w-3 mr-1 rotate-180" /> Close</>
+                                          ) : (
+                                            <><Sparkles className="h-3 w-3 mr-1" /> Match</>
+                                          )}
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                          onClick={() => handleUnmatch(refund.id)}
+                                          disabled={unmatchingId === refund.id}
+                                        >
+                                          {unmatchingId === refund.id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <><Unlink className="h-3 w-3 mr-1" /> Unlink</>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+
+                                {expandedRefundId === refund.id && (
+                                  <TableRow>
+                                    <TableCell colSpan={7} className="p-0 bg-teal-50/30">
+                                      <div className="px-4 py-3 space-y-2">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-teal-700">
+                                          <Search className="h-3.5 w-3.5" />
+                                          Smart Match Suggestions for ${refund.amount.toFixed(2)} refund
+                                        </div>
+
+                                        {loadingSuggestions ? (
+                                          <div className="flex items-center justify-center py-4">
+                                            <Loader2 className="h-5 w-5 animate-spin text-teal-500" />
+                                            <span className="ml-2 text-xs text-slate-500">Finding matching tolls...</span>
+                                          </div>
+                                        ) : suggestions.length === 0 ? (
+                                          <div className="text-xs text-slate-500 py-3 text-center">
+                                            No matching toll transactions found. The toll may not have been imported yet.
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-1.5">
+                                            {suggestions.map((s) => (
+                                              <Card key={s.tollId} className="border-slate-200 shadow-none">
+                                                <CardContent className="p-3 flex items-center justify-between gap-3">
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                      <span className="text-slate-600">
+                                                        Toll: <span className="font-semibold text-slate-800">${Math.abs(s.tollAmount).toFixed(2)}</span>
+                                                      </span>
+                                                      <span className="text-slate-400">|</span>
+                                                      <span className="text-slate-600">
+                                                        Refund: <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
+                                                      </span>
+                                                      <span className="text-slate-400">|</span>
+                                                      <span className={`font-medium ${Math.abs(s.variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                        {Math.abs(s.variance) < 0.01 ? 'Exact match' : `$${Math.abs(s.variance).toFixed(2)} variance`}
+                                                      </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                                                      <span>{formatInFleetTz(s.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                                                      {s.claimId && (
+                                                        <Badge variant="outline" className="text-[9px] border-purple-200 text-purple-600">
+                                                          Claim: {s.claimStatus || 'Pending'}
+                                                        </Badge>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  <div className="flex items-center gap-2">
+                                                    <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                                      s.confidence >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                                                      s.confidence >= 50 ? 'bg-amber-100 text-amber-700' :
+                                                      'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                      {s.confidence}%
+                                                    </div>
+                                                    <Button
+                                                      size="sm"
+                                                      className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
+                                                      onClick={() => handleMatch(refund.id, s.tollId, s.claimId)}
+                                                      disabled={matchingId === s.tollId}
+                                                    >
+                                                      {matchingId === s.tollId ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                      ) : (
+                                                        <><LinkIcon className="h-3 w-3 mr-1" /> Link</>
+                                                      )}
+                                                    </Button>
+                                                  </div>
+                                                </CardContent>
+                                              </Card>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </tbody>
+                        </table>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </TableCell>
                 </TableRow>
-
-                {/* Expanded suggestions panel */}
-                {expandedRefundId === refund.id && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="p-0 bg-teal-50/30">
-                      <div className="px-4 py-3 space-y-2">
-                        <div className="flex items-center gap-2 text-xs font-medium text-teal-700">
-                          <Search className="h-3.5 w-3.5" />
-                          Smart Match Suggestions for ${refund.amount.toFixed(2)} refund
-                        </div>
-
-                        {loadingSuggestions ? (
-                          <div className="flex items-center justify-center py-4">
-                            <Loader2 className="h-5 w-5 animate-spin text-teal-500" />
-                            <span className="ml-2 text-xs text-slate-500">Finding matching tolls...</span>
-                          </div>
-                        ) : suggestions.length === 0 ? (
-                          <div className="text-xs text-slate-500 py-3 text-center">
-                            No matching toll transactions found. The toll may not have been imported yet.
-                          </div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {suggestions.map((s, i) => (
-                              <Card key={s.tollId} className="border-slate-200 shadow-none">
-                                <CardContent className="p-3 flex items-center justify-between gap-3">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 text-xs">
-                                      <span className="text-slate-600">
-                                        Toll: <span className="font-semibold text-slate-800">${Math.abs(s.tollAmount).toFixed(2)}</span>
-                                      </span>
-                                      <span className="text-slate-400">|</span>
-                                      <span className="text-slate-600">
-                                        Refund: <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
-                                      </span>
-                                      <span className="text-slate-400">|</span>
-                                      <span className={`font-medium ${Math.abs(s.variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                        {Math.abs(s.variance) < 0.01 ? 'Exact match' : `$${Math.abs(s.variance).toFixed(2)} variance`}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                                      <span>{formatInFleetTz(s.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-                                      {s.claimId && (
-                                        <Badge variant="outline" className="text-[9px] border-purple-200 text-purple-600">
-                                          Claim: {s.claimStatus || 'Pending'}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {/* Confidence indicator */}
-                                    <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                      s.confidence >= 80 ? 'bg-emerald-100 text-emerald-700' :
-                                      s.confidence >= 50 ? 'bg-amber-100 text-amber-700' :
-                                      'bg-slate-100 text-slate-600'
-                                    }`}>
-                                      {s.confidence}%
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
-                                      onClick={() => handleMatch(refund.id, s.tollId, s.claimId)}
-                                      disabled={matchingId === s.tollId}
-                                    >
-                                      {matchingId === s.tollId ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        <><LinkIcon className="h-3 w-3 mr-1" /> Link</>
-                                      )}
-                                    </Button>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </React.Fragment>
-            ))}
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
 
-      {/* Load more */}
-      {visibleCount < filtered.length && (
+      {filtered.length > 0 && visibleWeekCount < weekGroups.length && (
         <div className="flex items-center justify-center">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setVisibleCount(prev => prev + 25)}
+            onClick={() => setVisibleWeekCount((prev) => prev + 8)}
             className="text-slate-600 hover:text-slate-900"
           >
             <ChevronDown className="h-4 w-4 mr-1" />
-            Show More ({visibleCount} of {filtered.length})
+            Show more weeks ({visibleWeekCount} of {weekGroups.length})
           </Button>
         </div>
       )}

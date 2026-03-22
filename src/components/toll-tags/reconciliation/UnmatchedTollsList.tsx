@@ -13,7 +13,9 @@ import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
 import { DisputeRefundsList } from "./DisputeRefundsList";
-import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil, HelpCircle, DollarSign, Route, CarFront, ShieldCheck } from "lucide-react";
+import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil, HelpCircle, DollarSign, Route, CarFront, ShieldCheck, CalendarRange } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
+import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
 
 type UnmatchedSubTab = 'needs-review' | 'underpaid' | 'deadhead' | 'personal-use' | 'dispute-refunds';
 
@@ -39,7 +41,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
     const [visibleSmartMatches, setVisibleSmartMatches] = useState(10);
-    const [visibleOtherTolls, setVisibleOtherTolls] = useState(25);
+    const [visibleWeekCount, setVisibleWeekCount] = useState(12);
     const [activeSubTab, setActiveSubTab] = useState<UnmatchedSubTab>('needs-review');
     const fleetTz = useFleetTimezone();
 
@@ -141,7 +143,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     // Reset visible counts when sub-tab changes
     useEffect(() => {
         setVisibleSmartMatches(10);
-        setVisibleOtherTolls(25);
+        setVisibleWeekCount(12);
     }, [activeSubTab]);
 
     // Group trips by vehicle for time-based driver inference
@@ -245,16 +247,6 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         );
     };
 
-    if (tolls.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-4" />
-                <h3 className="text-lg font-medium text-slate-900">All Tolls Reconciled</h3>
-                <p>Great job! No unmatched toll transactions found.</p>
-            </div>
-        );
-    }
-
     // Separate tolls into those with visible matches and others
     // Phase 4: Scope to active sub-tab bucket instead of all filteredTolls
     const activeTabTolls = classified[activeSubTab];
@@ -272,6 +264,24 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     });
 
     const otherTolls = activeTabTolls.filter(tx => !smartMatches.includes(tx));
+
+    const smartWeekGroups = useMemo(
+        () => groupTollsByWeek(smartMatches.slice(0, visibleSmartMatches)),
+        [smartMatches, visibleSmartMatches]
+    );
+
+    const otherWeekGroups = useMemo(() => groupTollsByWeek(otherTolls), [otherTolls]);
+    const visibleOtherWeekGroups = otherWeekGroups.slice(0, visibleWeekCount);
+
+    if (tolls.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-4" />
+                <h3 className="text-lg font-medium text-slate-900">All Tolls Reconciled</h3>
+                <p>Great job! No unmatched toll transactions found.</p>
+            </div>
+        );
+    }
 
     const getMatchBadge = (match: MatchResult) => {
         switch (match.matchType) {
@@ -386,23 +396,40 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                         <Sparkles className="h-5 w-5" />
                         <h3 className="font-semibold">Smart Suggestions ({smartMatches.length})</h3>
                     </div>
-                    <div className="grid grid-cols-1 gap-4">
-                        {smartMatches.slice(0, visibleSmartMatches).map(tx => {
-                            const match = suggestions.get(tx.id)![0];
-                            return (
-                                <SuggestedMatchCard 
-                                    key={tx.id}
-                                    transaction={tx}
-                                    match={match}
-                                    onConfirm={() => onReconcile(tx, match.trip)}
-                                    onDismiss={() => handleDismiss(tx.id)}
-                                    onApprove={onApprove ? () => onApprove(tx) : undefined}
-                                    onReject={onReject ? () => onReject(tx) : undefined}
-                                    onFlag={onFlag ? () => onFlag(tx) : undefined}
-                                    onClickDetail={() => openDetail(tx, match)}
-                                />
-                            );
-                        })}
+                    <div className="space-y-3">
+                        {smartWeekGroups.map((week) => (
+                            <Collapsible key={week.key} defaultOpen={false} className="group rounded-xl border border-indigo-200/80 bg-indigo-50/50 dark:bg-indigo-950/25 dark:border-indigo-800/50 overflow-hidden shadow-sm">
+                                <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 transition-colors">
+                                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                        <CalendarRange className="h-4 w-4 text-indigo-600 shrink-0" />
+                                        <span className="font-semibold text-slate-800 dark:text-slate-100">{week.label}</span>
+                                        <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
+                                        <Badge variant="secondary" className="text-[11px]">{week.items.length} toll{week.items.length !== 1 ? 's' : ''}</Badge>
+                                    </div>
+                                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                    <div className="grid grid-cols-1 gap-4 px-4 pb-4 pt-0 border-t border-indigo-100/80 dark:border-indigo-800/50">
+                                        {week.items.map(tx => {
+                                            const match = suggestions.get(tx.id)![0];
+                                            return (
+                                                <SuggestedMatchCard
+                                                    key={tx.id}
+                                                    transaction={tx}
+                                                    match={match}
+                                                    onConfirm={() => onReconcile(tx, match.trip)}
+                                                    onDismiss={() => handleDismiss(tx.id)}
+                                                    onApprove={onApprove ? () => onApprove(tx) : undefined}
+                                                    onReject={onReject ? () => onReject(tx) : undefined}
+                                                    onFlag={onFlag ? () => onFlag(tx) : undefined}
+                                                    onClickDetail={() => openDetail(tx, match)}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </CollapsibleContent>
+                            </Collapsible>
+                        ))}
                     </div>
                     {visibleSmartMatches < smartMatches.length && (
                         <div className="flex items-center justify-center">
@@ -454,122 +481,153 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {otherTolls.slice(0, visibleOtherTolls).map(tx => {
-                                const bestMatch = suggestions.get(tx.id)?.[0];
-                                const hasHiddenMatch = hiddenSuggestions.has(tx.id);
-                                const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
-                                const inferredDriver = getInferredDriver(vehicleId, tx.date);
-                                const displayDriver = tx.driverName || bestMatch?.trip.driverName || inferredDriver;
+                            {otherTolls.length === 0 ? (
+                                <TableRow className="hover:bg-transparent">
+                                    <TableCell colSpan={6} className="text-center text-slate-500 py-10 text-sm">
+                                        No tolls in this list — remaining items may appear under Smart Suggestions above.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                visibleOtherWeekGroups.map((week) => (
+                                    <TableRow key={week.key} className="border-0 hover:bg-transparent">
+                                        <TableCell colSpan={6} className="p-0 align-top">
+                                            <Collapsible defaultOpen={false} className="group border-b border-slate-200 last:border-b-0">
+                                                <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-2 py-3 text-left bg-slate-50/80 dark:bg-slate-900/40 hover:bg-slate-100/90 dark:hover:bg-slate-800/50 transition-colors">
+                                                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                                        <CalendarRange className="h-4 w-4 text-slate-500 shrink-0" />
+                                                        <span className="font-semibold text-slate-800 dark:text-slate-100">{week.label}</span>
+                                                        <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
+                                                        <Badge variant="secondary" className="text-[11px]">{week.items.length} toll{week.items.length !== 1 ? 's' : ''}</Badge>
+                                                    </div>
+                                                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
+                                                </CollapsibleTrigger>
+                                                <CollapsibleContent>
+                                                    <table className="w-full text-sm caption-bottom">
+                                                        <tbody className="[&_tr:last-child]:border-0">
+                                                            {week.items.map(tx => {
+                                                                const bestMatch = suggestions.get(tx.id)?.[0];
+                                                                const hasHiddenMatch = hiddenSuggestions.has(tx.id);
+                                                                const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
+                                                                const inferredDriver = getInferredDriver(vehicleId, tx.date);
+                                                                const displayDriver = tx.driverName || bestMatch?.trip.driverName || inferredDriver;
 
-                                return (
-                                    <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined)}>
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                {(() => {
-                                                    try {
-                                                        const timeStr = tx.time || '12:00:00';
-                                                        const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-                                                        const localDate = new Date(`${tx.date}T${cleanTime}`);
-                                                        const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
-                                                        
-                                                        const isFutureDate = validDate > new Date();
-                                                        return (
-                                                            <>
-                                                                <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{formatInFleetTz(validDate, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                                                <span className="text-xs text-slate-500">{formatInFleetTz(validDate, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-                                                                {isFutureDate && (
-                                                                    <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>
-                                                                )}
-                                                            </>
-                                                        );
-                                                    } catch (e) {
-                                                        return <span className="font-medium">{tx.date}</span>;
-                                                    }
-                                                })()}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center space-x-2">
-                                                <div className="flex items-center">
-                                                    <Tag className="w-3 h-3 mr-1 text-slate-400" />
-                                                    <span>{vehicleId || <span className="text-slate-400">Unknown</span>}</span>
-                                                </div>
-                                                {tx.receiptUrl && (
-                                                    <a href={tx.receiptUrl} target="_blank" rel="noopener noreferrer" className="cursor-pointer hover:opacity-80 transition-opacity">
-                                                        <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">
-                                                            <Camera className="w-3 h-3 mr-1" /> Receipt
-                                                        </Badge>
-                                                    </a>
-                                                )}
-                                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); openEdit(tx); }}>
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                             {displayDriver ? (
-                                                <div className="flex items-center group relative">
-                                                    {!tx.driverName && (
-                                                        <User className="w-3 h-3 mr-1.5 text-slate-400" />
-                                                    )}
-                                                    <span className={`text-sm font-medium ${tx.driverName ? 'text-slate-700' : 'text-slate-600'}`}>
-                                                        {displayDriver}
-                                                    </span>
-                                                    {!tx.driverName && (
-                                                        <span className="ml-2 hidden group-hover:inline-block text-[10px] text-slate-400 bg-slate-100 px-1 rounded">
-                                                            (Inferred)
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <span className="text-slate-400 font-normal italic">Unassigned</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="font-medium text-rose-600">
-                                            -${Math.abs(tx.amount).toFixed(2)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {bestMatch && !hasHiddenMatch ? (
-                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                    {getMatchBadge(bestMatch)}
-                                                    {bestMatch.confidenceScore != null && (
-                                                        <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${getScoreColor(bestMatch.confidenceScore)}`} title={`Confidence score: ${bestMatch.confidenceScore}/100`}>
-                                                            <Gauge className="h-3 w-3" />
-                                                            {bestMatch.confidenceScore}
-                                                        </span>
-                                                    )}
-                                                    {bestMatch.isAmbiguous && (
-                                                        <span title="Ambiguous — multiple trips compete with similar scores">
-                                                            <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50">Likely Personal</Badge>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                                            {hasHiddenMatch ? (
-                                                <Button size="sm" variant="ghost" disabled>Dismissed</Button>
-                                            ) : (
-                                                renderActionButtons(tx, bestMatch)
-                                            )}
+                                                                return (
+                                                                    <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined)}>
+                                                                        <TableCell>
+                                                                            <div className="flex flex-col">
+                                                                                {(() => {
+                                                                                    try {
+                                                                                        const timeStr = tx.time || '12:00:00';
+                                                                                        const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
+                                                                                        const localDate = new Date(`${tx.date}T${cleanTime}`);
+                                                                                        const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
+
+                                                                                        const isFutureDate = validDate > new Date();
+                                                                                        return (
+                                                                                            <>
+                                                                                                <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{formatInFleetTz(validDate, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                                                                <span className="text-xs text-slate-500">{formatInFleetTz(validDate, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                                                                                                {isFutureDate && (
+                                                                                                    <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>
+                                                                                                )}
+                                                                                            </>
+                                                                                        );
+                                                                                    } catch (e) {
+                                                                                        return <span className="font-medium">{tx.date}</span>;
+                                                                                    }
+                                                                                })()}
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <div className="flex items-center space-x-2">
+                                                                                <div className="flex items-center">
+                                                                                    <Tag className="w-3 h-3 mr-1 text-slate-400" />
+                                                                                    <span>{vehicleId || <span className="text-slate-400">Unknown</span>}</span>
+                                                                                </div>
+                                                                                {tx.receiptUrl && (
+                                                                                    <a href={tx.receiptUrl} target="_blank" rel="noopener noreferrer" className="cursor-pointer hover:opacity-80 transition-opacity">
+                                                                                        <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">
+                                                                                            <Camera className="w-3 h-3 mr-1" /> Receipt
+                                                                                        </Badge>
+                                                                                    </a>
+                                                                                )}
+                                                                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); openEdit(tx); }}>
+                                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                                </Button>
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            {displayDriver ? (
+                                                                                <div className="flex items-center group relative">
+                                                                                    {!tx.driverName && (
+                                                                                        <User className="w-3 h-3 mr-1.5 text-slate-400" />
+                                                                                    )}
+                                                                                    <span className={`text-sm font-medium ${tx.driverName ? 'text-slate-700' : 'text-slate-600'}`}>
+                                                                                        {displayDriver}
+                                                                                    </span>
+                                                                                    {!tx.driverName && (
+                                                                                        <span className="ml-2 hidden group-hover:inline-block text-[10px] text-slate-400 bg-slate-100 px-1 rounded">
+                                                                                            (Inferred)
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <span className="text-slate-400 font-normal italic">Unassigned</span>
+                                                                            )}
+                                                                        </TableCell>
+                                                                        <TableCell className="font-medium text-rose-600">
+                                                                            -${Math.abs(tx.amount).toFixed(2)}
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            {bestMatch && !hasHiddenMatch ? (
+                                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                    {getMatchBadge(bestMatch)}
+                                                                                    {bestMatch.confidenceScore != null && (
+                                                                                        <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${getScoreColor(bestMatch.confidenceScore)}`} title={`Confidence score: ${bestMatch.confidenceScore}/100`}>
+                                                                                            <Gauge className="h-3 w-3" />
+                                                                                            {bestMatch.confidenceScore}
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {bestMatch.isAmbiguous && (
+                                                                                        <span title="Ambiguous — multiple trips compete with similar scores">
+                                                                                            <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50">Likely Personal</Badge>
+                                                                            )}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                                                            {hasHiddenMatch ? (
+                                                                                <Button size="sm" variant="ghost" disabled>Dismissed</Button>
+                                                                            ) : (
+                                                                                renderActionButtons(tx, bestMatch)
+                                                                            )}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </CollapsibleContent>
+                                            </Collapsible>
                                         </TableCell>
                                     </TableRow>
-                                );
-                            })}
+                                ))
+                            )}
                         </TableBody>
                     </Table>
-                    {visibleOtherTolls < otherTolls.length && (
+                    {otherTolls.length > 0 && visibleWeekCount < otherWeekGroups.length && (
                         <div className="flex items-center justify-center pt-4 border-t mt-2">
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => setVisibleOtherTolls(prev => prev + 25)}
+                                onClick={() => setVisibleWeekCount(prev => prev + 8)}
                                 className="text-slate-600 hover:text-slate-900"
                             >
                                 <ChevronDown className="h-4 w-4 mr-1" />
-                                Show More ({visibleOtherTolls} of {otherTolls.length})
+                                Show more weeks ({visibleWeekCount} of {otherWeekGroups.length})
                             </Button>
                         </div>
                     )}
