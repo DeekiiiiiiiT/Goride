@@ -162,9 +162,10 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         const weeklyFuelCredits = safeTransactions
             .filter(t => {
                 if (!t) return false;
-                // Primary: Fuel Settlement (finalization) — correct fleet share
-                // Secondary: Fuel Reimbursement (enterprise sync) — also correct
-                const isFuelCredit = t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement';
+                // Primary: Fuel Settlement Credit (finalization) — correct fleet share (companyShare)
+                // Secondary: Fuel Settlement (legacy finalization) — check metadata.companyShare
+                // Tertiary: Fuel Reimbursement (enterprise sync) — also correct
+                const isFuelCredit = t.category === 'Fuel Settlement Credit' || t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement';
                 if (!isFuelCredit || (t.amount || 0) <= 0) return false;
 
                 // Priority 1: Report ID from metadata (Fuel Settlement stores reportId)
@@ -190,7 +191,18 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
                 const tDate = new Date(t.date);
                 return isWithinInterval(tDate, { start: weekStart, end: weekEnd });
             })
-            .reduce((sum, t) => sum + (t.amount || 0), 0);
+            .reduce((sum, t) => {
+                // For Fuel Settlement Credit, use amount directly (it's already companyShare)
+                if (t.category === 'Fuel Settlement Credit') {
+                    return sum + (t.amount || 0);
+                }
+                // For legacy Fuel Settlement, prefer metadata.companyShare if available
+                if (t.category === 'Fuel Settlement' && t.metadata?.companyShare) {
+                    return sum + (t.metadata.companyShare || 0);
+                }
+                // Fallback: use transaction amount (may be netAdjustment for old Fuel Settlement)
+                return sum + (t.amount || 0);
+            }, 0);
 
         const allocatedPaid = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0) + weeklyExpenses + weeklyFuelCredits;
 
@@ -220,7 +232,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         // Exclude Float Issue (Debt)
         if (t.category === 'Float Issue') return false;
         // Exclude Fuel Credits (already date-allocated above in Phase 1)
-        if (t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement' || t.category === 'Fuel Reimbursement Credit') return false;
+        if (t.category === 'Fuel Settlement Credit' || t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement' || t.category === 'Fuel Reimbursement Credit') return false;
 
         // Strict Safety: Never include Tag Balance operations as Driver Credits
         if (t.paymentMethod === 'Tag Balance') return false;

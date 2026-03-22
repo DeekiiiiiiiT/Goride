@@ -318,6 +318,7 @@ app.post("/fuel-maintenance/reconciliation/finalize", async (c) => {
       }
 
       const netAdjustment = driverOutOfPocket - report.driverShare;
+      const companyShare = report.companyShare ?? 0;
 
       const ledgerTx = {
         id: crypto.randomUUID(),
@@ -334,11 +335,40 @@ app.post("/fuel-maintenance/reconciliation/finalize", async (c) => {
           reportId: report.id,
           driverShare: report.driverShare,
           outOfPocket: driverOutOfPocket,
-          netAdjustment
+          netAdjustment,
+          companyShare, // Fleet share of fuel cost — used by Cash Wallet for fuel credits
         }
       };
 
       await kv.set(`transaction:${ledgerTx.id}`, ledgerTx);
+
+      // Also create a Fuel Credit transaction for Cash Wallet (fleet share credited to driver wallet)
+      // This is the amount we credit back because the driver paid cash for company's portion of fuel.
+      if (companyShare > 0 && driverOutOfPocket > 0) {
+        const fuelCreditTx = {
+          id: `fuel-credit-${report.vehicleId}-${report.weekStart}`,
+          type: 'Payment_Received',
+          category: 'Fuel Settlement Credit',
+          amount: companyShare,
+          status: 'Completed',
+          date: timestamp.split('T')[0],
+          timestamp: timestamp,
+          driverId: report.driverId,
+          vehicleId: report.vehicleId,
+          description: `Fleet fuel share credit: ${report.weekStart} to ${report.weekEnd}`,
+          paymentMethod: 'Cash',
+          isReconciled: true,
+          metadata: {
+            reportId: report.id,
+            source: 'fuel_finalization',
+            companyShare,
+            weekStart: report.weekStart,
+            weekEnd: report.weekEnd,
+          }
+        };
+        await kv.set(`transaction:${fuelCreditTx.id}`, fuelCreditTx);
+      }
+
       results.push({ vehicleId: report.vehicleId, transactionId: ledgerTx.id });
     }
 
