@@ -185,9 +185,13 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
   const [secCash, setSecCash] = useState(true);
   const [secSettlement, setSecSettlement] = useState(true);
   const [cashPaidBreakdownOpen, setCashPaidBreakdownOpen] = useState(false);
+  const [adjCashBalanceBreakdownOpen, setAdjCashBalanceBreakdownOpen] = useState(false);
 
   useEffect(() => {
-    if (!open) setCashPaidBreakdownOpen(false);
+    if (!open) {
+      setCashPaidBreakdownOpen(false);
+      setAdjCashBalanceBreakdownOpen(false);
+    }
   }, [open]);
 
   if (!row) return null;
@@ -201,6 +205,11 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
   const b = row.cashPaidBreakdown;
   const breakdownSum = b ? sumCashPaidParts(b) : 0;
   const breakdownMatches = b && Math.abs(breakdownSum - row.cashPaid) < 0.5;
+
+  const { settlement, adjCashBalance } = getPeriodSettlementComponents(row);
+  const driverOwes = settlement > 0.005;
+  const companyOwes = settlement < -0.005;
+  const isSettled = !driverOwes && !companyOwes;
 
   return (
     <>
@@ -403,14 +412,7 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
           )}
 
           {/* Settlement */}
-          {hasCashActivity &&
-            (() => {
-              const { settlement, adjCashBalance } = getPeriodSettlementComponents(row);
-              const driverOwes = settlement > 0.005;
-              const companyOwes = settlement < -0.005;
-              const isSettled = !driverOwes && !companyOwes;
-
-              return (
+          {hasCashActivity && (
                 <PayoutSection
                   title="Settlement"
                   description="Adj. cash balance minus Net Payout — amount owed"
@@ -418,17 +420,29 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
                   open={secSettlement}
                   onOpenChange={setSecSettlement}
                 >
-                  <LineItem
-                    icon={<Banknote className="h-4 w-4" />}
-                    label="Adj. Cash Balance"
-                    value={fmt(adjCashBalance)}
-                    valueColor="text-slate-700"
-                    sub={
-                      row.fuelCredits > 0
-                        ? `Original ${fmt(row.cashBalance)} minus ${fmt(row.fuelCredits)} fuel credit`
-                        : 'Cash balance for this period'
-                    }
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setAdjCashBalanceBreakdownOpen(true)}
+                    className="flex w-full items-start justify-between gap-3 rounded-lg py-2 px-1 -mx-1 text-left transition-colors hover:bg-indigo-100/50 dark:hover:bg-indigo-950/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/80"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Banknote className="h-4 w-4 shrink-0 text-slate-400" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                          Adj. Cash Balance
+                          <ChevronRight className="h-3.5 w-3.5 text-indigo-600 shrink-0" aria-hidden />
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {row.fuelCredits > 0.005
+                            ? `Original ${fmt(row.cashBalance)} minus ${fmt(row.fuelCredits)} fuel credit — tap for breakdown`
+                            : 'Cash balance for this period — tap for breakdown'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium tabular-nums whitespace-nowrap ml-4 text-slate-700">
+                      {fmt(adjCashBalance)}
+                    </span>
+                  </button>
                   <LineItem
                     icon={<DollarSign className="h-4 w-4" />}
                     label="Net Payout"
@@ -490,8 +504,7 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
                     </div>
                   </div>
                 </PayoutSection>
-              );
-            })()}
+          )}
         </div>
       </SheetContent>
     </Sheet>
@@ -575,6 +588,56 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
             </p>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={adjCashBalanceBreakdownOpen} onOpenChange={setAdjCashBalanceBreakdownOpen}>
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base">Adjusted cash balance</DialogTitle>
+          <DialogDescription className="text-xs">
+            {periodLabel} — cash still held after crediting fleet fuel share to the wallet.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-1 pt-2">
+          <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Cash balance</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Cash owed − cash paid (cash still with driver)</p>
+            </div>
+            <span className="text-sm tabular-nums font-medium text-slate-700 shrink-0">{fmt(row.cashBalance)}</span>
+          </div>
+          <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Fleet fuel credit (wallet)</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Company share of cash fuel credited to the driver</p>
+            </div>
+            <span
+              className={cn(
+                'text-sm tabular-nums font-medium shrink-0',
+                row.fuelCredits > 0.005 ? 'text-rose-600' : 'text-slate-400'
+              )}
+            >
+              {row.fuelCredits > 0.005 ? '−' : ''}
+              {fmt(row.fuelCredits)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-3 mt-1 border-t border-slate-200 dark:border-slate-700">
+            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Adj. cash balance</span>
+            <span className="text-base font-bold tabular-nums text-slate-800 dark:text-slate-100">
+              {fmt(adjCashBalance)}
+            </span>
+          </div>
+          {Math.abs(row.cashBalance - row.fuelCredits - adjCashBalance) > 0.5 && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
+              Formula check: expected {fmt(row.cashBalance - row.fuelCredits)} from settlement.
+            </p>
+          )}
+          <p className="text-[11px] text-slate-500 pt-2 leading-relaxed">
+            This is the cash position after fuel credits, before net payout is applied in the settlement below.
+          </p>
+        </div>
       </DialogContent>
     </Dialog>
     </>
