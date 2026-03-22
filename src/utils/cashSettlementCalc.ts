@@ -153,33 +153,39 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             })
             .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
-        // 3. Approved Fuel Reimbursement Credits in this week
-        // Includes both explicit 'Fuel Reimbursement Credit' and the standard 'Fuel Reimbursement'
-        // created during reconciliation finalization.
+        // 3. Fuel Credits for this week
+        // Primary source: 'Fuel Settlement' created at finalization — uses report.companyShare
+        // (the fleet's share after driver share deducted), matching the reconciliation table.
+        // Fallback: 'Fuel Reimbursement' from settlementService (enterprise sync) if no settlement exists.
+        // NOTE: We intentionally EXCLUDE 'Fuel Reimbursement Credit' (created at individual approval)
+        // because those use the full tx.amount (driver's total cash outlay), not the fleet share.
         const weeklyFuelCredits = safeTransactions
             .filter(t => {
                 if (!t) return false;
-                const isFuelCredit = t.category === 'Fuel Reimbursement Credit' || t.category === 'Fuel Reimbursement';
+                // Primary: Fuel Settlement (finalization) — correct fleet share
+                // Secondary: Fuel Reimbursement (enterprise sync) — also correct
+                const isFuelCredit = t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement';
                 if (!isFuelCredit || (t.amount || 0) <= 0) return false;
 
-                // Priority 1: Work Period Metadata (Enterprise Sync)
-                if (t.metadata?.workPeriodStart) {
-                    const startStr = t.metadata.workPeriodStart.split('T')[0];
-                    const payStart = new Date(startStr + 'T12:00:00');
-                    return isWithinInterval(payStart, { start: weekStart, end: weekEnd });
-                }
-
-                // Priority 2: Report ID Parsing (Fuzzy match for existing entries)
+                // Priority 1: Report ID from metadata (Fuel Settlement stores reportId)
                 if (t.metadata?.reportId) {
+                    // reportId format: "<vehicleId>_<weekStart>" e.g. "abc123_2026-02-16"
                     const parts = t.metadata.reportId.split('_');
-                    const dateStr = parts[parts.length - 1]; // e.g. "2026-03-09"
+                    const dateStr = parts[parts.length - 1]; // e.g. "2026-02-16"
                     if (dateStr && dateStr.length === 10 && dateStr.includes('-')) {
                         const reportStart = new Date(dateStr + 'T12:00:00');
                         return isWithinInterval(reportStart, { start: weekStart, end: weekEnd });
                     }
                 }
 
-                // Priority 3: Transaction Date (Fallback for legacy entries)
+                // Priority 2: Work Period Metadata (Enterprise Sync)
+                if (t.metadata?.workPeriodStart) {
+                    const startStr = t.metadata.workPeriodStart.split('T')[0];
+                    const payStart = new Date(startStr + 'T12:00:00');
+                    return isWithinInterval(payStart, { start: weekStart, end: weekEnd });
+                }
+
+                // Priority 3: Transaction Date (Fallback)
                 if (!t.date) return false;
                 const tDate = new Date(t.date);
                 return isWithinInterval(tDate, { start: weekStart, end: weekEnd });
@@ -214,7 +220,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         // Exclude Float Issue (Debt)
         if (t.category === 'Float Issue') return false;
         // Exclude Fuel Credits (already date-allocated above in Phase 1)
-        if (t.category === 'Fuel Reimbursement Credit' || t.category === 'Fuel Reimbursement') return false;
+        if (t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement' || t.category === 'Fuel Reimbursement Credit') return false;
 
         // Strict Safety: Never include Tag Balance operations as Driver Credits
         if (t.paymentMethod === 'Tag Balance') return false;

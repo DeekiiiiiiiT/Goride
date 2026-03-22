@@ -33,30 +33,10 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
-// Mirror the types from DriverPayoutHistory — keep in sync
-type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Pending';
+import type { PayoutPeriodRow, PayoutStatus } from '../../types/driverPayoutPeriod';
+import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 
-export interface PayoutPeriodRow {
-  periodStart: Date;
-  periodEnd: Date;
-  grossRevenue: number;
-  driverSharePercent: number;
-  driverShare: number;
-  tollExpenses: number;
-  tollReconciled: number;
-  tollUnreconciled: number;
-  fuelDeduction: number;
-  fuelCredits: number;
-  totalDeductions: number;
-  netPayout: number;
-  isFinalized: boolean;
-  tripCount: number;
-  tierName: string;
-  cashOwed: number;
-  cashPaid: number;
-  cashBalance: number;
-  status: PayoutStatus;
-}
+export type { PayoutPeriodRow };
 
 interface PayoutPeriodDetailProps {
   row: PayoutPeriodRow | null;
@@ -383,9 +363,7 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
           {/* Settlement */}
           {hasCashActivity &&
             (() => {
-              const netPayout = row.isFinalized ? row.netPayout : 0;
-              const actualCashBalance = row.cashBalance - (row.fuelCredits || 0);
-              const settlement = actualCashBalance - netPayout;
+              const { settlement, adjCashBalance } = getPeriodSettlementComponents(row);
               const driverOwes = settlement > 0.005;
               const companyOwes = settlement < -0.005;
               const isSettled = !driverOwes && !companyOwes;
@@ -401,7 +379,7 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
                   <LineItem
                     icon={<Banknote className="h-4 w-4" />}
                     label="Adj. Cash Balance"
-                    value={fmt(actualCashBalance)}
+                    value={fmt(adjCashBalance)}
                     valueColor="text-slate-700"
                     sub={
                       row.fuelCredits > 0
@@ -412,7 +390,7 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
                   <LineItem
                     icon={<DollarSign className="h-4 w-4" />}
                     label="Net Payout"
-                    value={row.isFinalized ? `−${fmt(netPayout)}` : 'Pending'}
+                    value={row.isFinalized ? `−${fmt(row.netPayout)}` : 'Pending'}
                     valueColor={row.isFinalized ? 'text-emerald-600' : 'text-amber-600'}
                     sub="Subtracted because the company owes the driver this amount"
                   />

@@ -1,53 +1,17 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
 import { Download, ChevronDown, DollarSign, TrendingDown, Clock, Loader2, CheckCircle, Wallet, Info } from "lucide-react";
-import { FinancialTransaction, TierConfig, Trip, DriverMetrics } from "../../types/data";
-import {
-  format,
-  differenceInCalendarDays,
-  startOfMonth,
-  endOfMonth
-} from "date-fns";
-// Phase 8.5: TierCalculations import removed — was only used by trip-based fallback
-import { tierService } from "../../services/tierService";
-import { api } from "../../services/api";
+import { FinancialTransaction, Trip, DriverMetrics } from "../../types/data";
+import { format } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
-import { computeWeeklyCashSettlement, CashWeekData } from "../../utils/cashSettlementCalc";
 import { PayoutPeriodDetail } from './PayoutPeriodDetail';
-import { isTollCategory } from '../../utils/tollCategoryHelper';
-
-// ────────────────────────────────────────────────────────────
-// Types
-// ────────────────────────────────────────────────────────────
-
-type PeriodType = 'daily' | 'weekly' | 'monthly';
-type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Pending';
-
-interface PayoutPeriodRow {
-  periodStart: Date;
-  periodEnd: Date;
-  grossRevenue: number;        // Total trip earnings in this period
-  driverSharePercent: number;  // Tier % applied
-  driverShare: number;         // grossRevenue * tier%
-  tollExpenses: number;        // Toll transactions (via isTollCategory)
-  tollReconciled: number;      // Phase 7: reconciled toll count
-  tollUnreconciled: number;    // Phase 7: unreconciled toll count
-  fuelDeduction: number;       // driverShare from finalized report (0 if unfinalized)
-  fuelCredits: number;         // New: fleet share credited back to wallet
-  totalDeductions: number;     // tollExpenses + fuelDeduction
-  netPayout: number;           // driverShare - totalDeductions
-  isFinalized: boolean;        // true if a finalized fuel report covers this period
-  tripCount: number;
-  tierName: string;            // Display name, e.g. "Gold", "Silver"
-  cashOwed: number;            // Cash driver collected for this period
-  cashPaid: number;            // Cash driver returned for this period
-  cashBalance: number;         // cashOwed - cashPaid (positive = driver still holds cash)
-  status: PayoutStatus;        // Finalized, Awaiting Cash, Pending
-}
+import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
+import { useDriverPayoutPeriodRows, type PeriodType } from '../../hooks/useDriverPayoutPeriodRows';
+import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 
 // ────────────────────────────────────────────────────────────
 // Props
@@ -66,68 +30,16 @@ interface DriverPayoutHistoryProps {
 
 export function DriverPayoutHistory({ driverId, transactions = [], trips = [], csvMetrics = [] }: DriverPayoutHistoryProps) {
 
-  // ── Phase 3: Tier data (same pattern as DriverEarningsHistory) ──
-  const [tiers, setTiers] = useState<TierConfig[]>([]);
-
-  useEffect(() => {
-    tierService.getTiers().then(setTiers);
-  }, []);
-
-  // ── Phase 3: Finalized reports (same pattern as DriverExpensesHistory) ──
-  const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
-  const [driverVehicleIds, setDriverVehicleIds] = useState<Set<string>>(new Set());
-  const [fuelDataLoading, setFuelDataLoading] = useState(true);
-
-  // ── Phase 8 Step 8.1: Ledger earnings state ──
-  // State declared here (with other useState calls); useEffect is below, after periodType.
-  const [ledgerRows, setLedgerRows] = useState<any[]>([]);
-  const [ledgerLoaded, setLedgerLoaded] = useState(false);
-  const [ledgerError, setLedgerError] = useState(false);
-
-  // ── Phase 4: Period type state + pagination ──
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
   const [visibleCount, setVisibleCount] = useState(12);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadFinalizedData = async () => {
-      setFuelDataLoading(true);
-      try {
-        const [drivers, vehicles, allReports] = await Promise.all([
-          api.getDrivers().catch(() => []),
-          api.getVehicles().catch(() => []),
-          api.getFinalizedReports().catch(() => []),
-        ]);
-        if (cancelled) return;
-
-        const driverRecord = (drivers || []).find((d: any) => d.id === driverId);
-
-        // Build ID set using ONLY native Roam IDs (no Uber/InDrive IDs per core rules)
-        const driverIdSet = new Set<string>([driverId]);
-        if (driverRecord?.driverId) driverIdSet.add(driverRecord.driverId);
-
-        const myVehicles = (vehicles || []).filter(
-          (v: any) => v.currentDriverId && driverIdSet.has(v.currentDriverId)
-        );
-        const vehicleIdSet = new Set<string>(myVehicles.map((v: any) => v.id));
-        setDriverVehicleIds(vehicleIdSet);
-
-        const myReports = (allReports || []).filter(
-          (r: any) => r.status === 'Finalized' && vehicleIdSet.has(r.vehicleId)
-        );
-        setFinalizedReports(myReports);
-      } catch (e) {
-        console.error('[DriverPayoutHistory] Failed to load finalized reports:', e);
-      } finally {
-        if (!cancelled) setFuelDataLoading(false);
-      }
-    };
-    loadFinalizedData();
-    return () => { cancelled = true; };
-  }, [driverId]);
-
-  // ── Phase 3: Combined loading gate ──
-  const isReady = tiers.length > 0 && !fuelDataLoading;
+  const { periodData, isReady } = useDriverPayoutPeriodRows({
+    driverId,
+    trips,
+    transactions,
+    csvMetrics,
+    periodType,
+  });
 
   const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;
 
@@ -135,237 +47,6 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
     setPeriodType(pt);
     setVisibleCount(defaultPageSize(pt));
   };
-
-  // ── Phase 8 Step 8.1: Fetch ledger earnings data ──
-  // Reuses the existing GET /ledger/driver-earnings-history endpoint.
-  // Data is fetched here but NOT yet consumed — Step 8.2 will wire it into periodData.
-  useEffect(() => {
-    let cancelled = false;
-    setLedgerLoaded(false);
-    setLedgerError(false);
-
-    api.getLedgerEarningsHistory({ driverId, periodType })
-      .then((result) => {
-        if (cancelled) return;
-        if (result.success && result.data) {
-          setLedgerRows(result.data);
-          console.log(`[DriverPayoutHistory] Ledger loaded: ${result.data.length} ${periodType} rows (${result.durationMs}ms)`);
-        } else {
-          setLedgerRows([]);
-          console.log('[DriverPayoutHistory] Ledger returned no data');
-        }
-        setLedgerLoaded(true);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('[DriverPayoutHistory] Ledger fetch failed:', err);
-        setLedgerError(true);
-        setLedgerLoaded(true);
-      });
-
-    return () => { cancelled = true; };
-  }, [driverId, periodType]);
-
-  // Phase 8.5: timeBuckets removed — was only needed by trip-based fallback.
-  // The primary ledger path receives pre-bucketed rows from the server.
-
-  // ────────────────────────────────────────────────────────────
-  // Cash settlement: compute weekly cash data once (same utility as Settlement tab)
-  // ────────────────────────────────────────────────────────────
-  const cashWeeks: CashWeekData[] = useMemo(() => {
-    return computeWeeklyCashSettlement({ trips, transactions, csvMetrics });
-  }, [trips, transactions, csvMetrics]);
-
-  // ────────────────────────────────────────────────────────────
-  // Phase 8 Step 8.2: Ledger-Based Period Aggregation (primary)
-  //   Earnings: from server ledger (grossRevenue, driverShare, tier, tripCount)
-  //   Expenses: client-side toll keyword matching + finalized fuel deductions
-  //   Fallback: trip-based computation if ledger unavailable (Step 8.3 safety net)
-  // ────────────────────────────────────────────────────────────
-  const periodData: PayoutPeriodRow[] = useMemo(() => {
-
-    // ── Shared helper: finalized fuel deduction lookup ──
-    const getDeductionForPeriod = (periodStart: Date, periodEnd: Date): { deduction: number; fleetShare: number; finalized: boolean } => {
-      let totalDeduction = 0;
-      let totalFleetShare = 0;
-      let hasFinalized = false;
-
-      for (const report of finalizedReports) {
-        const rStartRaw = report.weekStart ?? report.periodStart ?? '';
-        const rEndRaw = report.weekEnd ?? report.periodEnd ?? '';
-        const rStart = new Date(String(rStartRaw).split('T')[0] + 'T00:00:00');
-        const rEnd = new Date(String(rEndRaw).split('T')[0] + 'T23:59:59');
-
-        if (rStart <= periodEnd && rEnd >= periodStart) {
-          if (periodType === 'daily') {
-            const weekDays = Math.max(1, differenceInCalendarDays(rEnd, rStart) + 1);
-            const dailyShare = (report.driverShare ?? 0) / weekDays;
-            const dailyFleet = (report.companyShare ?? 0) / weekDays;
-            totalDeduction += dailyShare;
-            totalFleetShare += dailyFleet;
-          } else {
-            totalDeduction += (report.driverShare ?? 0);
-            totalFleetShare += (report.companyShare ?? 0);
-          }
-          hasFinalized = true;
-        }
-      }
-
-      return { deduction: totalDeduction, fleetShare: totalFleetShare, finalized: hasFinalized };
-    };
-
-    // ── Shared: Pre-filter expense transactions (for toll keyword matching) ──
-    const expenseTx = transactions.filter(
-      t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0)
-    );
-
-    // ── Shared: Toll expense calculator for a date range ──
-    const getTollsForPeriod = (pStartTime: number, pEndTime: number): { amount: number; reconciled: number; unreconciled: number } => {
-      let tollAmount = 0;
-      let reconciled = 0;
-      let unreconciled = 0;
-      expenseTx.forEach(tx => {
-        const d = new Date(tx.date).getTime();
-        if (d >= pStartTime && d <= pEndTime) {
-          if (isTollCategory(tx.category)) {
-            tollAmount += Math.abs(tx.amount);
-            if (tx.isReconciled) reconciled++;
-            else unreconciled++;
-          }
-        }
-      });
-      return { amount: tollAmount, reconciled, unreconciled };
-    };
-
-    // ══════════════════════════════════════════════════════════
-    // PRIMARY PATH: Ledger-based earnings + client-side expenses
-    // ══════════════════════════════════════════════════════════
-    if (ledgerLoaded && !ledgerError && ledgerRows.length > 0) {
-
-      // ── Cash map: key by Monday date string for fast lookup ──
-      const cashMap = new Map<string, CashWeekData>();
-      for (const cw of cashWeeks) {
-        const key = format(cw.start, 'yyyy-MM-dd');
-        cashMap.set(key, cw);
-      }
-
-      // ── Helper: look up cash for a period (weekly exact match, fuzzy ±2 days, monthly sum) ──
-      const getCashForPeriod = (periodStart: Date, periodEnd: Date): { cashOwed: number; cashPaid: number; cashBalance: number; fuelCredits: number } => {
-        if (periodType === 'daily') {
-          // Cash is tracked weekly — daily rows show 0 (per plan Step 4.5)
-          return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
-        }
-
-        if (periodType === 'monthly') {
-          // Sum all cash weeks whose start falls within this month
-          const mStart = startOfMonth(periodStart);
-          const mEnd = endOfMonth(periodStart);
-          let owed = 0, paid = 0, bal = 0, fCred = 0;
-          for (const cw of cashWeeks) {
-            if (cw.start >= mStart && cw.start <= mEnd) {
-              owed += cw.amountOwed;
-              paid += cw.amountPaid;
-              bal += cw.balance;
-              fCred += cw.weeklyFuelCredits;
-            }
-          }
-          return { cashOwed: owed, cashPaid: paid, cashBalance: bal, fuelCredits: fCred };
-        }
-
-        // Weekly: exact match first, then fuzzy ±2 days (same as Settlement tab)
-        const key = format(periodStart, 'yyyy-MM-dd');
-        let cw = cashMap.get(key);
-        if (!cw) {
-          const keyDate = periodStart;
-          for (const [ck, cv] of cashMap.entries()) {
-            const ckDate = new Date(ck + 'T00:00:00');
-            if (Math.abs(differenceInCalendarDays(keyDate, ckDate)) <= 2) {
-              cw = cv;
-              break;
-            }
-          }
-        }
-        if (cw) {
-          return { cashOwed: cw.amountOwed, cashPaid: cw.amountPaid, cashBalance: cw.balance, fuelCredits: cw.weeklyFuelCredits };
-        }
-        return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
-      };
-
-      let matchedCashCount = 0;
-
-      const rows: PayoutPeriodRow[] = ledgerRows.map((lr: any) => {
-        const periodStart = new Date(lr.periodStart + 'T00:00:00');
-        const periodEnd = new Date(lr.periodEnd + 'T23:59:59');
-        const pStartTime = periodStart.getTime();
-        const pEndTime = periodEnd.getTime();
-
-        // Earnings from ledger (server already computed tier, share, gross)
-        const grossRevenue = lr.grossRevenue || 0;
-        const tripCount = lr.tripCount || 0;
-        const driverSharePercent = lr.tier?.sharePercentage || 0;
-        const driverShare = lr.driverShare || 0;
-        const tierName = lr.tier?.name || 'Default';
-
-        // Toll expenses via keyword matching (client-side, unchanged)
-        const { amount: tollExpenses, reconciled: tollReconciled, unreconciled: tollUnreconciled } = getTollsForPeriod(pStartTime, pEndTime);
-
-        // Fuel deduction from finalized reports (client-side, unchanged)
-        const { deduction: fuelDeduction, fleetShare, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
-
-        const totalDeductions = tollExpenses + fuelDeduction;
-        const netPayout = driverShare - totalDeductions;
-
-        // Cash data from precomputed cashWeeks
-        const { cashOwed, cashPaid, cashBalance, fuelCredits: txFuelCredits } = getCashForPeriod(periodStart, periodEnd);
-        if (cashOwed > 0 || cashPaid > 0) matchedCashCount++;
-
-        // Enterprise Sync: If the report is finalized and has a fleet share,
-        // but no explicit fuel credit transaction exists yet, show it as a pending credit
-        // so the settlement amount is correct for the driver.
-        const effectiveFuelCredits = txFuelCredits > 0 ? txFuelCredits : (isFinalized ? fleetShare : 0);
-
-        return {
-          periodStart,
-          periodEnd,
-          grossRevenue,
-          driverSharePercent,
-          driverShare,
-          tollExpenses,
-          tollReconciled,
-          tollUnreconciled,
-          fuelDeduction,
-          fuelCredits: effectiveFuelCredits,
-          totalDeductions,
-          netPayout,
-          isFinalized,
-          tripCount,
-          tierName,
-          cashOwed,
-          cashPaid,
-          cashBalance,
-          status: (!isFinalized ? 'Pending' : (cashBalance - effectiveFuelCredits) > 0.005 ? 'Awaiting Cash' : 'Finalized') as PayoutStatus,
-        };
-      });
-
-      // Diagnostic logging (Phase 4 Step 4.8)
-      console.log(`[DriverPayoutHistory] Cash weeks computed: ${cashWeeks.length}, matched to payout rows: ${matchedCashCount}`);
-      // Ledger rows arrive newest-first and already filtered for activity by server
-      console.log(`[DriverPayoutHistory] Built ${rows.length} payout rows from LEDGER data`);
-      return rows;
-    }
-
-    // ══════════════════════════════════════════════════════════
-    // FALLBACK PATH (Phase 8.5): Trip-based computation removed.
-    // The trips prop has been eliminated. If the ledger is unavailable,
-    // we log an error and return [] — the Payout tab will show "no data"
-    // rather than silently computing from stale/absent trip data.
-    // ══════════════════════════════════════════════════════════
-    if (ledgerLoaded && (ledgerError || ledgerRows.length === 0)) {
-      console.error('[DriverPayoutHistory] Ledger unavailable — no trip fallback (removed in Phase 8.5). Payout tab will be empty.');
-    }
-
-    return [];
-  }, [ledgerLoaded, ledgerError, ledgerRows, transactions, finalizedReports, periodType, cashWeeks]);
 
   // ────────────────────────────────────────────────────────────
   // Phase 6: Summary totals (3-state counts)
@@ -431,6 +112,9 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
         'Cash Owed': row.cashOwed.toFixed(2),
         'Cash Paid': row.cashPaid.toFixed(2),
         'Cash Balance': row.cashBalance.toFixed(2),
+        'Net Settlement': row.isFinalized
+          ? getPeriodSettlementComponents(row).settlement.toFixed(2)
+          : 'Pending',
         'Status': row.status,
       };
     });

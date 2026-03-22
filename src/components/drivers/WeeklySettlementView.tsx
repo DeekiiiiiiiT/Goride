@@ -6,25 +6,42 @@ import { Progress } from "../ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { ScrollArea } from "../ui/scroll-area";
 import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
-import { 
-    format, 
-    isWithinInterval, 
-    areIntervalsOverlapping 
-} from "date-fns";
-import { DollarSign, Info, Eye, ArrowUpCircle, ArrowDownCircle, Wallet, Banknote, Fuel, Receipt, CreditCard } from "lucide-react";
+import { format } from "date-fns";
+import { DollarSign, Info, Eye, ArrowUpCircle, ArrowDownCircle, Wallet, Banknote, Fuel, Receipt, CreditCard, Scale } from "lucide-react";
 import { cn } from "../ui/utils";
 import { computeWeeklyCashSettlement } from '../../utils/cashSettlementCalc';
+
+/** Match PayoutPeriodDetail currency display. */
+function fmtMoney(n: number) {
+    return '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Monday key yyyy-MM-dd → Payout ledger settlement (same math as Payout period detail). */
+export type WeekSettlementEntry =
+    | { finalized: false }
+    | {
+          finalized: true;
+          settlement: number;
+          adjCashBalance: number;
+          netPayoutApplied: number;
+          cashBalance: number;
+          fuelCredits: number;
+      };
+
+export type WeekSettlementMap = Record<string, WeekSettlementEntry>;
 
 interface WeeklySettlementViewProps {
     trips: Trip[];
     transactions: FinancialTransaction[];
     csvMetrics: DriverMetrics[];
+    /** Optional: net settlement per week from `useDriverPayoutPeriodRows` (weekly). */
+    weekSettlementByMonday?: WeekSettlementMap;
     onLogPayment?: (periodStart: Date, periodEnd: Date, amountOwed: number) => void;
     onWeeksComputed?: (weeks: Array<{ start: Date; end: Date; amountOwed: number; amountPaid: number; balance: number; status: string }>) => void;
     readOnly?: boolean;
 }
 
-export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics = [], onLogPayment, onWeeksComputed, readOnly = false }: WeeklySettlementViewProps) {
+export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics = [], weekSettlementByMonday, onLogPayment, onWeeksComputed, readOnly = false }: WeeklySettlementViewProps) {
     
     const weeks = useMemo(() => {
         return computeWeeklyCashSettlement({ trips, transactions, csvMetrics });
@@ -32,33 +49,6 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
 
     type WeekData = typeof weeks[number];
     const [selectedWeek, setSelectedWeek] = useState<WeekData | null>(null);
-
-    // Get individual transactions for the selected week's overlay
-    const selectedWeekTransactions = useMemo(() => {
-        if (!selectedWeek) return [];
-        const safeTransactions = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
-        return safeTransactions
-            .filter(t => {
-                if (!t || !t.date) return false;
-                const tDate = new Date(t.date);
-                // Direct date match
-                if (isWithinInterval(tDate, { start: selectedWeek.start, end: selectedWeek.end })) return true;
-                // Also include allocated payments that reference this period
-                if (t.metadata?.workPeriodStart) {
-                    // Strip time and reconstruct as local noon to avoid UTC-midnight timezone day-shift
-                    const startStr = t.metadata.workPeriodStart.split('T')[0];
-                    const endStr = t.metadata.workPeriodEnd ? t.metadata.workPeriodEnd.split('T')[0] : startStr;
-                    const payStart = new Date(startStr + 'T12:00:00');
-                    const payEnd = new Date(endStr + 'T12:00:00');
-                    return areIntervalsOverlapping(
-                        { start: payStart, end: payEnd },
-                        { start: selectedWeek.start, end: selectedWeek.end }
-                    );
-                }
-                return false;
-            })
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [selectedWeek, transactions]);
 
     // Call onWeeksComputed if provided
     useEffect(() => {
@@ -138,6 +128,35 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
                                             ${week.balance.toFixed(2)}
                                         </p>
                                     </div>
+                                    {weekSettlementByMonday && (() => {
+                                        const key = format(week.start, 'yyyy-MM-dd');
+                                        const st = weekSettlementByMonday[key];
+                                        if (!st) return null;
+                                        if (!st.finalized) {
+                                            return (
+                                                <div className="space-y-0.5 min-w-[100px] max-w-[140px]">
+                                                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                                                        <Scale className="h-3 w-3" /> Net settlement
+                                                    </p>
+                                                    <p className="text-xs font-medium text-amber-600">Pending</p>
+                                                </div>
+                                            );
+                                        }
+                                        const s = st.settlement;
+                                        return (
+                                            <div className="space-y-0.5 min-w-[100px] max-w-[140px]">
+                                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                                                    <Scale className="h-3 w-3" /> Net settlement
+                                                </p>
+                                                <p className={cn(
+                                                    "text-sm font-bold",
+                                                    s > 0.005 ? "text-rose-600" : s < -0.005 ? "text-blue-600" : "text-emerald-600"
+                                                )}>
+                                                    ${s.toFixed(2)}
+                                                </p>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 {/* Action */}
@@ -394,51 +413,128 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
                                         </p>
                                     </div>
 
-                                    {/* ── Individual Transactions ── */}
-                                    {selectedWeekTransactions.length > 0 && (
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className="h-5 w-5 rounded bg-slate-100 flex items-center justify-center">
-                                                    <Receipt className="h-3 w-3 text-slate-500" />
+                                    {/* ── Net settlement (Payout ledger) — Adj. cash balance − net payout ── */}
+                                    {weekSettlementByMonday && (() => {
+                                        const mondayKey = format(selectedWeek.start, 'yyyy-MM-dd');
+                                        const st = weekSettlementByMonday[mondayKey];
+                                        return (
+                                            <div className="rounded-lg border border-indigo-200/90 bg-indigo-50/50 p-4 space-y-3">
+                                                <div className="flex items-start gap-2.5">
+                                                    <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                                                        <Scale className="h-4 w-4 text-indigo-600" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h4 className="text-sm font-semibold text-slate-800">Net settlement</h4>
+                                                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                                                            Same formula as the Payout tab: adj. cash balance (after fuel credit) minus net payout — what&apos;s left after accounting for earnings owed to the driver.
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                <h4 className="text-sm font-semibold text-slate-800">
-                                                    Transactions This Period
-                                                </h4>
-                                                <Badge variant="outline" className="text-[9px] border-slate-200 text-slate-500">
-                                                    {selectedWeekTransactions.length}
-                                                </Badge>
-                                            </div>
-                                            <div className="rounded-lg border border-slate-200 overflow-hidden">
-                                                <div className="divide-y divide-slate-100">
-                                                    {selectedWeekTransactions.map((tx) => (
-                                                        <div key={tx.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50/50">
-                                                            <div className="flex-1 min-w-0 mr-3">
-                                                                <p className="text-sm text-slate-700 truncate">
-                                                                    {tx.description}
-                                                                </p>
-                                                                <div className="flex items-center gap-2 mt-0.5">
-                                                                    <span className="text-[10px] text-slate-400">
-                                                                        {format(new Date(tx.date), "MMM d, h:mm a")}
+
+                                                {!st && (
+                                                    <p className="text-sm text-slate-600">
+                                                        No Payout row matched this week. If the week start doesn&apos;t align with Payout periods, net settlement won&apos;t appear here.
+                                                    </p>
+                                                )}
+
+                                                {st && st.finalized === false && (
+                                                    <div className="rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-sm text-amber-900">
+                                                        <span className="font-semibold">Pending</span>
+                                                        {' '}
+                                                        <span className="text-amber-800/95">
+                                                            Fuel or earnings aren&apos;t finalized for this period yet — net settlement can&apos;t be computed.
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {st && st.finalized === true && (() => {
+                                                    const driverOwes = st.settlement > 0.005;
+                                                    const companyOwes = st.settlement < -0.005;
+                                                    const isSettled = !driverOwes && !companyOwes;
+                                                    const signedSettlement =
+                                                        st.settlement < 0
+                                                            ? `-${fmtMoney(st.settlement)}`
+                                                            : st.settlement > 0
+                                                              ? fmtMoney(st.settlement)
+                                                              : fmtMoney(0);
+                                                    return (
+                                                        <div className="space-y-3">
+                                                            <div className="rounded-lg border border-slate-200/80 bg-white/80 divide-y divide-slate-100">
+                                                                <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                                                                            <Banknote className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                                            Adj. cash balance
+                                                                        </p>
+                                                                        <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                            {st.fuelCredits > 0.005
+                                                                                ? `Cash balance ${fmtMoney(st.cashBalance)} minus ${fmtMoney(st.fuelCredits)} fuel credit`
+                                                                                : 'Cash balance for this period (no fuel credit applied)'}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-sm font-mono font-semibold text-slate-900 tabular-nums shrink-0">
+                                                                        {fmtMoney(st.adjCashBalance)}
                                                                     </span>
-                                                                    {tx.category && (
-                                                                        <Badge variant="outline" className="text-[9px] border-slate-200 text-slate-500 py-0">
-                                                                            {tx.category}
-                                                                        </Badge>
-                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                                                                            <DollarSign className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                                            Net payout
+                                                                        </p>
+                                                                        <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                            Subtracted — amount the company owes the driver for this period
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-sm font-mono font-semibold text-emerald-700 tabular-nums shrink-0">
+                                                                        −{fmtMoney(st.netPayoutApplied)}
+                                                                    </span>
                                                                 </div>
                                                             </div>
-                                                            <span className={cn(
-                                                                "text-sm font-mono font-semibold shrink-0",
-                                                                (tx.amount || 0) > 0 ? "text-emerald-600" : "text-red-600"
-                                                            )}>
-                                                                {(tx.amount || 0) > 0 ? '+' : '-'}${Math.abs(tx.amount || 0).toFixed(2)}
-                                                            </span>
+
+                                                            <p className="text-center text-[11px] text-slate-500 font-medium px-1">
+                                                                Adj. cash balance − Net payout = Net settlement
+                                                            </p>
+
+                                                            <div
+                                                                className={cn(
+                                                                    'rounded-lg border px-3 py-3 flex items-center justify-between gap-2',
+                                                                    isSettled
+                                                                        ? 'border-emerald-200 bg-emerald-50/90'
+                                                                        : driverOwes
+                                                                          ? 'border-rose-200 bg-rose-50/90'
+                                                                          : 'border-blue-200 bg-blue-50/90'
+                                                                )}
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <p className="text-sm font-semibold text-slate-800">Net settlement</p>
+                                                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                        {isSettled
+                                                                            ? 'Fully settled for this period'
+                                                                            : driverOwes
+                                                                              ? 'Driver owes the fleet'
+                                                                              : 'Company owes the driver'}
+                                                                    </p>
+                                                                </div>
+                                                                <p
+                                                                    className={cn(
+                                                                        'text-xl font-bold font-mono tabular-nums shrink-0',
+                                                                        isSettled
+                                                                            ? 'text-emerald-700'
+                                                                            : driverOwes
+                                                                              ? 'text-rose-700'
+                                                                              : 'text-blue-700'
+                                                                    )}
+                                                                >
+                                                                    {isSettled ? fmtMoney(0) : signedSettlement}
+                                                                </p>
+                                                            </div>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    );
+                                                })()}
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
                             </ScrollArea>
 

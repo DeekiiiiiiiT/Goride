@@ -129,7 +129,13 @@ import { Calendar } from "../ui/calendar";
 import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
-import { WeeklySettlementView } from './WeeklySettlementView';
+import { WeeklySettlementView, type WeekSettlementMap } from './WeeklySettlementView';
+import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
+import {
+  aggregateFinalizedNetSettlement,
+  countPendingEarningsPeriods,
+  getPeriodSettlementComponents,
+} from '../../utils/driverSettlementMath';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
@@ -2119,6 +2125,47 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     return { netOutstanding, lifetimeCashCollected: ledgerLifetimeCash };
   }, [resolvedFinancials.lifetimeCashCollected, metrics.totalCashCollected, metrics.floatHeld, metrics.cashReceived, transactions]);
 
+  /** Same ledger + cash weeks pipeline as Financials → Payout (weekly), for net settlement on Cash Wallet. */
+  const { periodData: walletPayoutPeriodRows } = useDriverPayoutPeriodRows({
+    driverId,
+    trips: allTrips,
+    transactions,
+    csvMetrics,
+    periodType: 'weekly',
+  });
+
+  const walletNetSettlement = useMemo(
+    () => aggregateFinalizedNetSettlement(walletPayoutPeriodRows),
+    [walletPayoutPeriodRows]
+  );
+
+  const walletPendingEarningsWeeks = useMemo(
+    () => countPendingEarningsPeriods(walletPayoutPeriodRows),
+    [walletPayoutPeriodRows]
+  );
+
+  /** Key = Monday yyyy-MM-dd for matching WeeklySettlementView weeks to Payout rows. */
+  const weekSettlementByMonday = useMemo(() => {
+    const map: WeekSettlementMap = {};
+    for (const row of walletPayoutPeriodRows) {
+      const key = format(row.periodStart, 'yyyy-MM-dd');
+      if (!row.isFinalized) {
+        map[key] = { finalized: false };
+        continue;
+      }
+      const comp = getPeriodSettlementComponents(row);
+      map[key] = {
+        finalized: true,
+        settlement: comp.settlement,
+        adjCashBalance: comp.adjCashBalance,
+        netPayoutApplied: comp.netPayoutApplied,
+        cashBalance: row.cashBalance,
+        fuelCredits: row.fuelCredits,
+      };
+    }
+    return map;
+  }, [walletPayoutPeriodRows]);
+
   // ── Auto-Repair: When the completeness guard detects missing ledger platforms,
   // automatically trigger a one-time ledger repair for this driver, then re-fetch.
   // Guards: repairResult starts null on mount, so fires once; repairInProgress prevents overlap.
@@ -3330,11 +3377,36 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
              {/* Summary Cards Row (Phase 5) */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                 {/* Card 1: Net Outstanding */}
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                 {/* Card 1: Net settlement (matches Payout period settlement, finalized weeks only) */}
+                 <Card className="bg-white border-indigo-100/80 shadow-sm ring-1 ring-indigo-100/60">
+                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                         <CardTitle className="text-sm font-medium text-slate-500">Net Settlement</CardTitle>
+                         <Landmark className="h-4 w-4 text-indigo-500" />
+                     </CardHeader>
+                     <CardContent>
+                         <div className={cn("text-2xl font-bold", walletNetSettlement > 0.005 ? "text-rose-600" : walletNetSettlement < -0.005 ? "text-blue-600" : "text-emerald-600")}>
+                             ${walletNetSettlement.toFixed(2)}
+                         </div>
+                         <p className="text-xs text-slate-500 mt-1">
+                             {walletNetSettlement > 0.005
+                               ? "Driver owes fleet (after net payout)"
+                               : walletNetSettlement < -0.005
+                                 ? "Fleet owes driver"
+                                 : "Balanced"}
+                         </p>
+                         {walletPendingEarningsWeeks > 0 && (
+                           <p className="text-[11px] text-amber-600 mt-1">
+                             {walletPendingEarningsWeeks} week{walletPendingEarningsWeeks !== 1 ? 's' : ''} not finalized — excluded from total
+                           </p>
+                         )}
+                     </CardContent>
+                 </Card>
+
+                 {/* Card 2: Cash position (gross — before netting earnings) */}
                  <Card className="bg-white">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Net Outstanding</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Cash Position (gross)</CardTitle>
                          <DollarSign className="h-4 w-4 text-slate-500" />
                      </CardHeader>
                      <CardContent>
@@ -3342,7 +3414,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                              ${walletMetrics.netOutstanding.toFixed(2)}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                             {walletMetrics.netOutstanding > 0 ? "Driver owes platform" : "Platform owes driver"}
+                             Ledger cash + float − payments − cash tolls (pre–net payout)
                          </p>
                      </CardContent>
                  </Card>
@@ -3426,6 +3498,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             trips={allTrips}
                             transactions={transactions}
                             csvMetrics={csvMetrics}
+                            weekSettlementByMonday={weekSettlementByMonday}
                             onWeeksComputed={setSettlementWeeks}
                             onLogPayment={(start, end, amount) => setPaymentModalState({
                                 isOpen: true,
