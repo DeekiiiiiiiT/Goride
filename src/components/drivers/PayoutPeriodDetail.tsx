@@ -2,7 +2,7 @@
 // Payout Period Detail — Sheet overlay showing full breakdown for one period
 // ════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
   Sheet,
@@ -11,6 +11,13 @@ import {
   SheetTitle,
   SheetDescription,
 } from '../ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '../ui/dialog';
 import {
   Collapsible,
   CollapsibleContent,
@@ -31,9 +38,10 @@ import {
   Percent,
   Scale,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
-import type { PayoutPeriodRow, PayoutStatus } from '../../types/driverPayoutPeriod';
+import type { CashPaidBreakdown, PayoutPeriodRow, PayoutStatus } from '../../types/driverPayoutPeriod';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 
 export type { PayoutPeriodRow };
@@ -46,6 +54,16 @@ interface PayoutPeriodDetailProps {
 
 const fmt = (n: number) =>
   '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function sumCashPaidParts(b: CashPaidBreakdown): number {
+  return (
+    b.allocatedPayments +
+    b.tollCredits +
+    b.fuelCreditsInCashPaid +
+    b.fifoPayments +
+    b.surplusPayments
+  );
+}
 
 const statusConfig: Record<PayoutStatus, { icon: React.ReactNode; color: string; bg: string; label: string; description: string }> = {
   Finalized: {
@@ -166,6 +184,11 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
   const [secDeductions, setSecDeductions] = useState(true);
   const [secCash, setSecCash] = useState(true);
   const [secSettlement, setSecSettlement] = useState(true);
+  const [cashPaidBreakdownOpen, setCashPaidBreakdownOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) setCashPaidBreakdownOpen(false);
+  }, [open]);
 
   if (!row) return null;
 
@@ -175,7 +198,12 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
   const hasCashActivity =
     row.cashOwed > 0.005 || row.cashPaid > 0.005 || row.cashBalance > 0.005;
 
+  const b = row.cashPaidBreakdown;
+  const breakdownSum = b ? sumCashPaidParts(b) : 0;
+  const breakdownMatches = b && Math.abs(breakdownSum - row.cashPaid) < 0.5;
+
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader className="pb-2">
@@ -330,21 +358,35 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
                 valueColor={row.cashOwed > 0.005 ? 'text-slate-700' : 'text-slate-400'}
                 sub="Cash collected from passengers"
               />
-              <LineItem
-                icon={<Wallet className="h-4 w-4" />}
-                label="Cash Paid"
-                value={row.cashPaid > 0.005 ? fmt(row.cashPaid) : '$0.00'}
-                valueColor={row.cashPaid > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
-                sub="Direct cash returns to company"
-              />
-
-              {row.fuelCredits > 0.005 && (
+              {row.cashPaid > 0.005 ? (
+                <button
+                  type="button"
+                  onClick={() => setCashPaidBreakdownOpen(true)}
+                  className="flex w-full items-start justify-between gap-3 rounded-lg py-2 px-1 -mx-1 text-left transition-colors hover:bg-sky-100/60 dark:hover:bg-sky-950/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/80"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Wallet className="h-4 w-4 shrink-0 text-slate-400" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                        Cash Paid
+                        <ChevronRight className="h-3.5 w-3.5 text-sky-600 shrink-0" aria-hidden />
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Direct cash returns to company — tap for breakdown
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-medium tabular-nums whitespace-nowrap ml-4 text-emerald-700">
+                    {fmt(row.cashPaid)}
+                  </span>
+                </button>
+              ) : (
                 <LineItem
-                  icon={<Fuel className="h-4 w-4" />}
-                  label="Fuel Credits"
-                  value={fmt(row.fuelCredits)}
-                  valueColor="text-emerald-700"
-                  sub="Fleet share of cash fuel (credited to wallet)"
+                  icon={<Wallet className="h-4 w-4" />}
+                  label="Cash Paid"
+                  value="$0.00"
+                  valueColor="text-slate-400"
+                  sub="Direct cash returns to company"
                 />
               )}
 
@@ -453,5 +495,88 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
         </div>
       </SheetContent>
     </Sheet>
+
+    <Dialog open={cashPaidBreakdownOpen} onOpenChange={setCashPaidBreakdownOpen}>
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base">Cash paid breakdown</DialogTitle>
+          <DialogDescription className="text-xs">
+            {periodLabel} — everything that counts toward &quot;Cash Paid&quot; (reduces cash owed).
+          </DialogDescription>
+        </DialogHeader>
+
+        {!row.cashPaidBreakdown ? (
+          <p className="text-sm text-slate-500 py-2">
+            A detailed breakdown isn&apos;t available for this period. Open{' '}
+            <strong>Cash Wallet</strong> on the driver profile for the weekly settlement detail.
+          </p>
+        ) : (
+          <div className="space-y-1 pt-2">
+            {[
+              {
+                label: 'Allocated payments',
+                sub: 'Cash collections / payments tagged to this work period',
+                value: row.cashPaidBreakdown.allocatedPayments,
+              },
+              {
+                label: 'Cash toll credits',
+                sub: 'Approved cash tolls applied as credits',
+                value: row.cashPaidBreakdown.tollCredits,
+              },
+              {
+                label: 'Fuel credits (in cash paid)',
+                sub: 'Fuel settlement credits included in this total',
+                value: row.cashPaidBreakdown.fuelCreditsInCashPaid,
+              },
+              {
+                label: 'FIFO payments',
+                sub: 'Unallocated payments applied to older weeks first',
+                value: row.cashPaidBreakdown.fifoPayments,
+              },
+              {
+                label: 'Surplus payments',
+                sub: 'Remaining pool assigned to this week',
+                value: row.cashPaidBreakdown.surplusPayments,
+              },
+            ].map((line) => (
+              <div
+                key={line.label}
+                className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{line.label}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{line.sub}</p>
+                </div>
+                <span
+                  className={cn(
+                    'text-sm tabular-nums font-medium shrink-0',
+                    line.value > 0.005 ? 'text-emerald-700' : 'text-slate-400'
+                  )}
+                >
+                  {fmt(line.value)}
+                </span>
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between gap-2 pt-3 mt-1 border-t border-slate-200 dark:border-slate-700">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Total cash paid</span>
+              <span className="text-base font-bold tabular-nums text-emerald-700">{fmt(row.cashPaid)}</span>
+            </div>
+
+            {!breakdownMatches && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
+                Parts sum to {fmt(breakdownSum)}; displayed total stays {fmt(row.cashPaid)} from settlement engine.
+              </p>
+            )}
+
+            <p className="text-[11px] text-slate-500 pt-2 leading-relaxed">
+              Fuel credits and tolls are part of this total because they reduce what the driver still owes against
+              collected cash — the same logic as the Cash Wallet weekly breakdown.
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

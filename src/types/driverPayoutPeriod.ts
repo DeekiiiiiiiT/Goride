@@ -2,6 +2,15 @@
 
 export type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Pending';
 
+/** Matches `CashWeekData.breakdown` + FIFO/surplus — components that sum to Cash Paid (amountPaid). */
+export interface CashPaidBreakdown {
+  allocatedPayments: number;
+  tollCredits: number;
+  fuelCreditsInCashPaid: number;
+  fifoPayments: number;
+  surplusPayments: number;
+}
+
 export interface PayoutPeriodRow {
   periodStart: Date;
   periodEnd: Date;
@@ -22,4 +31,6 @@ export interface PayoutPeriodRow {
   cashPaid: number;
   cashBalance: number;
   status: PayoutStatus;
+  /** From weekly cash settlement — drives Cash Paid drill-down */
+  cashPaidBreakdown?: CashPaidBreakdown;
 }

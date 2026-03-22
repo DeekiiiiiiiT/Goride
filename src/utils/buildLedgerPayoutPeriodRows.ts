@@ -5,7 +5,7 @@ import {
   endOfMonth,
 } from 'date-fns';
 import type { FinancialTransaction, DriverMetrics } from '../types/data';
-import type { PayoutPeriodRow, PayoutStatus } from '../types/driverPayoutPeriod';
+import type { CashPaidBreakdown, PayoutPeriodRow, PayoutStatus } from '../types/driverPayoutPeriod';
 import type { CashWeekData } from './cashSettlementCalc';
 import { isTollCategory } from './tollCategoryHelper';
 
@@ -93,10 +93,35 @@ export function buildLedgerPayoutPeriodRows(params: {
       cashMap.set(key, cw);
     }
 
+    const emptyBreakdown = (): CashPaidBreakdown => ({
+      allocatedPayments: 0,
+      tollCredits: 0,
+      fuelCreditsInCashPaid: 0,
+      fifoPayments: 0,
+      surplusPayments: 0,
+    });
+
+    const breakdownFromWeek = (cw: CashWeekData): CashPaidBreakdown => {
+      const b = cw.breakdown;
+      return {
+        allocatedPayments: b?.allocatedPayments ?? 0,
+        tollCredits: b?.tollExpenses ?? 0,
+        fuelCreditsInCashPaid: b?.fuelCredits ?? 0,
+        fifoPayments: b?.fifoPayments ?? 0,
+        surplusPayments: b?.surplusPayments ?? 0,
+      };
+    };
+
     const getCashForPeriod = (
       periodStart: Date,
       periodEnd: Date
-    ): { cashOwed: number; cashPaid: number; cashBalance: number; fuelCredits: number } => {
+    ): {
+      cashOwed: number;
+      cashPaid: number;
+      cashBalance: number;
+      fuelCredits: number;
+      cashPaidBreakdown?: CashPaidBreakdown;
+    } => {
       if (periodType === 'daily') {
         return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
       }
@@ -108,15 +133,28 @@ export function buildLedgerPayoutPeriodRows(params: {
           paid = 0,
           bal = 0,
           fCred = 0;
+        const agg = emptyBreakdown();
         for (const cw of cashWeeks) {
           if (cw.start >= mStart && cw.start <= mEnd) {
             owed += cw.amountOwed;
             paid += cw.amountPaid;
             bal += cw.balance;
             fCred += cw.weeklyFuelCredits;
+            const br = breakdownFromWeek(cw);
+            agg.allocatedPayments += br.allocatedPayments;
+            agg.tollCredits += br.tollCredits;
+            agg.fuelCreditsInCashPaid += br.fuelCreditsInCashPaid;
+            agg.fifoPayments += br.fifoPayments;
+            agg.surplusPayments += br.surplusPayments;
           }
         }
-        return { cashOwed: owed, cashPaid: paid, cashBalance: bal, fuelCredits: fCred };
+        return {
+          cashOwed: owed,
+          cashPaid: paid,
+          cashBalance: bal,
+          fuelCredits: fCred,
+          cashPaidBreakdown: agg,
+        };
       }
 
       const key = format(periodStart, 'yyyy-MM-dd');
@@ -137,6 +175,7 @@ export function buildLedgerPayoutPeriodRows(params: {
           cashPaid: cw.amountPaid,
           cashBalance: cw.balance,
           fuelCredits: cw.weeklyFuelCredits,
+          cashPaidBreakdown: breakdownFromWeek(cw),
         };
       }
       return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
@@ -169,10 +208,13 @@ export function buildLedgerPayoutPeriodRows(params: {
       const totalDeductions = tollExpenses + fuelDeduction;
       const netPayout = driverShare - totalDeductions;
 
-      const { cashOwed, cashPaid, cashBalance, fuelCredits: txFuelCredits } = getCashForPeriod(
-        periodStart,
-        periodEnd
-      );
+      const {
+        cashOwed,
+        cashPaid,
+        cashBalance,
+        fuelCredits: txFuelCredits,
+        cashPaidBreakdown,
+      } = getCashForPeriod(periodStart, periodEnd);
 
       const effectiveFuelCredits =
         txFuelCredits > 0 ? txFuelCredits : isFinalized ? fleetShare : 0;
@@ -196,6 +238,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashOwed,
         cashPaid,
         cashBalance,
+        cashPaidBreakdown,
         status: (!isFinalized
           ? 'Pending'
           : cashBalance - effectiveFuelCredits > 0.005
