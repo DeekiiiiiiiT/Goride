@@ -1,8 +1,37 @@
 import React, { useState, useEffect } from 'react';
+import { format, isValid, parseISO } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../../ui/dialog";
 import { Button } from "../../ui/button";
 import { FinancialTransaction } from "../../../types/data";
 import { Pencil, Loader2 } from "lucide-react";
+
+/** `<input type="date">` only accepts `yyyy-MM-dd`. Raw tx often stores full ISO datetimes. */
+function toDateInputValue(raw: string | undefined | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const d = parseISO(trimmed);
+  return isValid(d) ? format(d, 'yyyy-MM-dd') : '';
+}
+
+/** `<input type="time">` needs `HH:mm`. Derive from `time` or from ISO `date` when time is absent. */
+function toTimeStateValue(rawTime: string | undefined | null, dateFallback: string | undefined | null): string {
+  const t = (rawTime && String(rawTime).trim()) || '';
+  const m = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const h = Math.min(23, parseInt(m[1], 10));
+    const min = Math.min(59, parseInt(m[2], 10));
+    const sec = m[3] !== undefined ? Math.min(59, parseInt(m[3], 10)) : 0;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  }
+  if (dateFallback) {
+    const d = parseISO(String(dateFallback).trim());
+    if (isValid(d)) {
+      return `${format(d, 'HH:mm')}:00`;
+    }
+  }
+  return '';
+}
 
 interface EditTollModalProps {
     isOpen: boolean;
@@ -23,8 +52,8 @@ export function EditTollModal({ isOpen, onClose, transaction, onSave }: EditToll
     // Populate fields when transaction changes
     useEffect(() => {
         if (transaction) {
-            setDate(transaction.date || '');
-            setTime(transaction.time || '');
+            setDate(toDateInputValue(transaction.date));
+            setTime(toTimeStateValue(transaction.time, transaction.date));
             setAmount(Math.abs(transaction.amount).toString());
             setVehiclePlate(transaction.vehiclePlate || transaction.vehicleId || '');
             setDriverName(transaction.driverName || '');
@@ -38,14 +67,17 @@ export function EditTollModal({ isOpen, onClose, transaction, onSave }: EditToll
         try {
             const updates: Record<string, any> = {};
 
-            // Only include fields that actually changed
-            if (date !== (transaction.date || '')) updates.date = date;
-            if (time !== (transaction.time || '')) updates.time = time;
+            const initialDate = toDateInputValue(transaction.date);
+            const initialTime = toTimeStateValue(transaction.time, transaction.date);
+
+            // Only include fields that actually changed (compare normalized values, not raw ISO)
+            if (date !== initialDate) updates.date = date;
+            if (time !== initialTime) updates.time = time;
             
             const newAmount = parseFloat(amount);
             if (!isNaN(newAmount) && newAmount !== Math.abs(transaction.amount)) {
-                // Store as negative (expense)
-                updates.amount = -Math.abs(newAmount);
+                const isDebit = transaction.amount < 0;
+                updates.amount = isDebit ? -Math.abs(newAmount) : Math.abs(newAmount);
             }
             
             const origPlate = transaction.vehiclePlate || transaction.vehicleId || '';

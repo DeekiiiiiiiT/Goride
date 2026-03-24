@@ -17,6 +17,7 @@ import { TollLogStats } from '../components/toll/TollLogStats';
 import { TollLogTable } from '../components/toll/TollLogTable';
 import { TollLogFilters } from '../components/toll/TollLogFilters';
 import { TollLogDetailPanel } from '../components/toll/TollLogDetailPanel';
+import { EditTollModal } from '../components/toll-tags/reconciliation/EditTollModal';
 import { TollLogEntry, TollLogFiltersState, DEFAULT_TOLL_LOG_FILTERS, TOLL_LOG_CSV_COLUMNS } from '../types/tollLog';
 import { isWithinInterval, parseISO, startOfDay, endOfDay, format } from 'date-fns';
 import { api } from '../services/api';
@@ -91,6 +92,7 @@ function fmtJMD(value: number): string {
 export function TollLogsPage() {
   const { logs, loading, refresh, vehicles, drivers, plazas } = useTollLogs();
   const [selectedLog, setSelectedLog] = useState<TollLogEntry | null>(null);
+  const [logToEdit, setLogToEdit] = useState<TollLogEntry | null>(null);
   const [filters, setFilters] = useState<TollLogFiltersState>(DEFAULT_TOLL_LOG_FILTERS);
 
   // --- Bulk selection state ---
@@ -291,6 +293,19 @@ export function TollLogsPage() {
     openBulkDialog('flag');
   };
 
+  const handleEditSave = useCallback(async (transactionId: string, updates: Record<string, any>) => {
+    try {
+      await api.editToll(transactionId, updates);
+      toast.success('Toll log updated.');
+      refresh();
+      setSelectedLog(prev => (prev?.id === transactionId ? null : prev));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update toll log.';
+      toast.error(message);
+      throw err;
+    }
+  }, [refresh]);
+
   const handleClearFilters = () => {
     setFilters(DEFAULT_TOLL_LOG_FILTERS);
   };
@@ -438,10 +453,18 @@ export function TollLogsPage() {
         logs={filteredLogs}
         loading={loading}
         onRowClick={handleRowClick}
+        onEdit={setLogToEdit}
         onFlagDisputed={handleFlagDisputed}
         selectedIds={selectedIds}
         onToggleSelect={handleToggleSelect}
         onToggleSelectAll={handleToggleSelectAll}
+      />
+
+      <EditTollModal
+        isOpen={!!logToEdit}
+        onClose={() => setLogToEdit(null)}
+        transaction={logToEdit?._raw ?? null}
+        onSave={handleEditSave}
       />
 
       {/* Detail Side Panel */}

@@ -30,6 +30,7 @@ import {
   ChevronsUpDown,
   MoreHorizontal,
   Eye,
+  Pencil,
   AlertTriangle,
   ExternalLink,
   Receipt,
@@ -50,6 +51,7 @@ interface TollLogTableProps {
   logs: TollLogEntry[];
   loading: boolean;
   onRowClick: (log: TollLogEntry) => void;
+  onEdit?: (log: TollLogEntry) => void;
   onFlagDisputed?: (log: TollLogEntry) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
@@ -193,6 +195,7 @@ export function TollLogTable({
   logs,
   loading,
   onRowClick,
+  onEdit,
   onFlagDisputed,
   selectedIds,
   onToggleSelect,
@@ -462,6 +465,12 @@ export function TollLogTable({
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
+                        {onEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(log)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        )}
                         {onFlagDisputed && (
                           <DropdownMenuItem onClick={() => onFlagDisputed(log)}>
                             <AlertTriangle className="h-4 w-4 mr-2" />
