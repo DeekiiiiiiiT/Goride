@@ -79,6 +79,11 @@ export interface TollLogEntry {
   } | null;
 }
 
+/** True if the row is not already eligible for the reconciliation unmatched queue (pending, no trip, not reconciled). */
+export function tollLogNeedsReconciliationReset(log: TollLogEntry): boolean {
+  return log.status !== 'Pending' || log.isReconciled || !!log.tripId;
+}
+
 // --- Filter state (used by Phase 5 Filters component) ---
 export interface TollLogFiltersState {
   search: string;

@@ -1658,6 +1658,26 @@ export const api = {
     return result.data || result;
   },
 
+  /** Set toll ledger to pending and clear trip/match fields so the row reappears under Toll Reconciliation → Unmatched. */
+  async resetTollForReconciliation(transactionId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll-reconciliation/reset-for-reconciliation`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ transactionId }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to reset toll for reconciliation');
+    }
+    return response.json();
+  },
+
   /** Fetch ALL toll transactions (flattened) for CSV export — no pagination. */
   async getTollTransactionsExport(): Promise<any[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/export`, {

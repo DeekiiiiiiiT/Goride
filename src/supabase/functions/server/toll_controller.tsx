@@ -11,6 +11,7 @@
  *   GET  /toll-reconciliation/unclaimed-refunds – paginated trips with no matched expense
  *   GET  /toll-reconciliation/reconciled        – paginated matched history
  *   GET  /toll-reconciliation/export            – all toll txns flattened for CSV export
+ *   POST /toll-reconciliation/reset-for-reconciliation – pending + clear trip/match (re-queue for Unmatched)
  */
 
 import { Hono } from "npm:hono";
@@ -2486,6 +2487,92 @@ app.patch(`${BASE}/edit`, async (c) => {
     return c.json({ success: true, data: tx });
   } catch (e: any) {
     console.log(`[TollReconciliation] PATCH /edit error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /reset-for-reconciliation ────────────────────────────────────
+
+app.post(`${BASE}/reset-for-reconciliation`, async (c) => {
+  try {
+    const { transactionId } = await c.req.json();
+    if (!transactionId) {
+      return c.json({ error: "transactionId is required" }, 400);
+    }
+
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry) {
+      return c.json({ error: `Toll ${transactionId} not found` }, 404);
+    }
+
+    const previousTripId = tollEntry.tripId;
+    const txBefore = tollLedgerToTxShape(tollEntry);
+
+    const meta = { ...(tollEntry.metadata || {}) } as Record<string, unknown>;
+    for (
+      const k of
+        ["reconciledAt", "reconciledBy", "matchedBy", "matchConfidence", "tripId", "matchedAt"]
+    ) {
+      delete meta[k];
+    }
+
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: "pending",
+        tripId: null,
+        isReconciled: false,
+        resolution: null,
+        matchConfidence: null,
+        matchedAt: null,
+        matchedBy: null,
+        metadata: meta,
+      },
+      "edited",
+      "admin",
+    );
+
+    const updated = await getTollLedgerEntry(transactionId);
+    if (!updated) {
+      return c.json({ error: "Toll entry missing after update" }, 500);
+    }
+    const tx = tollLedgerToTxShape(updated);
+
+    if (previousTripId) {
+      await writeTollLedgerEntry({
+        eventType: "toll_unreconciled",
+        category: "Toll Reconciliation",
+        description:
+          `Toll reset for reconciliation (was linked to trip ${previousTripId})`,
+        grossAmount: Math.abs(Number(txBefore.amount) || 0),
+        netAmount: 0,
+        direction: "neutral",
+        sourceType: "reconciliation_reversal",
+        sourceId: transactionId,
+        driverId: txBefore.driverId || "unknown",
+        driverName: txBefore.driverName || "Unknown",
+        vehicleId: txBefore.vehicleId,
+        date: txBefore.date,
+        metadata: {
+          previousTripId,
+          resetAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    console.log(
+      `[TollReconciliation] Reset for reconciliation: ${transactionId}` +
+        (previousTripId ? ` (unlinked trip ${previousTripId})` : ""),
+    );
+
+    return c.json({
+      success: true,
+      data: { transaction: tx },
+    });
+  } catch (e: any) {
+    console.log(
+      `[TollReconciliation] POST /reset-for-reconciliation error: ${e.message}`,
+    );
     return c.json({ error: e.message }, 500);
   }
 });

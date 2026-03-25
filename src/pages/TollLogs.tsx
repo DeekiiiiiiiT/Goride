@@ -18,7 +18,7 @@ import { TollLogTable } from '../components/toll/TollLogTable';
 import { TollLogFilters } from '../components/toll/TollLogFilters';
 import { TollLogDetailPanel } from '../components/toll/TollLogDetailPanel';
 import { EditTollModal } from '../components/toll-tags/reconciliation/EditTollModal';
-import { TollLogEntry, TollLogFiltersState, DEFAULT_TOLL_LOG_FILTERS, TOLL_LOG_CSV_COLUMNS } from '../types/tollLog';
+import { TollLogEntry, TollLogFiltersState, DEFAULT_TOLL_LOG_FILTERS, TOLL_LOG_CSV_COLUMNS, tollLogNeedsReconciliationReset } from '../types/tollLog';
 import { isWithinInterval, parseISO, startOfDay, endOfDay, format } from 'date-fns';
 import { api } from '../services/api';
 import { toast } from 'sonner@2.0.3';
@@ -100,6 +100,9 @@ export function TollLogsPage() {
   const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+
+  const [resetConfirmLog, setResetConfirmLog] = useState<TollLogEntry | null>(null);
+  const [resetProcessing, setResetProcessing] = useState(false);
 
   // --- Derive a clean driver option list for the filter dropdown ---
   const driverOptions = useMemo(() => {
@@ -306,6 +309,24 @@ export function TollLogsPage() {
     }
   }, [refresh]);
 
+  const executeResetForReconciliation = useCallback(async () => {
+    const log = resetConfirmLog;
+    if (!log || !tollLogNeedsReconciliationReset(log)) return;
+    setResetProcessing(true);
+    try {
+      await api.resetTollForReconciliation(log.id);
+      toast.success('Toll sent back to reconciliation. Refresh the Reconciliation page to see it under Unmatched.');
+      setResetConfirmLog(null);
+      if (selectedLog?.id === log.id) setSelectedLog(null);
+      refresh();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to reset toll.';
+      toast.error(message);
+    } finally {
+      setResetProcessing(false);
+    }
+  }, [refresh, resetConfirmLog, selectedLog?.id]);
+
   const handleClearFilters = () => {
     setFilters(DEFAULT_TOLL_LOG_FILTERS);
   };
@@ -455,6 +476,7 @@ export function TollLogsPage() {
         onRowClick={handleRowClick}
         onEdit={setLogToEdit}
         onFlagDisputed={handleFlagDisputed}
+        onResetForReconciliation={log => setResetConfirmLog(log)}
         selectedIds={selectedIds}
         onToggleSelect={handleToggleSelect}
         onToggleSelectAll={handleToggleSelectAll}
@@ -533,6 +555,53 @@ export function TollLogsPage() {
                 </>
               ) : (
                 <>Confirm</>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!resetConfirmLog}
+        onOpenChange={open => {
+          if (!open && !resetProcessing) setResetConfirmLog(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send back to reconciliation?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                <p>
+                  This sets the toll to <strong>Pending</strong>, clears any linked trip and match metadata, so it appears again under{' '}
+                  <strong>Toll Reconciliation → Unmatched</strong> after you refresh there.
+                </p>
+                {resetConfirmLog && (
+                  <p className="text-xs text-slate-500">
+                    {fmtJMD(resetConfirmLog.absAmount)} · {resetConfirmLog.driverDisplayName} ·{' '}
+                    {resetConfirmLog.date?.slice(0, 10)}
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetProcessing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              disabled={resetProcessing}
+              onClick={e => {
+                e.preventDefault();
+                void executeResetForReconciliation();
+              }}
+            >
+              {resetProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin inline" />
+                  Working…
+                </>
+              ) : (
+                'Confirm'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

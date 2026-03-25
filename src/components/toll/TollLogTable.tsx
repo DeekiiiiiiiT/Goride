@@ -33,12 +33,13 @@ import {
   Pencil,
   AlertTriangle,
   ExternalLink,
+  RotateCcw,
   Receipt,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
-import { TollLogEntry } from '../../types/tollLog';
+import { TollLogEntry, tollLogNeedsReconciliationReset } from '../../types/tollLog';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +54,8 @@ interface TollLogTableProps {
   onRowClick: (log: TollLogEntry) => void;
   onEdit?: (log: TollLogEntry) => void;
   onFlagDisputed?: (log: TollLogEntry) => void;
+  /** Opens confirm flow to reset ledger row for Toll Reconciliation → Unmatched */
+  onResetForReconciliation?: (log: TollLogEntry) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: (pageIds: string[]) => void;
@@ -197,6 +200,7 @@ export function TollLogTable({
   onRowClick,
   onEdit,
   onFlagDisputed,
+  onResetForReconciliation,
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
@@ -475,6 +479,12 @@ export function TollLogTable({
                           <DropdownMenuItem onClick={() => onFlagDisputed(log)}>
                             <AlertTriangle className="h-4 w-4 mr-2" />
                             Flag as Disputed
+                          </DropdownMenuItem>
+                        )}
+                        {onResetForReconciliation && tollLogNeedsReconciliationReset(log) && (
+                          <DropdownMenuItem onClick={() => onResetForReconciliation(log)}>
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            Send back to reconciliation
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
