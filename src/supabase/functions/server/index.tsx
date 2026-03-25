@@ -28,6 +28,8 @@ import tollApp, {
   isTollCategory as isTollCategoryServer,
   updateTollLedgerEntry,
   deleteTollLedgerEntry,
+  buildTollLedgerFullBackupPayload,
+  executeTollLedgerRepairDates,
 } from "./toll_controller.tsx";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
@@ -4027,6 +4029,33 @@ app.post("/make-server-37f42386/ledger/backfill", requireAuth(), requirePermissi
         console.error('[Ledger Backfill] Fatal error:', e);
         return c.json({ error: e.message }, 500);
     }
+});
+
+// ─── Toll ledger backup + date repair (aliases on main router) ───────────────
+// Same behavior as toll_controller routes under /toll-reconciliation/toll-ledger/*.
+// Exposed here under /ledger/* next to backfill so admin tools share one URL family.
+app.get("/make-server-37f42386/ledger/toll-ledger-backup", requireAuth(), requirePermission('data.backfill'), async (c) => {
+  try {
+    const backup = await buildTollLedgerFullBackupPayload();
+    const filename = `toll_ledger_backup_${new Date().toISOString().split("T")[0]}.json`;
+    c.header("Content-Type", "application/json");
+    c.header("Content-Disposition", `attachment; filename="${filename}"`);
+    return c.json(backup);
+  } catch (e: any) {
+    console.log(`[TollLedgerBackup] Error (ledger alias): ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/ledger/toll-ledger-repair-dates", requireAuth(), requirePermission('data.backfill'), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const results = await executeTollLedgerRepairDates(body);
+    return c.json({ success: true, results });
+  } catch (e: any) {
+    console.log(`[TollLedgerRepairDates] Error (alias): ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 // ─── POST /ledger/repair-driver-ids — Phase 5.2b: Fix Uber UUID → Roam UUID in ledger ──────

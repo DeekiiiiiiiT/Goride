@@ -1737,24 +1737,110 @@ app.get(`${BASE}/toll-ledger/stats`, async (c) => {
 // PHASE 1 (Fix): Toll Ledger Backups + Date Repair Backfill
 // ═══════════════════════════════════════════════════════════════════════
 
+/** Exported for alias routes on main app (`index.tsx` → `/ledger/toll-ledger-*`). */
+export async function buildTollLedgerFullBackupPayload() {
+  const all = await getAllTollLedgerEntries();
+  all.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  return {
+    exportedAt: new Date().toISOString(),
+    version: "1.0",
+    count: all.length,
+    earliest: all[0]?.date || null,
+    latest: all[all.length - 1]?.date || null,
+    entries: all,
+  };
+}
+
+export type TollLedgerRepairDatesResults = {
+  dryRun: boolean;
+  fleetTz: string;
+  totalLedger: number;
+  checked: number;
+  legacyFound: number;
+  toUpdate: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  samples: Array<{ id: string; from: string; to: string }>;
+};
+
+/**
+ * Repairs toll_ledger.date values by comparing against legacy transaction:${id} when present.
+ * Body: dryRun (default true), batchSize (default 200, max 500).
+ */
+export async function executeTollLedgerRepairDates(body: {
+  dryRun?: boolean;
+  batchSize?: number;
+}): Promise<TollLedgerRepairDatesResults> {
+  const dryRun = body?.dryRun !== false;
+  const batchSize = Math.min(Number(body?.batchSize) || 200, 500);
+
+  const fleetTz = await getFleetTimezone();
+  const ledgerEntries = await getAllTollLedgerEntries();
+
+  const results: TollLedgerRepairDatesResults = {
+    dryRun,
+    fleetTz,
+    totalLedger: ledgerEntries.length,
+    checked: 0,
+    legacyFound: 0,
+    toUpdate: 0,
+    updated: 0,
+    skipped: 0,
+    errors: 0,
+    samples: [],
+  };
+
+  for (let i = 0; i < ledgerEntries.length; i += batchSize) {
+    const batch = ledgerEntries.slice(i, i + batchSize);
+    const legacyKeys = batch.map((e) => `transaction:${e.id}`);
+    const legacyTxs = await kv.mget(legacyKeys).catch(() => []);
+
+    for (let j = 0; j < batch.length; j++) {
+      const entry = batch[j];
+      results.checked++;
+
+      const legacy = legacyTxs?.[j];
+      if (!legacy) {
+        results.skipped++;
+        continue;
+      }
+      results.legacyFound++;
+
+      if (!isTollCategory(legacy?.category)) {
+        results.skipped++;
+        continue;
+      }
+
+      const canonical = deriveCanonicalDateFromLegacyTx(legacy, fleetTz);
+      if (!canonical) {
+        results.errors++;
+        continue;
+      }
+
+      if (entry.date !== canonical) {
+        results.toUpdate++;
+        if (results.samples.length < 25) {
+          results.samples.push({ id: entry.id, from: entry.date, to: canonical });
+        }
+        if (!dryRun) {
+          await updateTollLedgerEntry(entry.id, { date: canonical }, "updated", "system", "Repair Dates");
+          results.updated++;
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
 /**
  * Backup ALL toll_ledger:* records as JSON (download).
  * This is separate from the legacy transaction:* toll backup.
  */
 app.get(`${BASE}/toll-ledger/backup-ledger`, async (c) => {
   try {
-    const all = await getAllTollLedgerEntries();
-    all.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-
-    const backup = {
-      exportedAt: new Date().toISOString(),
-      version: "1.0",
-      count: all.length,
-      earliest: all[0]?.date || null,
-      latest: all[all.length - 1]?.date || null,
-      entries: all,
-    };
-
+    const backup = await buildTollLedgerFullBackupPayload();
     const filename = `toll_ledger_backup_${new Date().toISOString().split("T")[0]}.json`;
     c.header("Content-Type", "application/json");
     c.header("Content-Disposition", `attachment; filename="${filename}"`);
@@ -1776,67 +1862,7 @@ app.get(`${BASE}/toll-ledger/backup-ledger`, async (c) => {
 app.post(`${BASE}/toll-ledger/repair-dates`, async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const dryRun = body?.dryRun !== false; // default true
-    const batchSize = Math.min(Number(body?.batchSize) || 200, 500);
-
-    const fleetTz = await getFleetTimezone();
-    const ledgerEntries = await getAllTollLedgerEntries();
-
-    const results = {
-      dryRun,
-      fleetTz,
-      totalLedger: ledgerEntries.length,
-      checked: 0,
-      legacyFound: 0,
-      toUpdate: 0,
-      updated: 0,
-      skipped: 0,
-      errors: 0,
-      samples: [] as Array<{ id: string; from: string; to: string }>,
-    };
-
-    // Process in batches to avoid huge mget payloads
-    for (let i = 0; i < ledgerEntries.length; i += batchSize) {
-      const batch = ledgerEntries.slice(i, i + batchSize);
-      const legacyKeys = batch.map((e) => `transaction:${e.id}`);
-      const legacyTxs = await kv.mget(legacyKeys).catch(() => []);
-
-      for (let j = 0; j < batch.length; j++) {
-        const entry = batch[j];
-        results.checked++;
-
-        const legacy = legacyTxs?.[j];
-        if (!legacy) {
-          results.skipped++;
-          continue;
-        }
-        results.legacyFound++;
-
-        // Only trust legacy if it is a toll category
-        if (!isTollCategory(legacy?.category)) {
-          results.skipped++;
-          continue;
-        }
-
-        const canonical = deriveCanonicalDateFromLegacyTx(legacy, fleetTz);
-        if (!canonical) {
-          results.errors++;
-          continue;
-        }
-
-        if (entry.date !== canonical) {
-          results.toUpdate++;
-          if (results.samples.length < 25) {
-            results.samples.push({ id: entry.id, from: entry.date, to: canonical });
-          }
-          if (!dryRun) {
-            await updateTollLedgerEntry(entry.id, { date: canonical }, "updated", "system", "Repair Dates");
-            results.updated++;
-          }
-        }
-      }
-    }
-
+    const results = await executeTollLedgerRepairDates(body);
     return c.json({ success: true, results });
   } catch (e: any) {
     console.log(`[TollLedgerRepairDates] Error: ${e.message}`);

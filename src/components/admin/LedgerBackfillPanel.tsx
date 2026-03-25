@@ -138,7 +138,7 @@ export function LedgerBackfillPanel() {
     setTollBackupLoading(true);
     setTollRepairError(null);
     try {
-      const url = `${API_BASE}/toll-reconciliation/toll-ledger/backup-ledger`;
+      const url = `${API_BASE}/ledger/toll-ledger-backup`;
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` },
       });
@@ -172,7 +172,7 @@ export function LedgerBackfillPanel() {
     setConfirmTollRepair(false);
 
     try {
-      const url = `${API_BASE}/toll-reconciliation/toll-ledger/repair-dates`;
+      const url = `${API_BASE}/ledger/toll-ledger-repair-dates`;
       const res = await fetch(url, {
         method: 'POST',
         headers: {
