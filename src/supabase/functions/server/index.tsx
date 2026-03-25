@@ -21,7 +21,14 @@ import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
-import tollApp from "./toll_controller.tsx";
+import tollApp, {
+  saveTollLedgerEntry,
+  getTollLedgerEntry,
+  transactionToTollLedgerServer,
+  isTollCategory as isTollCategoryServer,
+  updateTollLedgerEntry,
+  deleteTollLedgerEntry,
+} from "./toll_controller.tsx";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import * as unverifiedVendor from './unverified_vendor_controller.tsx';
@@ -84,6 +91,18 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
+
+// ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
+// Tolls are now written ONLY to toll_ledger:* (single source of truth).
+// The transaction:* store is no longer used for toll data.
+// ───────────────────────────────────────────────────────────────────────
+async function writeTollToLedger(transaction: any): Promise<void> {
+  if (!isTollCategoryServer(transaction.category)) return;
+  
+  const tollRecord = transactionToTollLedgerServer(transaction);
+  await saveTollLedgerEntry(tollRecord);
+  console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
+}
 
 // ─── Driver ID Resolution ─────────────────────────────────────────────
 // Resolves any driver identifier (Roam UUID, Uber UUID, InDrive UUID,
@@ -2687,6 +2706,13 @@ app.post("/make-server-37f42386/transactions", async (c) => {
                 needsLogReview: (!isAiVerified) ? true : (transaction.metadata?.needsLogReview || undefined),
             };
             console.log(`[StationGate] Transaction ${transaction.id} held — station locationStatus="${locationStatus || 'none'}", skipping auto-approval and fuel entry creation.`);
+            
+            // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
+            if (isTollCategoryServer(transaction.category)) {
+                await writeTollToLedger(transaction);
+                return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
+            }
+            
             await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
             // ── Write-Time Ledger ──
             try {
@@ -2714,6 +2740,12 @@ app.post("/make-server-37f42386/transactions", async (c) => {
                         ? 'AI scan failed — odometer photo pending admin review'
                         : 'Manual odometer override — pending admin verification'),
             };
+            // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
+            if (isTollCategoryServer(transaction.category)) {
+                await writeTollToLedger(transaction);
+                return c.json({ success: true, data: transaction });
+            }
+            
             await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
             // ── Write-Time Ledger ──
             try {
@@ -2809,6 +2841,12 @@ app.post("/make-server-37f42386/transactions", async (c) => {
         }
     }
 
+    // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
+    if (isTollCategoryServer(transaction.category)) {
+        await writeTollToLedger(transaction);
+        return c.json({ success: true, data: transaction });
+    }
+    
     await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
     // ── Write-Time Ledger ──
     try {
@@ -2829,6 +2867,15 @@ app.post("/make-server-37f42386/transactions", async (c) => {
 app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
   const id = c.req.param("id");
   try {
+    // Phase 6: Check toll_ledger first (tolls are now stored there, not in transaction:*)
+    const tollEntry = await getTollLedgerEntry(id);
+    if (tollEntry) {
+      await deleteTollLedgerEntry(id);
+      console.log(`[TollLedger] Deleted toll_ledger:${id}`);
+      return c.json({ success: true });
+    }
+    
+    // Not a toll, delete from transaction:*
     await kv.del(`transaction:${id}`);
     return c.json({ success: true });
   } catch (e: any) {

@@ -44,11 +44,61 @@ const BASE = "/make-server-37f42386/toll-reconciliation";
 /**
  * Single source of truth for toll category detection (server-side copy).
  * Mirrors /utils/tollCategoryHelper.ts exactly.
+ * 
+ * @deprecated Phase 6: Toll data is now stored in `toll_ledger:*` prefix,
+ * not in `transaction:*` with category filtering. This function is only
+ * used for backward compatibility during migration and for routing new
+ * toll transactions to the toll ledger. Use `getTollLedgerEntry()` to
+ * check if an ID is a toll record.
  */
 function isTollCategory(category: string | undefined | null): boolean {
   if (!category) return false;
   const lower = category.toLowerCase();
   return lower === "toll usage" || lower === "tolls";
+}
+
+/**
+ * Formats a Date into YYYY-MM-DD in the given IANA timezone.
+ * Uses Intl so it is DST-aware (even though Jamaica has no DST).
+ */
+function toFleetDateOnly(d: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  const y = get("year");
+  const m = get("month");
+  const day = get("day");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Attempts to derive the canonical toll date (YYYY-MM-DD) from a legacy transaction record.
+ * - If tx.date has a TZ suffix, interpret as UTC instant → format in fleet TZ.
+ * - If tx.date is naive, interpret in fleet TZ via naiveToUtc() → format in fleet TZ.
+ * - If tx.date is already YYYY-MM-DD, return as-is.
+ */
+function deriveCanonicalDateFromLegacyTx(tx: any, fleetTz: string): string | null {
+  const raw = tx?.date;
+  if (!raw || typeof raw !== "string") return null;
+
+  // Date-only already
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  // ISO-ish with time
+  if (raw.includes("T")) {
+    const utc = hasTzSuffix(raw) ? new Date(raw) : naiveToUtc(raw, fleetTz);
+    if (!isNaN(utc.getTime())) return toFleetDateOnly(utc, fleetTz);
+  }
+
+  // Fallback: try Date parsing
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) return toFleetDateOnly(d, fleetTz);
+
+  return null;
 }
 
 // ─── Ported Trip-Time Helpers (from /utils/timeUtils.ts) ───────────────
@@ -600,8 +650,9 @@ async function loadAllTrips(): Promise<any[]> {
 }
 
 /**
- * Shared helper: loads ALL transactions then filters to toll-category only.
- * Single source of truth for "what is a toll transaction" on the server.
+ * @deprecated Phase 6: Use `getAllTollLedgerEntries()` instead.
+ * This function loads from `transaction:*` which is no longer used for tolls.
+ * Kept for potential rollback scenarios.
  */
 async function loadAllTollTransactions(): Promise<any[]> {
   const allTx = await loadAllTransactions();
@@ -609,10 +660,9 @@ async function loadAllTollTransactions(): Promise<any[]> {
 }
 
 /**
- * Convenience: loads toll transactions + trips in parallel.
- * Used by endpoints that need both (summary, unreconciled, unclaimed-refunds, export).
- * Note: calls loadAllTransactions() (not loadAllTollTransactions()) to avoid
- * double-awaiting — the toll filter is applied once after the parallel fetch.
+ * @deprecated Phase 6: Use `loadAllTollLedgerWithTrips()` instead.
+ * This function loads from `transaction:*` which is no longer used for tolls.
+ * Kept for potential rollback scenarios.
  */
 async function loadAllTollTransactionsWithTrips(): Promise<{ tollTx: any[]; trips: any[] }> {
   const [allTx, trips] = await Promise.all([
@@ -620,6 +670,84 @@ async function loadAllTollTransactionsWithTrips(): Promise<{ tollTx: any[]; trip
     loadAllTrips(),
   ]);
   const tollTx = allTx.filter((tx: any) => isTollCategory(tx.category));
+  return { tollTx, trips };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 5: Toll Ledger-Based Loaders (single source of truth)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert a TollLedgerRecord to the legacy transaction shape for backward compatibility.
+ * This allows existing endpoint response shapes and client code to work unchanged.
+ */
+function tollLedgerToTxShape(entry: TollLedgerRecord): any {
+  // Map status back to transaction status format
+  let status = "Pending";
+  if (entry.status === "approved" || entry.status === "resolved") status = "Approved";
+  else if (entry.status === "rejected") status = "Rejected";
+  else if (entry.status === "reconciled") status = "Approved";
+  else if (entry.status === "pending") status = "Pending";
+
+  // Build the transaction-like object
+  return {
+    id: entry.id,
+    date: entry.date,
+    time: entry.time,
+    amount: entry.amount,
+    type: entry.type === "usage" ? "Usage" : entry.type === "top_up" ? "Top-up" : "Refund",
+    category: "Toll Usage",
+    description: entry.location || entry.plaza || "",
+    vendor: entry.plaza || entry.location || "",
+    vehicleId: entry.vehicleId,
+    vehiclePlate: entry.vehiclePlate,
+    driverId: entry.driverId,
+    driverName: entry.driverName,
+    paymentMethod: entry.paymentMethod === "cash" ? "Cash" :
+                   entry.paymentMethod === "card" ? "Card" :
+                   entry.paymentMethod === "fleet_account" ? "Fleet Account" : "Tag Balance",
+    status,
+    isReconciled: entry.status === "reconciled" || !!entry.tripId,
+    tripId: entry.tripId,
+    receiptUrl: entry.receiptUrl,
+    notes: entry.notes,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+    metadata: {
+      tollTagId: entry.tollTagId,
+      tagNumber: entry.tagNumber,
+      highway: entry.highway,
+      plaza: entry.plaza,
+      batchId: entry.batchId,
+      batchName: entry.batchName,
+      importedAt: entry.importedAt,
+      sourceFile: entry.sourceFile,
+      matchConfidence: entry.matchConfidence,
+      matchedAt: entry.matchedAt,
+      matchedBy: entry.matchedBy,
+      resolution: entry.resolution,
+      auditTrail: entry.auditTrail,
+      // Preserve auto-match override flag
+      autoMatchOverridden: entry.metadata?.autoMatchOverridden,
+      // Include any other metadata
+      ...entry.metadata,
+    },
+  };
+}
+
+/**
+ * Phase 5 loader: reads from toll_ledger:* instead of filtering transaction:*.
+ * Returns data in the same shape as loadAllTollTransactionsWithTrips() for compatibility.
+ */
+async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any[] }> {
+  const [ledgerEntries, trips] = await Promise.all([
+    getAllTollLedgerEntries(),
+    loadAllTrips(),
+  ]);
+  
+  // Convert toll ledger entries to transaction shape for backward compatibility
+  const tollTx = ledgerEntries.map(tollLedgerToTxShape);
+  
   return { tollTx, trips };
 }
 
@@ -643,7 +771,8 @@ app.get(`${BASE}/summary`, async (c) => {
   try {
     const { driverId } = parseQueryParams(c);
 
-    const loaded = await loadAllTollTransactionsWithTrips();
+    // Phase 5: Read from toll_ledger:* (single source of truth)
+    const loaded = await loadAllTollLedgerWithTrips();
     let tollTx = loaded.tollTx;
     let trips = loaded.trips;
 
@@ -724,7 +853,8 @@ app.get(`${BASE}/unreconciled`, async (c) => {
   try {
     const { driverId, limit, offset } = parseQueryParams(c);
 
-    const loaded = await loadAllTollTransactionsWithTrips();
+    // Phase 5: Read from toll_ledger:* (single source of truth)
+    const loaded = await loadAllTollLedgerWithTrips();
     let tollTx = loaded.tollTx;
     let trips = loaded.trips;
 
@@ -791,23 +921,30 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       if (!trip) continue;
 
       try {
-        // Update transaction fields
+        // Phase 5: Update toll_ledger:* as primary store
+        // Phase 6: Write ONLY to toll_ledger (single source of truth)
+        await updateTollLedgerEntry(
+          txId,
+          {
+            status: "reconciled",
+            tripId,
+            driverId: trip.driverId || tx.driverId,
+            driverName: trip.driverName || tx.driverName,
+            matchConfidence: best.confidenceScore,
+            matchedAt: new Date().toISOString(),
+            matchedBy: "system-auto",
+          },
+          "reconciled",
+          "system-auto"
+        );
+
+        // Update local tx object for response (not persisted to transaction:*)
         tx.tripId = tripId;
         tx.isReconciled = true;
         tx.driverId = trip.driverId || tx.driverId;
         tx.driverName = trip.driverName || tx.driverName;
-        tx.metadata = {
-          ...tx.metadata,
-          reconciledAt: new Date().toISOString(),
-          reconciledBy: "system-auto",
-          matchedTripPlatform: trip.platform,
-          autoMatchReason: best.reason,
-          autoMatchScore: best.confidenceScore,
-        };
 
-        await kv.set(`transaction:${txId}`, tx);
-
-        // Write ledger entry (mirrors the manual /reconcile endpoint)
+        // Write ledger entry for audit trail
         await writeTollLedgerEntry({
           eventType: "toll_reconciled",
           category: "Toll Reconciliation",
@@ -880,7 +1017,8 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
   try {
     const { driverId, limit, offset } = parseQueryParams(c);
 
-    const loaded = await loadAllTollTransactionsWithTrips();
+    // Phase 5: Read from toll_ledger:* (single source of truth)
+    const loaded = await loadAllTollLedgerWithTrips();
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
 
@@ -927,7 +1065,9 @@ app.get(`${BASE}/reconciled`, async (c) => {
   try {
     const { driverId, limit, offset } = parseQueryParams(c);
 
-    const allTollTx = await loadAllTollTransactions();
+    // Phase 5: Read from toll_ledger:* (single source of truth)
+    const ledgerEntries = await getAllTollLedgerEntries();
+    const allTollTx = ledgerEntries.map(tollLedgerToTxShape);
 
     let reconciled = allTollTx.filter(
       (tx: any) => tx.isReconciled && tx.tripId,
@@ -1018,8 +1158,9 @@ app.get(`${BASE}/toll-logs`, async (c) => {
     const limit = c.req.query("limit") ? parseInt(c.req.query("limit"), 10) : undefined;
     const offset = parseInt(c.req.query("offset") || "0", 10);
 
-    // ── Load all toll transactions ──
-    let tollTx = await loadAllTollTransactions();
+    // ── Load all toll transactions (Phase 1 fix: read from toll_ledger) ──
+    // This keeps Toll Logs aligned with Toll Ledger + Toll Reconciliation.
+    let tollTx = (await getAllTollLedgerEntries()).map(tollLedgerToTxShape);
 
     // ── Apply filters ──
     if (vehicleId) {
@@ -1125,6 +1266,919 @@ app.get(`${BASE}/toll-logs`, async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// TOLL LEDGER STORAGE LAYER (Phase 2 - Single Source of Truth)
+// ═══════════════════════════════════════════════════════════════════════
+// All toll data stored under `toll_ledger:{id}` prefix.
+// These functions are the canonical CRUD operations for toll records.
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── Types (mirrored from src/types/tollLedgerRecord.ts for Deno) ────────
+
+type TollType = 'usage' | 'top_up' | 'refund' | 'adjustment' | 'balance_transfer';
+type TollPaymentMethod = 'tag_balance' | 'cash' | 'card' | 'fleet_account';
+type TollStatus = 'pending' | 'approved' | 'rejected' | 'reconciled' | 'resolved' | 'disputed';
+type TollResolution = 'personal' | 'business' | 'write_off' | 'refunded';
+type TollAuditAction = 'created' | 'updated' | 'reconciled' | 'unreconciled' | 'approved' | 'rejected' | 'resolved' | 'imported' | 'edited' | 'deleted';
+
+interface TollAuditEntry {
+  action: TollAuditAction;
+  timestamp: string;
+  userId?: string;
+  userName?: string;
+  changes?: Record<string, { from: unknown; to: unknown }>;
+  metadata?: Record<string, unknown>;
+}
+
+interface TollLedgerRecord {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  vehicleId: string | null;
+  vehiclePlate: string | null;
+  driverId: string | null;
+  driverName: string | null;
+  tollTagId: string | null;
+  tagNumber: string | null;
+  plaza: string | null;
+  highway: string | null;
+  location: string | null;
+  date: string;
+  time: string | null;
+  type: TollType;
+  amount: number;
+  paymentMethod: TollPaymentMethod;
+  status: TollStatus;
+  resolution: TollResolution | null;
+  isReconciled: boolean;
+  tripId: string | null;
+  matchConfidence: number | null;
+  matchedAt: string | null;
+  matchedBy: string | null;
+  batchId: string | null;
+  batchName: string | null;
+  importedAt: string | null;
+  sourceFile: string | null;
+  receiptUrl: string | null;
+  referenceNumber: string | null;
+  description: string | null;
+  notes: string | null;
+  auditTrail: TollAuditEntry[];
+  metadata: Record<string, unknown>;
+  _legacyTransactionId?: string;
+}
+
+interface TollLedgerFilters {
+  vehicleId?: string;
+  driverId?: string;
+  tollTagId?: string;
+  plaza?: string;
+  highway?: string;
+  type?: TollType;
+  status?: TollStatus;
+  resolution?: TollResolution;
+  isReconciled?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  batchId?: string;
+  search?: string;
+}
+
+// ── Toll Ledger KV Helpers ──────────────────────────────────────────────
+
+const TOLL_LEDGER_PREFIX = "toll_ledger:";
+
+/**
+ * Save a toll ledger entry to KV store.
+ */
+async function saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void> {
+  // Validate required fields
+  if (!entry.id) throw new Error("TollLedgerRecord.id is required");
+  if (!entry.date) throw new Error("TollLedgerRecord.date is required");
+  if (typeof entry.amount !== "number") throw new Error("TollLedgerRecord.amount must be a number");
+
+  // Ensure timestamps
+  const now = new Date().toISOString();
+  if (!entry.createdAt) entry.createdAt = now;
+  entry.updatedAt = now;
+
+  // Normalize amount sign (usage = negative, top-up/refund = positive)
+  if (entry.type === "usage" && entry.amount > 0) {
+    entry.amount = -Math.abs(entry.amount);
+  } else if ((entry.type === "top_up" || entry.type === "refund") && entry.amount < 0) {
+    entry.amount = Math.abs(entry.amount);
+  }
+
+  await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
+  console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
+}
+
+/**
+ * Get a single toll ledger entry by ID.
+ */
+async function getTollLedgerEntry(id: string): Promise<TollLedgerRecord | null> {
+  const entry = await kv.get(`${TOLL_LEDGER_PREFIX}${id}`);
+  return entry as TollLedgerRecord | null;
+}
+
+/**
+ * Update a toll ledger entry with partial data.
+ * Automatically updates `updatedAt` and can append to audit trail.
+ */
+async function updateTollLedgerEntry(
+  id: string,
+  updates: Partial<TollLedgerRecord>,
+  auditAction?: TollAuditAction,
+  auditUserId?: string,
+  auditUserName?: string
+): Promise<TollLedgerRecord | null> {
+  const existing = await getTollLedgerEntry(id);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+
+  // Track changes for audit
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(updates) as (keyof TollLedgerRecord)[]) {
+    if (key === "auditTrail" || key === "updatedAt") continue;
+    if (updates[key] !== existing[key]) {
+      changes[key] = { from: existing[key], to: updates[key] };
+    }
+  }
+
+  const updated: TollLedgerRecord = {
+    ...existing,
+    ...updates,
+    updatedAt: now,
+  };
+
+  // Append audit entry if action provided
+  if (auditAction && Object.keys(changes).length > 0) {
+    updated.auditTrail = [
+      ...existing.auditTrail,
+      {
+        action: auditAction,
+        timestamp: now,
+        userId: auditUserId,
+        userName: auditUserName,
+        changes: Object.keys(changes).length > 0 ? changes : undefined,
+      },
+    ];
+  }
+
+  await saveTollLedgerEntry(updated);
+  return updated;
+}
+
+/**
+ * Delete a toll ledger entry.
+ */
+async function deleteTollLedgerEntry(id: string): Promise<boolean> {
+  const existing = await getTollLedgerEntry(id);
+  if (!existing) return false;
+  await kv.del(`${TOLL_LEDGER_PREFIX}${id}`);
+  console.log(`[TollLedgerStorage] Deleted toll_ledger:${id}`);
+  return true;
+}
+
+/**
+ * Get all toll ledger entries.
+ */
+async function getAllTollLedgerEntries(): Promise<TollLedgerRecord[]> {
+  const entries = await kv.getByPrefix(TOLL_LEDGER_PREFIX);
+  return (entries || []).filter(Boolean) as TollLedgerRecord[];
+}
+
+/**
+ * Query toll ledger entries with filters.
+ */
+async function queryTollLedgerEntries(filters: TollLedgerFilters): Promise<TollLedgerRecord[]> {
+  const all = await getAllTollLedgerEntries();
+
+  return all.filter((entry) => {
+    // Vehicle filter
+    if (filters.vehicleId && entry.vehicleId !== filters.vehicleId) return false;
+
+    // Driver filter
+    if (filters.driverId && entry.driverId !== filters.driverId) return false;
+
+    // Tag filter
+    if (filters.tollTagId && entry.tollTagId !== filters.tollTagId) return false;
+
+    // Plaza filter (partial match)
+    if (filters.plaza && !entry.plaza?.toLowerCase().includes(filters.plaza.toLowerCase())) return false;
+
+    // Highway filter
+    if (filters.highway && entry.highway !== filters.highway) return false;
+
+    // Type filter
+    if (filters.type && entry.type !== filters.type) return false;
+
+    // Status filter
+    if (filters.status && entry.status !== filters.status) return false;
+
+    // Resolution filter
+    if (filters.resolution && entry.resolution !== filters.resolution) return false;
+
+    // Reconciled filter
+    if (filters.isReconciled !== undefined && entry.isReconciled !== filters.isReconciled) return false;
+
+    // Date range filter
+    if (filters.dateFrom && entry.date < filters.dateFrom) return false;
+    if (filters.dateTo && entry.date > filters.dateTo) return false;
+
+    // Batch filter
+    if (filters.batchId && entry.batchId !== filters.batchId) return false;
+
+    // Free text search
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const searchableFields = [
+        entry.plaza,
+        entry.highway,
+        entry.location,
+        entry.driverName,
+        entry.vehiclePlate,
+        entry.tagNumber,
+        entry.description,
+        entry.notes,
+        entry.referenceNumber,
+      ].filter(Boolean).map((s) => s!.toLowerCase());
+
+      if (!searchableFields.some((f) => f.includes(searchLower))) return false;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Convert a FinancialTransaction (toll category) to TollLedgerRecord.
+ * Server-side version of transactionToTollLedger().
+ */
+function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
+  const now = new Date().toISOString();
+  const dateOnly =
+    typeof tx.date === "string" && tx.date.includes("T")
+      ? tx.date.slice(0, 10)
+      : tx.date;
+
+  // Determine toll type
+  const category = (tx.category || "").toLowerCase();
+  const isTopUp = category.includes("top") || category.includes("credit") || tx.amount > 0;
+  const isRefund = category.includes("refund");
+  const type: TollType = isRefund ? "refund" : isTopUp ? "top_up" : "usage";
+
+  // Determine payment method
+  const pm = (tx.paymentMethod || "").toLowerCase();
+  let paymentMethod: TollPaymentMethod = "tag_balance";
+  if (pm.includes("cash")) paymentMethod = "cash";
+  else if (pm.includes("card")) paymentMethod = "card";
+  else if (pm.includes("fleet") || pm.includes("account")) paymentMethod = "fleet_account";
+
+  // Determine status
+  let status: TollStatus = "pending";
+  const txStatus = (tx.status || "").toLowerCase();
+  if (txStatus === "approved") status = "approved";
+  else if (txStatus === "rejected") status = "rejected";
+  else if (tx.isReconciled) status = "reconciled";
+  else if (txStatus === "completed" || txStatus === "resolved") status = "resolved";
+
+  // Extract resolution
+  let resolution: TollResolution | null = null;
+  const metaResolution = tx.metadata?.resolution as string | undefined;
+  if (metaResolution) {
+    const r = metaResolution.toLowerCase();
+    if (r === "personal") resolution = "personal";
+    else if (r === "business") resolution = "business";
+    else if (r.includes("write")) resolution = "write_off";
+    else if (r.includes("refund")) resolution = "refunded";
+  }
+
+  return {
+    id: tx.id,
+    createdAt: tx.metadata?.createdAt || now,
+    updatedAt: now,
+
+    vehicleId: tx.vehicleId || null,
+    vehiclePlate: tx.vehiclePlate || null,
+
+    driverId: tx.driverId || null,
+    driverName: tx.driverName || null,
+
+    tollTagId: tx.metadata?.tollTagUuid || tx.metadata?.tollTagId || null,
+    tagNumber: tx.metadata?.tagNumber || null,
+
+    plaza: tx.vendor || tx.metadata?.tollPlaza || null,
+    highway: tx.metadata?.highway || null,
+    location: tx.vendor || tx.description || null,
+
+    // Canonical: store date-only (YYYY-MM-DD) to avoid timezone/day-shift issues
+    date: dateOnly,
+    time: tx.time || null,
+    type,
+    amount: tx.amount,
+    paymentMethod,
+
+    status,
+    resolution,
+    isReconciled: tx.isReconciled || false,
+
+    tripId: tx.tripId || null,
+    matchConfidence: tx.metadata?.matchConfidence || null,
+    matchedAt: tx.metadata?.reconciledAt || null,
+    matchedBy: tx.metadata?.reconciledBy || null,
+
+    batchId: tx.batchId || null,
+    batchName: tx.batchName || null,
+    importedAt: tx.metadata?.importedAt || null,
+    sourceFile: tx.metadata?.sourceFile || null,
+
+    receiptUrl: tx.receiptUrl || null,
+    referenceNumber: tx.referenceNumber || null,
+    description: tx.description || null,
+    notes: tx.notes || null,
+
+    auditTrail: [{
+      action: "imported",
+      timestamp: now,
+      metadata: { source: "migration", originalCategory: tx.category },
+    }],
+
+    metadata: tx.metadata || {},
+
+    _legacyTransactionId: tx.id,
+  };
+}
+
+// ── Toll Ledger Test Endpoint ───────────────────────────────────────────
+
+app.get(`${BASE}/toll-ledger/test`, async (c) => {
+  try {
+    const testId = `test-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    // Create test entry
+    const testEntry: TollLedgerRecord = {
+      id: testId,
+      createdAt: now,
+      updatedAt: now,
+      vehicleId: "test-vehicle",
+      vehiclePlate: "TEST-001",
+      driverId: "test-driver",
+      driverName: "Test Driver",
+      tollTagId: null,
+      tagNumber: null,
+      plaza: "Test Plaza",
+      highway: "Test Highway",
+      location: "Test Location",
+      date: now.split("T")[0],
+      time: now.split("T")[1].split(".")[0],
+      type: "usage",
+      amount: -100,
+      paymentMethod: "tag_balance",
+      status: "pending",
+      resolution: null,
+      isReconciled: false,
+      tripId: null,
+      matchConfidence: null,
+      matchedAt: null,
+      matchedBy: null,
+      batchId: null,
+      batchName: null,
+      importedAt: null,
+      sourceFile: null,
+      receiptUrl: null,
+      referenceNumber: null,
+      description: "Test toll entry",
+      notes: null,
+      auditTrail: [{ action: "created", timestamp: now }],
+      metadata: { test: true },
+    };
+
+    // Save
+    await saveTollLedgerEntry(testEntry);
+
+    // Read
+    const readEntry = await getTollLedgerEntry(testId);
+    if (!readEntry) {
+      return c.json({ error: "Failed to read test entry after save" }, 500);
+    }
+
+    // Update
+    const updated = await updateTollLedgerEntry(
+      testId,
+      { status: "approved", notes: "Updated in test" },
+      "updated",
+      "test-user",
+      "Test User"
+    );
+    if (!updated) {
+      return c.json({ error: "Failed to update test entry" }, 500);
+    }
+
+    // Query
+    const queryResults = await queryTollLedgerEntries({ vehicleId: "test-vehicle" });
+
+    // Delete
+    const deleted = await deleteTollLedgerEntry(testId);
+    if (!deleted) {
+      return c.json({ error: "Failed to delete test entry" }, 500);
+    }
+
+    // Verify deletion
+    const afterDelete = await getTollLedgerEntry(testId);
+
+    return c.json({
+      success: true,
+      message: "Toll ledger storage layer test passed",
+      results: {
+        created: testEntry.id,
+        read: readEntry?.id === testId,
+        updated: updated?.status === "approved" && updated?.auditTrail.length === 2,
+        queryFound: queryResults.some((e) => e.id === testId),
+        deleted: deleted && !afterDelete,
+      },
+    });
+  } catch (e: any) {
+    console.error(`[TollLedgerTest] Error: ${e.message}`);
+    return c.json({ error: e.message, stack: e.stack }, 500);
+  }
+});
+
+// ── Toll Ledger Stats Endpoint ──────────────────────────────────────────
+
+app.get(`${BASE}/toll-ledger/stats`, async (c) => {
+  try {
+    const all = await getAllTollLedgerEntries();
+
+    const stats = {
+      total: all.length,
+      byStatus: {} as Record<string, number>,
+      byType: {} as Record<string, number>,
+      byPaymentMethod: {} as Record<string, number>,
+      reconciled: all.filter((e) => e.isReconciled).length,
+      unreconciled: all.filter((e) => !e.isReconciled).length,
+      totalAmount: all.reduce((sum, e) => sum + e.amount, 0),
+    };
+
+    for (const entry of all) {
+      stats.byStatus[entry.status] = (stats.byStatus[entry.status] || 0) + 1;
+      stats.byType[entry.type] = (stats.byType[entry.type] || 0) + 1;
+      stats.byPaymentMethod[entry.paymentMethod] = (stats.byPaymentMethod[entry.paymentMethod] || 0) + 1;
+    }
+
+    return c.json({ success: true, stats });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 1 (Fix): Toll Ledger Backups + Date Repair Backfill
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Backup ALL toll_ledger:* records as JSON (download).
+ * This is separate from the legacy transaction:* toll backup.
+ */
+app.get(`${BASE}/toll-ledger/backup-ledger`, async (c) => {
+  try {
+    const all = await getAllTollLedgerEntries();
+    all.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      version: "1.0",
+      count: all.length,
+      earliest: all[0]?.date || null,
+      latest: all[all.length - 1]?.date || null,
+      entries: all,
+    };
+
+    const filename = `toll_ledger_backup_${new Date().toISOString().split("T")[0]}.json`;
+    c.header("Content-Type", "application/json");
+    c.header("Content-Disposition", `attachment; filename="${filename}"`);
+    return c.json(backup);
+  } catch (e: any) {
+    console.log(`[TollLedgerBackup] Error (ledger): ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/**
+ * Repairs toll_ledger.date values by comparing against legacy transaction:${id} when present.
+ * This specifically targets the “same time, wrong day” issue caused by inconsistent date formats/timezones.
+ *
+ * Body:
+ *  - dryRun?: boolean (default true)
+ *  - batchSize?: number (default 200, max 500)
+ */
+app.post(`${BASE}/toll-ledger/repair-dates`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default true
+    const batchSize = Math.min(Number(body?.batchSize) || 200, 500);
+
+    const fleetTz = await getFleetTimezone();
+    const ledgerEntries = await getAllTollLedgerEntries();
+
+    const results = {
+      dryRun,
+      fleetTz,
+      totalLedger: ledgerEntries.length,
+      checked: 0,
+      legacyFound: 0,
+      toUpdate: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      samples: [] as Array<{ id: string; from: string; to: string }>,
+    };
+
+    // Process in batches to avoid huge mget payloads
+    for (let i = 0; i < ledgerEntries.length; i += batchSize) {
+      const batch = ledgerEntries.slice(i, i + batchSize);
+      const legacyKeys = batch.map((e) => `transaction:${e.id}`);
+      const legacyTxs = await kv.mget(legacyKeys).catch(() => []);
+
+      for (let j = 0; j < batch.length; j++) {
+        const entry = batch[j];
+        results.checked++;
+
+        const legacy = legacyTxs?.[j];
+        if (!legacy) {
+          results.skipped++;
+          continue;
+        }
+        results.legacyFound++;
+
+        // Only trust legacy if it is a toll category
+        if (!isTollCategory(legacy?.category)) {
+          results.skipped++;
+          continue;
+        }
+
+        const canonical = deriveCanonicalDateFromLegacyTx(legacy, fleetTz);
+        if (!canonical) {
+          results.errors++;
+          continue;
+        }
+
+        if (entry.date !== canonical) {
+          results.toUpdate++;
+          if (results.samples.length < 25) {
+            results.samples.push({ id: entry.id, from: entry.date, to: canonical });
+          }
+          if (!dryRun) {
+            await updateTollLedgerEntry(entry.id, { date: canonical }, "updated", "system", "Repair Dates");
+            results.updated++;
+          }
+        }
+      }
+    }
+
+    return c.json({ success: true, results });
+  } catch (e: any) {
+    console.log(`[TollLedgerRepairDates] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /toll-ledger/sync-check ─────────────────────────────────────────
+// Compares transaction:* toll records with toll_ledger:* to detect drift.
+// Returns mismatches for monitoring and debugging dual-write consistency.
+
+app.get(`${BASE}/toll-ledger/sync-check`, async (c) => {
+  try {
+    // Load all toll transactions from transaction:* store
+    const allTx = await kv.getByPrefix("transaction:");
+    const tollTxMap = new Map<string, any>();
+    for (const tx of allTx || []) {
+      if (tx && isTollCategory(tx.category)) {
+        tollTxMap.set(tx.id, tx);
+      }
+    }
+
+    // Load all toll ledger entries
+    const tollLedgerEntries = await getAllTollLedgerEntries();
+    const tollLedgerMap = new Map<string, TollLedgerRecord>();
+    for (const entry of tollLedgerEntries) {
+      tollLedgerMap.set(entry.id, entry);
+    }
+
+    // Compare
+    const missingInLedger: string[] = [];
+    const missingInTx: string[] = [];
+    const statusMismatch: { id: string; txStatus: string; ledgerStatus: string }[] = [];
+    const amountMismatch: { id: string; txAmount: number; ledgerAmount: number }[] = [];
+
+    // Check for txs missing in toll ledger
+    for (const [id, tx] of tollTxMap) {
+      const ledgerEntry = tollLedgerMap.get(id);
+      if (!ledgerEntry) {
+        missingInLedger.push(id);
+        continue;
+      }
+
+      // Check status alignment
+      const txStatusNorm = (tx.status || "pending").toLowerCase();
+      const ledgerStatusNorm = ledgerEntry.status;
+      const statusMatch =
+        (txStatusNorm === "approved" && (ledgerStatusNorm === "approved" || ledgerStatusNorm === "resolved")) ||
+        (txStatusNorm === "rejected" && ledgerStatusNorm === "rejected") ||
+        (txStatusNorm === "pending" && ledgerStatusNorm === "pending") ||
+        (txStatusNorm === "completed" && (ledgerStatusNorm === "resolved" || ledgerStatusNorm === "reconciled")) ||
+        (tx.isReconciled && ledgerStatusNorm === "reconciled");
+
+      if (!statusMatch) {
+        statusMismatch.push({ id, txStatus: tx.status || "Pending", ledgerStatus: ledgerEntry.status });
+      }
+
+      // Check amount
+      if (Math.abs(tx.amount - ledgerEntry.amount) > 0.01) {
+        amountMismatch.push({ id, txAmount: tx.amount, ledgerAmount: ledgerEntry.amount });
+      }
+    }
+
+    // Check for ledger entries missing in tx store (orphans)
+    for (const [id] of tollLedgerMap) {
+      if (!tollTxMap.has(id)) {
+        missingInTx.push(id);
+      }
+    }
+
+    const inSync = missingInLedger.length === 0 && missingInTx.length === 0 &&
+      statusMismatch.length === 0 && amountMismatch.length === 0;
+
+    return c.json({
+      success: true,
+      inSync,
+      summary: {
+        totalTollTransactions: tollTxMap.size,
+        totalTollLedgerEntries: tollLedgerMap.size,
+        missingInLedger: missingInLedger.length,
+        missingInTx: missingInTx.length,
+        statusMismatch: statusMismatch.length,
+        amountMismatch: amountMismatch.length,
+      },
+      details: {
+        missingInLedger: missingInLedger.slice(0, 50), // Limit for response size
+        missingInTx: missingInTx.slice(0, 50),
+        statusMismatch: statusMismatch.slice(0, 50),
+        amountMismatch: amountMismatch.slice(0, 50),
+      },
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /toll-ledger/sync-check error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 4: Backfill Historical Data
+// ═══════════════════════════════════════════════════════════════════════
+
+// ─── GET /toll-ledger/backup ─────────────────────────────────────────────
+// Creates a JSON backup of ALL toll transactions before migration.
+// REQUIRED: Download and verify this backup before running backfill.
+
+app.get(`${BASE}/toll-ledger/backup`, async (c) => {
+  try {
+    console.log("[TollLedgerBackup] Starting backup of all toll transactions...");
+    
+    // Load all transactions
+    const allTx = await kv.getByPrefix("transaction:");
+    const tollTransactions: any[] = [];
+    
+    for (const tx of allTx || []) {
+      if (tx && isTollCategory(tx.category)) {
+        tollTransactions.push(tx);
+      }
+    }
+
+    // Sort by date for easier verification
+    tollTransactions.sort((a, b) => {
+      const dateA = a.date || a.createdAt || "";
+      const dateB = b.date || b.createdAt || "";
+      return dateA.localeCompare(dateB);
+    });
+
+    // Compute stats
+    const dateRange = {
+      earliest: tollTransactions[0]?.date || "N/A",
+      latest: tollTransactions[tollTransactions.length - 1]?.date || "N/A",
+    };
+    const totalAmount = tollTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      version: "1.0",
+      count: tollTransactions.length,
+      dateRange,
+      totalAmount: Number(totalAmount.toFixed(2)),
+      transactions: tollTransactions,
+    };
+
+    console.log(`[TollLedgerBackup] Backup complete: ${tollTransactions.length} toll transactions, date range: ${dateRange.earliest} to ${dateRange.latest}`);
+
+    // Return as JSON with download headers
+    const filename = `toll_backup_${new Date().toISOString().split("T")[0]}.json`;
+    c.header("Content-Type", "application/json");
+    c.header("Content-Disposition", `attachment; filename="${filename}"`);
+    
+    return c.json(backup);
+  } catch (e: any) {
+    console.log(`[TollLedgerBackup] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /toll-ledger/backfill ──────────────────────────────────────────
+// Migrates existing toll transactions from transaction:* to toll_ledger:*.
+// Supports dry-run mode and batch processing.
+
+app.post(`${BASE}/toll-ledger/backfill`, async (c) => {
+  try {
+    const body = await c.req.json();
+    const dryRun = body.dryRun !== false; // Default to dry-run for safety
+    const batchSize = Math.min(body.batchSize || 100, 500); // Cap at 500
+    const startDate = body.startDate; // Optional filter
+    const skipExisting = body.skipExisting !== false; // Default to skip existing
+
+    console.log(`[TollLedgerBackfill] Starting backfill: dryRun=${dryRun}, batchSize=${batchSize}, startDate=${startDate || "all"}`);
+
+    // Load all toll transactions
+    const allTx = await kv.getByPrefix("transaction:");
+    const tollTransactions: any[] = [];
+    
+    for (const tx of allTx || []) {
+      if (tx && isTollCategory(tx.category)) {
+        // Apply date filter if specified
+        if (startDate && tx.date && tx.date < startDate) continue;
+        tollTransactions.push(tx);
+      }
+    }
+
+    console.log(`[TollLedgerBackfill] Found ${tollTransactions.length} toll transactions to process`);
+
+    // Load existing toll ledger entries to check for duplicates
+    const existingLedger = await getAllTollLedgerEntries();
+    const existingIds = new Set(existingLedger.map(e => e.id));
+
+    const results = {
+      processed: 0,
+      created: 0,
+      skipped: 0,
+      errors: 0,
+      errorDetails: [] as string[],
+    };
+
+    // Process in batches
+    for (let i = 0; i < tollTransactions.length; i += batchSize) {
+      const batch = tollTransactions.slice(i, i + batchSize);
+      
+      for (const tx of batch) {
+        results.processed++;
+
+        try {
+          // Check if already exists
+          if (skipExisting && existingIds.has(tx.id)) {
+            results.skipped++;
+            continue;
+          }
+
+          // Convert to toll ledger format
+          const tollRecord = transactionToTollLedgerServer(tx);
+          
+          // Add backfill audit entry
+          const auditEntry: TollAuditEntry = {
+            action: "imported",
+            timestamp: new Date().toISOString(),
+            userId: "system",
+            userName: "Backfill Migration",
+            metadata: {
+              source: "backfill",
+              originalTransactionId: tx.id,
+              dryRun,
+            },
+          };
+          tollRecord.auditTrail = [auditEntry];
+          
+          // Validate required fields
+          if (!tollRecord.id) {
+            results.errors++;
+            results.errorDetails.push(`Missing ID for transaction: ${JSON.stringify(tx).slice(0, 100)}`);
+            continue;
+          }
+          if (!tollRecord.date) {
+            // Try to extract date from other fields
+            tollRecord.date = tx.createdAt?.split("T")[0] || new Date().toISOString().split("T")[0];
+          }
+          if (typeof tollRecord.amount !== "number" || isNaN(tollRecord.amount)) {
+            tollRecord.amount = 0;
+          }
+
+          // Save (unless dry run)
+          if (!dryRun) {
+            await saveTollLedgerEntry(tollRecord);
+            existingIds.add(tollRecord.id); // Track to avoid re-processing in same run
+          }
+          
+          results.created++;
+        } catch (err: any) {
+          results.errors++;
+          results.errorDetails.push(`Error processing ${tx.id}: ${err.message}`);
+          if (results.errorDetails.length > 50) {
+            results.errorDetails.push("... (truncated, too many errors)");
+            break;
+          }
+        }
+      }
+
+      // Log progress every batch
+      console.log(`[TollLedgerBackfill] Progress: ${results.processed}/${tollTransactions.length} processed, ${results.created} created, ${results.skipped} skipped, ${results.errors} errors`);
+    }
+
+    console.log(`[TollLedgerBackfill] Complete: ${JSON.stringify(results)}`);
+
+    return c.json({
+      success: true,
+      dryRun,
+      results,
+      message: dryRun 
+        ? "Dry run complete. Review results and re-run with dryRun=false to execute."
+        : `Backfill complete: ${results.created} entries created.`,
+    });
+  } catch (e: any) {
+    console.log(`[TollLedgerBackfill] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /toll-ledger/backfill/status ────────────────────────────────────
+// Compares counts and identifies any missing entries after backfill.
+
+app.get(`${BASE}/toll-ledger/backfill/status`, async (c) => {
+  try {
+    // Load all toll transactions
+    const allTx = await kv.getByPrefix("transaction:");
+    const tollTxMap = new Map<string, any>();
+    for (const tx of allTx || []) {
+      if (tx && isTollCategory(tx.category)) {
+        tollTxMap.set(tx.id, tx);
+      }
+    }
+
+    // Load all toll ledger entries
+    const tollLedgerEntries = await getAllTollLedgerEntries();
+    const tollLedgerIds = new Set(tollLedgerEntries.map(e => e.id));
+
+    // Find missing entries
+    const missingInLedger: string[] = [];
+    for (const [id] of tollTxMap) {
+      if (!tollLedgerIds.has(id)) {
+        missingInLedger.push(id);
+      }
+    }
+
+    // Compute stats by status/type for both stores
+    const txByStatus: Record<string, number> = {};
+    const ledgerByStatus: Record<string, number> = {};
+    
+    for (const tx of tollTxMap.values()) {
+      const status = tx.status || "Pending";
+      txByStatus[status] = (txByStatus[status] || 0) + 1;
+    }
+    for (const entry of tollLedgerEntries) {
+      ledgerByStatus[entry.status] = (ledgerByStatus[entry.status] || 0) + 1;
+    }
+
+    const isComplete = missingInLedger.length === 0;
+
+    return c.json({
+      success: true,
+      isComplete,
+      counts: {
+        transactionStore: tollTxMap.size,
+        tollLedgerStore: tollLedgerEntries.size,
+        missingInLedger: missingInLedger.length,
+      },
+      byStatus: {
+        transactionStore: txByStatus,
+        tollLedgerStore: ledgerByStatus,
+      },
+      missingIds: missingInLedger.slice(0, 100), // Limit for response size
+      message: isComplete 
+        ? "All toll transactions have been migrated to the toll ledger."
+        : `${missingInLedger.length} toll transactions are missing from the toll ledger. Run backfill to complete migration.`,
+    });
+  } catch (e: any) {
+    console.log(`[TollLedgerBackfill] GET /status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // PHASE 3: Server-Side Reconciliation Actions (with ledger writes)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1188,19 +2242,16 @@ app.post(`${BASE}/reconcile`, async (c) => {
       );
     }
 
-    const tx = await kv.get(`transaction:${transactionId}`);
-    if (!tx) return c.json({ error: `Transaction ${transactionId} not found` }, 404);
+    // Phase 6: Read from toll_ledger (single source of truth)
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
-    if (!isTollCategory(tx.category)) {
-      return c.json(
-        { error: `Transaction ${transactionId} is not a toll category (found: ${tx.category})` },
-        400,
-      );
-    }
+    // Convert to tx shape for response compatibility
+    const tx = tollLedgerToTxShape(tollEntry);
 
-    if (tx.isReconciled && tx.tripId) {
+    if (tollEntry.status === "reconciled" && tollEntry.tripId) {
       return c.json(
-        { error: `Transaction ${transactionId} is already reconciled to trip ${tx.tripId}` },
+        { error: `Toll ${transactionId} is already reconciled to trip ${tollEntry.tripId}` },
         409,
       );
     }
@@ -1208,19 +2259,24 @@ app.post(`${BASE}/reconcile`, async (c) => {
     const trip = await kv.get(`trip:${tripId}`);
     if (!trip) return c.json({ error: `Trip ${tripId} not found` }, 404);
 
-    // Update transaction
+    // Phase 6: Write ONLY to toll_ledger (single source of truth)
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: "reconciled",
+        tripId,
+        driverId: trip.driverId || tx.driverId,
+        driverName: trip.driverName || tx.driverName,
+      },
+      "reconciled",
+      "admin"
+    );
+
+    // Update local tx object for response (not persisted to transaction:*)
     tx.tripId = tripId;
     tx.isReconciled = true;
     tx.driverId = trip.driverId || tx.driverId;
     tx.driverName = trip.driverName || tx.driverName;
-    tx.metadata = {
-      ...tx.metadata,
-      reconciledAt: new Date().toISOString(),
-      reconciledBy: "admin",
-      matchedTripPlatform: trip.platform,
-    };
-
-    await kv.set(`transaction:${transactionId}`, tx);
 
     // Write ledger entry
     await writeTollLedgerEntry({
@@ -1271,32 +2327,40 @@ app.post(`${BASE}/unreconcile`, async (c) => {
       return c.json({ error: "transactionId is required" }, 400);
     }
 
-    const tx = await kv.get(`transaction:${transactionId}`);
-    if (!tx) return c.json({ error: `Transaction ${transactionId} not found` }, 404);
+    // Phase 6: Read from toll_ledger (single source of truth)
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
-    if (!tx.tripId) {
+    // Convert to tx shape for response compatibility
+    const tx = tollLedgerToTxShape(tollEntry);
+
+    if (!tollEntry.tripId) {
       return c.json(
-        { error: `Transaction ${transactionId} has no linked trip to unreconcile` },
+        { error: `Toll ${transactionId} has no linked trip to unreconcile` },
         400,
       );
     }
 
-    const previousTripId = tx.tripId;
+    const previousTripId = tollEntry.tripId;
     const previousTrip = await kv.get(`trip:${previousTripId}`);
 
-    // Clear reconciliation
+    // Phase 6: Write ONLY to toll_ledger (single source of truth)
+    // Include autoMatchOverridden flag if this was auto-matched
+    const wasAutoMatched = tx.metadata?.reconciledBy === 'system-auto' || tx.metadata?.matchedBy === 'system-auto';
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: "pending",
+        tripId: null,
+        metadata: wasAutoMatched ? { autoMatchOverridden: true } : undefined,
+      },
+      "unreconciled",
+      "admin"
+    );
+
+    // Update local tx object for response (not persisted to transaction:*)
     tx.tripId = null;
     tx.isReconciled = false;
-    tx.metadata = {
-      ...tx.metadata,
-      unreconciledAt: new Date().toISOString(),
-      previousTripId,
-      // Phase 6: If this was an auto-matched toll, set override flag so the
-      // auto-confirm logic in /unreconciled skips it on future page loads.
-      ...(tx.metadata?.reconciledBy === 'system-auto' ? { autoMatchOverridden: true } : {}),
-    };
-
-    await kv.set(`transaction:${transactionId}`, tx);
 
     // Write reversal ledger entry
     await writeTollLedgerEntry({
@@ -1348,15 +2412,12 @@ app.patch(`${BASE}/edit`, async (c) => {
       return c.json({ error: "updates object is required" }, 400);
     }
 
-    const tx = await kv.get(`transaction:${transactionId}`);
-    if (!tx) return c.json({ error: `Transaction ${transactionId} not found` }, 404);
+    // Phase 6: Read from toll_ledger (single source of truth)
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
-    if (!isTollCategory(tx.category)) {
-      return c.json(
-        { error: `Transaction ${transactionId} is not a toll category (found: ${tx.category})` },
-        400,
-      );
-    }
+    // Convert to tx shape for response compatibility
+    const tx = tollLedgerToTxShape(tollEntry);
 
     // Only allow specific fields to be edited
     const allowedFields = ["date", "time", "amount", "vehiclePlate", "vehicleId", "driverName", "driverId", "description"];
@@ -1381,23 +2442,16 @@ app.patch(`${BASE}/edit`, async (c) => {
     }
 
     // Track edit history in metadata
-    tx.metadata = {
-      ...tx.metadata,
-      lastEditedAt: new Date().toISOString(),
-      lastEditedBy: "admin",
-      editHistory: [
-        ...(tx.metadata?.editHistory || []),
-        {
-          editedAt: new Date().toISOString(),
-          fields: Object.keys(appliedUpdates),
-          previousValues: Object.fromEntries(
-            Object.keys(appliedUpdates).map((k) => [k, tx[k]])
-          ),
-        },
-      ],
-    };
+    // Phase 6: Write ONLY to toll_ledger (single source of truth)
+    await updateTollLedgerEntry(
+      transactionId,
+      appliedUpdates,
+      "updated",
+      "admin"
+    );
 
-    await kv.set(`transaction:${transactionId}`, tx);
+    // Update local tx object for response (not persisted to transaction:*)
+    Object.assign(tx, appliedUpdates);
 
     console.log(
       `[TollReconciliation] Edited tx ${transactionId}: ${Object.keys(appliedUpdates).join(", ")}`,
@@ -1448,8 +2502,7 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
         continue;
       }
 
-      const updatedTxKeys: string[] = [];
-      const updatedTxValues: any[] = [];
+      const tollLedgerUpdates: { id: string; updates: Partial<TollLedgerRecord>; trip: any }[] = [];
       const ledgerKeys: string[] = [];
       const ledgerValues: any[] = [];
 
@@ -1478,30 +2531,27 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
           continue;
         }
 
-        // Update transaction
-        tx.tripId = tripId;
-        tx.isReconciled = true;
-        tx.driverId = trip.driverId || tx.driverId;
-        tx.driverName = trip.driverName || tx.driverName;
-        tx.metadata = {
-          ...tx.metadata,
-          reconciledAt: new Date().toISOString(),
-          reconciledBy: "admin_bulk",
-          matchedTripPlatform: trip.platform,
-        };
+        // Phase 6: Write ONLY to toll_ledger
+        tollLedgerUpdates.push({
+          id: transactionId,
+          updates: {
+            status: "reconciled",
+            tripId,
+            driverId: trip.driverId || tx.driverId,
+            driverName: trip.driverName || tx.driverName,
+          },
+          trip,
+        });
 
-        updatedTxKeys.push(`transaction:${transactionId}`);
-        updatedTxValues.push(tx);
-
-        // Build ledger entry
+        // Build ledger entry for audit trail
         const ledgerId = crypto.randomUUID();
         ledgerKeys.push(`ledger:${ledgerId}`);
         ledgerValues.push({
           id: ledgerId,
           date: tx.date?.split("T")[0] || new Date().toISOString().split("T")[0],
           createdAt: new Date().toISOString(),
-          driverId: tx.driverId || trip.driverId || "unknown",
-          driverName: tx.driverName || trip.driverName || "Unknown",
+          driverId: trip.driverId || tx.driverId || "unknown",
+          driverName: trip.driverName || tx.driverName || "Unknown",
           vehicleId: tx.vehicleId || trip.vehicleId,
           eventType: "toll_reconciled",
           category: "Toll Reconciliation",
@@ -1525,12 +2575,14 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
         results.matched++;
       }
 
-      // Batch write transactions + ledger entries
-      if (updatedTxKeys.length > 0) {
-        await kv.mset(updatedTxKeys, updatedTxValues);
-      }
+      // Batch write ledger entries (audit trail)
       if (ledgerKeys.length > 0) {
         await kv.mset(ledgerKeys, ledgerValues);
+      }
+
+      // Phase 6: Update toll_ledger entries (primary store)
+      for (const { id, updates } of tollLedgerUpdates) {
+        await updateTollLedgerEntry(id, updates, "reconciled", "admin_bulk");
       }
     }
 
@@ -1555,27 +2607,27 @@ app.post(`${BASE}/approve`, async (c) => {
       return c.json({ error: "transactionId is required" }, 400);
     }
 
-    const tx = await kv.get(`transaction:${transactionId}`);
-    if (!tx) return c.json({ error: `Transaction ${transactionId} not found` }, 404);
+    // Phase 6: Read from toll_ledger (single source of truth)
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
-    if (!isTollCategory(tx.category)) {
-      return c.json(
-        { error: `Transaction ${transactionId} is not a toll category` },
-        400,
-      );
-    }
+    // Convert to tx shape for response compatibility
+    const tx = tollLedgerToTxShape(tollEntry);
 
+    // Phase 6: Write ONLY to toll_ledger (single source of truth)
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: "approved",
+        notes: notes || undefined,
+      },
+      "approved",
+      "admin"
+    );
+
+    // Update local tx object for response
     tx.status = "Approved";
     tx.isReconciled = true;
-    tx.metadata = {
-      ...tx.metadata,
-      approvedAt: new Date().toISOString(),
-      approvedBy: "admin",
-      notes: notes || tx.metadata?.notes,
-      resolution: "approved",
-    };
-
-    await kv.set(`transaction:${transactionId}`, tx);
 
     // Write ledger entry for the approval
     await writeTollLedgerEntry({
@@ -1618,27 +2670,27 @@ app.post(`${BASE}/reject`, async (c) => {
       return c.json({ error: "transactionId is required" }, 400);
     }
 
-    const tx = await kv.get(`transaction:${transactionId}`);
-    if (!tx) return c.json({ error: `Transaction ${transactionId} not found` }, 404);
+    // Phase 6: Read from toll_ledger (single source of truth)
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
-    if (!isTollCategory(tx.category)) {
-      return c.json(
-        { error: `Transaction ${transactionId} is not a toll category` },
-        400,
-      );
-    }
+    // Convert to tx shape for response compatibility
+    const tx = tollLedgerToTxShape(tollEntry);
 
+    // Phase 6: Write ONLY to toll_ledger (single source of truth)
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: "rejected",
+        notes: reason || undefined,
+      },
+      "rejected",
+      "admin"
+    );
+
+    // Update local tx object for response
     tx.status = "Rejected";
-    tx.isReconciled = true; // Rejected = resolved (no longer pending)
-    tx.metadata = {
-      ...tx.metadata,
-      rejectedAt: new Date().toISOString(),
-      rejectedBy: "admin",
-      rejectionReason: reason || "No reason provided",
-      resolution: "rejected",
-    };
-
-    await kv.set(`transaction:${transactionId}`, tx);
+    tx.isReconciled = true;
 
     // Write ledger entry for the rejection
     await writeTollLedgerEntry({
@@ -1690,17 +2742,14 @@ app.post(`${BASE}/resolve`, async (c) => {
       );
     }
 
-    const tx = await kv.get(`transaction:${transactionId}`);
-    if (!tx) return c.json({ error: `Transaction ${transactionId} not found` }, 404);
+    // Phase 6: Read from toll_ledger (single source of truth)
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
-    if (!isTollCategory(tx.category)) {
-      return c.json(
-        { error: `Transaction ${transactionId} is not a toll category` },
-        400,
-      );
-    }
+    // Convert to tx shape for response compatibility
+    const tx = tollLedgerToTxShape(tollEntry);
 
-    const amount = Math.abs(Number(tx.amount) || 0);
+    const amount = Math.abs(Number(tollEntry.amount) || 0);
 
     // Determine status and claim creation based on resolution type
     let claimResolutionReason: string;
@@ -1738,16 +2787,25 @@ app.post(`${BASE}/resolve`, async (c) => {
         return c.json({ error: "Invalid resolution" }, 400);
     }
 
-    tx.isReconciled = true;
-    tx.metadata = {
-      ...tx.metadata,
-      resolvedAt: new Date().toISOString(),
-      resolvedBy: "admin",
-      resolution,
-      resolutionNotes: notes,
-    };
+    // Phase 6: Write ONLY to toll_ledger (single source of truth)
+    const ledgerResolution: "personal" | "business" | "write_off" | null =
+      resolution === "Personal" ? "personal" :
+      resolution === "Business" ? "business" :
+      resolution === "WriteOff" ? "write_off" : null;
+    
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: tx.status === "Approved" ? "resolved" : "rejected",
+        resolution: ledgerResolution,
+        notes: notes || undefined,
+      },
+      "resolved",
+      "admin"
+    );
 
-    await kv.set(`transaction:${transactionId}`, tx);
+    // Update local tx object for response (not persisted to transaction:*)
+    tx.isReconciled = true;
 
     // Create a claim record for audit trail
     const claimId = crypto.randomUUID();
@@ -1809,7 +2867,8 @@ app.post(`${BASE}/resolve`, async (c) => {
 
 app.get(`${BASE}/export`, async (c) => {
   try {
-    const { tollTx, trips: allTrips } = await loadAllTollTransactionsWithTrips();
+    // Phase 5: Read from toll_ledger:* (single source of truth)
+    const { tollTx, trips: allTrips } = await loadAllTollLedgerWithTrips();
 
     if (tollTx.length === 0) {
       return c.json({ success: true, data: [], total: 0 });
@@ -1874,11 +2933,16 @@ app.get(`${BASE}/export`, async (c) => {
         const tPart = tx.date.split("T")[1];
         if (tPart) timeStr = tPart.replace(/[Z+-].*$/, "");
       }
+      const dateOnly =
+        typeof tx.date === "string" && tx.date.includes("T")
+          ? tx.date.slice(0, 10)
+          : (tx.date || "");
 
       // Base row — transaction fields
       const row: Record<string, any> = {
         id: tx.id || "",
-        date: tx.date || "",
+        // Canonical: date-only string for consistent filtering/grouping in UI
+        date: dateOnly,
         time: timeStr,
         vehicleId: tx.vehicleId || "",
         vehiclePlate: tx.vehiclePlate || "",
@@ -1970,3 +3034,13 @@ app.get(`${BASE}/export`, async (c) => {
 });
 
 export default app;
+
+// ── Exported helpers for dual-write (Phase 3) ───────────────────────────────
+export {
+  saveTollLedgerEntry,
+  getTollLedgerEntry,
+  updateTollLedgerEntry,
+  deleteTollLedgerEntry,
+  transactionToTollLedgerServer,
+  isTollCategory,
+};

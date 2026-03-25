@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download } from 'lucide-react';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
@@ -49,6 +49,23 @@ interface RepairResult {
   _diagnostics?: { driverRecords: { id: string; name: string; uberDriverId: string | null; inDriveDriverId: string | null }[] };
 }
 
+interface TollRepairDatesResponse {
+  success: boolean;
+  results: {
+    dryRun: boolean;
+    fleetTz: string;
+    totalLedger: number;
+    checked: number;
+    legacyFound: number;
+    toUpdate: number;
+    updated: number;
+    skipped: number;
+    errors: number;
+    samples: Array<{ id: string; from: string; to: string }>;
+  };
+  error?: string;
+}
+
 export function LedgerBackfillPanel() {
   // ── Backfill state ──
   const [driverId, setDriverId] = useState('');
@@ -80,6 +97,13 @@ export function LedgerBackfillPanel() {
   const [setPlatformError, setPlatformError_] = useState<string | null>(null);
   const [confirmSetPlatform, setConfirmSetPlatform] = useState<{ roamId: string; platform: string; platformId: string; driverName: string } | null>(null);
 
+  // ── Toll Ledger Date Repair state ──
+  const [tollRepairLoading, setTollRepairLoading] = useState(false);
+  const [tollRepairResult, setTollRepairResult] = useState<TollRepairDatesResponse | null>(null);
+  const [tollRepairError, setTollRepairError] = useState<string | null>(null);
+  const [confirmTollRepair, setConfirmTollRepair] = useState(false);
+  const [tollBackupLoading, setTollBackupLoading] = useState(false);
+
   const runBackfill = async (dryRun: boolean) => {
     setLoading(true);
     setResult(null);
@@ -107,6 +131,67 @@ export function LedgerBackfillPanel() {
       setError(e.message || 'Network error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const downloadTollLedgerBackup = async () => {
+    setTollBackupLoading(true);
+    setTollRepairError(null);
+    try {
+      const url = `${API_BASE}/toll-reconciliation/toll-ledger/backup-ledger`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Server returned ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      const cd = res.headers.get('content-disposition') || '';
+      const match = /filename="([^"]+)"/.exec(cd);
+      a.download = match?.[1] || 'toll_ledger_backup.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (e: any) {
+      setTollRepairError(e.message || 'Backup download failed');
+    } finally {
+      setTollBackupLoading(false);
+    }
+  };
+
+  const runTollRepairDates = async (dryRun: boolean) => {
+    setTollRepairLoading(true);
+    setTollRepairResult(null);
+    setTollRepairError(null);
+    setConfirmTollRepair(false);
+
+    try {
+      const url = `${API_BASE}/toll-reconciliation/toll-ledger/repair-dates`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dryRun, batchSize: 200 }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTollRepairError(data.error || `Server returned ${res.status}`);
+      } else {
+        setTollRepairResult(data);
+      }
+    } catch (e: any) {
+      setTollRepairError(e.message || 'Network error');
+    } finally {
+      setTollRepairLoading(false);
     }
   };
 
@@ -393,6 +478,141 @@ export function LedgerBackfillPanel() {
           </details>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 1B: TOLL LEDGER DATE REPAIR                                 */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Toll Ledger Date Repair</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Fix toll ledger records where the stored <span className="font-medium">date</span> is off by a day due to legacy timezone/format issues.
+              Runs a full backfill by comparing each <span className="font-medium">toll_ledger</span> entry to its legacy <span className="font-medium">transaction</span> record.
+            </p>
+          </div>
+
+          <button
+            onClick={downloadTollLedgerBackup}
+            disabled={tollBackupLoading || tollRepairLoading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg font-medium text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+            title="Download a full JSON backup of toll_ledger:* before making changes"
+          >
+            {tollBackupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Download Backup (toll_ledger)
+          </button>
+        </div>
+
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={() => runTollRepairDates(true)}
+            disabled={tollRepairLoading || tollBackupLoading}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 rounded-lg font-medium text-sm hover:bg-blue-100 dark:hover:bg-blue-900/50 disabled:opacity-50 transition-colors"
+          >
+            {tollRepairLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+            Preview (Dry Run)
+          </button>
+
+          {!confirmTollRepair ? (
+            <button
+              onClick={() => setConfirmTollRepair(true)}
+              disabled={tollRepairLoading || tollBackupLoading}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-lg font-medium text-sm hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 transition-colors"
+            >
+              <Play className="h-4 w-4" />
+              Run Repair (Real)
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">Are you sure?</span>
+              <button
+                onClick={() => runTollRepairDates(false)}
+                disabled={tollRepairLoading || tollBackupLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {tollRepairLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Yes, Repair
+              </button>
+              <button
+                onClick={() => setConfirmTollRepair(false)}
+                disabled={tollRepairLoading || tollBackupLoading}
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 text-sm hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+
+        {tollRepairError && (
+          <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <div>
+              <div className="text-sm font-medium text-red-800 dark:text-red-200">Repair failed</div>
+              <div className="text-sm text-red-700 dark:text-red-300">{tollRepairError}</div>
+            </div>
+          </div>
+        )}
+
+        {tollRepairResult?.success && (
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                {tollRepairResult.results.dryRun ? 'Dry Run Results' : 'Repair Completed'}
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Fleet TZ: <span className="font-medium">{tollRepairResult.results.fleetTz}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md p-3">
+                <div className="text-xs text-slate-500 dark:text-slate-400">Ledger total</div>
+                <div className="text-lg font-bold text-slate-900 dark:text-white">{tollRepairResult.results.totalLedger}</div>
+              </div>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md p-3">
+                <div className="text-xs text-slate-500 dark:text-slate-400">Legacy found</div>
+                <div className="text-lg font-bold text-slate-900 dark:text-white">{tollRepairResult.results.legacyFound}</div>
+              </div>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md p-3">
+                <div className="text-xs text-slate-500 dark:text-slate-400">Would change</div>
+                <div className="text-lg font-bold text-slate-900 dark:text-white">{tollRepairResult.results.toUpdate}</div>
+              </div>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md p-3">
+                <div className="text-xs text-slate-500 dark:text-slate-400">Errors</div>
+                <div className="text-lg font-bold text-slate-900 dark:text-white">{tollRepairResult.results.errors}</div>
+              </div>
+            </div>
+
+            {tollRepairResult.results.samples?.length > 0 && (
+              <div className="mt-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Sample changes (max 25)</div>
+                <div className="max-h-48 overflow-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-slate-600 dark:text-slate-300">ID</th>
+                        <th className="text-left px-3 py-2 font-medium text-slate-600 dark:text-slate-300">From</th>
+                        <th className="text-left px-3 py-2 font-medium text-slate-600 dark:text-slate-300">To</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tollRepairResult.results.samples.map((s) => (
+                        <tr key={s.id} className="border-b border-slate-100 dark:border-slate-800">
+                          <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-200">{s.id}</td>
+                          <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{s.from}</td>
+                          <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{s.to}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* SECTION 2: DRIVER ID REPAIR                                       */}

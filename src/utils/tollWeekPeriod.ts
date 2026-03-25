@@ -4,6 +4,11 @@ import type { DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 /** Parse toll charge date/time (same rules as reconciliation tables). */
 export function getTollTransactionDate(tx: FinancialTransaction): Date {
   try {
+    // If date already includes a time component, parse as ISO directly.
+    if (tx.date && tx.date.includes('T')) {
+      const d = parseISO(tx.date);
+      return !isNaN(d.getTime()) ? d : new Date(tx.date);
+    }
     const timeStr = tx.time || '12:00:00';
     const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
     const localDate = new Date(`${tx.date}T${cleanTime}`);
