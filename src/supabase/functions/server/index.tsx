@@ -30,6 +30,7 @@ import tollApp, {
   deleteTollLedgerEntry,
   buildTollLedgerFullBackupPayload,
   executeTollLedgerRepairDates,
+  executeTollResetForReconciliation,
 } from "./toll_controller.tsx";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
@@ -4099,6 +4100,23 @@ app.post("/make-server-37f42386/ledger/toll-ledger-repair-dates", requireAuth(),
   } catch (e: any) {
     console.log(`[TollLedgerRepairDates] Error (alias): ${e.message}`);
     return c.json({ error: e.message }, 500);
+  }
+});
+
+// Toll reset for reconciliation — registered on main router (same URL as toll_controller)
+// so production always matches; nested app.route("/", tollApp) was returning 404 for some deploys.
+app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const result = await executeTollResetForReconciliation(body.transactionId);
+    return c.json(result);
+  } catch (e: any) {
+    const status =
+      typeof e.status === "number" && e.status >= 400 && e.status < 600
+        ? e.status
+        : 500;
+    console.log(`[TollReset] Error (main router): ${e.message}`);
+    return c.json({ error: e.message }, status);
   }
 });
 
