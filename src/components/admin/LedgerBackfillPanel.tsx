@@ -4,6 +4,14 @@ import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, Chevr
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
+function edgeFnHeaders(extra?: Record<string, string>): Record<string, string> {
+  return {
+    Authorization: `Bearer ${publicAnonKey}`,
+    apikey: publicAnonKey,
+    ...extra,
+  };
+}
+
 interface BackfillResult {
   success: boolean;
   dryRun: boolean;
@@ -141,7 +149,7 @@ export function LedgerBackfillPanel() {
       const url = `${API_BASE}/ledger/backfill?tollLedgerBackup=1&dryRun=true`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+        headers: edgeFnHeaders(),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -180,7 +188,7 @@ export function LedgerBackfillPanel() {
       const url = `${API_BASE}/ledger/backfill?${params.toString()}`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+        headers: edgeFnHeaders(),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -202,7 +210,7 @@ export function LedgerBackfillPanel() {
     setDiscoveryError(null);
     try {
       const res = await fetch(`${API_BASE}/diagnostic/unresolvable-driver-map`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+        headers: edgeFnHeaders(),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -224,10 +232,7 @@ export function LedgerBackfillPanel() {
     try {
       const res = await fetch(`${API_BASE}/diagnostic/set-platform-id`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: edgeFnHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ roamId, platform, platformId }),
       });
       const data = await res.json();
@@ -260,7 +265,7 @@ export function LedgerBackfillPanel() {
       const url = `${API_BASE}/ledger/repair-driver-ids${params.toString() ? '?' + params.toString() : ''}`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+        headers: edgeFnHeaders(),
       });
 
       const data = await res.json();

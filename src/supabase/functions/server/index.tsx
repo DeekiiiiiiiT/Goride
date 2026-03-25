@@ -89,6 +89,36 @@ function correctFutureDates(transactions: any[]): any[] {
 
 const app = new Hono();
 
+// ─── Edge URL normalization (fixes 404 when gateway path ≠ Hono routes) ─────
+// Some Supabase / proxy setups send pathname as `/functions/v1/make-server-37f42386/...`
+// or bare `/ledger/...` while all handlers are registered as `/make-server-37f42386/...`.
+function normalizeEdgePathname(pathname: string): string {
+  if (pathname.startsWith("/functions/v1/make-server-37f42386")) {
+    return pathname.slice("/functions/v1".length) || "/make-server-37f42386";
+  }
+  if (pathname === "/make-server-37f42386" || pathname.startsWith("/make-server-37f42386/")) {
+    return pathname;
+  }
+  if (
+    pathname.startsWith("/ledger/") ||
+    pathname.startsWith("/toll-reconciliation/") ||
+    pathname.startsWith("/diagnostic/")
+  ) {
+    return `/make-server-37f42386${pathname}`;
+  }
+  return pathname;
+}
+
+app.use("*", async (c, next) => {
+  const url = new URL(c.req.url);
+  const fixed = normalizeEdgePathname(url.pathname);
+  if (fixed !== url.pathname) {
+    url.pathname = fixed;
+    return app.fetch(new Request(url.toString(), c.req.raw));
+  }
+  await next();
+});
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -403,7 +433,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     exposeHeaders: ["Content-Length", "X-Cache"],
     maxAge: 600,
