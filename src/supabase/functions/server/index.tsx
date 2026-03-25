@@ -3845,6 +3845,20 @@ app.delete("/make-server-37f42386/ledger/:id", requireAuth(), requirePermission(
 // Supports: ?dryRun=true, ?driverId=xxx, per-platform stats, skip reasons, error details, timing
 app.post("/make-server-37f42386/ledger/backfill", requireAuth(), requirePermission('data.backfill'), async (c) => {
     try {
+        // ── Toll ledger: backup + date repair (branch on this SAME handler) ──
+        // Ledger Backfill UI calls these; some gateways / older bundles never registered
+        // separate /ledger/toll-* routes, but this path has worked since Phase 2 backfill.
+        if (c.req.query("tollLedgerBackup") === "1") {
+            const backup = await buildTollLedgerFullBackupPayload();
+            return c.json(backup);
+        }
+        if (c.req.query("tollLedgerDateRepair") === "1") {
+            const repairDryRun = c.req.query("repairDryRun") !== "false";
+            const batchSize = Math.min(Number(c.req.query("repairBatchSize")) || 200, 500);
+            const results = await executeTollLedgerRepairDates({ dryRun: repairDryRun, batchSize });
+            return c.json({ success: true, results });
+        }
+
         const startedAt = new Date().toISOString();
         const startMs = Date.now();
 

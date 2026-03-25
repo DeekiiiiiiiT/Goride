@@ -138,8 +138,9 @@ export function LedgerBackfillPanel() {
     setTollBackupLoading(true);
     setTollRepairError(null);
     try {
-      const url = `${API_BASE}/ledger/toll-ledger-backup`;
+      const url = `${API_BASE}/ledger/backfill?tollLedgerBackup=1&dryRun=true`;
       const res = await fetch(url, {
+        method: 'POST',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` },
       });
       if (!res.ok) {
@@ -147,13 +148,12 @@ export function LedgerBackfillPanel() {
         throw new Error(data.error || `Server returned ${res.status}`);
       }
 
-      const blob = await res.blob();
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const objectUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      const cd = res.headers.get('content-disposition') || '';
-      const match = /filename="([^"]+)"/.exec(cd);
-      a.download = match?.[1] || 'toll_ledger_backup.json';
+      a.download = `toll_ledger_backup_${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -172,14 +172,15 @@ export function LedgerBackfillPanel() {
     setConfirmTollRepair(false);
 
     try {
-      const url = `${API_BASE}/ledger/toll-ledger-repair-dates`;
+      const params = new URLSearchParams();
+      params.set('tollLedgerDateRepair', '1');
+      params.set('repairDryRun', dryRun ? 'true' : 'false');
+      params.set('repairBatchSize', '200');
+      params.set('dryRun', 'true');
+      const url = `${API_BASE}/ledger/backfill?${params.toString()}`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ dryRun, batchSize: 200 }),
+        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
       });
 
       const data = await res.json().catch(() => ({}));
@@ -488,8 +489,9 @@ export function LedgerBackfillPanel() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Toll Ledger Date Repair</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Fix toll ledger records where the stored <span className="font-medium">date</span> is off by a day due to legacy timezone/format issues.
-              Runs a full backfill by comparing each <span className="font-medium">toll_ledger</span> entry to its legacy <span className="font-medium">transaction</span> record.
+              Aligns <span className="font-medium">toll_ledger.date</span> with legacy <span className="font-medium">transaction</span> dates.
+              Calls the same <span className="font-medium">POST …/ledger/backfill</span> route as the section above (extra query flags only).
+              <span className="block mt-1 text-slate-400 dark:text-slate-500">404 usually means the hosted Edge Function is not this codebase version—redeploy <span className="font-mono text-xs">make-server-37f42386</span>.</span>
             </p>
           </div>
 
