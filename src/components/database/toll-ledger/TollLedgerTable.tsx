@@ -49,10 +49,50 @@ function formatCurrency(value: number | null | undefined): string {
   }).format(value);
 }
 
+/**
+ * Format toll date for display. Date-only strings (YYYY-MM-DD) must be parsed as
+ * local calendar dates — `new Date('2026-01-04')` is UTC midnight and shows as
+ * Jan 3 in Jamaica (UTC-5), while filters still use the string 2026-01-04.
+ */
 function formatDate(iso: string | null | undefined, time?: string | null): string {
   if (!iso) return '\u2014';
+  const s = iso.trim();
   try {
-    const d = new Date(iso);
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+    if (isDateOnly) {
+      const [y, m, day] = s.split('-').map(Number);
+      const t = time?.trim();
+      const hasTime = t && /^\d{1,2}:\d{2}/.test(t);
+      let d: Date;
+      if (hasTime) {
+        const parts = t.split(':').map((p) => parseInt(p, 10));
+        const hh = parts[0] ?? 0;
+        const mm = parts[1] ?? 0;
+        const ss = parts[2] ?? 0;
+        d = new Date(y, m - 1, day, hh, mm, ss);
+      } else {
+        d = new Date(y, m - 1, day);
+      }
+      if (isNaN(d.getTime())) return iso;
+      if (hasTime) {
+        return d.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+      }
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+
+    const d = new Date(s);
     if (isNaN(d.getTime())) return iso;
     const datePart = d.toLocaleDateString('en-US', {
       month: 'short',
