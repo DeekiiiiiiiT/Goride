@@ -15,7 +15,7 @@ jobs:
         uses: supabase/setup-cli@v1
 
       - name: Deploy make-server-37f42386
-        run: supabase functions deploy make-server-37f42386 --project-ref $SUPABASE_PROJECT_REF
+        run: supabase functions deploy make-server-37f42386 --project-ref $SUPABASE_PROJECT_REF --use-api
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
