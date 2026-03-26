@@ -4103,6 +4103,16 @@ app.post("/make-server-37f42386/ledger/toll-ledger-repair-dates", requireAuth(),
   }
 });
 
+// Debug endpoint (helps confirm the deployed bundle includes the route).
+// Call: GET /functions/v1/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug
+app.get("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug", async (c) => {
+  return c.json({
+    ok: true,
+    route: "reset-for-reconciliation-debug",
+    now: new Date().toISOString(),
+  });
+});
+
 // Toll reset for reconciliation — registered on main router (same URL as toll_controller)
 // so production always matches; nested app.route("/", tollApp) was returning 404 for some deploys.
 app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", async (c) => {
