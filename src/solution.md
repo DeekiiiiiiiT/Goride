@@ -1,265 +1,253 @@
-# Toll Ledger Architecture Redesign
+# Fuel GPS matching: geofence enforcement & review workflows
 
-## Overview
-
-Migrate from the current fragmented toll system (filtering `transaction:*` by category) to a dedicated `toll_ledger:*` storage system that serves as the single source of truth for all toll data.
+This document breaks implementation into **phases**. **Do not start a phase until the product owner confirms** to proceed. After each phase is complete, **wait for explicit approval** before moving to the next phase.
 
 ---
 
-## Phase 1: Define Schema and Create Types
+## Scope summary
 
-**Goal:** Establish the canonical toll ledger schema and TypeScript types before writing any storage or API code.
-
-### Step 1.1: Create TollLedgerRecord type
-- Create new file `src/types/tollLedgerRecord.ts`
-- Define the complete `TollLedgerRecord` interface with all fields:
-  - Identity: `id`, `createdAt`, `updatedAt`
-  - Vehicle: `vehicleId`, `vehiclePlate`
-  - Driver: `driverId`, `driverName`
-  - Tag: `tollTagId`, `tagNumber`
-  - Location: `plaza`, `highway`, `location`
-  - Transaction: `date`, `time`, `type`, `amount`, `paymentMethod`
-  - Status: `status`, `resolution`, `isReconciled`
-  - Matching: `tripId`, `matchConfidence`, `matchedAt`, `matchedBy`
-  - Import: `batchId`, `batchName`, `importedAt`, `sourceFile`
-  - Evidence: `receiptUrl`, `description`, `notes`
-  - Audit: `auditTrail` array with `action`, `timestamp`, `userId`, `changes`
-  - Flexible: `metadata` object
-
-### Step 1.2: Define enums and constants
-- `TollType`: `usage`, `top_up`, `refund`, `adjustment`, `balance_transfer`
-- `TollPaymentMethod`: `tag_balance`, `cash`, `card`, `fleet_account`
-- `TollStatus`: `pending`, `approved`, `rejected`, `reconciled`, `resolved`, `disputed`
-- `TollResolution`: `personal`, `business`, `write_off`, `refunded`
-- `TollAuditAction`: `created`, `updated`, `reconciled`, `unreconciled`, `approved`, `rejected`, `resolved`, `imported`
-
-### Step 1.3: Create conversion utilities
-- `transactionToTollLedger(tx: FinancialTransaction): TollLedgerRecord` - Convert existing transactions
-- `tollLedgerToTransaction(toll: TollLedgerRecord): FinancialTransaction` - For backward compatibility
-- `validateTollLedgerRecord(record: unknown): TollLedgerRecord` - Runtime validation
-
-### Step 1.4: Update type exports
-- Add exports to `src/types/index.ts`
-- Ensure no circular dependencies
-
-**Verification:** Run `npm run build` to confirm types compile without errors.
+| Problem | Desired behavior |
+|--------|-------------------|
+| Log GPS is **outside** a verified station’s **`geofenceRadius`** but still inside the global smart-match window (~600m) | **Do not** auto-link to that verified station; treat as **no verified match** → **Learnt (STAGING)** for admin. |
+| **Two (or more) verified stations** close together; matcher cannot pick safely | **Do not** guess; route to a **dedicated admin “review” queue** (new tab or equivalent) until an admin assigns the correct station. |
+| Forensic / display consistency | Use **`geofenceRadius`** (and optional GPS accuracy) consistently with super-admin **Regional Efficiency** settings. |
 
 ---
 
-## Phase 2: Create Server-Side Storage Layer
+## Phase 1 — Core matcher: per-station geofence acceptance
 
-**Goal:** Implement the KV storage functions for `toll_ledger:*` on the server without changing any existing endpoints.
+**Goal:** Single source of truth in `findMatchingStationSmart` (and any shared helper): a station is only an acceptable **verified** match if distance to that station (primary + aliases) is within **`geofenceRadius + GPS accuracy buffer`**.
 
-### Step 2.1: Create toll ledger KV helpers
-- Add to `toll_controller.tsx` or create `toll_ledger_service.ts`:
-  - `saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void>`
-  - `getTollLedgerEntry(id: string): Promise<TollLedgerRecord | null>`
-  - `updateTollLedgerEntry(id: string, updates: Partial<TollLedgerRecord>): Promise<TollLedgerRecord>`
-  - `deleteTollLedgerEntry(id: string): Promise<void>`
-  - `getAllTollLedgerEntries(): Promise<TollLedgerRecord[]>`
-  - `queryTollLedgerEntries(filters: TollLedgerFilters): Promise<TollLedgerRecord[]>`
+### Steps
 
-### Step 2.2: Implement audit trail helper
-- `appendAuditTrail(entry: TollLedgerRecord, action: TollAuditAction, userId: string, changes?: object): TollLedgerRecord`
-- Automatically adds timestamp and formats changes
+1. **Inventory current behavior**
+   - Open `src/supabase/functions/server/geo_matcher.ts`.
+   - Document in comments (brief) the three outcomes: single candidate, multiple candidates (ambiguity rules), zero candidates.
+   - Confirm default `maxRadiusMeters` (600) remains the **search radius** for *who enters the candidate pool*, not the **acceptance** threshold.
 
-### Step 2.3: Implement query/filter logic
-- `TollLedgerFilters` interface: `vehicleId`, `driverId`, `dateRange`, `status`, `isReconciled`, `type`, `batchId`
-- Server-side filtering function that works with KV prefix scan
+2. **Define acceptance rule (precise)**
+   - For a candidate station with resolved distance `d` (shortest to primary or alias):
+     - Let `R = station.geofenceRadius ?? <project default, e.g. 150>` to match existing `StationProfile` / KV data.
+     - Let `A = gpsAccuracy` passed into `findMatchingStationSmart` (meters; 0 if unknown).
+     - **Accept** this candidate as a possible match only if `d <= R + A`.
+   - Decide policy when **`geofenceRadius` is missing**: use same default as duplicate-check / admin UI (`getDefaultGeofenceRadius` pattern) — **record the decision in code comments**.
 
-### Step 2.4: Add validation on save
-- Validate required fields before KV write
-- Normalize amounts (ensure consistent sign convention)
-- Sanitize string fields
+3. **Apply acceptance after candidate ordering, not only in multi-station branch**
+   - After building the sorted candidate list within `maxRadiusMeters + A`:
+     - **Filter** or **re-evaluate** each candidate: drop any where `d > R + A` for *that* station (per-station `R`).
+   - **Single-candidate path:** If the only candidate within 600m is **outside** its own `R + A`, treat as **no station** (`confidence: 'none'`), not `high`.
+   - **Multi-candidate path:** Re-run ambiguity logic **only on candidates that pass** their own `R + A`. If none pass, result is `none` (or a new explicit confidence — see step 5).
 
-**Verification:** Add temporary test endpoint `GET /toll-ledger/test` that creates, reads, updates, and deletes a test entry.
+4. **Ambiguity vs “outside geofence”**
+   - If **two+** stations are within **600m** but **all** are outside their respective `R + A`:
+     - Prefer returning **`none`** → Learnt funnel, **unless** product requires “ambiguous” for UI — **confirm with PO**.
+   - If **two+** pass their geofence but distances are “too similar” (existing ratio logic), keep **`ambiguous`** → review workflow (Phase 4).
 
----
+5. **Optional: explicit `confidence` value**
+   - If useful for logging/UI, add e.g. `'outside_geofence'` instead of collapsing to `'none'`, but **only if** all call sites handle it (otherwise stick to `'none'` to minimize churn).
 
-## Phase 3: Implement Dual-Write for New Data ✅ COMPLETED
+6. **Logging**
+   - Add structured `console.log` when rejecting due to geofence: station id, name, `d`, `R`, `A`.
 
-**Goal:** New toll data writes to both `transaction:*` (existing) and `toll_ledger:*` (new) without breaking any existing functionality.
+7. **Local verification (no deploy)**
+   - Manually trace: 442m vs 75m → must **not** return `high` for that station.
+   - Trace: 50m vs 75m → **high** (sole candidate).
+   - Trace: two stations both inside 600m, one at 40m (inside 75m) one at 200m (outside 200m geofence) — closest valid wins per existing ambiguity rules.
 
-### Step 3.1: Update manual toll entry (LogTollUsageModal)
-- After saving to `transaction:*`, also call `saveTollLedgerEntry()`
-- Convert transaction data to toll ledger format
-- Handle errors gracefully (log but don't fail if toll ledger write fails)
+**Exit criteria:** `geo_matcher.ts` behavior matches the table in “Scope summary” for geofence; unit tests added if the project has a test runner for this file (optional sub-step).
 
-### Step 3.2: Update CSV bulk import (BulkImportTollTransactionsModal)
-- For each imported row, write to both stores
-- Include batch metadata in toll ledger entry
-- Track import statistics for both stores
+**Phase 1 implementation (done):**
 
-### Step 3.3: Update reconciliation operations
-- `POST /reconcile`: Update both `transaction:*` and `toll_ledger:*`
-- `POST /unreconcile`: Update both stores
-- `POST /approve`: Update both stores
-- `POST /reject`: Update both stores
-- `POST /resolve`: Update both stores
-
-### Step 3.4: Update bulk reconcile
-- Ensure `POST /bulk-reconcile` writes to both stores
-- Use `kv.mset` for toll ledger entries too
-
-### Step 3.5: Add sync verification
-- Create helper to compare `transaction:*` and `toll_ledger:*` for a given toll ID
-- Log discrepancies for debugging
-
-**Verification:** 
-1. Create a toll via manual entry, verify it exists in both stores
-2. Import a CSV batch, verify all entries exist in both stores
-3. Reconcile a toll, verify both stores updated
+- `findMatchingStationSmart` first collects stations within **search radius** `maxRadiusMeters + gpsAccuracy` (unchanged default 600m + A).
+- Each candidate is **accepted** only if `distance <= (station.geofenceRadius ?? 150) + gpsAccuracy`.
+- Rejections log: `[SmartMatch] Geofence reject: id=… name=… d=… R=… A=…`.
+- If no station passes acceptance → `confidence: 'none'`, `distance` = closest **search-radius** distance (for audit), `candidatesInRange: 0`.
+- Ambiguity rules (3a/3b/3c) run on the **accepted** list only; per solution doc, if multiple stations are in search radius but **none** pass geofence → **none** (Learnt), not ambiguous.
 
 ---
 
-## Phase 4: Backfill Historical Data ✅ COMPLETED
+## Phase 2 — Wire matcher outputs through all server paths
 
-**Goal:** Migrate all existing toll transactions from `transaction:*` to `toll_ledger:*`.
+**Goal:** Every code path that calls `findMatchingStationSmart` (or duplicates its logic) produces consistent metadata and correct **Learnt** vs **ambiguous** vs **verified** outcomes.
 
-### Step 4.0: Create backup before migration (REQUIRED)
-- Create `GET /toll-ledger/backup` endpoint
-- Export ALL toll transactions from `transaction:*` to JSON format
-- Include full transaction objects with all metadata
-- Return downloadable JSON file with timestamp in filename (e.g., `toll_backup_2026-03-20.json`)
-- Log backup creation with count and date range
-- **DO NOT proceed to Step 4.1 until backup is downloaded and verified**
+### Steps
 
-### Step 4.1: Create backfill endpoint
-- `POST /toll-ledger/backfill` (admin only)
-- Parameters: `dryRun: boolean`, `batchSize: number`, `startDate?: string`
+1. **`fuel_controller.tsx` — fuel entry POST**
+   - Locate the block that calls `findMatchingStationSmart(..., 600, 0)`.
+   - Confirm: when result is `none`, existing branch creates **Learnt** and sets `verificationMethod: 'none'` / `locationStatus: 'unknown'` as today — **no duplicate** Learnt records (guard if entry already has `learnt_location` key).
+   - Pass **GPS accuracy** from `extractEntryCoords` / `entry.metadata` if available instead of hardcoded `0` (align with Phase 1 `A`).
+   - Re-read **ambiguous** branch: ensure it still sets `review_required` and does not create Learnt **unless** product wants both — **default: ambiguous → review only, not Learnt**.
 
-### Step 4.2: Implement backfill logic
-- Load all `transaction:*` entries where `isTollCategory(category)` is true
-- For each transaction:
-  - Check if `toll_ledger:{id}` already exists (skip if yes)
-  - Convert using `transactionToTollLedger()`
-  - Add audit entry: `action: 'imported'`, `source: 'backfill'`
-  - Save to `toll_ledger:*`
-- Track progress: processed, created, skipped, errors
+2. **`fuel_controller.tsx` — orphan reconcile (`/admin/reconcile-ledger-orphans`)**
+   - Same matcher call: after Phase 1, entries **outside** geofence should **not** be backfilled to verified.
+   - Confirm counters (`skippedNoMatch`, etc.) still make sense; add `skippedOutsideGeofence` log if helpful.
 
-### Step 4.3: Add backfill verification
-- `GET /toll-ledger/backfill/status`
-- Compare counts: total tolls in `transaction:*` vs `toll_ledger:*`
-- List any missing entries
+3. **`index.tsx` — financial / AI fuel transaction path**
+   - Locate `findMatchingStationSmart` with `600` and `locationMetadata.accuracy`.
+   - Align: verified link only when matcher returns acceptable match **and** Phase 1 rules satisfied (inherited automatically if only matcher changes).
+   - When `none`: existing **Learnt location** creation — verify idempotency if transaction is retried.
 
-### Step 4.4: Handle edge cases
-- Transactions with missing required fields (set defaults)
-- Duplicate detection (same date/amount/vehicle)
-- Invalid data (log and skip with error report)
+4. **Manual station picker override**
+   - Confirm **manual** verified selection still bypasses GPS (existing `skipGpsMatching`) — **do not** break admin/driver explicit picks.
 
-### Step 4.5: Create backfill UI (optional)
-- Add to Database Management section
-- Show progress, stats, errors
-- Allow re-running for failed entries
+5. **Grep for other callers**
+   - Search repo for `findMatchingStationSmart`, `findMatchingStation(`, and any hardcoded `600` proximity for fuel — list each file and either align or document exception (e.g. analytics-only).
 
-**Verification:**
-1. Run backfill in dry-run mode, review report
-2. Run actual backfill on staging/test data
-3. Verify counts match between stores
-4. Spot-check 10 random entries for data integrity
+**Exit criteria:** Grep clean; manual smoke: submit fuel with coords outside 75m of nearest verified → **Learnt** created; inside → verified link.
+
+**Phase 2 implementation (done):**
+
+- **`extractEntryGpsAccuracyMeters(entry)`** in `fuel_controller.tsx` — reads accuracy from `geofenceMetadata`, `metadata.geofenceMetadata`, `metadata.locationMetadata`, `locationMetadata`; caps at 500m; used for `findMatchingStationSmart(..., 600, gpsAccuracyM)` on **fuel POST** and **orphan reconcile**.
+- **Fuel POST — ambiguous:** Always sets `review_required` / `gps_ambiguous` / `matchDistance` / `ambiguityReason`; optional `matchedStationId` only if matcher ever returns a station (currently `null` for ambiguous). **No Learnt** on ambiguous.
+- **Fuel POST — no match:** **`metadata.learntLocationId`** set on create; **reuses** existing Learnt KV id on retry if `learntLocationId` already present (no duplicate `learnt_location:*` rows).
+- **Reconcile:** New counter **`skippedOutsideGeofence`** when `confidence === 'none'` and `distance` is finite (search radius hit but geofence rejected); **`skippedNoMatch`** when no station in search radius (`distance` Infinity). Response JSON includes `skippedOutsideGeofence`.
+- **`index.tsx` (fuel transactions):** `locationMetadata.accuracy` was already passed to matcher; **Learnt idempotency** via `metadata.learntLocationId` (same pattern as fuel POST); **`metadata` guard** on ambiguous / no-match branches; **`matchDistance`** on ambiguous.
+- **`findMatchingStationSmart` callers:** Only `fuel_controller.tsx` (2) and `index.tsx` (1) — **no code changes** elsewhere required for Phase 2.
 
 ---
 
-## Phase 5: Switch Readers to Toll Ledger ✅ COMPLETED
+## Phase 3 — Forensic verification & audit scoring alignment
 
-**Goal:** Update all toll data consumers to read from `toll_ledger:*` instead of `transaction:*`.
+**Goal:** Server-side “forensic” distance checks and any **audit confidence** logic use **`geofenceRadius`** consistently with Phase 1, avoiding `location.radius` / wrong defaults where that contradicts super-admin settings.
 
-### Step 5.1: Update `/toll-logs` endpoint
-- Change `loadAllTollTransactions()` to `getAllTollLedgerEntries()`
-- Update response mapping to match existing `TollLogEntry` shape
-- Ensure all existing filters still work
+### Steps
 
-### Step 5.2: Update `/unreconciled` endpoint
-- Query `toll_ledger:*` where `isReconciled = false`
-- Maintain existing response shape for UI compatibility
-- Update auto-reconcile logic to work with toll ledger
+1. **`fuel_controller.tsx` — Phase 5 forensic block**
+   - Find `radiusThreshold = matchedStationForVerification.location?.radius || 100`.
+   - Replace with **`geofenceRadius`** (and same default policy as Phase 1). Optionally keep `location.radius` as legacy fallback **only if** data migration proves some stations only have `location.radius`.
 
-### Step 5.3: Update `/reconciled` endpoint
-- Query `toll_ledger:*` where `isReconciled = true`
-- Include linked trip data
+2. **`fuel_logic` / confidence score**
+   - Search `calculateConfidenceScore` and related for distance thresholds; align with `geofenceRadius` or document why a different metric is used (e.g. scoring vs gating).
 
-### Step 5.4: Update `/export` endpoint
-- Read from `toll_ledger:*`
-- Map to `TollLedgerEntry` format
-- Verify CSV export still works
+3. **KV / station schema**
+   - Verify persisted stations from super-admin include `geofenceRadius` on the object used at runtime; if some old records lack it, defaults must match Phase 1.
 
-### Step 5.5: Update `/summary` endpoint
-- Calculate aggregates from `toll_ledger:*`
+**Exit criteria:** Forensic flags (`isSpoofingRisk`, etc.) use the same radius concept as matching; no contradictory 100m default unless documented.
 
-### Step 5.6: Update client hooks
-- `useTollLogs`: Verify works with new response (should be unchanged)
-- `useTollReconciliation`: Verify works with new response
-- No changes should be needed if response shapes match
+**Phase 3 implementation (done):**
 
-### Step 5.7: Add feature flag (optional)
-- `USE_TOLL_LEDGER=true` environment variable
-- Allows quick rollback to `transaction:*` if issues arise
-
-**Verification:**
-1. Toll Logs page shows same data as before
-2. Toll Reconciliation shows same unreconciled/reconciled data
-3. Toll Analytics charts/stats match
-4. Export CSV contains same columns and data
-5. All reconciliation operations still work
+- **`fuel_controller.tsx` — POST forensic block:** `radiusThreshold = geofenceRadius ?? location.radius ?? 150` (matches `geo_matcher` / Regional Efficiency; legacy `location.radius` when `geofenceRadius` absent).
+- **`fuel_controller.tsx` — `/admin/verify-record-forensics`:** Drift plausibility uses `metadata.radiusUsed` then station **`geofenceRadius`**, then **`location.radius`**, then **150** (replaces bare `|| 100`).
+- **`fuel_logic.ts` — `calculateConfidenceScore`:** GPS proximity bonus uses **`min(50, R × 0.5)`** with **`R = station.geofenceRadius ?? 150`** instead of a fixed **50m** threshold (scales with tight vs loose stations).
 
 ---
 
-## Phase 6: Cleanup and Finalization ✅ COMPLETED
+## Phase 4 — Admin UI: “Spatial review” (or similar) for ambiguous proximity
 
-**Goal:** Remove dual-write, stop writing tolls to `transaction:*`, and clean up legacy code.
+**Goal:** Verified stations **close together** → entries that are **`ambiguous`** / **`review_required`** appear in a **dedicated Station Database tab** (or sub-view) so admins resolve **which station** applies, without mixing with **Learnt** unknown locations.
 
-### Step 6.1: Remove dual-write logic
-- Update manual entry to write only to `toll_ledger:*`
-- Update CSV import to write only to `toll_ledger:*`
-- Update reconciliation operations to write only to `toll_ledger:*`
+### Steps
 
-### Step 6.2: Deprecate toll category filtering
-- Remove `isTollCategory()` usage from toll endpoints
-- Mark function as deprecated with JSDoc comment
+1. **Product naming**
+   - Finalize tab label: e.g. **“Spatial review”**, **“Ambiguous GPS”**, **“Proximity review”** — avoid generic **“Review”** if it conflicts with other admin queues.
 
-### Step 6.3: Update documentation
-- Document new `toll_ledger:*` schema
-- Document API changes
-- Update any developer guides
+2. **Data source**
+   - List what to show: fuel entries / transactions with `metadata.locationStatus === 'review_required'` and `verificationMethod` in `gps_ambiguous`, … (complete enum from codebase).
+   - Decide pagination, filters (date, vehicle, driver), and actions: **assign to station A**, **assign to station B**, **send to Learnt**, **merge**.
 
-### Step 6.4: Archive toll data from transaction store (optional)
-- Create backup of toll transactions before deletion
-- Remove toll entries from `transaction:*` to reduce store size
-- Add migration notes to changelog
+3. **API**
+   - If no endpoint exists: add GET (scoped, admin) that queries `fuel_entry:` / `transaction:` prefixes with review flags — **or** reuse existing Fuel Audit dashboard API with a dedicated filter. Prefer **one** list endpoint to avoid drift.
 
-### Step 6.5: Remove legacy code
-- Remove old `loadAllTollTransactions()` function
-- Remove `generateTransactionLedgerEntry()` for toll types
-- Clean up unused imports and types
+4. **UI implementation**
+   - Add tab to Station Database shell (same pattern as **Learnt (STAGING)**).
+   - Reuse table/card components from Fuel Audit if possible for consistency.
+   - Empty state copy explaining difference vs **Learnt**.
 
-### Step 6.6: Final verification
-- Full regression test of all toll features
-- Performance comparison (should be faster)
-- Monitor for any errors in production
+5. **Permissions**
+   - Restrict to super-admin or same role as other Station Database tabs.
 
-**Verification:**
-1. All toll features work with toll ledger only
-2. No toll data in `transaction:*` for new entries
-3. Build passes with no unused code warnings
-4. No regressions in toll functionality
+6. **Out of scope for this phase (unless PO insists)**
+   - Full merge/promote flows may already exist on Fuel Audit — **link** or **embed** instead of duplicating.
+
+**Exit criteria:** Ambiguous matches are visible and actionable in the new tab; Learnt tab still only for true unknown-location funnel.
+
+**Phase 4 implementation (done):**
+
+- **`GET /make-server-37f42386/admin/spatial-review-queue`** — Loads `fuel_entry:` and `transaction:` (Fuel / Fuel Reimbursement only), filters **`locationStatus === 'review_required'`** and **`verificationMethod === 'gps_ambiguous'`**, returns `{ items, count }` sorted by date desc.
+- **`POST .../admin/bulk-assign-station`** — Resolves **`fuel_entry:{id}`** first, then **`transaction:{id}`** for the same id; rejects non-fuel transactions; clears **`metadata.ambiguityReason`** on assign; idempotency checks top-level and **`metadata.matchedStationId`**.
+- **UI:** **`SpatialReviewTab`** — Table + empty state (explains difference vs Learnt), **Assign station** dialog with verified-station **Select**, calls **`api.bulkAssignStation`**.
+- **Station Database** — New tab **Spatial review** (badge **GPS**) after **Learnt (STAGING)**.
 
 ---
 
-## Rollback Plan
+## Phase 5 — Client consistency & copy
 
-If issues arise at any phase:
+**Goal:** Dashboards and analytics do not **re-bridge** fuel logs to verified stations using a **600m** rule alone; tooltips and labels match backend behavior.
 
-1. **Phase 3-4 (Dual-write/Backfill):** Simply stop using toll ledger, existing system unaffected
-2. **Phase 5 (Readers):** Re-enable `USE_TOLL_LEDGER=false` to revert to transaction store
-3. **Phase 6 (Cleanup):** Cannot easily rollback; ensure thorough testing before this phase
+### Steps
+
+1. **`GasStationAnalytics.tsx` (and similar)**
+   - Replace or gate “closest within 600m” logic so it respects **master station geofence** or **defers** to server-side `matchedStationId`.
+
+2. **`FuelLogTable.tsx` / transaction logs**
+   - Tooltip text for “Verified Station” / `gps_smart_matching` should mention **distance vs geofence** when relevant, or “pending review” for ambiguous.
+
+3. **i18n / strings**
+   - Centralize new strings if the project uses a message catalog.
+
+**Exit criteria:** UI does not show a log as “verified at 442m” for a 75m station after Phases 1–2 are live (unless manual override).
+
+**Phase 5 implementation (done):**
+
+- **`GasStationAnalytics.tsx`:** Removed flat **600m** client bridge. Offline bridge uses **`shortestDistanceMeters`** (primary + **`gpsAliases`**) and accepts only when **`d ≤ geofenceRadius (default 150) + GPS accuracy`** from log metadata — aligned with server matching. Bridge metadata: **`bridgeSource: 'gps_proximity_geofence'`**.
+- **`FuelLogTable.tsx`:** Verified tooltip — **“GPS offset from station anchor”** (not “Accuracy”), optional **reference radius** when **`metadata.radiusUsed`** exists; verification method uses **`replace(/_/g, ' ')`**. Ambiguous review tooltip — **distance** copy + pointer to **Station Database → Spatial review (GPS)**. Unknown-location tooltip — clarifies **Learnt (STAGING)** vs waiting for server match.
 
 ---
 
-## Success Metrics
+## Phase 6 — QA, rollout, and regression checklist
 
-- [x] Single `toll_ledger:*` store contains all toll data
-- [x] Toll Logs, Reconciliation, Analytics all read from same source
-- [x] No data discrepancies between views
-- [x] Audit trail captures all changes
-- [x] Query performance improved (no category filtering)
-- [x] Code is cleaner and easier to maintain
+**Goal:** Safe deploy with repeatable tests, monitoring, and a clear rollback story.
+
+### Pre-deploy
+
+- [ ] Deploy **Supabase Edge** (or your host) so **`fuel_controller`** / **`geo_matcher`** changes are live.
+- [ ] Deploy **frontend** so Phase 4–5 UI (Spatial review tab, analytics, tooltips) is live.
+- [ ] Confirm **staging** (or a test org) has at least one **verified** station with a **known `geofenceRadius`** (e.g. 75m) and GPS test coordinates **inside** and **outside** that radius.
+
+### Regression matrix (record pass/fail + notes)
+
+| # | Scenario | Expected | Pass |
+|---|----------|----------|------|
+| 1 | GPS **inside** station `geofenceRadius` (+ accuracy), single nearby verified station | `findMatchingStationSmart` → **high/medium**; fuel entry **verified** or correct handshake | |
+| 2 | GPS **outside** geofence but **within ~600m** of only one verified station | **No** auto-link to verified; **Learnt** (or `locationStatus` per no-match path); **`[SmartMatch] Geofence reject`** in logs | |
+| 3 | Two verified stations **close together**, distances ambiguous | **`gps_ambiguous`**; **Spatial review** tab lists row; **no** Learnt for this case alone | |
+| 4 | **Manual** station picker (verified) on fuel entry | Skips GPS; **`manual_admin_override`** / picker path; no false Learnt | |
+| 5 | **No GPS** on fuel entry | Gate / **Learnt** path unchanged; no crash | |
+| 6 | **Retry** same fuel save after Learnt id created | **Same** `learntLocationId` (no duplicate learnt rows) | |
+| 7 | **`POST /admin/reconcile-ledger-orphans`** on mixed orphans | `skippedOutsideGeofence` increments when in-range but outside geofence; matches only when inside acceptance | |
+| 8 | **Spatial review** → **Assign station** | Entry updates; **`ambiguityReason`** cleared; verified metadata | |
+| 9 | **GasStationAnalytics** for unresolved log | No **600m** phantom bridge; bridge only if within **geofence + accuracy** | |
+| 10 | **FuelLogTable** tooltips | Verified shows **offset** + optional **radiusUsed**; ambiguous points to **Spatial review** | |
+
+### Monitoring (first 48h after prod)
+
+- Search logs for **`[SmartMatch]`**, **`Geofence reject`**, **`SpatialReviewQueue`**.
+- Watch **Learnt** count: a **step change** is expected if many old logs were wrongly auto-verified (now correctly unlinked).
+- Watch **Spatial review** queue depth; should drain as admins assign.
+
+### Rollback
+
+1. Revert the deployment commit(s) (server + client) or redeploy previous build.
+2. **Data:** Entries already saved with new metadata (e.g. `learntLocationId`, `manual_bulk_assign`) are **not** auto-reverted — plan a **one-time reconcile** only if business requires re-linking old rows (out of scope unless requested).
+
+### Sign-off
+
+- [ ] Product owner accepts test matrix results for staging (or prod smoke).
+- [ ] No open **P0** issues on matching, Learnt, or Spatial review.
+
+**Phase 6 status:** Checklist ready — fill **Pass** column and checkboxes when QA is complete.
+
+---
+
+## Execution order & approvals
+
+| Phase | Depends on | Requires PO confirmation before starting |
+|-------|------------|------------------------------------------|
+| 1 | — | Yes |
+| 2 | 1 | Yes |
+| 3 | 1–2 (matcher stable) | Yes |
+| 4 | 1–2 (flags stable) | Yes |
+| 5 | 1–2 (ideally 3) | Yes |
+| 6 | All planned dev complete | Yes |
+
+**Current status:** **Phases 1–6 documented.** **Phase 6** = run the checklist above and sign off when done (no further code required for this phase unless QA finds bugs).

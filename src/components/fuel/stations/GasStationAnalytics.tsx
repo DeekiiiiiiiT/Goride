@@ -2,6 +2,21 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FuelEntry } from '../../../types/fuel';
 import { StationProfile, StationOverride } from '../../../types/station';
 import { aggregateStations, calculateRegionalStats, calculateDistance, generateStationId, normalizeStationName } from '../../../utils/stationUtils';
+
+/** Shortest distance to station primary + gpsAliases (parity with server geo_matcher). */
+function shortestDistanceMeters(lat: number, lng: number, station: StationProfile): number {
+  let d = calculateDistance(lat, lng, station.location.lat, station.location.lng);
+  const aliases = (station as any).gpsAliases;
+  if (Array.isArray(aliases)) {
+    for (const a of aliases) {
+      if (a?.lat != null && a?.lng != null) {
+        const ad = calculateDistance(lat, lng, a.lat, a.lng);
+        if (ad < d) d = ad;
+      }
+    }
+  }
+  return d;
+}
 import { fuelService } from '../../../services/fuelService';
 import { toast } from 'sonner@2.0.3';
 import { StationDashboard } from './StationDashboard';
@@ -53,7 +68,7 @@ export function GasStationAnalytics({ logs, loading = false, onRequestRefresh }:
     const masterById = new Map(masterStations.map(s => [s.id, s]));
 
     // 1. Evidence Bridge: Resolve logs to Verified Stations
-    // Priority: matchedStationId (server-side link) > GPS proximity > vendor name as-is
+    // Priority: matchedStationId (server-side link) > geofence-aware GPS bridge > vendor name as-is
     const resolvedLogs = inputLogs.map(log => {
       // Phase 11: First check if the log already has a server-side station match.
       // This covers transactions matched by the reconciler, sync-orphans, or auto-cleanup.
@@ -83,25 +98,26 @@ export function GasStationAnalytics({ logs, loading = false, onRequestRefresh }:
         return log;
       }
 
-      // Try to find a verified station within 600m (GPS-based bridge)
+      // Client-only bridge: same rule as server smart match — within per-station geofence (+ GPS accuracy).
+      // Do not use a flat 600m radius; that over-attached logs outside Regional Efficiency.
       const lat = log.locationMetadata?.lat || log.metadata?.location?.lat;
       const lng = log.locationMetadata?.lng || log.metadata?.location?.lng;
 
       if (lat && lng) {
+        const gpsAcc =
+          Number(log.locationMetadata?.accuracy ?? log.metadata?.locationMetadata?.accuracy ?? (log as any).geofenceMetadata?.accuracy ?? 0) || 0;
+
         let closestStation: StationProfile | null = null;
         let minDistance = Infinity;
 
-        masterStations.filter(s => s.status === 'verified').forEach(station => {
-          const dist = calculateDistance(
-            lat, lng,
-            station.location.lat, station.location.lng
-          );
-          
-          if (dist < minDistance && dist <= 600) {
+        for (const station of masterStations.filter((s) => s.status === 'verified')) {
+          const dist = shortestDistanceMeters(lat, lng, station);
+          const R = station.geofenceRadius ?? 150;
+          if (dist <= R + gpsAcc && dist < minDistance) {
             minDistance = dist;
             closestStation = station;
           }
-        });
+        }
 
         if (closestStation) {
           return {
@@ -113,8 +129,8 @@ export function GasStationAnalytics({ logs, loading = false, onRequestRefresh }:
               ...log.metadata,
               bridgedStationId: closestStation.id,
               bridgeDistance: minDistance,
-              bridgeSource: 'gps_proximity',
-            }
+              bridgeSource: 'gps_proximity_geofence',
+            },
           };
         }
       }

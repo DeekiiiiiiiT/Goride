@@ -1026,9 +1026,11 @@ export function calculateConfidenceScore(entry: any, station?: any) {
       score += 15;
     }
     
-    // Proximity Bonus
-    const matchDist = entry.metadata?.matchDistance || 999;
-    if (matchDist < 50) {
+    // Proximity bonus: "tight" relative to this station's geofence (Phase 3; aligns with matcher defaults)
+    const matchDist = entry.metadata?.matchDistance ?? 999;
+    const R = Number(station?.geofenceRadius) || 150;
+    const tightProximityCapM = Math.min(50, R * 0.5);
+    if (matchDist < tightProximityCapM) {
       breakdown.gps_bonus = 5;
       score += 5;
     }

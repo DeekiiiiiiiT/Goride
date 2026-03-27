@@ -947,6 +947,14 @@ export const api = {
     return response.json();
   },
 
+  async getSpatialReviewQueue(): Promise<{ items: any[]; count: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/spatial-review-queue`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+    });
+    if (!response.ok) throw new Error('Failed to fetch spatial review queue');
+    return response.json();
+  },
+
   async bulkAssignStation(entryIds: string[], stationId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/bulk-assign-station`, {
         method: 'POST',

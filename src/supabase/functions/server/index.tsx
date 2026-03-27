@@ -2545,31 +2545,40 @@ app.post("/make-server-37f42386/transactions", async (c) => {
                     }
                 } else if (smartResult.confidence === 'ambiguous') {
                     // GPS is near multiple stations — flag for management review, do NOT guess
+                    if (!transaction.metadata) transaction.metadata = {};
                     transaction.metadata.locationStatus = 'review_required';
                     transaction.metadata.verificationMethod = 'gps_ambiguous';
                     transaction.metadata.ambiguityReason = smartResult.ambiguityReason;
                     transaction.metadata.matchConfidence = 'ambiguous';
+                    transaction.metadata.matchDistance = smartResult.distance;
                     console.log(`[SmartGeoMatch] Ambiguous match — flagged for review. ${smartResult.ambiguityReason}`);
                 } else {
                     // No match at all — create Learnt Location (preserved from original)
+                    if (!transaction.metadata) transaction.metadata = {};
                     transaction.metadata.locationStatus = 'unverified';
 
-                    const learntId = crypto.randomUUID();
-                    const learntLocation = {
-                        id: learntId,
-                        name: transaction.vendor || transaction.description || 'Unknown Station',
-                        parentCompany: transaction.metadata?.parentCompany,
-                        location: {
-                            lat: locationMetadata.lat,
-                            lng: locationMetadata.lng,
-                            accuracy: locationMetadata.accuracy
-                        },
-                        timestamp: new Date().toISOString(),
-                        transactionId: transaction.id,
-                        status: 'learnt'
-                    };
-                    await kv.set(`learnt_location:${learntId}`, stampOrg(learntLocation, c));
-                    console.log(`[SmartGeoMatch] No station match — created Learnt Location: ${learntId}`);
+                    let learntId = transaction.metadata.learntLocationId as string | undefined;
+                    if (!learntId) {
+                        learntId = crypto.randomUUID();
+                        const learntLocation = {
+                            id: learntId,
+                            name: transaction.vendor || transaction.description || 'Unknown Station',
+                            parentCompany: transaction.metadata?.parentCompany,
+                            location: {
+                                lat: locationMetadata.lat,
+                                lng: locationMetadata.lng,
+                                accuracy: locationMetadata.accuracy
+                            },
+                            timestamp: new Date().toISOString(),
+                            transactionId: transaction.id,
+                            status: 'learnt'
+                        };
+                        await kv.set(`learnt_location:${learntId}`, stampOrg(learntLocation, c));
+                        console.log(`[SmartGeoMatch] No station match — created Learnt Location: ${learntId}`);
+                    } else {
+                        console.log(`[SmartGeoMatch] Reusing Learnt Location ${learntId} for transaction ${transaction.id} (no duplicate create)`);
+                    }
+                    transaction.metadata.learntLocationId = learntId;
                 }
             } catch (err) {
                 console.error("Geolocation Smart Matching Error:", err);

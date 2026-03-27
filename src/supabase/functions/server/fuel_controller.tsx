@@ -401,6 +401,21 @@ function extractEntryCoords(entry: any): { lat: number; lng: number } | null {
 }
 
 /**
+ * GPS accuracy in meters for smart matching (Phase 1 geofence buffer `A`).
+ * Aligns with Driver Portal `geofenceMetadata.accuracy` and financial `locationMetadata.accuracy`.
+ */
+function extractEntryGpsAccuracyMeters(entry: any): number {
+    const raw = Number(
+        entry.geofenceMetadata?.accuracy ??
+        entry.metadata?.geofenceMetadata?.accuracy ??
+        entry.metadata?.locationMetadata?.accuracy ??
+        entry.locationMetadata?.accuracy
+    );
+    if (!Number.isFinite(raw) || raw < 0) return 0;
+    return Math.min(raw, 500);
+}
+
+/**
  * Normalize a Plus Code for comparison.
  * Strips whitespace, uppercases, and removes compound locality (e.g., "X36X+5W Portmore" → "X36X+5W").
  * Returns only the code portion.
@@ -1291,7 +1306,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     const allStationsForEntry = (!skipGpsMatching && entryCoords) ? (await kv.getByPrefix("station:") || []) : [];
 
     if (!skipGpsMatching && entryCoords) {
-        const smartResult = findMatchingStationSmart(entryLat, entryLng, allStationsForEntry, 600, 0);
+        const gpsAccuracyM = extractEntryGpsAccuracyMeters(entry);
+        const smartResult = findMatchingStationSmart(entryLat, entryLng, allStationsForEntry, 600, gpsAccuracyM);
 
         if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
             // --- Confident match: proceed with full handshake (same as before) ---
@@ -1343,23 +1359,24 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
             console.log(`[SmartGeoMatch] POST entry ${entry.id} matched "${matchedStation.name}" (${matchedStation.id}) at ${smartResult.distance}m [${smartResult.confidence}]`);
 
         } else if (smartResult.confidence === 'ambiguous') {
-            // --- Ambiguous: create entry but flag for review, do NOT sign/lock ---
+            // --- Ambiguous: flag for review, do NOT sign/lock, do NOT create Learnt ---
+            entry.metadata = {
+                ...entry.metadata,
+                locationStatus: 'review_required',
+                verificationMethod: 'gps_ambiguous',
+                matchDistance: smartResult.distance,
+                matchConfidence: 'ambiguous',
+                ambiguityReason: smartResult.ambiguityReason
+            };
+            entry.auditStatus = 'Review Required';
             const closestStation = smartResult.station as any;
             if (closestStation) {
                 entry.matchedStationId = closestStation.id;
                 entry.vendor = closestStation.name;
                 entry.metadata = {
                     ...entry.metadata,
-                    locationStatus: 'review_required',
-                    verificationMethod: 'gps_ambiguous',
-                    matchedStationId: closestStation.id,
-                    matchDistance: smartResult.distance,
-                    matchConfidence: 'ambiguous',
-                    ambiguityReason: smartResult.ambiguityReason
+                    matchedStationId: closestStation.id
                 };
-                entry.auditStatus = 'Review Required';
-
-                // Still calculate confidence (will naturally be lower without a firm GPS match)
                 const confidence = fuelLogic.calculateConfidenceScore(entry, closestStation);
                 entry.metadata = {
                     ...entry.metadata,
@@ -1372,25 +1389,32 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
 
         } else {
             // --- No match: Learnt Location funnel (preserved from original) ---
-            const learntId = crypto.randomUUID();
-            const learntLocation = {
-                id: learntId,
-                name: entry.vendor || entry.stationName || "Unknown Vendor",
-                location: { lat: entryLat, lng: entryLng },
-                status: 'learnt',
-                firstSeen: entry.date || new Date().toISOString(),
-                sourceEntryId: entry.id,
-                driverId: entry.driverId,
-                vehicleId: entry.vehicleId
-            };
-            await kv.set(`learnt_location:${learntId}`, learntLocation);
+            if (!entry.metadata) entry.metadata = {};
+            let learntId = entry.metadata.learntLocationId as string | undefined;
+            if (learntId) {
+                console.log(`[SmartGeoMatch] Reusing Learnt Location ${learntId} for entry ${entry.id} (no duplicate create)`);
+            } else {
+                learntId = crypto.randomUUID();
+                const learntLocation = {
+                    id: learntId,
+                    name: entry.vendor || entry.stationName || "Unknown Vendor",
+                    location: { lat: entryLat, lng: entryLng },
+                    status: 'learnt',
+                    firstSeen: entry.date || new Date().toISOString(),
+                    sourceEntryId: entry.id,
+                    driverId: entry.driverId,
+                    vehicleId: entry.vehicleId
+                };
+                await kv.set(`learnt_location:${learntId}`, learntLocation);
+                console.log(`[SmartGeoMatch] No match for entry ${entry.id} — created Learnt Location: ${learntId}`);
+            }
 
             entry.metadata = {
                 ...entry.metadata,
                 locationStatus: 'unknown',
-                verificationMethod: 'none'
+                verificationMethod: 'none',
+                learntLocationId: learntId
             };
-            console.log(`[SmartGeoMatch] No match for entry ${entry.id} — created Learnt Location: ${learntId}`);
         }
     } else if (!skipGpsMatching) {
         // --- NO GPS COORDINATES: STATION GATE HOLD ---
@@ -1474,9 +1498,11 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
                 matchedStationForVerification.location.lng
             );
             
-            // Phase 8: Adaptive Radius Hardening
-            // Use the station's defined radius if available, fallback to 100m
-            const radiusThreshold = matchedStationForVerification.location?.radius || 100;
+            // Phase 8 / Phase 3: Same radius policy as geo_matcher / super-admin Regional Efficiency
+            const radiusThreshold =
+                matchedStationForVerification.geofenceRadius ??
+                matchedStationForVerification.location?.radius ??
+                150;
             
             // Forensic Anti-Spoofing: Compare client claim with server truth
             const clientIsInside = geofence.isInside;
@@ -1695,6 +1721,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
         let matchCount = 0;
         let skippedNoCoords = 0;
         let skippedNoMatch = 0;
+        let skippedOutsideGeofence = 0;
         let skippedAmbiguous = 0;
         const stationUpdateMap = new Map();
 
@@ -1708,7 +1735,8 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
             const entryLat = coords.lat;
             const entryLng = coords.lng;
 
-            const smartResult = findMatchingStationSmart(entryLat, entryLng, allStations, 600, 0);
+            const gpsAccuracyM = extractEntryGpsAccuracyMeters(entry);
+            const smartResult = findMatchingStationSmart(entryLat, entryLng, allStations, 600, gpsAccuracyM);
 
             if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
                 const matchedStation = smartResult.station as any;
@@ -1763,7 +1791,13 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
                 skippedAmbiguous++;
                 console.log(`[Reconcile] Skipped ambiguous entry ${entry.id}. ${smartResult.ambiguityReason}`);
             } else {
-                skippedNoMatch++;
+                // confidence === 'none': distinguish no station in search radius vs outside per-station geofence
+                if (Number.isFinite(smartResult.distance) && smartResult.distance < Infinity) {
+                    skippedOutsideGeofence++;
+                    console.log(`[Reconcile] Skipped entry ${entry.id}: within search radius but outside station geofence (d=${smartResult.distance}m).`);
+                } else {
+                    skippedNoMatch++;
+                }
             }
         }
 
@@ -1791,12 +1825,92 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
             matchesFound: matchCount,
             skippedNoCoords,
             skippedNoMatch,
+            skippedOutsideGeofence,
             skippedAmbiguous,
             stationsUpdated: stationUpdateMap.size,
-            message: `Reconciliation complete. ${matchCount} matched, ${skippedAmbiguous} ambiguous (skipped), ${skippedNoMatch} no match, ${skippedNoCoords} no GPS.`
+            message: `Reconciliation complete. ${matchCount} matched, ${skippedAmbiguous} ambiguous (skipped), ${skippedNoMatch} no station in range, ${skippedOutsideGeofence} outside geofence, ${skippedNoCoords} no GPS.`
         });
     } catch (e: any) {
         console.error("[Reconcile Error]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// --- SPATIAL REVIEW QUEUE (ambiguous GPS — multiple verified stations nearby) ---
+app.get(`${BASE_PATH}/admin/spatial-review-queue`, async (c) => {
+    try {
+        const [fuelRaw, txRaw] = await Promise.all([
+            kv.getByPrefix("fuel_entry:") || [],
+            kv.getByPrefix("transaction:") || [],
+        ]);
+
+        const isSpatialAmbiguous = (m: any) =>
+            m?.locationStatus === "review_required" && m?.verificationMethod === "gps_ambiguous";
+
+        const items: any[] = [];
+
+        for (const e of fuelRaw as any[]) {
+            if (!isSpatialAmbiguous(e?.metadata)) continue;
+            const lat =
+                e.lat ??
+                e.geofenceMetadata?.lat ??
+                e.metadata?.locationMetadata?.lat ??
+                e.metadata?.lat;
+            const lng =
+                e.lng ??
+                e.geofenceMetadata?.lng ??
+                e.metadata?.locationMetadata?.lng ??
+                e.metadata?.lng;
+            items.push({
+                recordType: "fuel_entry",
+                id: e.id,
+                date: e.date,
+                vehicleId: e.vehicleId,
+                driverId: e.driverId,
+                vendor: e.vendor,
+                location: e.location,
+                lat: typeof lat === "number" ? lat : Number(lat) || undefined,
+                lng: typeof lng === "number" ? lng : Number(lng) || undefined,
+                metadata: {
+                    ambiguityReason: e.metadata?.ambiguityReason,
+                    matchDistance: e.metadata?.matchDistance,
+                    matchConfidence: e.metadata?.matchConfidence,
+                },
+            });
+        }
+
+        for (const t of txRaw as any[]) {
+            const cat = t.category;
+            if (cat !== "Fuel" && cat !== "Fuel Reimbursement") continue;
+            if (!isSpatialAmbiguous(t?.metadata)) continue;
+            const lm = t.metadata?.locationMetadata;
+            items.push({
+                recordType: "transaction",
+                id: t.id,
+                date: t.date,
+                vehicleId: t.vehicleId,
+                driverId: t.driverId,
+                vendor: t.vendor,
+                location: t.description || t.vendor,
+                lat: lm?.lat,
+                lng: lm?.lng,
+                metadata: {
+                    ambiguityReason: t.metadata?.ambiguityReason,
+                    matchDistance: t.metadata?.matchDistance,
+                    matchConfidence: t.metadata?.matchConfidence,
+                },
+            });
+        }
+
+        items.sort((a, b) => {
+            const da = new Date(a.date || 0).getTime();
+            const db = new Date(b.date || 0).getTime();
+            return db - da;
+        });
+
+        return c.json({ items, count: items.length });
+    } catch (e: any) {
+        console.error("[SpatialReviewQueue]", e);
         return c.json({ error: e.message }, 500);
     }
 });
@@ -1851,16 +1965,29 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
         let latestDate: string | null = null;
 
         for (const entryId of entryIds) {
-            // 5a. Fetch entry from KV
-            const entry = await kv.get(`fuel_entry:${entryId}`);
+            // 5a. Fetch fuel entry first, then financial fuel transaction
+            let entry: any = await kv.get(`fuel_entry:${entryId}`);
+            let storageKey = `fuel_entry:${entryId}`;
+            if (!entry) {
+                entry = await kv.get(`transaction:${entryId}`);
+                storageKey = `transaction:${entryId}`;
+            }
             if (!entry) {
                 skippedNotFound++;
                 errors.push({ entryId, reason: "Entry not found" });
                 continue;
             }
 
+            if (storageKey.startsWith("transaction:")) {
+                const cat = entry.category;
+                if (cat !== "Fuel" && cat !== "Fuel Reimbursement") {
+                    errors.push({ entryId, reason: "Not a fuel transaction" });
+                    continue;
+                }
+            }
+
             // 5b. Idempotency — skip if already assigned to this exact station
-            if (entry.matchedStationId === stationId) {
+            if (entry.matchedStationId === stationId || entry.metadata?.matchedStationId === stationId) {
                 skippedAlreadyAssigned++;
                 continue;
             }
@@ -1881,15 +2008,16 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
                 locationStatus: 'verified',
                 verificationMethod: 'manual_bulk_assign',
                 matchedStationId: stationId,
-                bulkAssignedAt: new Date().toISOString()
+                bulkAssignedAt: new Date().toISOString(),
             };
+            delete entry.metadata.ambiguityReason;
 
             // 5d. Re-sign with SHA-256 (cryptographic chain-of-custody)
             entry.signature = await signRecord(entry);
             entry.signedAt = new Date().toISOString();
 
             // 5e. Persist to KV
-            await kv.set(`fuel_entry:${entryId}`, entry);
+            await kv.set(storageKey, entry);
             updatedCount++;
 
             // Track latest date for station stats (Phase 3)
@@ -2835,7 +2963,11 @@ app.post(`${BASE_PATH}/admin/verify-record-forensics`, async (c) => {
         // Deep Forensic Check
         const serverStation = record.matchedStationId ? await kv.get(`station:${record.matchedStationId}`) : null;
         const drift = record.metadata?.serverSideDistance || 0;
-        const radius = record.metadata?.radiusUsed || 100;
+        const radius =
+            record.metadata?.radiusUsed ??
+            serverStation?.geofenceRadius ??
+            serverStation?.location?.radius ??
+            150;
         
         const isPhysicallyPlausible = drift <= radius * 2;
         const isEfficiencyPlausible = (record.metadata?.efficiencyVariance || 0) < 30;

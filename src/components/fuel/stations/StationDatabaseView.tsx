@@ -12,6 +12,7 @@ import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
 import { ParentCompanyManager } from './ParentCompanyManager';
 import { VerifiedStationsTab } from './VerifiedStationsTab';
 import { LearntLocationsTab } from './LearntLocationsTab';
+import { SpatialReviewTab } from './SpatialReviewTab';
 import { UnverifiedVendorsTab } from './UnverifiedVendorsTab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Switch } from '../../ui/switch';
@@ -448,6 +449,10 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                 Learnt
                 <Badge variant="outline" className="h-4 px-1 text-[8px] border-amber-200 text-amber-500">STAGING</Badge>
               </TabsTrigger>
+              <TabsTrigger value="spatial-review" className="flex items-center gap-1.5">
+                Spatial review
+                <Badge variant="outline" className="h-4 px-1 text-[8px] border-violet-200 text-violet-600">GPS</Badge>
+              </TabsTrigger>
               <TabsTrigger value="unverified-vendors" className="flex items-center gap-1.5">
                 Unverified Vendors
                 <Badge variant="outline" className="h-4 px-1 text-[8px] border-red-200 text-red-500">GATE</Badge>
@@ -636,6 +641,11 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                  setIsAddStationOpen(true);
                }}
              />
+          </TabsContent>
+
+          {/* --- Spatial review (ambiguous GPS between verified stations) --- */}
+          <TabsContent value="spatial-review" className="m-0 p-0 border-0">
+            <SpatialReviewTab onResolved={() => fetchData()} />
           </TabsContent>
 
           {/* --- Unverified Vendors Tab --- */}

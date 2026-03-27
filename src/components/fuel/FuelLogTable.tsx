@@ -619,9 +619,19 @@ export function FuelLogTable({
                                                         <TooltipContent>
                                                             <div className="space-y-1">
                                                                 <p className="text-[10px] font-bold">Verified Station</p>
-                                                                <p className="text-[10px]">Mapped to Master Ledger via {entry.metadata?.verificationMethod?.replace('_', ' ') || 'GPS'}.</p>
+                                                                <p className="text-[10px]">
+                                                                    Mapped to Master Ledger via{' '}
+                                                                    {(entry.metadata?.verificationMethod || 'gps').replace(/_/g, ' ')}.
+                                                                </p>
                                                                 {entry.metadata?.matchDistance !== undefined && (
-                                                                    <p className="text-[10px] text-blue-500 font-medium">Accuracy: {entry.metadata.matchDistance}m</p>
+                                                                    <p className="text-[10px] text-blue-500 font-medium">
+                                                                        GPS offset from station anchor: {entry.metadata.matchDistance}m
+                                                                        {entry.metadata?.radiusUsed != null && (
+                                                                            <span className="block text-[9px] font-normal text-slate-500 mt-0.5">
+                                                                                Reference radius (verification): ±{entry.metadata.radiusUsed}m
+                                                                            </span>
+                                                                        )}
+                                                                    </p>
                                                                 )}
                                                                 {entry.metadata?.matchConfidence && (
                                                                     <p className="text-[10px] text-blue-400">Confidence: {entry.metadata.matchConfidence}</p>
@@ -648,7 +658,14 @@ export function FuelLogTable({
                                                                 <p className="text-[10px] font-bold">Review Required</p>
                                                                 <p className="text-[10px]">GPS match requires admin review — {entry.metadata?.ambiguityReason || 'multiple nearby stations detected'}.</p>
                                                                 {entry.metadata?.matchDistance !== undefined && (
-                                                                    <p className="text-[10px] text-amber-500 font-medium">Closest match: {entry.metadata.matchDistance}m</p>
+                                                                    <p className="text-[10px] text-amber-500 font-medium">
+                                                                        Distance to nearest candidate: {entry.metadata.matchDistance}m
+                                                                    </p>
+                                                                )}
+                                                                {entry.metadata?.verificationMethod === 'gps_ambiguous' && (
+                                                                    <p className="text-[9px] text-slate-500">
+                                                                        Resolve under Station Database → Spatial review (GPS).
+                                                                    </p>
                                                                 )}
                                                             </div>
                                                         </TooltipContent>
@@ -664,7 +681,9 @@ export function FuelLogTable({
                                                         </TooltipTrigger>
                                                         <TooltipContent>
                                                             <p className="text-[10px] font-bold">Unverified Location</p>
-                                                            <p className="text-[10px]">Transaction funneled to review queue. Promoting the station will secure this log.</p>
+                                                            <p className="text-[10px]">
+                                                                No verified station link yet — check Learnt (STAGING) for new coordinates, or wait for a server match.
+                                                            </p>
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 )}

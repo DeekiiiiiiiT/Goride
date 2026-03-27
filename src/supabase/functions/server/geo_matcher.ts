@@ -126,14 +126,38 @@ const shortestDistanceToStation = (lat: number, lng: number, station: StationPro
 };
 
 /**
+ * Default radius when `geofenceRadius` is absent — aligned with duplicate-check / admin UI fallbacks.
+ */
+const DEFAULT_STATION_GEOFENCE_METERS = 150;
+
+const geofenceLimitMeters = (station: StationProfile): number =>
+  station.geofenceRadius ?? DEFAULT_STATION_GEOFENCE_METERS;
+
+/**
+ * A match is accepted only if d <= R + A (per-station geofence plus GPS accuracy buffer).
+ */
+const isWithinStationAcceptance = (
+  station: StationProfile,
+  distanceMeters: number,
+  gpsAccuracyMeters: number
+): boolean => {
+  const R = geofenceLimitMeters(station);
+  return distanceMeters <= R + gpsAccuracyMeters;
+};
+
+/**
  * Ambiguity-Aware Smart Matching
  *
- * Searches up to maxRadiusMeters but checks for overlap before accepting a match:
- *   - 1 station in range           → high confidence (no ambiguity possible)
- *   - 2+ but closest is inside its own geofenceRadius → high confidence (tight zone)
- *   - 2+ but closest is clearly nearer (d1 < d2 * 0.5) → medium confidence
- *   - 2+ and distances are similar  → ambiguous — refuse to match
- *   - 0 in range                    → none
+ * Two radii:
+ * - **Search radius** (`maxRadiusMeters` + `gpsAccuracy`, default ~600m): which stations are considered
+ *   as spatial candidates at all.
+ * - **Acceptance** (per station: `geofenceRadius` + `gpsAccuracy`): a candidate is kept only if
+ *   the shortest distance to that station satisfies d <= R + A.
+ *
+ * Outcomes (after acceptance filter):
+ *   - 0 accepted                      → none (no match; e.g. Learnt funnel)
+ *   - 1 accepted                      → high (sole acceptable candidate)
+ *   - 2+ accepted, ambiguity rules  → high / medium / ambiguous (unchanged; uses accepted list only)
  *
  * The driver workflow is unaffected — this runs server-side on GPS data only.
  */
@@ -146,24 +170,20 @@ export const findMatchingStationSmart = (
 ): SmartMatchResult => {
   const effectiveRadius = maxRadiusMeters + gpsAccuracy;
 
-  // 1. Calculate distance from the GPS point to every station
-  const candidates: { station: StationProfile; distance: number }[] = [];
+  // 1. Stations within search radius (discovery pool — not yet geofence-validated)
+  const inSearchRadius: { station: StationProfile; distance: number }[] = [];
 
   for (const station of stations) {
     const dist = shortestDistanceToStation(lat, lng, station);
     if (dist <= effectiveRadius) {
-      candidates.push({ station, distance: Math.round(dist) });
+      inSearchRadius.push({ station, distance: Math.round(dist) });
     }
   }
 
-  // 2. Sort by distance ascending (closest first)
-  candidates.sort((a, b) => a.distance - b.distance);
+  inSearchRadius.sort((a, b) => a.distance - b.distance);
 
-  const candidatesInRange = candidates.length;
-
-  // 3. Decision logic
-  if (candidatesInRange === 0) {
-    console.log(`[SmartMatch] 0 stations within ${effectiveRadius}m. Decision: none`);
+  if (inSearchRadius.length === 0) {
+    console.log(`[SmartMatch] 0 stations within search radius ${effectiveRadius}m. Decision: none`);
     return {
       station: null,
       confidence: 'none',
@@ -173,12 +193,43 @@ export const findMatchingStationSmart = (
     };
   }
 
-  const closest = candidates[0];
-  const secondClosestDistance = candidatesInRange >= 2 ? candidates[1].distance : Infinity;
+  // 2. Acceptance: drop candidates outside that station's geofence (+ GPS accuracy)
+  const accepted: { station: StationProfile; distance: number }[] = [];
+  for (const c of inSearchRadius) {
+    const R = geofenceLimitMeters(c.station);
+    if (isWithinStationAcceptance(c.station, c.distance, gpsAccuracy)) {
+      accepted.push(c);
+    } else {
+      console.log(
+        `[SmartMatch] Geofence reject: id=${c.station.id} name="${c.station.name}" ` +
+          `d=${c.distance}m R=${R}m A=${gpsAccuracy}m (require d<=${R + gpsAccuracy}m)`
+      );
+    }
+  }
+
+  if (accepted.length === 0) {
+    const closestRejected = inSearchRadius[0];
+    console.log(
+      `[SmartMatch] ${inSearchRadius.length} station(s) within search radius but 0 within per-station geofence (R+A). Decision: none`
+    );
+    return {
+      station: null,
+      confidence: 'none',
+      distance: closestRejected.distance,
+      candidatesInRange: 0,
+      secondClosestDistance: Infinity,
+    };
+  }
+
+  const candidatesInRange = accepted.length;
+  const closest = accepted[0];
+  const secondClosestDistance = candidatesInRange >= 2 ? accepted[1].distance : Infinity;
 
   if (candidatesInRange === 1) {
+    const R = geofenceLimitMeters(closest.station);
     console.log(
-      `[SmartMatch] 1 station within ${effectiveRadius}m: "${closest.station.name}" at ${closest.distance}m. Decision: high (sole candidate)`
+      `[SmartMatch] 1 station within geofence (R+A): "${closest.station.name}" at ${closest.distance}m ` +
+        `(R=${R}m A=${gpsAccuracy}m). Decision: high (sole candidate)`
     );
     return {
       station: closest.station,
@@ -189,17 +240,17 @@ export const findMatchingStationSmart = (
     };
   }
 
-  // Multiple candidates — check for ambiguity
-  const stationGeofence = (closest.station as any).geofenceRadius || 150;
+  // Multiple accepted candidates — ambiguity rules (same as before, on accepted list only)
+  const stationGeofence = geofenceLimitMeters(closest.station);
   const ratio = secondClosestDistance > 0 ? closest.distance / secondClosestDistance : 0;
-  const secondName = candidates[1].station.name;
+  const secondName = accepted[1].station.name;
 
-  // 3a. Closest is inside its own tight geofence zone — safe match even with neighbours
+  // 3a. Closest is inside its own nominal geofence (tight zone, no buffer) — safe even with neighbours
   if (closest.distance <= stationGeofence) {
     console.log(
-      `[SmartMatch] ${candidatesInRange} stations within ${effectiveRadius}m. ` +
-      `Closest: "${closest.station.name}" at ${closest.distance}m (inside geofence ${stationGeofence}m). ` +
-      `Second: "${secondName}" at ${secondClosestDistance}m. Ratio: ${ratio.toFixed(2)}. Decision: high (within geofence)`
+      `[SmartMatch] ${candidatesInRange} stations accepted. ` +
+        `Closest: "${closest.station.name}" at ${closest.distance}m (inside geofence ${stationGeofence}m). ` +
+        `Second: "${secondName}" at ${secondClosestDistance}m. Ratio: ${ratio.toFixed(2)}. Decision: high (within geofence)`
     );
     return {
       station: closest.station,
@@ -213,9 +264,9 @@ export const findMatchingStationSmart = (
   // 3b. Closest is clearly nearer than second (less than half the distance)
   if (closest.distance < secondClosestDistance * 0.5) {
     console.log(
-      `[SmartMatch] ${candidatesInRange} stations within ${effectiveRadius}m. ` +
-      `Closest: "${closest.station.name}" at ${closest.distance}m. ` +
-      `Second: "${secondName}" at ${secondClosestDistance}m. Ratio: ${ratio.toFixed(2)}. Decision: medium (clearly closer)`
+      `[SmartMatch] ${candidatesInRange} stations accepted. ` +
+        `Closest: "${closest.station.name}" at ${closest.distance}m. ` +
+        `Second: "${secondName}" at ${secondClosestDistance}m. Ratio: ${ratio.toFixed(2)}. Decision: medium (clearly closer)`
     );
     return {
       station: closest.station,
@@ -228,7 +279,7 @@ export const findMatchingStationSmart = (
 
   // 3c. Distances are too similar — refuse to guess
   const ambiguityReason =
-    `${candidatesInRange} stations within ${effectiveRadius}m. ` +
+    `${candidatesInRange} stations within geofence acceptance. ` +
     `Closest: "${closest.station.name}" at ${closest.distance}m. ` +
     `Second: "${secondName}" at ${secondClosestDistance}m. ` +
     `Ratio: ${ratio.toFixed(2)} — too close to distinguish.`;
