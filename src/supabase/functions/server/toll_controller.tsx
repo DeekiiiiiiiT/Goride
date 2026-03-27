@@ -17,6 +17,7 @@
 import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { isTollCategory } from "./toll_category_flags.ts";
 import { getFleetTimezone, naiveToUtc, hasTzSuffix } from "./timezone_helper.tsx";
 import {
   parseISO,
@@ -52,11 +53,6 @@ const BASE = "/make-server-37f42386/toll-reconciliation";
  * toll transactions to the toll ledger. Use `getTollLedgerEntry()` to
  * check if an ID is a toll record.
  */
-function isTollCategory(category: string | undefined | null): boolean {
-  if (!category) return false;
-  const lower = category.toLowerCase();
-  return lower === "toll usage" || lower === "tolls";
-}
 
 /**
  * Formats a Date into YYYY-MM-DD in the given IANA timezone.

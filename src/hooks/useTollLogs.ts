@@ -4,6 +4,7 @@ import { FinancialTransaction } from '../types/data';
 import { Vehicle } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { TollLogEntry } from '../types/tollLog';
+import { tollLogKindFromCategory } from '../utils/tollCategoryHelper';
 
 // Simple driver shape returned by api.getDrivers()
 interface DriverRecord {
@@ -161,7 +162,16 @@ export function useTollLogs() {
       // Note: server already filters to toll categories and sorts by date desc,
       // so we skip client-side filtering/deduplication/sorting.
       const enriched: TollLogEntry[] = tollTransactions.map((tx: any) => {
-        const isUsage = tx.category === 'Toll Usage' || tx.category === 'Tolls';
+        const kind = tollLogKindFromCategory(tx.category);
+        const isUsage = kind === 'usage';
+        const typeLabel =
+          kind === 'top-up'
+            ? 'Top-up'
+            : kind === 'refund'
+              ? 'Refund'
+              : kind === 'adjustment'
+                ? 'Adjustment'
+                : 'Usage';
 
         // Resolve vehicle
         const vehicle = tx.vehicleId ? vehicleMap.get(tx.vehicleId) : undefined;
@@ -188,7 +198,7 @@ export function useTollLogs() {
           amount: tx.amount,
           absAmount: Math.abs(tx.amount),
           isUsage,
-          typeLabel: isUsage ? 'Usage' : 'Top-up',
+          typeLabel,
           vehicleId: tx.vehicleId || null,
           vehicleName,
           driverId: tx.driverId || null,

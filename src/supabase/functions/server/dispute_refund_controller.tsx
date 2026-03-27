@@ -18,6 +18,7 @@
 
 import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
+import { isTollCategory } from "./toll_category_flags.ts";
 
 const app = new Hono();
 
@@ -286,10 +287,7 @@ app.get(`${BASE}/suggestions/:id`, async (c) => {
     const driverTolls = allTxns.filter((tx: any) => {
       if (!tx || typeof tx !== "object") return false;
       if (tx.driverId !== refundDriverId) return false;
-      // Must be a toll category
-      const cat = (tx.category || "").toLowerCase();
-      if (cat !== "toll usage" && cat !== "tolls") return false;
-      return true;
+      return isTollCategory(tx.category);
     });
 
     // Also check for Claimable Loss claims for this driver

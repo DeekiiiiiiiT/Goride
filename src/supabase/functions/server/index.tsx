@@ -5235,10 +5235,9 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
     }
 
     // Phase 4b: Auto-create Cash Wallet credit for approved Toll reimbursements (Manual Resolve: WriteOff/Business)
-    const isTollCategory = tx.category === 'Toll Usage' || tx.category === 'Tolls';
     const isTollCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
 
-    if (isTollCategory && tx.status === 'Approved' && isTollCash) {
+    if (isTollCategoryServer(tx.category) && tx.status === 'Approved' && isTollCash) {
         if (!tx.driverId || tx.driverId === 'fleet') {
             console.log(`[TollCredit] Skipping wallet credit: driverId is '${tx.driverId}' (fleet-absorbed, no driver to credit) for transaction ${id}`);
         } else {
