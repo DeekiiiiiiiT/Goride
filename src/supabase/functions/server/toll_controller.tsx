@@ -733,18 +733,49 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
 }
 
 /**
- * Phase 5 loader: reads from toll_ledger:* instead of filtering transaction:*.
- * Returns data in the same shape as loadAllTollTransactionsWithTrips() for compatibility.
+ * Read path: `toll_ledger:*` (canonical) plus legacy `transaction:*` rows with a toll
+ * category that are not yet in the ledger (same `id` → ledger wins).
+ * Fixes empty Toll Logs / Ledger when data never migrated off `transaction:*`.
+ */
+async function loadMergedTollTxArray(): Promise<any[]> {
+  const [ledgerEntries, rawTx] = await Promise.all([
+    getAllTollLedgerEntries(),
+    kv.getByPrefix("transaction:"),
+  ]);
+  const byId = new Map<string, any>();
+  for (const e of ledgerEntries) {
+    const tx = tollLedgerToTxShape(e);
+    if (tx?.id != null && String(tx.id) !== "") {
+      byId.set(String(tx.id), tx);
+    }
+  }
+  let legacyAdded = 0;
+  for (const tx of rawTx || []) {
+    if (!tx || typeof tx !== "object") continue;
+    if (!isTollCategory(tx.category)) continue;
+    const id = tx.id;
+    if (id == null || id === "") continue;
+    const sid = String(id);
+    if (byId.has(sid)) continue;
+    byId.set(sid, tx);
+    legacyAdded++;
+  }
+  if (legacyAdded > 0) {
+    console.log(
+      `[TollMerge] Merged ${legacyAdded} toll transaction(s) from transaction:* not in toll_ledger`,
+    );
+  }
+  return Array.from(byId.values());
+}
+
+/**
+ * Phase 5+ loader: merged toll rows + all trips (for reconciliation views).
  */
 async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any[] }> {
-  const [ledgerEntries, trips] = await Promise.all([
-    getAllTollLedgerEntries(),
+  const [tollTx, trips] = await Promise.all([
+    loadMergedTollTxArray(),
     loadAllTrips(),
   ]);
-  
-  // Convert toll ledger entries to transaction shape for backward compatibility
-  const tollTx = ledgerEntries.map(tollLedgerToTxShape);
-  
   return { tollTx, trips };
 }
 
@@ -1062,9 +1093,7 @@ app.get(`${BASE}/reconciled`, async (c) => {
   try {
     const { driverId, limit, offset } = parseQueryParams(c);
 
-    // Phase 5: Read from toll_ledger:* (single source of truth)
-    const ledgerEntries = await getAllTollLedgerEntries();
-    const allTollTx = ledgerEntries.map(tollLedgerToTxShape);
+    const allTollTx = await loadMergedTollTxArray();
 
     let reconciled = allTollTx.filter(
       (tx: any) => tx.isReconciled && tx.tripId,
@@ -1155,9 +1184,8 @@ app.get(`${BASE}/toll-logs`, async (c) => {
     const limit = c.req.query("limit") ? parseInt(c.req.query("limit"), 10) : undefined;
     const offset = parseInt(c.req.query("offset") || "0", 10);
 
-    // ── Load all toll transactions (Phase 1 fix: read from toll_ledger) ──
-    // This keeps Toll Logs aligned with Toll Ledger + Toll Reconciliation.
-    let tollTx = (await getAllTollLedgerEntries()).map(tollLedgerToTxShape);
+    // ── Load toll transactions: ledger + legacy transaction:* (merged) ──
+    let tollTx = await loadMergedTollTxArray();
 
     // ── Apply filters ──
     if (vehicleId) {
