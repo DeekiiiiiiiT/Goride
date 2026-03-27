@@ -72,6 +72,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api"
+    "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc"
   }
 }
