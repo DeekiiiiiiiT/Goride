@@ -1682,12 +1682,17 @@ export const api = {
     if (!response.ok) {
       const status = response.status;
       const bodyText = await response.text().catch(() => '');
+      let msg = `Failed to reset toll for reconciliation (HTTP ${status})`;
       try {
-        const err = JSON.parse(bodyText || '{}');
-        throw new Error(err.error || `Failed to reset toll for reconciliation (HTTP ${status})`);
+        const parsed = JSON.parse(bodyText || '{}') as { error?: string };
+        if (parsed?.error && typeof parsed.error === 'string') {
+          msg = parsed.error;
+        }
       } catch {
-        throw new Error(`Failed to reset toll for reconciliation (HTTP ${status})`);
+        const t = bodyText?.trim();
+        if (t) msg = t.length > 200 ? `${t.slice(0, 200)}…` : t;
       }
+      throw new Error(msg);
     }
     return response.json();
   },

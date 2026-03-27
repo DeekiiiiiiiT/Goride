@@ -2528,11 +2528,32 @@ export async function executeTollResetForReconciliation(
   }
   const id = String(transactionId).trim();
 
-  const tollEntry = await getTollLedgerEntry(id);
+  let tollEntry = await getTollLedgerEntry(id);
+  // Rows may appear in /toll-logs via merge from transaction:* but have no toll_ledger:* yet.
   if (!tollEntry) {
-    const err = new Error(`Toll ${id} not found`) as Error & { status?: number };
-    err.status = 404;
-    throw err;
+    const legacy = await kv.get(`transaction:${id}`);
+    if (
+      !legacy ||
+      typeof legacy !== "object" ||
+      !isTollCategory((legacy as { category?: string }).category)
+    ) {
+      const err = new Error(`Toll ${id} not found`) as Error & { status?: number };
+      err.status = 404;
+      throw err;
+    }
+    const hydrated = transactionToTollLedgerServer(legacy);
+    await saveTollLedgerEntry(hydrated);
+    tollEntry = await getTollLedgerEntry(id);
+    if (!tollEntry) {
+      const err = new Error(`Toll ${id} could not be written to toll ledger`) as Error & {
+        status?: number;
+      };
+      err.status = 500;
+      throw err;
+    }
+    console.log(
+      `[TollReconciliation] Hydrated toll_ledger:${id} from transaction:* for reset-for-reconciliation`,
+    );
   }
 
   const previousTripId = tollEntry.tripId;
