@@ -1,0 +1,31 @@
+# Deploy Edge Function `make-server-37f42386` when you push to `main` (e.g. Commit + Sync).
+# Required repo secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF
+name: Deploy Supabase Edge Function
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-supabase-edge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy make-server-37f42386
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy make-server-37f42386 \
+            --use-api \
+            --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
