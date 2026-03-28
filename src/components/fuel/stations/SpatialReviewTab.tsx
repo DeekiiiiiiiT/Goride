@@ -18,7 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
-import { Loader2, RefreshCw, MapPin, AlertCircle } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../ui/dropdown-menu';
+import { Loader2, RefreshCw, MapPin, AlertCircle, ChevronDown, Eye, Link2, Copy } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import type { StationProfile } from '../../../types/station';
 
@@ -48,6 +54,7 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<SpatialReviewItem | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -83,6 +90,35 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
     setSelectedStationId('');
     setAssignOpen(true);
   };
+
+  const openView = (row: SpatialReviewItem) => {
+    setSelectedItem(row);
+    setViewOpen(true);
+  };
+
+  const openAssignFromView = () => {
+    if (!selectedItem) return;
+    setViewOpen(false);
+    setSelectedStationId('');
+    setAssignOpen(true);
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+
+  const mapsHref =
+    selectedItem?.lat != null &&
+    selectedItem?.lng != null &&
+    Number.isFinite(selectedItem.lat) &&
+    Number.isFinite(selectedItem.lng)
+      ? `https://www.google.com/maps?q=${selectedItem.lat},${selectedItem.lng}`
+      : null;
 
   const confirmAssign = async () => {
     if (!selectedItem || !selectedStationId) {
@@ -152,7 +188,7 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
                 <TableHead className="text-[10px] uppercase tracking-wider">Vendor / note</TableHead>
                 <TableHead className="text-[10px] uppercase tracking-wider text-right">Δ m</TableHead>
                 <TableHead className="text-[10px] uppercase tracking-wider">Reason</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider w-[120px]">Action</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider w-[130px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -180,9 +216,24 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Button size="sm" variant="secondary" className="h-8 text-xs" onClick={() => openAssign(row)}>
-                      Assign station
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-slate-200">
+                          Actions
+                          <ChevronDown className="h-3 w-3 opacity-60" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => openView(row)}>
+                          <Eye className="h-3.5 w-3.5" />
+                          View details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => openAssign(row)}>
+                          <Link2 className="h-3.5 w-3.5" />
+                          Assign station
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
@@ -190,6 +241,140 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
           </Table>
         </div>
       )}
+
+      {/* Detail overlay — full context for admin decision */}
+      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[min(90vh,720px)] flex flex-col gap-0 p-0 overflow-hidden border-slate-200">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b border-slate-100 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Eye className="h-4 w-4 text-violet-600" />
+              Spatial review — details
+            </DialogTitle>
+            <DialogDescription className="text-xs text-left">
+              GPS could not pick a single verified station. Use this to compare distances and choose the correct station.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedItem && (
+            <div className="px-4 py-3 space-y-4 overflow-y-auto flex-1 text-sm">
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Record</p>
+                  <p className="text-slate-800 font-medium">
+                    {selectedItem.recordType === 'fuel_entry' ? 'Fuel entry' : 'Transaction'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <code className="text-[11px] bg-slate-100 px-1.5 py-0.5 rounded break-all text-slate-700">
+                      {selectedItem.id}
+                    </code>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      title="Copy ID"
+                      onClick={() => copyToClipboard(selectedItem.id, 'Record ID')}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Date</p>
+                    <p className="text-slate-800">
+                      {selectedItem.date ? new Date(selectedItem.date).toLocaleString() : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Δ to nearest (m)</p>
+                    <p className="text-slate-800 tabular-nums">
+                      {selectedItem.metadata?.matchDistance != null &&
+                      Number.isFinite(selectedItem.metadata.matchDistance)
+                        ? `${Math.round(selectedItem.metadata.matchDistance)} m`
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Vendor / note</p>
+                  <p className="text-slate-800 break-words">{selectedItem.vendor || selectedItem.location || '—'}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Vehicle ID</p>
+                    <p className="text-slate-800 font-mono text-xs">{selectedItem.vehicleId || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Driver ID</p>
+                    <p className="text-slate-800 font-mono text-xs">{selectedItem.driverId || '—'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">GPS coordinates</p>
+                  {selectedItem.lat != null && selectedItem.lng != null ? (
+                    <div className="space-y-0.5">
+                      <p className="text-slate-800 font-mono text-xs">
+                        {Number(selectedItem.lat).toFixed(6)}, {Number(selectedItem.lng).toFixed(6)}
+                      </p>
+                      {mapsHref && (
+                        <a
+                          href={mapsHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                        >
+                          Open in Maps
+                          <Link2 className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-xs">—</p>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Full system reason</p>
+                    {selectedItem.metadata?.ambiguityReason && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px] px-2"
+                        onClick={() =>
+                          copyToClipboard(selectedItem.metadata!.ambiguityReason!, 'Reason text')
+                        }
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy
+                      </Button>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 max-h-48 overflow-y-auto">
+                    <pre className="text-[11px] text-slate-700 whitespace-pre-wrap break-words font-sans leading-relaxed">
+                      {selectedItem.metadata?.ambiguityReason || 'No reason string stored.'}
+                    </pre>
+                  </div>
+                </div>
+                {selectedItem.metadata?.matchConfidence && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Match confidence</p>
+                    <p className="text-slate-800">{selectedItem.metadata.matchConfidence}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 shrink-0 flex-row justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setViewOpen(false)}>
+              Close
+            </Button>
+            <Button size="sm" onClick={openAssignFromView}>
+              Assign station…
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent className="sm:max-w-md">
