@@ -22,9 +22,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../ui/dropdown-menu';
-import { Loader2, RefreshCw, MapPin, AlertCircle, ChevronDown, Eye, Link2, Copy } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../ui/alert-dialog';
+import { Loader2, RefreshCw, MapPin, AlertCircle, ChevronDown, Eye, Link2, Copy, Trash2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import type { StationProfile } from '../../../types/station';
 
@@ -55,6 +65,9 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
   const [loading, setLoading] = useState(true);
   const [assignOpen, setAssignOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<SpatialReviewItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [selectedItem, setSelectedItem] = useState<SpatialReviewItem | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -119,6 +132,39 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
     Number.isFinite(selectedItem.lng)
       ? `https://www.google.com/maps?q=${selectedItem.lat},${selectedItem.lng}`
       : null;
+
+  const openDeleteConfirm = (row: SpatialReviewItem) => {
+    setItemToDelete(row);
+    setDeleteOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    const idRemoved = itemToDelete.id;
+    const typeRemoved = itemToDelete.recordType;
+    setDeleting(true);
+    try {
+      await api.deleteSpatialReviewRecord({
+        recordType: typeRemoved,
+        id: idRemoved,
+      });
+      toast.success('Record deleted', {
+        description: 'Removed from the ledger and spatial review queue.',
+      });
+      setDeleteOpen(false);
+      setItemToDelete(null);
+      if (selectedItem?.id === idRemoved) {
+        setViewOpen(false);
+        setSelectedItem(null);
+      }
+      await load();
+      onResolved?.();
+    } catch (e: any) {
+      toast.error(e.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const confirmAssign = async () => {
     if (!selectedItem || !selectedStationId) {
@@ -232,6 +278,14 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
                           <Link2 className="h-3.5 w-3.5" />
                           Assign station
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="gap-2 text-xs cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                          onClick={() => openDeleteConfirm(row)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete permanently
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -241,6 +295,34 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
           </Table>
         </div>
       )}
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this record permanently?</AlertDialogTitle>
+            <AlertDialogDescription className="text-left space-y-2">
+              <span className="block">
+                This removes the {itemToDelete?.recordType === 'fuel_entry' ? 'fuel entry' : 'fuel transaction'} from
+                storage. Use for test logs or mistakes. This cannot be undone.
+              </span>
+              {itemToDelete?.id && (
+                <code className="block text-[10px] bg-slate-100 px-2 py-1 rounded break-all">{itemToDelete.id}</code>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => confirmDelete()}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete permanently'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Detail overlay — full context for admin decision */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

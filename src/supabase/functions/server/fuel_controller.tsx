@@ -365,6 +365,176 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
 }
 
 /**
+ * After spatial bulk-assign stamps a fuel transaction with a station, ensure a `fuel_entry:*`
+ * record exists and is linked so Transaction Logs (which load fuel_entry only) show the row.
+ */
+async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promise<void> {
+    if (!tx?.id || !station?.id) return;
+    const cat = tx.category;
+    if (cat !== "Fuel" && cat !== "Fuel Reimbursement") return;
+
+    if (!tx.vehicleId) {
+        console.log(`[BulkAssign-FuelEntry] Skip fuel_entry: no vehicleId on transaction ${tx.id}`);
+        return;
+    }
+
+    let existing: any = null;
+    const linkedId = tx.metadata?.fuelEntryId;
+    if (linkedId) {
+        existing = await kv.get(`fuel_entry:${linkedId}`);
+        if (existing?.transactionId && existing.transactionId !== tx.id) {
+            console.warn(
+                `[BulkAssign-FuelEntry] metadata.fuelEntryId ${linkedId} mismatched transactionId — searching by transactionId`
+            );
+            existing = null;
+        }
+    }
+
+    if (!existing) {
+        const { data: rows } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "fuel_entry:%")
+            .eq("value->>transactionId", tx.id)
+            .limit(5);
+        if (rows?.length) {
+            existing = rows[0].value;
+        }
+    }
+
+    const stationName = station.name;
+
+    if (existing) {
+        const updated: any = {
+            ...existing,
+            vendor: stationName,
+            matchedStationId: station.id,
+            location:
+                !existing.location ||
+                (typeof existing.location === "string" && existing.location.toLowerCase().includes("unknown")) ||
+                existing.location === "Manual Entry"
+                    ? stationName
+                    : existing.location,
+            stationAddress: station.address || existing.stationAddress || tx.metadata?.stationLocation || "",
+            metadata: {
+                ...existing.metadata,
+                locationStatus: "verified",
+                verificationMethod: "manual_bulk_assign",
+                matchedStationId: station.id,
+                bulkAssignedAt: new Date().toISOString(),
+            },
+        };
+        delete updated.metadata?.ambiguityReason;
+
+        const confidence = fuelLogic.calculateConfidenceScore(updated, station);
+        updated.metadata = {
+            ...updated.metadata,
+            auditConfidenceScore: confidence.score,
+            auditConfidenceBreakdown: confidence.breakdown,
+            isHighlyTrusted: confidence.isHighlyTrusted,
+        };
+
+        updated.signature = await signRecord(updated);
+        await kv.set(`fuel_entry:${existing.id}`, updated);
+
+        if (!tx.metadata?.fuelEntryId || tx.metadata.fuelEntryId !== existing.id) {
+            tx.metadata = { ...tx.metadata, fuelEntryId: existing.id };
+            tx.signature = await signRecord(tx);
+            tx.signedAt = new Date().toISOString();
+            await kv.set(`transaction:${tx.id}`, tx);
+        }
+        console.log(`[BulkAssign-FuelEntry] Updated fuel_entry ${existing.id} for transaction ${tx.id}`);
+        return;
+    }
+
+    const quantity = Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0;
+    const amount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
+    const pricePerLiter =
+        tx.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
+
+    const rawPaymentSource = tx.metadata?.paymentSource || tx.paymentMethod;
+    const paymentSourceEnum = (() => {
+        const map: Record<string, string> = {
+            driver_cash: "Personal",
+            rideshare_cash: "RideShare_Cash",
+            company_card: "Gas_Card",
+            petty_cash: "Petty_Cash",
+            Cash: "Personal",
+            "RideShare Cash": "RideShare_Cash",
+            "Gas Card": "Gas_Card",
+            Other: "Petty_Cash",
+            Personal: "Personal",
+            RideShare_Cash: "RideShare_Cash",
+            Gas_Card: "Gas_Card",
+            Petty_Cash: "Petty_Cash",
+        };
+        return map[rawPaymentSource] || "Personal";
+    })();
+    const metadataPaymentSource = (() => {
+        const map: Record<string, string> = {
+            Personal: "driver_cash",
+            RideShare_Cash: "rideshare_cash",
+            Gas_Card: "company_card",
+            Petty_Cash: "petty_cash",
+        };
+        return map[paymentSourceEnum] || "driver_cash";
+    })();
+
+    const fuelEntryId = crypto.randomUUID();
+    const fuelEntry: any = {
+        id: fuelEntryId,
+        date: tx.date && tx.time
+            ? `${tx.date}T${tx.time}`
+            : tx.date || new Date().toISOString().split("T")[0],
+        type: "Reimbursement",
+        amount,
+        liters: quantity,
+        pricePerLiter,
+        odometer: Number(tx.odometer) || 0,
+        vendor: stationName,
+        location: stationName,
+        stationAddress: station.address || tx.metadata?.stationLocation || "",
+        vehicleId: tx.vehicleId,
+        driverId: tx.driverId,
+        transactionId: tx.id,
+        receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
+        odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
+        isVerified: true,
+        source: "Bulk Assign",
+        matchedStationId: station.id,
+        paymentSource: paymentSourceEnum,
+        entryMode: "Floating",
+        metadata: {
+            ...tx.metadata,
+            locationStatus: "verified",
+            verificationMethod: "manual_bulk_assign",
+            matchedStationId: station.id,
+            originalTransactionId: tx.id,
+            paymentSource: metadataPaymentSource,
+            stationName: stationName,
+        },
+    };
+    delete fuelEntry.metadata?.ambiguityReason;
+
+    const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, station);
+    fuelEntry.metadata = {
+        ...fuelEntry.metadata,
+        auditConfidenceScore: confidence.score,
+        auditConfidenceBreakdown: confidence.breakdown,
+        isHighlyTrusted: confidence.isHighlyTrusted,
+    };
+
+    fuelEntry.signature = await signRecord(fuelEntry);
+    await kv.set(`fuel_entry:${fuelEntryId}`, fuelEntry);
+
+    tx.metadata = { ...tx.metadata, fuelEntryId: fuelEntryId };
+    tx.signature = await signRecord(tx);
+    tx.signedAt = new Date().toISOString();
+    await kv.set(`transaction:${tx.id}`, tx);
+    console.log(`[BulkAssign-FuelEntry] Created fuel_entry ${fuelEntryId} for transaction ${tx.id}`);
+}
+
+/**
  * Robust coordinate extraction from a fuel entry.
  * 
  * Driver Portal entries store GPS in `geofenceMetadata.lat/lng`.
@@ -1915,6 +2085,102 @@ app.get(`${BASE_PATH}/admin/spatial-review-queue`, async (c) => {
     }
 });
 
+/**
+ * Permanently delete a row that appears in Spatial review (gps_ambiguous only).
+ * Validates state so random IDs cannot be purged. Cleans linked learnt_location rows.
+ */
+app.post(`${BASE_PATH}/admin/spatial-review/delete`, async (c) => {
+    try {
+        let body: any;
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ error: "Invalid JSON in request body" }, 400);
+        }
+
+        const { recordType, id } = body;
+        if (!id || typeof id !== "string" || id.trim().length === 0) {
+            return c.json({ error: "Missing or invalid id" }, 400);
+        }
+        if (recordType !== "fuel_entry" && recordType !== "transaction") {
+            return c.json({ error: "recordType must be fuel_entry or transaction" }, 400);
+        }
+
+        const isSpatialAmbiguous = (m: any) =>
+            m?.locationStatus === "review_required" && m?.verificationMethod === "gps_ambiguous";
+
+        const deleteLearntById = async (learntId: string) => {
+            const loc = await kv.get(`learnt_location:${learntId}`);
+            if (loc) {
+                await kv.del(`learnt_location:${learntId}`);
+                console.log(`[SpatialReviewDelete] Removed learnt_location:${learntId}`);
+            }
+        };
+
+        const cleanupOrphanLearnt = async (recordId: string, kind: "fuel_entry" | "transaction") => {
+            const learntAll = (await kv.getByPrefix("learnt_location:")) || [];
+            for (const loc of learntAll) {
+                if (!loc?.id) continue;
+                if (kind === "fuel_entry" && loc.sourceEntryId === recordId) {
+                    await kv.del(`learnt_location:${loc.id}`);
+                    console.log(`[SpatialReviewDelete] Removed learnt_location:${loc.id} (sourceEntryId match)`);
+                }
+                if (kind === "transaction" && loc.transactionId === recordId) {
+                    await kv.del(`learnt_location:${loc.id}`);
+                    console.log(`[SpatialReviewDelete] Removed learnt_location:${loc.id} (transactionId match)`);
+                }
+            }
+        };
+
+        if (recordType === "fuel_entry") {
+            const entry = await kv.get(`fuel_entry:${id}`);
+            if (!entry) {
+                return c.json({ error: "Fuel entry not found" }, 404);
+            }
+            if (!isSpatialAmbiguous(entry.metadata)) {
+                return c.json(
+                    { error: "Entry is not in spatial review (gps_ambiguous). Only those rows can be deleted here." },
+                    400
+                );
+            }
+            const lid = entry.metadata?.learntLocationId;
+            if (typeof lid === "string" && lid.length > 0) {
+                await deleteLearntById(lid);
+            }
+            await cleanupOrphanLearnt(id, "fuel_entry");
+            await kv.del(`fuel_entry:${id}`);
+            console.log(`[SpatialReviewDelete] Deleted fuel_entry:${id}`);
+            return c.json({ success: true, deleted: "fuel_entry", id });
+        }
+
+        const tx = await kv.get(`transaction:${id}`);
+        if (!tx) {
+            return c.json({ error: "Transaction not found" }, 404);
+        }
+        if (!isSpatialAmbiguous(tx.metadata)) {
+            return c.json(
+                { error: "Transaction is not in spatial review (gps_ambiguous). Only those rows can be deleted here." },
+                400
+            );
+        }
+        const cat = tx.category;
+        if (cat !== "Fuel" && cat !== "Fuel Reimbursement") {
+            return c.json({ error: "Not a fuel transaction" }, 400);
+        }
+        const tlid = tx.metadata?.learntLocationId;
+        if (typeof tlid === "string" && tlid.length > 0) {
+            await deleteLearntById(tlid);
+        }
+        await cleanupOrphanLearnt(id, "transaction");
+        await kv.del(`transaction:${id}`);
+        console.log(`[SpatialReviewDelete] Deleted transaction:${id}`);
+        return c.json({ success: true, deleted: "transaction", id });
+    } catch (e: any) {
+        console.error("[SpatialReviewDelete]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 // --- BULK ASSIGN STATION (Manual Orphan Resolution) ---
 app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
     try {
@@ -2019,6 +2285,12 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
             // 5e. Persist to KV
             await kv.set(storageKey, entry);
             updatedCount++;
+
+            // 5f. Fuel transactions only exist as `transaction:*` until a fuel_entry is created;
+            //     ensure one exists so Transaction Logs / FuelLogTable show the assignment.
+            if (storageKey.startsWith("transaction:")) {
+                await ensureFuelEntryLinkedToTransaction(entry, station);
+            }
 
             // Track latest date for station stats (Phase 3)
             if (entry.date) {

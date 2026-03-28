@@ -955,6 +955,22 @@ export const api = {
     return response.json();
   },
 
+  async deleteSpatialReviewRecord(payload: { recordType: 'fuel_entry' | 'transaction'; id: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/spatial-review/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Failed to delete record');
+    }
+    return response.json();
+  },
+
   async bulkAssignStation(entryIds: string[], stationId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/bulk-assign-station`, {
         method: 'POST',
