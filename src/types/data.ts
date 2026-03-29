@@ -555,7 +555,12 @@ export interface LedgerDriverOverview {
     tolls: number;
     tips: number;
     baseFare: number;
+    /** Sum of ledger platform_fee events; gross−net on fares is separate (baseFare − earnings). */
     platformFees: number;
+    /** platform_fee ledger entries, split by platform. */
+    platformFeesByPlatform?: Record<string, number>;
+    /** Per-platform sum of (grossAmount − netAmount) on fare_earning lines. */
+    fareGrossMinusNetByPlatform?: Record<string, number>;
     tripCount: number;
     cancelledCount: number;
     disputeRefunds?: number; // Phase 8: Support Adjustment refund totals

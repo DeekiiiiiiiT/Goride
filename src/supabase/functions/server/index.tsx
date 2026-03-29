@@ -3399,6 +3399,8 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     let pTips = 0;
     let pBaseFare = 0;
     let pPlatformFees = 0;
+    const pPlatformFeesByPlatform: Record<string, number> = {};
+    const pFareGrossMinusNetByPlatform: Record<string, number> = {};
     let pTripCount = 0;
     let pCancelledCount = 0;
 
@@ -3415,6 +3417,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         pEarnings += net;
         pBaseFare += gross;
         pTripCount += 1;
+        pFareGrossMinusNetByPlatform[plat] = (pFareGrossMinusNetByPlatform[plat] || 0) + (gross - net);
         if (e.paymentMethod === "Cash") pCash += (e.metadata?.cashCollected ? Number(e.metadata.cashCollected) : Math.abs(net));
 
         // Platform stats
@@ -3446,7 +3449,9 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
         pPlatformStats[plat].tolls += Math.abs(net);
       } else if (et === "platform_fee") {
-        pPlatformFees += Math.abs(net);
+        const feeAmt = Math.abs(net);
+        pPlatformFees += feeAmt;
+        pPlatformFeesByPlatform[plat] = (pPlatformFeesByPlatform[plat] || 0) + feeAmt;
       } else if (et === "cancelled_trip_loss") {
         pCancelledCount += 1;
       }
@@ -3632,6 +3637,12 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         tips: Number(pTips.toFixed(2)),
         baseFare: Number(pBaseFare.toFixed(2)),
         platformFees: Number(pPlatformFees.toFixed(2)),
+        platformFeesByPlatform: Object.fromEntries(
+          Object.entries(pPlatformFeesByPlatform).map(([k, v]) => [k, Number(v.toFixed(2))])
+        ),
+        fareGrossMinusNetByPlatform: Object.fromEntries(
+          Object.entries(pFareGrossMinusNetByPlatform).map(([k, v]) => [k, Number(v.toFixed(2))])
+        ),
         tripCount: pTripCount,
         cancelledCount: pCancelledCount,
         disputeRefunds: Number(pDisputeRefunds.toFixed(2)),

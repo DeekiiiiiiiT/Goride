@@ -1,13 +1,22 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   DollarSign,
   Navigation,
   Loader2,
   Fuel,
-  Info
+  Info,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Progress } from '../ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
+import { Separator } from '../ui/separator';
 import {
   Tooltip,
   PieChart as RawPieChart,
@@ -32,10 +41,33 @@ export const getPlatformColor = (platform: string) => PLATFORM_COLORS[platform] 
 
 // ── PieChart wrapper removed — use RawPieChart directly with explicit keys ──
 
+function fmtMoney(n: number) {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // ── MetricCard (exported for use elsewhere in DriverDetail) ──
-export function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action, tooltip, loading }: any) {
+export function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action, tooltip, loading, onClick, interactiveLabel }: any) {
    return (
-      <Card className={cn(loading && "animate-pulse")}>
+      <Card
+        className={cn(
+          loading && "animate-pulse",
+          onClick && "cursor-pointer transition-colors hover:bg-slate-50/90 dark:hover:bg-slate-800/50 border-slate-200/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+        )}
+        onClick={onClick}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onKeyDown={
+          onClick
+            ? (e: React.KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onClick();
+                }
+              }
+            : undefined
+        }
+        aria-label={onClick ? interactiveLabel || title : undefined}
+      >
          <CardContent className="p-6">
             <div className="flex items-center justify-between space-y-0 pb-2">
                <div className="flex items-center gap-2">
@@ -116,6 +148,9 @@ interface OverviewMetricsGridProps {
 
 // ── The Grid Component ──
 export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading, isToday }: OverviewMetricsGridProps) {
+  const [periodEarningsOpen, setPeriodEarningsOpen] = useState(false);
+  const [platformFeesExpanded, setPlatformFeesExpanded] = useState(false);
+
   // Platform breakdowns computed from resolvedFinancials (ledger-preferred)
   const earningsBreakdown = useMemo(() =>
     Object.entries(resolvedFinancials.platformStats)
@@ -150,7 +185,224 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
     [resolvedFinancials]
   );
 
+  const platformEarningsSum = useMemo(() => {
+    if (!resolvedFinancials.platformStats) return 0;
+    return Object.values(resolvedFinancials.platformStats).reduce(
+      (s: number, p: any) => s + (p?.earnings || 0),
+      0
+    );
+  }, [resolvedFinancials.platformStats]);
+
+  const fareGrossMinusNet = useMemo(() => {
+    const gross = Number(resolvedFinancials.totalBaseFare) || 0;
+    const net = Number(resolvedFinancials.periodEarnings) || 0;
+    return gross - net;
+  }, [resolvedFinancials.totalBaseFare, resolvedFinancials.periodEarnings]);
+
+  const cashByPlatformRows = useMemo(() => {
+    return Object.entries(resolvedFinancials.platformStats || {})
+      .filter(([, stats]: [string, any]) => (stats?.cashCollected || 0) > 0)
+      .sort((a, b) => (b[1].cashCollected || 0) - (a[1].cashCollected || 0));
+  }, [resolvedFinancials.platformStats]);
+
+  const platformFeesLedgerRows = useMemo(() => {
+    return Object.entries(resolvedFinancials.platformFeesByPlatform || {})
+      .filter(([, v]) => (v || 0) > 0)
+      .sort((a, b) => (b[1] as number) - (a[1] as number));
+  }, [resolvedFinancials.platformFeesByPlatform]);
+
+  const fareGapByPlatformRows = useMemo(() => {
+    return Object.entries(resolvedFinancials.fareGrossMinusNetByPlatform || {})
+      .filter(([, v]) => (v || 0) > 0.005)
+      .sort((a, b) => (b[1] as number) - (a[1] as number));
+  }, [resolvedFinancials.fareGrossMinusNetByPlatform]);
+
   return (
+    <>
+      <Dialog
+        open={periodEarningsOpen}
+        onOpenChange={(open) => {
+          setPeriodEarningsOpen(open);
+          if (!open) setPlatformFeesExpanded(false);
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold tracking-tight">
+              {isToday ? "Today's earnings" : "Period earnings"} — breakdown
+            </DialogTitle>
+            <DialogDescription className="text-left text-sm text-slate-600 dark:text-slate-400">
+              Ledger totals for the selected date range. The card headline is net fare on trip lines; platform rows include tips.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 text-sm">
+            {resolvedFinancials.dataIncomplete ? (
+              <p className="text-slate-600 dark:text-slate-400">
+                Ledger data is incomplete for this period. Repair the ledger or widen filters to see a full breakdown.
+              </p>
+            ) : (
+              <>
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fare & tips</h3>
+                  <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                    {(resolvedFinancials.tripCount || 0) > 0 && (
+                      <p className="text-[11px] text-slate-500">
+                        Ledger trip lines: {resolvedFinancials.tripCount}
+                      </p>
+                    )}
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-600 dark:text-slate-400">Gross fare</span>
+                      <span className="font-medium tabular-nums">${fmtMoney(resolvedFinancials.totalBaseFare || 0)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-600 dark:text-slate-400">Net fare</span>
+                      <span className="font-semibold tabular-nums">${fmtMoney(resolvedFinancials.periodEarnings)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4 text-xs">
+                      <span className="text-slate-500">Implied on fare</span>
+                      <span className="tabular-nums text-slate-600">${fmtMoney(fareGrossMinusNet)}</span>
+                    </div>
+                    {(resolvedFinancials.platformFees || 0) > 0 && (
+                      <div className="text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setPlatformFeesExpanded((e) => !e)}
+                          className="flex w-full items-center justify-between gap-3 rounded-md py-1.5 pl-1 pr-0 text-left transition-colors hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
+                          aria-expanded={platformFeesExpanded}
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5 text-slate-500">
+                            <ChevronRight
+                              className={cn(
+                                'h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200',
+                                platformFeesExpanded && 'rotate-90'
+                              )}
+                              aria-hidden
+                            />
+                            Platform fee entries
+                          </span>
+                          <span className="shrink-0 tabular-nums text-slate-600">
+                            ${fmtMoney(resolvedFinancials.platformFees)}
+                          </span>
+                        </button>
+                        {platformFeesExpanded && (
+                          <div className="mt-2 space-y-3 border-l border-slate-200 pl-3 ml-1.5 dark:border-slate-600">
+                            {platformFeesLedgerRows.length > 0 && (
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                                  Ledger platform fees
+                                </p>
+                                {platformFeesLedgerRows.map(([label, amt]) => (
+                                  <div
+                                    key={label}
+                                    className="flex justify-between gap-4 text-[11px]"
+                                  >
+                                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                                      <span
+                                        className="h-2 w-2 shrink-0 rounded-full"
+                                        style={{ backgroundColor: getPlatformColor(label) }}
+                                      />
+                                      {label}
+                                    </span>
+                                    <span className="tabular-nums font-medium text-slate-700">
+                                      ${fmtMoney(amt as number)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {fareGapByPlatformRows.length > 0 && (
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                                  Gross − net by platform
+                                </p>
+                                {fareGapByPlatformRows.map(([label, amt]) => (
+                                  <div
+                                    key={`gap-${label}`}
+                                    className="flex justify-between gap-4 text-[11px]"
+                                  >
+                                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                                      <span
+                                        className="h-2 w-2 shrink-0 rounded-full"
+                                        style={{ backgroundColor: getPlatformColor(label) }}
+                                      />
+                                      {label}
+                                    </span>
+                                    <span className="tabular-nums font-medium text-slate-700">
+                                      ${fmtMoney(amt as number)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {platformFeesLedgerRows.length === 0 &&
+                              fareGapByPlatformRows.length === 0 && (
+                                <p className="text-[11px] text-slate-500">
+                                  No per-platform breakdown in the ledger for this period.
+                                </p>
+                              )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <Separator className="bg-slate-200/80 dark:bg-slate-700" />
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-600 dark:text-slate-400">Tips</span>
+                      <span className="font-medium tabular-nums">${fmtMoney(resolvedFinancials.totalTips || 0)}</span>
+                    </div>
+                    {(resolvedFinancials.disputeRefunds || 0) > 0 && (
+                      <div className="flex justify-between gap-4 text-xs">
+                        <span className="text-slate-500">Dispute recoveries</span>
+                        <span className="tabular-nums text-emerald-700">${fmtMoney(resolvedFinancials.disputeRefunds)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 dark:border-slate-700">
+                      <span className="text-slate-700 dark:text-slate-300">Net fare + tips</span>
+                      <span className="font-semibold tabular-nums">
+                        ${fmtMoney((resolvedFinancials.periodEarnings || 0) + (resolvedFinancials.totalTips || 0))}
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-snug text-slate-500">
+                      Sum of platform lines (below) includes tips: ${fmtMoney(platformEarningsSum)}.
+                    </p>
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cash allocation</h3>
+                  <div className="space-y-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-600 dark:text-slate-400">Total cash collected</span>
+                      <span className="font-semibold tabular-nums">${fmtMoney(resolvedFinancials.cashCollected || 0)}</span>
+                    </div>
+                    <Separator className="my-1 bg-slate-100 dark:bg-slate-800" />
+                    {cashByPlatformRows.map(([label, stats]: [string, any]) => (
+                        <div key={label} className="flex justify-between gap-4 text-xs">
+                          <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: getPlatformColor(label) }}
+                            />
+                            {label}
+                          </span>
+                          <span className="tabular-nums font-medium">${fmtMoney(stats.cashCollected)}</span>
+                        </div>
+                      ))}
+                    {cashByPlatformRows.length === 0 && (resolvedFinancials.cashCollected || 0) > 0 && (
+                        <p className="text-[11px] text-slate-500">Cash total is from the ledger; per-platform cash may be unallocated in older data.</p>
+                      )}
+                  </div>
+                </section>
+
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  Financials → Earnings uses <span className="font-medium text-slate-600 dark:text-slate-400">gross fare</span> per week; this view matches the overview card (net fare) plus tips context.
+                </p>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 [&>:nth-child(1)]:order-1 [&>:nth-child(2)]:order-2 [&>:nth-child(3)]:order-3 [&>:nth-child(4)]:order-4 [&>:nth-child(5)]:order-5 [&>:nth-child(6)]:hidden [&>:nth-child(7)]:order-6">
       {/* Card 1: Period Earnings — breakdown now from resolvedFinancials */}
       <MetricCard
@@ -162,6 +414,8 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         loading={localLoading}
         breakdown={resolvedFinancials.dataIncomplete ? [] : earningsBreakdown}
+        onClick={() => setPeriodEarningsOpen(true)}
+        interactiveLabel="Open period earnings breakdown and cash allocation"
       />
 
       {/* Card 2: Cash Collected */}
@@ -600,5 +854,6 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }
