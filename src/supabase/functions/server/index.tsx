@@ -14,7 +14,7 @@ import { pMap } from "./concurrency.ts";
 import { findMatchingStationSmart } from "./geo_matcher.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { Buffer } from "node:buffer";
-import { requireAuth, requirePermission } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId } from "./org_scope.ts";
 import fuelApp from "./fuel_controller.tsx";
@@ -422,6 +422,9 @@ async function generateTransactionLedgerEntry(transaction: any): Promise<any | n
             quantity: transaction.quantity,
             unitPrice: transaction.unitPrice,
             odometer: transaction.odometer,
+            ...(transaction.category === "InDrive Wallet Credit"
+                ? { indriveWalletLoad: true, walletProvider: "InDrive" as const }
+                : {}),
         },
     };
 }
@@ -2455,7 +2458,7 @@ app.get("/make-server-37f42386/transactions", requireAuth(), async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/transactions", async (c) => {
+app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
   try {
     const transaction = await c.req.json();
     if (!transaction.id) {
@@ -2477,6 +2480,60 @@ app.post("/make-server-37f42386/transactions", async (c) => {
             transaction.metadata._futureDateWarning = true;
             transaction.metadata._originalDate = transaction.date;
         }
+    }
+
+    // ── InDrive Wallet Credit (Phase 3) — fleet top-up to driver InDrive digital wallet
+    // Ledger: wallet_credit inflow; platform InDrive; see generateTransactionLedgerEntry.
+    // Phase 8: same permission as other transaction writes (Phase 1.5 ADR: transactions.edit).
+    const INDRIVE_WALLET_CATEGORY = "InDrive Wallet Credit";
+    if (transaction.category === INDRIVE_WALLET_CATEGORY) {
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        if (!rbacUser || !hasPermission(rbacUser.resolvedRole, "transactions.edit")) {
+            return c.json(
+                {
+                    error: "Forbidden",
+                    message:
+                        'Logging InDrive wallet loads requires the "transactions.edit" permission (same as editing transactions).',
+                    required: "transactions.edit",
+                },
+                403
+            );
+        }
+        const amt = Number(transaction.amount);
+        if (!Number.isFinite(amt) || amt <= 0) {
+            return c.json({ error: "InDrive Wallet Credit requires a positive, finite amount" }, 400);
+        }
+        if (!transaction.driverId || String(transaction.driverId).trim() === "") {
+            return c.json({ error: "InDrive Wallet Credit requires driverId" }, 400);
+        }
+        if (transaction.type === "Expense" || transaction.type === "Payout") {
+            return c.json(
+                {
+                    error:
+                        "InDrive Wallet Credit cannot use type Expense or Payout — use Adjustment so the ledger records an inflow",
+                },
+                400
+            );
+        }
+        if (transaction.type && transaction.type !== "Adjustment") {
+            return c.json(
+                { error: "InDrive Wallet Credit must use type Adjustment" },
+                400
+            );
+        }
+        if (!transaction.type) transaction.type = "Adjustment";
+        if (transaction.platform && transaction.platform !== "InDrive") {
+            return c.json({ error: "InDrive Wallet Credit requires platform InDrive" }, 400);
+        }
+        transaction.platform = "InDrive";
+        if (!transaction.description?.trim()) {
+            transaction.description = "Fleet load — InDrive digital wallet";
+        }
+        if (!transaction.status) transaction.status = "Completed";
+        if (transaction.isReconciled === undefined || transaction.isReconciled === null) {
+            transaction.isReconciled = true;
+        }
+        if (!transaction.paymentMethod) transaction.paymentMethod = "Digital Wallet";
     }
 
     // Auto-Approve Logic for AI Verified Fuel
@@ -3683,6 +3740,160 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
   } catch (e: any) {
     console.log(`[Ledger DriverOverview] Error: ${e.message}`);
     return c.json({ error: `Ledger driver overview failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── GET /ledger/driver-indrive-wallet — Period loads, fees, lifetime loads (Phase 2) ──
+// Query: driverId, startDate, endDate (YYYY-MM-DD). Same multi-ID driver resolution as driver-overview.
+// periodFees: sum of ledger platform_fee for InDrive in range; if 0, sum (gross−net) on fare_earning for InDrive.
+// periodLoads / lifetimeLoads: sum positive amounts on transaction:* with category "InDrive Wallet Credit".
+//
+// Phase 7 — estimatedBalance (optional fourth field):
+//   estimatedBalance = lifetimeLoads − lifetimeInDriveFees
+//   where lifetimeInDriveFees uses the SAME dual rule as periodFees but over ALL ledger rows (no date filter):
+//     primary: sum |netAmount| on eventType platform_fee, platform InDrive;
+//     else: sum (grossAmount − netAmount) on fare_earning, platform InDrive.
+//   lifetimeLoads is fleet-reported top-ups only (positive "InDrive Wallet Credit" transactions), not InDrive’s app balance.
+//   This is a fleet accounting estimate, not InDrive’s official wallet balance.
+// Phase 8: read access aligned with financial transaction visibility (transactions.view).
+app.get(
+  "/make-server-37f42386/ledger/driver-indrive-wallet",
+  requireAuth(),
+  requirePermission("transactions.view"),
+  async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    const LOAD_CATEGORY = "InDrive Wallet Credit";
+
+    if (!driverId || !startDate || !endDate) {
+      return c.json({ error: "Missing required params: driverId, startDate, endDate" }, 400);
+    }
+
+    const allDriverIds: string[] = [driverId];
+    try {
+      const driverRecord = await kv.get(`driver:${driverId}`);
+      if (driverRecord) {
+        if (driverRecord.uberDriverId) allDriverIds.push(driverRecord.uberDriverId);
+        if (driverRecord.inDriveDriverId) allDriverIds.push(driverRecord.inDriveDriverId);
+      }
+    } catch (lookupErr) {
+      console.warn(`[IndriveWallet] Could not look up driver ${driverId}:`, lookupErr);
+    }
+
+    const driverIdOrFilter =
+      allDriverIds.length === 1
+        ? null
+        : allDriverIds.map((id) => `value->>driverId.eq.${id}`).join(",");
+
+    const orgId = getOrgId(c);
+
+    const PAGE = 1000;
+    const MAX_ROWS = 50000;
+    const paginatedFetch = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
+    const ledgerBaseQuery = () => {
+      let q = supabase.from("kv_store_37f42386").select("value").like("key", "ledger:%");
+      if (orgId) q = q.eq("value->>organizationId", orgId);
+      if (driverIdOrFilter) q = q.or(driverIdOrFilter);
+      else q = q.eq("value->>driverId", driverId);
+      return q;
+    };
+
+    const ledgerRowDate = (raw: string | undefined) => (raw ? String(raw).split("T")[0] : "");
+
+    // One scan of all ledger rows for this driver: period fee metrics + lifetime fee metrics (Phase 7).
+    const allLedgerRows = await paginatedFetch(() => ledgerBaseQuery());
+
+    let platformFeeInDrive = 0;
+    let fareGapInDrive = 0;
+    let lifetimePlatformFeeInDrive = 0;
+    let lifetimeFareGapInDrive = 0;
+
+    for (const row of allLedgerRows) {
+      const e = row.value;
+      if (!e) continue;
+      const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
+      const net = Number(e.netAmount) || 0;
+      const gross = Number(e.grossAmount) || 0;
+      const et = e.eventType;
+      const d = ledgerRowDate(e.date);
+      const inPeriod = d >= startDate && d <= endDate;
+
+      if (et === "platform_fee" && plat === "InDrive") {
+        const absNet = Math.abs(net);
+        lifetimePlatformFeeInDrive += absNet;
+        if (inPeriod) platformFeeInDrive += absNet;
+      }
+      if (et === "fare_earning" && plat === "InDrive") {
+        const gap = gross - net;
+        lifetimeFareGapInDrive += gap;
+        if (inPeriod) fareGapInDrive += gap;
+      }
+    }
+
+    const periodFees = platformFeeInDrive > 0 ? platformFeeInDrive : fareGapInDrive;
+    const lifetimeInDriveFees =
+      lifetimePlatformFeeInDrive > 0 ? lifetimePlatformFeeInDrive : lifetimeFareGapInDrive;
+
+    const txBaseQuery = () => {
+      let q = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "transaction:%")
+        .eq("value->>category", LOAD_CATEGORY);
+      if (orgId) q = q.eq("value->>organizationId", orgId);
+      if (driverIdOrFilter) q = q.or(driverIdOrFilter);
+      else q = q.eq("value->>driverId", driverId);
+      return q;
+    };
+
+    const loadTxRows = await paginatedFetch(() => txBaseQuery());
+
+    const txDate = (raw: string | undefined) => (raw ? raw.split("T")[0] : "");
+
+    let periodLoads = 0;
+    let lifetimeLoads = 0;
+    for (const row of loadTxRows) {
+      const t = row.value;
+      if (!t) continue;
+      const amt = Number(t.amount) || 0;
+      if (amt <= 0) continue;
+      const d = txDate(t.date);
+      lifetimeLoads += amt;
+      if (d >= startDate && d <= endDate) periodLoads += amt;
+    }
+
+    const estimatedBalance = Number((lifetimeLoads - lifetimeInDriveFees).toFixed(2));
+
+    const data = {
+      periodLoads: Number(periodLoads.toFixed(2)),
+      periodFees: Number(periodFees.toFixed(2)),
+      lifetimeLoads: Number(lifetimeLoads.toFixed(2)),
+      estimatedBalance,
+    };
+
+    console.log(
+      `[IndriveWallet] driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerRows=${allLedgerRows.length} loadTxRows=${loadTxRows.length}`
+    );
+
+    return c.json({ success: true, data });
+  } catch (e: any) {
+    console.error("[IndriveWallet] Error:", e);
+    return c.json({ error: `InDrive wallet summary failed: ${e.message}` }, 500);
   }
 });
 

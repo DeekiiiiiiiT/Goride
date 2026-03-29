@@ -1,253 +1,205 @@
-# Fuel GPS matching: geofence enforcement & review workflows
+# InDrive wallet — implementation plan
 
-This document breaks implementation into **phases**. **Do not start a phase until the product owner confirms** to proceed. After each phase is complete, **wait for explicit approval** before moving to the next phase.
+This document breaks the **InDrive wallet** feature into phases. **Do not start a phase until the stakeholder confirms** to proceed. After each phase is complete, wait for explicit approval before moving on.
 
----
+**Scope recap**
 
-## Scope summary
-
-| Problem | Desired behavior |
-|--------|-------------------|
-| Log GPS is **outside** a verified station’s **`geofenceRadius`** but still inside the global smart-match window (~600m) | **Do not** auto-link to that verified station; treat as **no verified match** → **Learnt (STAGING)** for admin. |
-| **Two (or more) verified stations** close together; matcher cannot pick safely | **Do not** guess; route to a **dedicated admin “review” queue** (new tab or equivalent) until an admin assigns the correct station. |
-| Forensic / display consistency | Use **`geofenceRadius`** (and optional GPS accuracy) consistently with super-admin **Regional Efficiency** settings. |
+- Fleet loads money into a driver’s **InDrive digital wallet**; InDrive deducts fees (aligned with **Implied on fare** / platform-fee breakdown in Period earnings).
+- **MVP:** Log each load amount; show loads and fees on an **Overview** card.
+- **API:** **GET** returns `{ periodLoads, periodFees, lifetimeLoads, estimatedBalance }` (Phase 7 adds `estimatedBalance` with an explicit server-side formula).
+- **Optional later:** **Estimated running InDrive balance** = explicit formula (e.g. cumulative loads − cumulative InDrive fee ledger lines ± adjustments). This is product-defined, not inferred from trips alone.
 
 ---
 
-## Phase 1 — Core matcher: per-station geofence acceptance
+## Phase 1 — Contract, types, and naming (no runtime behavior yet)
 
-**Goal:** Single source of truth in `findMatchingStationSmart` (and any shared helper): a station is only an acceptable **verified** match if distance to that station (primary + aliases) is within **`geofenceRadius + GPS accuracy buffer`**.
+**Goal:** Lock naming and data shapes so backend and frontend stay aligned and ledger mapping stays correct.
 
 ### Steps
 
-1. **Inventory current behavior**
-   - Open `src/supabase/functions/server/geo_matcher.ts`.
-   - Document in comments (brief) the three outcomes: single candidate, multiple candidates (ambiguity rules), zero candidates.
-   - Confirm default `maxRadiusMeters` (600) remains the **search radius** for *who enters the candidate pool*, not the **acceptance** threshold.
+1. **Confirm transaction category string** for fleet top-ups (must match existing ledger mapper in `index.tsx` `generateTransactionLedgerEntry`: lowercase category must include both `wallet` and `credit`, e.g. `InDrive Wallet Credit`).
+2. **Add TypeScript types** (e.g. in `src/types/data.ts`):
+   - `IndriveWalletSummary` with `periodLoads`, `periodFees`, `lifetimeLoads`, and `estimatedBalance` (Phase 7).
+3. **Document** that `periodFees` matches the **InDrive** slice of the same definitions used in Period earnings breakdown (clarify whether this is: sum of `platform_fee` ledger rows with `platform === 'InDrive'`, and/or **gross − net** on `fare_earning` for InDrive — align with product; ideally one canonical definition used by GET and overlay).
+4. **List required fields** on “load” transactions: `driverId` (canonical Roam UUID), `date`, positive `amount`, `category`, `platform: 'InDrive'`, `type` (e.g. `Adjustment` — verify inflow vs `Expense` so ledger direction is **inflow**).
+5. **Permissions:** Note which role can log loads (e.g. same as `transactions.edit` or a narrower permission if you add one later).
+6. **Output:** Short ADR-style note in this file or a comment block listing **decisions** from steps 1–5 (single source of truth for implementers).
 
-2. **Define acceptance rule (precise)**
-   - For a candidate station with resolved distance `d` (shortest to primary or alias):
-     - Let `R = station.geofenceRadius ?? <project default, e.g. 150>` to match existing `StationProfile` / KV data.
-     - Let `A = gpsAccuracy` passed into `findMatchingStationSmart` (meters; 0 if unknown).
-     - **Accept** this candidate as a possible match only if `d <= R + A`.
-   - Decide policy when **`geofenceRadius` is missing**: use same default as duplicate-check / admin UI (`getDefaultGeofenceRadius` pattern) — **record the decision in code comments**.
+**Exit criteria:** Types committed; category string and `periodFees` definition agreed; no code changes to server/UI beyond types if you choose to add types only in this phase.
 
-3. **Apply acceptance after candidate ordering, not only in multi-station branch**
-   - After building the sorted candidate list within `maxRadiusMeters + A`:
-     - **Filter** or **re-evaluate** each candidate: drop any where `d > R + A` for *that* station (per-station `R`).
-   - **Single-candidate path:** If the only candidate within 600m is **outside** its own `R + A`, treat as **no station** (`confidence: 'none'`), not `high`.
-   - **Multi-candidate path:** Re-run ambiguity logic **only on candidates that pass** their own `R + A`. If none pass, result is `none` (or a new explicit confidence — see step 5).
+### Phase 1 — ADR (locked decisions)
 
-4. **Ambiguity vs “outside geofence”**
-   - If **two+** stations are within **600m** but **all** are outside their respective `R + A`:
-     - Prefer returning **`none`** → Learnt funnel, **unless** product requires “ambiguous” for UI — **confirm with PO**.
-   - If **two+** pass their geofence but distances are “too similar” (existing ratio logic), keep **`ambiguous`** → review workflow (Phase 4).
+| Decision | Choice |
+|----------|--------|
+| **Load transaction category** | `InDrive Wallet Credit` — constant `INDRIVE_WALLET_LOAD_CATEGORY` in `src/constants/indriveWallet.ts` (lowercase contains `wallet` + `credit` → ledger `wallet_credit`). |
+| **Platform tag** | `InDrive` — `INDRIVE_WALLET_PLATFORM`. |
+| **Transaction type for loads** | `Adjustment` with **positive** `amount` — `INDRIVE_WALLET_LOAD_TRANSACTION_TYPE` (avoids Expense/Payout outflow-only path in `generateTransactionLedgerEntry`). |
+| **`periodFees` (canonical for Phase 2)** | In `[startDate, endDate]`: (1) Sum fee magnitude from ledger `platform_fee` rows with `platform === 'InDrive'`. (2) If that sum is **0**, use sum of `(grossAmount - netAmount)` on `fare_earning` for InDrive (same as `fareGrossMinusNetByPlatform.InDrive` / “Implied on fare” for InDrive). |
+| **`periodLoads` / `lifetimeLoads` (Phase 2)** | Sum **positive** `amount` on `transaction:*` where `category === InDrive Wallet Credit` and `driverId` in resolved ID set; period filtered by date range, lifetime unbounded (or capped at `endDate` per handler). |
+| **Permissions (logging loads)** | Reuse existing **`transactions.edit`** on `POST .../transactions` unless a narrower permission is added later. |
+| **Types** | `IndriveWalletSummary`, `IndriveWalletSummaryResponse`, `IndriveWalletLoadTransactionInput` in `src/types/data.ts`; `TransactionCategory` includes `'InDrive Wallet Credit'`. |
 
-5. **Optional: explicit `confidence` value**
-   - If useful for logging/UI, add e.g. `'outside_geofence'` instead of collapsing to `'none'`, but **only if** all call sites handle it (otherwise stick to `'none'` to minimize churn).
-
-6. **Logging**
-   - Add structured `console.log` when rejecting due to geofence: station id, name, `d`, `R`, `A`.
-
-7. **Local verification (no deploy)**
-   - Manually trace: 442m vs 75m → must **not** return `high` for that station.
-   - Trace: 50m vs 75m → **high** (sole candidate).
-   - Trace: two stations both inside 600m, one at 40m (inside 75m) one at 200m (outside 200m geofence) — closest valid wins per existing ambiguity rules.
-
-**Exit criteria:** `geo_matcher.ts` behavior matches the table in “Scope summary” for geofence; unit tests added if the project has a test runner for this file (optional sub-step).
-
-**Phase 1 implementation (done):**
-
-- `findMatchingStationSmart` first collects stations within **search radius** `maxRadiusMeters + gpsAccuracy` (unchanged default 600m + A).
-- Each candidate is **accepted** only if `distance <= (station.geofenceRadius ?? 150) + gpsAccuracy`.
-- Rejections log: `[SmartMatch] Geofence reject: id=… name=… d=… R=… A=…`.
-- If no station passes acceptance → `confidence: 'none'`, `distance` = closest **search-radius** distance (for audit), `candidatesInRange: 0`.
-- Ambiguity rules (3a/3b/3c) run on the **accepted** list only; per solution doc, if multiple stations are in search radius but **none** pass geofence → **none** (Learnt), not ambiguous.
+**Status:** Phase 1 **implemented** (constants + types + ADR). Awaiting approval before Phase 2.
 
 ---
 
-## Phase 2 — Wire matcher outputs through all server paths
+## Phase 2 — Backend GET: `periodLoads`, `periodFees`, `lifetimeLoads`
 
-**Goal:** Every code path that calls `findMatchingStationSmart` (or duplicates its logic) produces consistent metadata and correct **Learnt** vs **ambiguous** vs **verified** outcomes.
+**Goal:** One authoritative endpoint that aggregates InDrive wallet data for a driver and date range.
 
 ### Steps
 
-1. **`fuel_controller.tsx` — fuel entry POST**
-   - Locate the block that calls `findMatchingStationSmart(..., 600, 0)`.
-   - Confirm: when result is `none`, existing branch creates **Learnt** and sets `verificationMethod: 'none'` / `locationStatus: 'unknown'` as today — **no duplicate** Learnt records (guard if entry already has `learnt_location` key).
-   - Pass **GPS accuracy** from `extractEntryCoords` / `entry.metadata` if available instead of hardcoded `0` (align with Phase 1 `A`).
-   - Re-read **ambiguous** branch: ensure it still sets `review_required` and does not create Learnt **unless** product wants both — **default: ambiguous → review only, not Learnt**.
+1. **Choose route and method**, e.g. `GET /make-server-37f42386/ledger/driver-indrive-wallet?driverId=&startDate=&endDate=` (same auth pattern as `/ledger/driver-overview`).
+2. **Resolve driver IDs** the same way as `driver-overview` (Roam UUID + `uberDriverId` / `inDriveDriverId` if ledger rows use alternate IDs) so no rows are dropped.
+3. **`periodLoads`:** Sum positive amounts from `transaction:*` (or org-filtered KV query) where:
+   - category matches the agreed InDrive load category (step Phase 1.1),
+   - `driverId` matches resolved set,
+   - `date` ∈ `[startDate, endDate]` (inclusive, consistent with other endpoints).
+4. **`lifetimeLoads`:** Same filter as `periodLoads` but **no** start/end (or `endDate` only if you cap at “today”).
+5. **`periodFees`:** Implement the **single canonical definition** from Phase 1:
+   - Prefer reusing query/aggregation logic already used for `fareGrossMinusNetByPlatform` / `platformFeesByPlatform` for **InDrive** only, **or** query `ledger:*` in range with `platform` InDrive and `eventType` in `platform_fee` (and optionally derive gross−net from `fare_earning` if product says so).
+6. **Validate** response: `periodFees` should be ≥ 0; loads ≥ 0; handle missing driver → 404 or empty zeros per existing API style.
+7. **Log** one debug line server-side with counts (not PII) for troubleshooting.
+8. **Unit sanity:** Manually verify with one driver that numbers match Period earnings overlay for the same range when comparing InDrive fee lines.
 
-2. **`fuel_controller.tsx` — orphan reconcile (`/admin/reconcile-ledger-orphans`)**
-   - Same matcher call: after Phase 1, entries **outside** geofence should **not** be backfilled to verified.
-   - Confirm counters (`skippedNoMatch`, etc.) still make sense; add `skippedOutsideGeofence` log if helpful.
+**Exit criteria:** Endpoint returns JSON `{ success, data: { periodLoads, periodFees, lifetimeLoads } }`; documented in a comment above the handler.
 
-3. **`index.tsx` — financial / AI fuel transaction path**
-   - Locate `findMatchingStationSmart` with `600` and `locationMetadata.accuracy`.
-   - Align: verified link only when matcher returns acceptable match **and** Phase 1 rules satisfied (inherited automatically if only matcher changes).
-   - When `none`: existing **Learnt location** creation — verify idempotency if transaction is retried.
-
-4. **Manual station picker override**
-   - Confirm **manual** verified selection still bypasses GPS (existing `skipGpsMatching`) — **do not** break admin/driver explicit picks.
-
-5. **Grep for other callers**
-   - Search repo for `findMatchingStationSmart`, `findMatchingStation(`, and any hardcoded `600` proximity for fuel — list each file and either align or document exception (e.g. analytics-only).
-
-**Exit criteria:** Grep clean; manual smoke: submit fuel with coords outside 75m of nearest verified → **Learnt** created; inside → verified link.
-
-**Phase 2 implementation (done):**
-
-- **`extractEntryGpsAccuracyMeters(entry)`** in `fuel_controller.tsx` — reads accuracy from `geofenceMetadata`, `metadata.geofenceMetadata`, `metadata.locationMetadata`, `locationMetadata`; caps at 500m; used for `findMatchingStationSmart(..., 600, gpsAccuracyM)` on **fuel POST** and **orphan reconcile**.
-- **Fuel POST — ambiguous:** Always sets `review_required` / `gps_ambiguous` / `matchDistance` / `ambiguityReason`; optional `matchedStationId` only if matcher ever returns a station (currently `null` for ambiguous). **No Learnt** on ambiguous.
-- **Fuel POST — no match:** **`metadata.learntLocationId`** set on create; **reuses** existing Learnt KV id on retry if `learntLocationId` already present (no duplicate `learnt_location:*` rows).
-- **Reconcile:** New counter **`skippedOutsideGeofence`** when `confidence === 'none'` and `distance` is finite (search radius hit but geofence rejected); **`skippedNoMatch`** when no station in search radius (`distance` Infinity). Response JSON includes `skippedOutsideGeofence`.
-- **`index.tsx` (fuel transactions):** `locationMetadata.accuracy` was already passed to matcher; **Learnt idempotency** via `metadata.learntLocationId` (same pattern as fuel POST); **`metadata` guard** on ambiguous / no-match branches; **`matchDistance`** on ambiguous.
-- **`findMatchingStationSmart` callers:** Only `fuel_controller.tsx` (2) and `index.tsx` (1) — **no code changes** elsewhere required for Phase 2.
+**Status:** Phase 2 **implemented** — `GET /make-server-37f42386/ledger/driver-indrive-wallet` in `index.tsx`; client `api.getDriverIndriveWallet` in `api.ts`. Awaiting approval before Phase 3.
 
 ---
 
-## Phase 3 — Forensic verification & audit scoring alignment
+## Phase 3 — Backend: ensure “load” transactions write correct ledger rows
 
-**Goal:** Server-side “forensic” distance checks and any **audit confidence** logic use **`geofenceRadius`** consistently with Phase 1, avoiding `location.radius` / wrong defaults where that contradicts super-admin settings.
+**Goal:** When an admin saves an InDrive load via existing `POST .../transactions`, a **`wallet_credit`** ledger entry is created with `platform: 'InDrive'` where applicable.
 
 ### Steps
 
-1. **`fuel_controller.tsx` — Phase 5 forensic block**
-   - Find `radiusThreshold = matchedStationForVerification.location?.radius || 100`.
-   - Replace with **`geofenceRadius`** (and same default policy as Phase 1). Optionally keep `location.radius` as legacy fallback **only if** data migration proves some stations only have `location.radius`.
+1. **Trace** `saveTransaction` / `POST /transactions` path in `index.tsx` to confirm `generateTransactionLedgerEntry` runs for non-toll, non-fuel-gate transactions.
+2. **Confirm** category `InDrive Wallet Credit` maps to `wallet_credit` (both `wallet` and `credit` in lowercase).
+3. **Confirm** `transaction.platform` is copied to ledger entry (already in generator — verify).
+4. **Edge cases:** If amount is negative or category wrong, reject or normalize with clear error message.
+5. **Idempotency / duplicates:** Document whether editing the same load is allowed; ledger dedup is by `sourceId` + `sourceType` — avoid duplicate transaction IDs.
+6. **Optional:** If repair jobs regenerate ledger from transactions, confirm InDrive loads are included in repair scope.
 
-2. **`fuel_logic` / confidence score**
-   - Search `calculateConfidenceScore` and related for distance thresholds; align with `geofenceRadius` or document why a different metric is used (e.g. scoring vs gating).
+**Exit criteria:** Creating one test load in dev produces one `ledger:*` row with `eventType: 'wallet_credit'` and platform InDrive (or documented metadata).
 
-3. **KV / station schema**
-   - Verify persisted stations from super-admin include `geofenceRadius` on the object used at runtime; if some old records lack it, defaults must match Phase 1.
-
-**Exit criteria:** Forensic flags (`isSpoofingRisk`, etc.) use the same radius concept as matching; no contradictory 100m default unless documented.
-
-**Phase 3 implementation (done):**
-
-- **`fuel_controller.tsx` — POST forensic block:** `radiusThreshold = geofenceRadius ?? location.radius ?? 150` (matches `geo_matcher` / Regional Efficiency; legacy `location.radius` when `geofenceRadius` absent).
-- **`fuel_controller.tsx` — `/admin/verify-record-forensics`:** Drift plausibility uses `metadata.radiusUsed` then station **`geofenceRadius`**, then **`location.radius`**, then **150** (replaces bare `|| 100`).
-- **`fuel_logic.ts` — `calculateConfidenceScore`:** GPS proximity bonus uses **`min(50, R × 0.5)`** with **`R = station.geofenceRadius ?? 150`** instead of a fixed **50m** threshold (scales with tight vs loose stations).
+**Status:** Phase 3 **implemented** — `POST /transactions` validates `InDrive Wallet Credit` (positive amount, `driverId`, `type=Adjustment`, `platform=InDrive`, defaults description/status/payment); `generateTransactionLedgerEntry` adds `metadata.indriveWalletLoad` + `walletProvider: InDrive`. Awaiting approval before Phase 4.
 
 ---
 
-## Phase 4 — Admin UI: “Spatial review” (or similar) for ambiguous proximity
+## Phase 4 — Client API and hooks
 
-**Goal:** Verified stations **close together** → entries that are **`ambiguous`** / **`review_required`** appear in a **dedicated Station Database tab** (or sub-view) so admins resolve **which station** applies, without mixing with **Learnt** unknown locations.
+**Goal:** Frontend calls one function; no duplicated sum logic in components.
 
 ### Steps
 
-1. **Product naming**
-   - Finalize tab label: e.g. **“Spatial review”**, **“Ambiguous GPS”**, **“Proximity review”** — avoid generic **“Review”** if it conflicts with other admin queues.
+1. **Add** `api.getDriverIndriveWallet({ driverId, startDate, endDate })` in `src/services/api.ts` pointing to the Phase 2 route.
+2. **Parse** response and surface errors (network, 401, 400) consistently with `getLedgerDriverOverview`.
+3. **Optional React hook** `useIndriveWallet(driverId, dateRange)` that fetches when `driverId` and range are set and returns `{ data, loading, error, refetch }`.
+4. **Type imports** from `types/data.ts` for the response.
 
-2. **Data source**
-   - List what to show: fuel entries / transactions with `metadata.locationStatus === 'review_required'` and `verificationMethod` in `gps_ambiguous`, … (complete enum from codebase).
-   - Decide pagination, filters (date, vehicle, driver), and actions: **assign to station A**, **assign to station B**, **send to Learnt**, **merge**.
+**Exit criteria:** From browser console or a temporary test button, the hook/API returns the same numbers as the raw GET for a known driver.
 
-3. **API**
-   - If no endpoint exists: add GET (scoped, admin) that queries `fuel_entry:` / `transaction:` prefixes with review flags — **or** reuse existing Fuel Audit dashboard API with a dedicated filter. Prefer **one** list endpoint to avoid drift.
-
-4. **UI implementation**
-   - Add tab to Station Database shell (same pattern as **Learnt (STAGING)**).
-   - Reuse table/card components from Fuel Audit if possible for consistency.
-   - Empty state copy explaining difference vs **Learnt**.
-
-5. **Permissions**
-   - Restrict to super-admin or same role as other Station Database tabs.
-
-6. **Out of scope for this phase (unless PO insists)**
-   - Full merge/promote flows may already exist on Fuel Audit — **link** or **embed** instead of duplicating.
-
-**Exit criteria:** Ambiguous matches are visible and actionable in the new tab; Learnt tab still only for true unknown-location funnel.
-
-**Phase 4 implementation (done):**
-
-- **`GET /make-server-37f42386/admin/spatial-review-queue`** — Loads `fuel_entry:` and `transaction:` (Fuel / Fuel Reimbursement only), filters **`locationStatus === 'review_required'`** and **`verificationMethod === 'gps_ambiguous'`**, returns `{ items, count }` sorted by date desc.
-- **`POST .../admin/bulk-assign-station`** — Resolves **`fuel_entry:{id}`** first, then **`transaction:{id}`** for the same id; rejects non-fuel transactions; clears **`metadata.ambiguityReason`** on assign; idempotency checks top-level and **`metadata.matchedStationId`**.
-- **UI:** **`SpatialReviewTab`** — Table + empty state (explains difference vs Learnt), **Assign station** dialog with verified-station **Select**, calls **`api.bulkAssignStation`**.
-- **Station Database** — New tab **Spatial review** (badge **GPS**) after **Learnt (STAGING)**.
+**Status:** Phase 4 **implemented** — `api.getDriverIndriveWallet` (with `parseFinancialApiErrorBody` for 4xx/5xx); same helper applied to `getLedgerDriverOverview`; `useIndriveWallet` in `src/hooks/useIndriveWallet.ts` (`data`, `loading`, `error`, `refetch`). Awaiting approval before Phase 5.
 
 ---
 
-## Phase 5 — Client consistency & copy
+## Phase 5 — Overview UI: “InDrive wallet” card + log load
 
-**Goal:** Dashboards and analytics do not **re-bridge** fuel logs to verified stations using a **600m** rule alone; tooltips and labels match backend behavior.
+**Goal:** Driver Detail Overview shows loads, fees (period), and a control to log a new load.
 
 ### Steps
 
-1. **`GasStationAnalytics.tsx` (and similar)**
-   - Replace or gate “closest within 600m” logic so it respects **master station geofence** or **defers** to server-side `matchedStationId`.
+1. **Placement:** Add a card to `OverviewMetricsGrid` (or adjacent section in `DriverDetail`) with title **InDrive wallet** (exact casing per design system).
+2. **Display:** Show `periodLoads`, `periodFees`, `lifetimeLoads` from Phase 4 (loading skeleton, error state).
+3. **Log load modal:** Form fields: amount (required, > 0), date (default today), optional note/reference; submit calls **`api.saveTransaction`** with agreed category, `platform: 'InDrive'`, `driverId`, positive amount, appropriate `type`.
+4. **On success:** Close modal, toast, **refetch** wallet summary (and optionally append to local transactions if parent passes `setTransactions`).
+5. **Copy:** Short helper text explaining fees vs fleet loads (one sentence) to reduce support questions.
+6. **Accessibility:** Focus trap in modal, labels on inputs, keyboard submit.
 
-2. **`FuelLogTable.tsx` / transaction logs**
-   - Tooltip text for “Verified Station” / `gps_smart_matching` should mention **distance vs geofence** when relevant, or “pending review” for ambiguous.
+**Exit criteria:** User can log a load and see totals update without full page reload.
 
-3. **i18n / strings**
-   - Centralize new strings if the project uses a message catalog.
-
-**Exit criteria:** UI does not show a log as “verified at 442m” for a 75m station after Phases 1–2 are live (unless manual override).
-
-**Phase 5 implementation (done):**
-
-- **`GasStationAnalytics.tsx`:** Removed flat **600m** client bridge. Offline bridge uses **`shortestDistanceMeters`** (primary + **`gpsAliases`**) and accepts only when **`d ≤ geofenceRadius (default 150) + GPS accuracy`** from log metadata — aligned with server matching. Bridge metadata: **`bridgeSource: 'gps_proximity_geofence'`**.
-- **`FuelLogTable.tsx`:** Verified tooltip — **“GPS offset from station anchor”** (not “Accuracy”), optional **reference radius** when **`metadata.radiusUsed`** exists; verification method uses **`replace(/_/g, ' ')`**. Ambiguous review tooltip — **distance** copy + pointer to **Station Database → Spatial review (GPS)**. Unknown-location tooltip — clarifies **Learnt (STAGING)** vs waiting for server match.
+**Status:** Phase 5 **implemented** — `OverviewMetricsGrid` includes an **InDrive wallet** card (period loads headline, period fees & lifetime loads in breakdown; loading/error states; helper copy + tooltip). **Log load** modal posts via `api.saveTransaction` with `InDrive Wallet Credit` / `InDrive` / `Adjustment`. On success: toast, `useIndriveWallet` refetch, `refreshData()` + ledger refresh key bump from `DriverDetail`. `walletRange` is derived from Driver Detail `dateRange` (`yyyy-MM-dd`). Awaiting approval before Phase 6.
 
 ---
 
-## Phase 6 — QA, rollout, and regression checklist
+## Phase 6 — Polish, edge cases, and alignment with Period earnings overlay
 
-**Goal:** Safe deploy with repeatable tests, monitoring, and a clear rollback story.
+**Goal:** Numbers match expectations; empty states; no double-counting.
 
-### Pre-deploy
+### Steps
 
-- [ ] Deploy **Supabase Edge** (or your host) so **`fuel_controller`** / **`geo_matcher`** changes are live.
-- [ ] Deploy **frontend** so Phase 4–5 UI (Spatial review tab, analytics, tooltips) is live.
-- [ ] Confirm **staging** (or a test org) has at least one **verified** station with a **known `geofenceRadius`** (e.g. 75m) and GPS test coordinates **inside** and **outside** that radius.
+1. **Cross-check** `periodFees` from GET vs InDrive rows inside Period earnings breakdown modal for the **same** date range (document any intentional difference).
+2. **Empty state:** No InDrive trips and no loads — show zeros and friendly copy.
+3. **Large numbers / currency:** Use same formatting as other Overview cards (`fmtMoney` / locale).
+4. **Date range:** When driver changes date filter on Driver Detail, wallet card refetches with same `startDate`/`endDate` as `driver-overview`.
+5. **Performance:** Debounce or single fetch with `driver-overview` if both load together (optional batch later — not required for MVP).
 
-### Regression matrix (record pass/fail + notes)
+**Exit criteria:** QA checklist in this file ticked for items 1–5.
 
-| # | Scenario | Expected | Pass |
-|---|----------|----------|------|
-| 1 | GPS **inside** station `geofenceRadius` (+ accuracy), single nearby verified station | `findMatchingStationSmart` → **high/medium**; fuel entry **verified** or correct handshake | |
-| 2 | GPS **outside** geofence but **within ~600m** of only one verified station | **No** auto-link to verified; **Learnt** (or `locationStatus` per no-match path); **`[SmartMatch] Geofence reject`** in logs | |
-| 3 | Two verified stations **close together**, distances ambiguous | **`gps_ambiguous`**; **Spatial review** tab lists row; **no** Learnt for this case alone | |
-| 4 | **Manual** station picker (verified) on fuel entry | Skips GPS; **`manual_admin_override`** / picker path; no false Learnt | |
-| 5 | **No GPS** on fuel entry | Gate / **Learnt** path unchanged; no crash | |
-| 6 | **Retry** same fuel save after Learnt id created | **Same** `learntLocationId` (no duplicate learnt rows) | |
-| 7 | **`POST /admin/reconcile-ledger-orphans`** on mixed orphans | `skippedOutsideGeofence` increments when in-range but outside geofence; matches only when inside acceptance | |
-| 8 | **Spatial review** → **Assign station** | Entry updates; **`ambiguityReason`** cleared; verified metadata | |
-| 9 | **GasStationAnalytics** for unresolved log | No **600m** phantom bridge; bridge only if within **geofence + accuracy** | |
-| 10 | **FuelLogTable** tooltips | Verified shows **offset** + optional **radiusUsed**; ambiguous points to **Spatial review** | |
+**Status:** Phase 6 **implemented** — (1) Period earnings modal includes **InDrive fees — period alignment**: compares `GET /ledger/driver-indrive-wallet` `periodFees` with the same server rule from `resolvedFinancials` (ledger `platformFeesByPlatform.InDrive` or `fareGrossMinusNetByPlatform.InDrive`), with copy when platform filter ≠ All. (2) InDrive wallet card **empty state** when all three metrics are zero. (3) Amounts use shared **`fmtMoney`**. (4) **`ledgerDateRangeStrings`** in `DriverDetail` is the single source for driver-overview fetch and `walletRange` prop. (5) **`useIndriveWallet`** debounces range changes (300ms) with generation guards.
 
-### Monitoring (first 48h after prod)
+**QA checklist (Phase 6 items 1–5)**
 
-- Search logs for **`[SmartMatch]`**, **`Geofence reject`**, **`SpatialReviewQueue`**.
-- Watch **Learnt** count: a **step change** is expected if many old logs were wrongly auto-verified (now correctly unlinked).
-- Watch **Spatial review** queue depth; should drain as admins assign.
-
-### Rollback
-
-1. Revert the deployment commit(s) (server + client) or redeploy previous build.
-2. **Data:** Entries already saved with new metadata (e.g. `learntLocationId`, `manual_bulk_assign`) are **not** auto-reverted — plan a **one-time reconcile** only if business requires re-linking old rows (out of scope unless requested).
-
-### Sign-off
-
-- [ ] Product owner accepts test matrix results for staging (or prod smoke).
-- [ ] No open **P0** issues on matching, Learnt, or Spatial review.
-
-**Phase 6 status:** Checklist ready — fill **Pass** column and checkboxes when QA is complete.
+- [x] **1.** `periodFees` from wallet GET cross-checked against Period earnings breakdown (same fee rule; filter caveat documented in UI).
+- [x] **2.** Empty InDrive activity shows zeros + friendly subtext on the wallet card.
+- [x] **3.** Currency uses `fmtMoney` / locale-consistent formatting on the InDrive surfaces touched here.
+- [x] **4.** Wallet fetch uses the same `yyyy-MM-dd` range as `getLedgerDriverOverview` (`ledgerDateRangeStrings`).
+- [x] **5.** Debounced wallet fetch (optional perf) — **done** (no batch with driver-overview for MVP).
 
 ---
 
-## Execution order & approvals
+## Phase 7 — Estimated InDrive balance (optional product logic)
 
-| Phase | Depends on | Requires PO confirmation before starting |
-|-------|------------|------------------------------------------|
-| 1 | — | Yes |
-| 2 | 1 | Yes |
-| 3 | 1–2 (matcher stable) | Yes |
-| 4 | 1–2 (flags stable) | Yes |
-| 5 | 1–2 (ideally 3) | Yes |
-| 6 | All planned dev complete | Yes |
+**Goal:** Optional fourth field, e.g. `estimatedBalance`, using an **explicit** formula (not magic).
 
-**Current status:** **Phases 1–6 documented.** **Phase 6** = run the checklist above and sign off when done (no further code required for this phase unless QA finds bugs).
+### Steps
+
+1. **Define formula in code comments** (e.g. `estimatedBalance = lifetimeLoads - sum(InDrive platform_fee ledger net) + sum(wallet_credit adjustments) - …`). Adjust to match fleet accounting.
+2. **Implement** only if product approves; add to GET response as optional field.
+3. **Disclaim in UI:** “Estimate only — not InDrive’s official balance.”
+4. **Do not** conflate with Roam cash wallet or Uber balance.
+
+**Exit criteria:** If shipped, value is reproducible from ledger + transactions export; if not shipped, Phase 2 response remains three fields only.
+
+**Status:** Phase 7 **implemented** — `GET /ledger/driver-indrive-wallet` returns **`estimatedBalance`** = `lifetimeLoads − lifetimeInDriveFees`, where `lifetimeInDriveFees` uses the same dual rule as `periodFees` (ledger `platform_fee` for InDrive, else `fare_earning` gross−net) over **all** ledger rows for the driver. Comments in `index.tsx` document the formula. UI: fourth breakdown row **Est. balance** plus footer disclaimer (not official InDrive balance; not Roam cash / Uber). Types: `IndriveWalletSummary.estimatedBalance` in `types/data.ts`.
+
+---
+
+## Phase 8 — Verification, permissions, and handoff
+
+**Goal:** Safe rollout.
+
+### Steps
+
+1. **Permission check** on GET and on POST transaction for loads (match Phase 1.5).
+2. **Regression:** Driver overview and Period earnings modal unchanged for non–InDrive drivers.
+3. **Update** this `solution.md` with “Implemented in commit …” and any deviations.
+4. **Stakeholder sign-off** on copy and formula (especially Phase 7 if enabled).
+
+**Exit criteria:** Checklist complete; feature flag removed or documented.
+
+**Status:** Phase 8 **implemented** — **GET** `/ledger/driver-indrive-wallet`: `requireAuth()` + `requirePermission('transactions.view')` (read path aligned with who can view transactions). **POST** `/transactions`: `requireAuth()` on the route; **InDrive Wallet Credit** additionally requires `hasPermission(..., 'transactions.edit')` with **403** + message if missing (Phase 1.5). **UI:** `OverviewMetricsGrid` disables **Log load** when `!can('transactions.edit')` (native `title` hint). **Regression:** InDrive wallet card and Period earnings remain date-range and driver-agnostic; drivers without InDrive activity still show zeros / alignment messaging only. **Feature flag:** none; no flag to remove. **Stakeholder sign-off:** manual step before production.
+
+**QA checklist (Phase 8)**
+
+- [x] **1.** GET wallet + POST load permissions enforced (see above).
+- [x] **2.** Non–InDrive drivers: no InDrive-specific branching; overview/cards behave as before.
+- [x] **3.** This document updated (implementation notes; commit hash left to author at commit time).
+- [ ] **4.** Stakeholder sign-off (optional — track outside repo).
+
+---
+
+## Execution rule (for implementers)
+
+1. **Confirm** with the stakeholder before starting **Phase 1** implementation.
+2. Complete phases **in order**; after each phase, **stop** and wait for **explicit approval** before starting the next.
+3. If a phase reveals a design conflict (e.g. `periodFees` definition), **update this document** and resolve before coding dependent phases.
+
+---
+
+## Appendix — Reference (from prior analysis)
+
+- Ledger mapper: category contains `wallet` + `credit` → `wallet_credit` (`generateTransactionLedgerEntry` in `index.tsx`).
+- Trip-derived InDrive fees: `platform_fee` from `indriveServiceFee` on trip ledger generation.
+- Driver overview already exposes InDrive splits: `fareGrossMinusNetByPlatform`, `platformFeesByPlatform` (reuse or mirror for `periodFees`).

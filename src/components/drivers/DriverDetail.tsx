@@ -339,6 +339,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     to: new Date(),
   });
 
+  /** Single source for `getLedgerDriverOverview` and InDrive wallet GET — same `yyyy-MM-dd` bounds. */
+  const ledgerDateRangeStrings = useMemo(() => {
+    if (!dateRange?.from) return null;
+    return {
+      startDate: format(dateRange.from, 'yyyy-MM-dd'),
+      endDate: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
+    };
+  }, [dateRange]);
+
   // ────────────────────────────────────────────────────────────
   // Server-side trip fetching: load ALL trips for this driver
   // so we aren't limited by the initial 1,000-trip page load.
@@ -1104,12 +1113,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   
   // ── Ledger driver-overview fetch (Phase 14 — date-range aware) ──
   useEffect(() => {
-    if (!dateRange?.from) return;
+    if (!ledgerDateRangeStrings) return;
     let cancelled = false;
     const fetchLedgerOverview = async () => {
       try {
-        const startDate = format(dateRange.from!, 'yyyy-MM-dd');
-        const endDate = format(dateRange.to || dateRange.from!, 'yyyy-MM-dd');
+        const { startDate, endDate } = ledgerDateRangeStrings;
         const platforms = selectedPlatforms.has('All') ? undefined : Array.from(selectedPlatforms);
         const result = await api.getLedgerDriverOverview({ driverId, startDate, endDate, platforms });
         if (!cancelled) {
@@ -1125,7 +1133,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     setLedgerOverviewLoaded(false);
     fetchLedgerOverview();
     return () => { cancelled = true; };
-  }, [driverId, dateRange, selectedPlatforms, ledgerRefreshKey]);
+  }, [driverId, ledgerDateRangeStrings, selectedPlatforms, ledgerRefreshKey]);
 
   // Calculate Metrics based on Date Range
    // Phase 7 NOTE: This useMemo computes THREE categories of data:
@@ -2661,7 +2669,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   <p className="mt-1 text-xs text-rose-600">Diagnostic failed: {cashDiagResult.error}</p>
                 )}
               </div>)}
-              <OverviewMetricsGrid resolvedFinancials={resolvedFinancials} metrics={metrics} localLoading={localLoading} isToday={!!isToday} />
+              <OverviewMetricsGrid
+                resolvedFinancials={resolvedFinancials}
+                metrics={metrics}
+                localLoading={localLoading}
+                isToday={!!isToday}
+                driverId={driverId}
+                walletRange={ledgerDateRangeStrings}
+                platformFilterAllPlatforms={selectedPlatforms.has('All')}
+                onWalletLoadSuccess={async () => {
+                  await refreshData();
+                  setLedgerRefreshKey((k) => k + 1);
+                }}
+              />
              {false && (<div>
                <MetricCard 
                   title={isToday ? "Today's Earnings" : "Period Earnings"} 

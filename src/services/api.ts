@@ -1,6 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
-import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, DisputeRefund } from '../types/data';
+import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
@@ -68,6 +68,18 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, ret
     }
     throw err;
   }
+}
+
+/** Parse JSON `{ error: string }` from failed financial GET responses when possible (matches server `return c.json({ error })`). */
+async function parseFinancialApiErrorBody(response: Response): Promise<string> {
+  const raw = await response.text();
+  try {
+    const j = JSON.parse(raw);
+    if (j && typeof j.error === 'string') return j.error;
+  } catch {
+    /* keep raw */
+  }
+  return raw || '(empty body)';
 }
 
 export const api = {
@@ -695,7 +707,10 @@ export const api = {
         },
         body: JSON.stringify(transaction)
     });
-    if (!response.ok) throw new Error("Failed to save transaction");
+    if (!response.ok) {
+      const msg = await parseFinancialApiErrorBody(response);
+      throw new Error(msg || 'Failed to save transaction');
+    }
     const result = await response.json();
     return result.data || result;
   },
@@ -2188,10 +2203,32 @@ export const api = {
       { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
     );
     if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Ledger driver overview failed: ${errText}`);
+      const msg = await parseFinancialApiErrorBody(response);
+      throw new Error(`Ledger driver overview failed: ${msg}`);
     }
     const json = await response.json();
+    return json.data;
+  },
+
+  async getDriverIndriveWallet(params: {
+    driverId: string;
+    startDate: string;
+    endDate: string;
+  }): Promise<IndriveWalletSummary> {
+    const qp = new URLSearchParams();
+    qp.set('driverId', params.driverId);
+    qp.set('startDate', params.startDate);
+    qp.set('endDate', params.endDate);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/driver-indrive-wallet?${qp.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+    );
+    if (!response.ok) {
+      const msg = await parseFinancialApiErrorBody(response);
+      throw new Error(`InDrive wallet summary failed: ${msg}`);
+    }
+    const json = await response.json();
+    if (!json?.data) throw new Error('InDrive wallet summary: empty response');
     return json.data;
   },
 

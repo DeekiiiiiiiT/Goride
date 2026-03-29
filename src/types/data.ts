@@ -447,7 +447,9 @@ export type TransactionCategory =
   // Payouts
   | 'Vehicle Payment' | 'Supplier Payment' | 'Tax Payment'
   // Wallet
-  | 'Cash Collection' | 'Float Issue';
+  | 'Cash Collection' | 'Float Issue'
+  /** Fleet top-up to driver InDrive digital wallet — maps to ledger `wallet_credit` (see `INDRIVE_WALLET_LOAD_CATEGORY`). */
+  | 'InDrive Wallet Credit';
 
 export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Digital Wallet' | 'Credit Card' | 'Mobile Money' | 'Check' | 'Other' | 'Gas Card';
 
@@ -593,6 +595,56 @@ export interface LedgerDriverOverview {
     missingCount: number;
     byPlatform: Record<string, { trips: number; ledger: number }>;
   };
+}
+
+/**
+ * GET `/ledger/driver-indrive-wallet` (Phase 2 + Phase 7). All amounts same currency as fleet (e.g. JMD).
+ *
+ * **`periodFees` (canonical, Phase 2):** Within `[startDate, endDate]`, sum **absolute** fee impact
+ * for InDrive:
+ * 1. Primary: sum `|netAmount|` (or signed outflow magnitude) on ledger rows with `eventType === 'platform_fee'`,
+ *    `platform === 'InDrive'` (after `GoRide` → `Roam` normalization does not apply to InDrive).
+ * 2. If that sum is **0**, use sum of `(grossAmount - netAmount)` on `fare_earning` rows for InDrive in range
+ *    (matches “Implied on fare” / `fareGrossMinusNetByPlatform.InDrive` in driver-overview).
+ * This single rule must match the InDrive fee story shown in the Period earnings breakdown overlay.
+ *
+ * **`estimatedBalance` (Phase 7):** `lifetimeLoads - lifetimeInDriveFees` where `lifetimeInDriveFees` applies the
+ * same two-step rule over **all** ledger rows (no date filter). Not InDrive’s official balance.
+ */
+export interface IndriveWalletSummary {
+  periodLoads: number;
+  periodFees: number;
+  lifetimeLoads: number;
+  /**
+   * Phase 7 — `lifetimeLoads − lifetimeInDriveFees` (same fee rule as `periodFees`, lifetime scope).
+   * Fleet estimate only; not InDrive’s official app balance. Do not conflate with Roam cash or other platforms.
+   */
+  estimatedBalance: number;
+}
+
+export interface IndriveWalletSummaryResponse {
+  success: boolean;
+  data?: IndriveWalletSummary;
+  error?: string;
+}
+
+/**
+ * Required shape for creating an InDrive wallet load via `saveTransaction` (Phase 5).
+ * Optional fields may be set by the server or UI defaults.
+ */
+export interface IndriveWalletLoadTransactionInput {
+  driverId: string;
+  date: string;
+  /** Must be > 0. */
+  amount: number;
+  category: 'InDrive Wallet Credit';
+  platform: 'InDrive';
+  type: 'Adjustment';
+  description?: string;
+  paymentMethod?: PaymentMethod;
+  status?: TransactionStatus;
+  referenceNumber?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface FinancialTransaction {

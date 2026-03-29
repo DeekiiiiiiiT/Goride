@@ -1,11 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import { useIndriveWallet, type IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
+import { usePermissions } from '../../hooks/usePermissions';
+import { api } from '../../services/api';
+import {
+  INDRIVE_WALLET_LOAD_CATEGORY,
+  INDRIVE_WALLET_PLATFORM,
+  INDRIVE_WALLET_LOAD_TRANSACTION_TYPE,
+} from '../../constants/indriveWallet';
+import type { FinancialTransaction } from '../../types/data';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   DollarSign,
   Navigation,
   Loader2,
   Fuel,
   Info,
-  ChevronRight
+  ChevronRight,
+  Wallet,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Progress } from '../ui/progress';
@@ -13,10 +23,16 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
 import { Separator } from '../ui/separator';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { format } from 'date-fns';
+import { toast } from 'sonner@2.0.3';
 import {
   Tooltip,
   PieChart as RawPieChart,
@@ -144,12 +160,44 @@ interface OverviewMetricsGridProps {
   metrics: any;
   localLoading: boolean;
   isToday: boolean;
+  driverId?: string;
+  walletRange?: IndriveWalletDateRange | null;
+  /** When false, driver-overview may omit platforms — InDrive wallet GET uses all InDrive rows for the same dates. */
+  platformFilterAllPlatforms?: boolean;
+  onWalletLoadSuccess?: () => void | Promise<void>;
 }
 
 // ── The Grid Component ──
-export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading, isToday }: OverviewMetricsGridProps) {
+export function OverviewMetricsGrid({
+  resolvedFinancials,
+  metrics,
+  localLoading,
+  isToday,
+  driverId,
+  walletRange,
+  platformFilterAllPlatforms = true,
+  onWalletLoadSuccess,
+}: OverviewMetricsGridProps) {
+  const { can } = usePermissions();
   const [periodEarningsOpen, setPeriodEarningsOpen] = useState(false);
   const [platformFeesExpanded, setPlatformFeesExpanded] = useState(false);
+  const [logLoadOpen, setLogLoadOpen] = useState(false);
+  const [loadAmount, setLoadAmount] = useState('');
+  const [loadDate, setLoadDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [loadNote, setLoadNote] = useState('');
+  const [loadSubmitting, setLoadSubmitting] = useState(false);
+
+  const rangeReady = !!(driverId && walletRange?.startDate && walletRange?.endDate);
+  const { data: walletData, loading: walletLoading, error: walletError, refetch: refetchWallet } =
+    useIndriveWallet(driverId, rangeReady ? walletRange : null);
+
+  useEffect(() => {
+    if (logLoadOpen) {
+      setLoadAmount('');
+      setLoadDate(format(new Date(), 'yyyy-MM-dd'));
+      setLoadNote('');
+    }
+  }, [logLoadOpen]);
 
   // Platform breakdowns computed from resolvedFinancials (ledger-preferred)
   const earningsBreakdown = useMemo(() =>
@@ -216,6 +264,63 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
       .filter(([, v]) => (v || 0) > 0.005)
       .sort((a, b) => (b[1] as number) - (a[1] as number));
   }, [resolvedFinancials.fareGrossMinusNetByPlatform]);
+
+  /** Same rule as GET /ledger/driver-indrive-wallet `periodFees` (ledger platform_fee or fare gross−net for InDrive). */
+  const inDriveFeesFromLedgerOverlay = useMemo(() => {
+    const pf = resolvedFinancials.platformFeesByPlatform || {};
+    const fg = resolvedFinancials.fareGrossMinusNetByPlatform || {};
+    const ledgerFee = Number(pf.InDrive ?? 0) || 0;
+    const gap = Number(fg.InDrive ?? 0) || 0;
+    return ledgerFee > 0 ? ledgerFee : gap;
+  }, [resolvedFinancials.platformFeesByPlatform, resolvedFinancials.fareGrossMinusNetByPlatform]);
+
+  const walletAllZero =
+    rangeReady &&
+    !!walletData &&
+    walletData.periodLoads === 0 &&
+    walletData.periodFees === 0 &&
+    walletData.lifetimeLoads === 0;
+
+  const handleSubmitLogLoad = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!driverId || !rangeReady) {
+      toast.error('Driver and date range are required.');
+      return;
+    }
+    const amt = parseFloat(loadAmount.replace(/,/g, ''));
+    if (!Number.isFinite(amt) || amt <= 0) {
+      toast.error('Enter an amount greater than zero.');
+      return;
+    }
+    const desc = loadNote.trim();
+    setLoadSubmitting(true);
+    try {
+      const payload: Partial<FinancialTransaction> & { platform?: string } = {
+        id: crypto.randomUUID(),
+        driverId,
+        date: loadDate,
+        amount: amt,
+        category: INDRIVE_WALLET_LOAD_CATEGORY,
+        platform: INDRIVE_WALLET_PLATFORM,
+        type: INDRIVE_WALLET_LOAD_TRANSACTION_TYPE,
+        description: desc || 'Fleet load — InDrive digital wallet',
+        paymentMethod: 'Digital Wallet',
+        status: 'Completed',
+        isReconciled: true,
+      };
+      await api.saveTransaction(payload);
+      toast.success('InDrive wallet load recorded');
+      setLogLoadOpen(false);
+      await refetchWallet();
+      await onWalletLoadSuccess?.();
+    } catch (err) {
+      console.error('[OverviewMetricsGrid] Log load failed', err);
+      const msg = err instanceof Error ? err.message : 'Failed to save load';
+      toast.error(msg);
+    } finally {
+      setLoadSubmitting(false);
+    }
+  };
 
   return (
     <>
@@ -365,6 +470,50 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
                     <p className="text-[11px] leading-snug text-slate-500">
                       Sum of platform lines (below) includes tips: ${fmtMoney(platformEarningsSum)}.
                     </p>
+                    {resolvedFinancials.source === 'ledger' && rangeReady && (
+                      <div className="mt-3 rounded-md border border-emerald-200/80 bg-emerald-50/40 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-400">
+                          InDrive fees — period alignment
+                        </p>
+                        {walletLoading ? (
+                          <p className="mt-1 text-[11px] text-slate-500">Loading InDrive wallet summary…</p>
+                        ) : walletError ? (
+                          <p className="mt-1 text-[11px] text-rose-600">{walletError}</p>
+                        ) : walletData ? (
+                          <>
+                            <div className="mt-1 flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                              <span>GET /ledger/driver-indrive-wallet (period)</span>
+                              <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
+                                ${fmtMoney(walletData.periodFees)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                              <span>Same rule from this breakdown</span>
+                              <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
+                                ${fmtMoney(inDriveFeesFromLedgerOverlay)}
+                              </span>
+                            </div>
+                            {!platformFilterAllPlatforms && (
+                              <p className="mt-2 text-[10px] leading-snug text-slate-500">
+                                Platform filter is not All — overview totals may omit InDrive; the InDrive wallet card always includes all InDrive ledger rows for these dates.
+                              </p>
+                            )}
+                            {platformFilterAllPlatforms &&
+                              Math.abs(walletData.periodFees - inDriveFeesFromLedgerOverlay) <= 0.02 && (
+                                <p className="mt-2 text-[10px] text-emerald-700 dark:text-emerald-500">
+                                  Matches the InDrive wallet card (server fee rule: ledger fees or gross−net when fees are zero).
+                                </p>
+                              )}
+                            {platformFilterAllPlatforms &&
+                              Math.abs(walletData.periodFees - inDriveFeesFromLedgerOverlay) > 0.02 && (
+                                <p className="mt-2 text-[10px] text-amber-700 dark:text-amber-500">
+                                  Values differ — check rounding or sync timing; see solution.md Phase 6.
+                                </p>
+                              )}
+                          </>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 </section>
 
@@ -403,7 +552,71 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
         </DialogContent>
       </Dialog>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 [&>:nth-child(1)]:order-1 [&>:nth-child(2)]:order-2 [&>:nth-child(3)]:order-3 [&>:nth-child(4)]:order-4 [&>:nth-child(5)]:order-5 [&>:nth-child(6)]:hidden [&>:nth-child(7)]:order-6">
+      <Dialog open={logLoadOpen} onOpenChange={setLogLoadOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log InDrive wallet load</DialogTitle>
+            <DialogDescription>
+              Record a fleet top-up to this driver&apos;s InDrive digital wallet. Amount must be positive.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmitLogLoad} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="indrive-load-amount">Amount</Label>
+              <Input
+                id="indrive-load-amount"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                placeholder="0.00"
+                value={loadAmount}
+                onChange={(ev) => setLoadAmount(ev.target.value)}
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="indrive-load-date">Date</Label>
+              <Input
+                id="indrive-load-date"
+                type="date"
+                value={loadDate}
+                onChange={(ev) => setLoadDate(ev.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="indrive-load-note">Note or reference (optional)</Label>
+              <Input
+                id="indrive-load-note"
+                type="text"
+                placeholder="e.g. bank ref, batch id"
+                value={loadNote}
+                onChange={(ev) => setLoadNote(ev.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setLogLoadOpen(false)} disabled={loadSubmitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loadSubmitting}>
+                {loadSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  'Save load'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 [&>:nth-child(1)]:order-1 [&>:nth-child(2)]:order-2 [&>:nth-child(3)]:order-3 [&>:nth-child(4)]:order-4 [&>:nth-child(5)]:order-5 [&>:nth-child(6)]:order-6 [&>:nth-child(7)]:hidden [&>:nth-child(8)]:order-7">
       {/* Card 1: Period Earnings — breakdown now from resolvedFinancials */}
       <MetricCard
         title={isToday ? "Today's Earnings" : "Period Earnings"}
@@ -442,6 +655,63 @@ export function OverviewMetricsGrid({ resolvedFinancials, metrics, localLoading,
             color: getPlatformColor(label)
           }))}
       />
+
+      <div className="flex flex-col gap-1.5">
+        <MetricCard
+          title="InDrive wallet"
+          subtext={
+            !rangeReady
+              ? 'Pick a date range to see InDrive wallet totals.'
+              : walletError
+                ? walletError
+                : walletAllZero
+                  ? 'No InDrive fee lines or wallet loads in this period, and no lifetime top-ups yet — zeros below are expected.'
+                  : 'Fees are platform charges for this range; the headline is fleet top-ups you log.'
+          }
+          tooltip="Headline: period loads (fleet top-ups in range). Period fees and lifetime loads as labeled. Est. balance = lifetime loads minus lifetime InDrive fees (same ledger rule as period fees, all-time). Estimate only — not InDrive’s official balance. Not Roam cash or other platforms."
+          value={
+            !rangeReady || (rangeReady && walletError)
+              ? '—'
+              : `$${fmtMoney(walletData?.periodLoads ?? 0)}`
+          }
+          icon={<Wallet className="h-4 w-4 text-emerald-600" />}
+          loading={rangeReady && walletLoading}
+          breakdown={
+            !rangeReady || walletError || !walletData
+              ? []
+              : [
+                  { label: 'Period fees', value: `$${fmtMoney(walletData.periodFees)}`, color: '#94a3b8' },
+                  { label: 'Lifetime loads', value: `$${fmtMoney(walletData.lifetimeLoads)}`, color: PLATFORM_COLORS.InDrive },
+                  {
+                    label: 'Est. balance',
+                    value: `$${fmtMoney(walletData.estimatedBalance ?? 0)}`,
+                    color: '#6366f1',
+                  },
+                ]
+          }
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              disabled={!rangeReady || loadSubmitting || !can('transactions.edit')}
+              title={!can('transactions.edit') ? 'Requires permission to edit transactions' : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                setLogLoadOpen(true);
+              }}
+            >
+              Log load
+            </Button>
+          }
+        />
+        {rangeReady && !walletError && walletData && (
+          <p className="px-1 text-[10px] leading-snug text-slate-400 dark:text-slate-500">
+            Est. balance is a fleet model only — not InDrive&apos;s official balance. Not Roam cash or Uber.
+          </p>
+        )}
+      </div>
 
       {/* Card 4: Time Metrics Donut */}
       <Card>
