@@ -668,7 +668,7 @@ export function OverviewMetricsGrid({
                   ? 'No InDrive fee lines, wallet loads in this period, or estimated balance — zeros below are expected.'
                   : 'Fees are platform charges for this range; the headline is fleet top-ups you log.'
           }
-          tooltip="Headline: period loads (fleet top-ups in range). Breakdown: period fees, period loads (same as headline), est. balance. Est. balance = lifetime loads minus lifetime InDrive fees (same ledger rule as period fees, all-time). Estimate only — not InDrive’s official balance. Not Roam cash or other platforms."
+          tooltip="Headline: period loads (fleet top-ups in range). Breakdown: period fees, est. balance. Est. balance = lifetime loads minus lifetime InDrive fees (same ledger rule as period fees, all-time). Estimate only — not InDrive’s official balance. Not Roam cash or other platforms."
           value={
             !rangeReady || (rangeReady && walletError)
               ? '—'
@@ -681,7 +681,6 @@ export function OverviewMetricsGrid({
               ? []
               : [
                   { label: 'Period fees', value: `$${fmtMoney(walletData.periodFees)}`, color: '#94a3b8' },
-                  { label: 'Period loads', value: `$${fmtMoney(walletData.periodLoads)}`, color: PLATFORM_COLORS.InDrive },
                   {
                     label: 'Est. balance',
                     value: `$${fmtMoney(walletData.estimatedBalance ?? 0)}`,
