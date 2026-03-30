@@ -282,7 +282,7 @@ export function DriverIndriveWalletTab({ driverId, range, ledgerRefreshKey = 0 }
             <p className="text-sm text-rose-600 dark:text-rose-400 py-2">{err}</p>
           )}
           {walletData && rangeReady && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">Period loads</p>
                 <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
@@ -293,12 +293,6 @@ export function DriverIndriveWalletTab({ driverId, range, ledgerRefreshKey = 0 }
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">Period fees</p>
                 <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                   ${fmtMoney(walletData.periodFees)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">Lifetime loads</p>
-                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                  ${fmtMoney(walletData.lifetimeLoads)}
                 </p>
               </div>
               <div>
