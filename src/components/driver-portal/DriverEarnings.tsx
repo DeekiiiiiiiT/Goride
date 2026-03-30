@@ -27,6 +27,7 @@ import { startOfDay, endOfDay, format, subDays, differenceInDays } from "date-fn
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { api } from '../../services/api';
+import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 import { usePlatformConfig } from '../auth/PlatformConfigContext';
 import { WeeklySettlementView } from '../drivers/WeeklySettlementView';
 import { TransactionLedgerView } from '../drivers/TransactionLedgerView';
@@ -222,10 +223,10 @@ export function DriverEarnings() {
 
   const calculateTierInfo = async (allTrips: Trip[], currentPeriodTrips: Trip[]) => {
       // 1. Total Cumulative Earnings (All Time)
-      const totalCumulative = allTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      const totalCumulative = allTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
       
       // 2. Earnings for the displayed period
-      const periodEarnings = currentPeriodTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      const periodEarnings = currentPeriodTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
       
       // 3. Earnings BEFORE this period
       const beforeEarnings = totalCumulative - periodEarnings;
@@ -299,8 +300,7 @@ export function DriverEarnings() {
 
   const processEarnings = (currentTrips: Trip[], currentTx: FinancialTransaction[]) => {
       // 1. Calculate Stats
-      const tripNet = currentTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
-      const fares = currentTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
+      const tripNet = currentTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
       
       const tips = currentTrips.reduce((sum, t) => sum + (t.fareBreakdown?.tips || 0), 0);
       const tolls = currentTrips.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
@@ -404,11 +404,11 @@ export function DriverEarnings() {
               return d >= prevFrom && d <= prevTo;
           });
           
-          const prevFares = prevTrips.reduce((sum, t) => sum + (t.amount || 0), 0);
+          const prevFares = prevTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
           
           if (prevFares > 0) {
-              trendValue = ((fares - prevFares) / prevFares) * 100;
-          } else if (fares > 0) {
+              trendValue = ((tripNet - prevFares) / prevFares) * 100;
+          } else if (tripNet > 0) {
               trendValue = 100;
           } else {
               trendValue = 0;
@@ -417,7 +417,7 @@ export function DriverEarnings() {
 
       setStats({
           totalBalance: totalBalance,
-          tripFares: fares,
+          tripFares: tripNet,
           tips: tips, 
           promotions: promotions,
           tolls: tolls,

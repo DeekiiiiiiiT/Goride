@@ -19,6 +19,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { Trip } from '../../types/data';
+import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
@@ -334,7 +335,7 @@ export function DriverTrips() {
                              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg flex justify-between items-center">
                                 <span className="font-medium text-slate-900 dark:text-slate-100">Net Payout</span>
                                 <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                                    ${(selectedTrip.netPayout || selectedTrip.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    ${getDriverPortalTripEarnings(selectedTrip).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                 </span>
                             </div>
                         </div>
@@ -349,7 +350,7 @@ export function DriverTrips() {
 
 function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
    // Heuristic: If we have explicit cash collected OR the net payout is negative (implying cash collection > earnings), treat as cash trip.
-   const amount = trip.netPayout || trip.amount;
+   const amount = getDriverPortalTripEarnings(trip);
    const isCash = (Math.abs(Number(trip.cashCollected || 0)) > 0) || amount < 0 || ['goride', 'roam', 'private', 'cash'].includes((trip.platform || '').toLowerCase());
    const date = new Date(trip.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 

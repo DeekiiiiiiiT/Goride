@@ -1,4 +1,5 @@
 import { TierConfig, Trip, MonthlyPerformance } from '../types/data';
+import { getDriverPortalTripEarnings } from './tripEarnings';
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from 'date-fns';
 
 export const TierCalculations = {
@@ -15,7 +16,7 @@ export const TierCalculations = {
           try {
               const tripDate = typeof trip.date === 'string' ? parseISO(trip.date) : trip.date;
               if (isWithinInterval(tripDate, { start, end })) {
-                  return sum + (trip.amount || 0);
+                  return sum + getDriverPortalTripEarnings(trip);
               }
           } catch (e) {
               console.warn("Invalid trip date encountered in tier calculation", trip);
@@ -81,7 +82,7 @@ export const TierCalculations = {
               const key = format(tripDate, 'yyyy-MM');
               
               const current = monthlyData.get(key) || { earnings: 0, count: 0, date: tripDate };
-              current.earnings += (trip.amount || 0);
+              current.earnings += getDriverPortalTripEarnings(trip);
               current.count += 1;
               monthlyData.set(key, current);
           } catch (e) {

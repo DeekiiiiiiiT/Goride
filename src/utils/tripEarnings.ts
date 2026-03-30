@@ -28,3 +28,17 @@ export function getEffectiveTripEarnings(trip: Trip | null | undefined): number 
   // All other platforms / legacy InDrive trips without fee data
   return trip.amount || 0;
 }
+
+/**
+ * Aggregated earnings for driver-facing UI (portal cards, trip list, tier progress).
+ * InDrive + fee data: driver's net after InDrive's cut (`indriveNetIncome`).
+ * Otherwise: same as historical `netPayout || amount` (cash trips keep gross in `amount`
+ * when `netPayout` is intentionally 0 — except InDrive, where we must not substitute gross).
+ */
+export function getDriverPortalTripEarnings(trip: Trip | null | undefined): number {
+  if (!trip) return 0;
+  if (trip.platform === 'InDrive' && trip.indriveNetIncome != null) {
+    return trip.indriveNetIncome;
+  }
+  return trip.netPayout || trip.amount || 0;
+}

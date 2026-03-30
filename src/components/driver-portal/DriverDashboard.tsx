@@ -34,6 +34,7 @@ import { format, isSameWeek } from "date-fns";
 import { DriverOverview } from './DriverOverview';
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { resolveMissingTripAddresses } from '../../utils/addressResolver';
+import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 
 export function DriverDashboard() {
   const { user } = useAuth();
@@ -178,15 +179,15 @@ export function DriverDashboard() {
             const now = new Date();
             
             const todayTrips = myTrips.filter(t => t.date.startsWith(today));
-            const todaySum = todayTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
+            const todaySum = todayTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
 
             // Calculate Weekly Earnings Breakdown (for Display Cards)
             const weeklyTrips = myTrips.filter(t => isSameWeek(new Date(t.date), now, { weekStartsOn: 1 }));
             const weeklyBreakdown = { uber: 0, indrive: 0, roam: 0 };
-            const weeklySumForBreakdown = weeklyTrips.reduce((sum, t) => sum + (t.netPayout || t.amount || 0), 0);
+            const weeklySumForBreakdown = weeklyTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
 
             weeklyTrips.forEach(t => {
-                const amount = t.netPayout || t.amount || 0;
+                const amount = getDriverPortalTripEarnings(t);
                 
                 const platform = (t.platform || '').toLowerCase();
                 if (platform === 'uber') {
