@@ -97,6 +97,9 @@ export interface Trip {
   // Multi-stop trips (e.g. InDrive)
   intermediateStops?: { id: string; address: string; coords?: { lat: number; lon: number } }[];
 
+  /** Uber CSV: payments row(s) merged but no row from trip_activity.csv for this Trip UUID (e.g. date cutoff mismatch). */
+  missingTripActivityInExport?: boolean;
+
   [key: string]: any; // Allow dynamic properties
 }
 

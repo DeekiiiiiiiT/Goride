@@ -97,6 +97,11 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                 <Navigation className="h-4 w-4 text-indigo-500" />
                 Route Information
               </h3>
+              {trip.missingTripActivityInExport && (
+                <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800 rounded-lg px-3 py-2">
+                  Pickup and dropoff were not merged: this trip UUID had no row in <span className="font-medium">trip_activity.csv</span> in the same import (often payments include an extra day that activity does not). Re-download when Uber’s trip list includes this trip, then import again.
+                </p>
+              )}
               <div className="relative pl-4 border-l-2 border-slate-200 dark:border-slate-800 space-y-8 pb-1">
                 {/* Dynamic Timeline Generation */}
                 {(() => {
@@ -166,7 +171,10 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                         </div>
                         
                         <p className="text-sm text-slate-900 dark:text-slate-50 font-medium">
-                          {event.location || "Location not recorded"}
+                          {event.location ||
+                            (trip.missingTripActivityInExport
+                              ? "Not in trip activity export"
+                              : "Location not recorded")}
                         </p>
                         
                         {event.time && (

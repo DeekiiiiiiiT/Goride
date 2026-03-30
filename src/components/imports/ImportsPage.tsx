@@ -326,7 +326,7 @@ export function ImportsPage() {
       // 1. Merge
       // Phase 1: Capture Organization Name
       const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats, driverTimeData, vehicleTimeData, disputeRefunds } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
+      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats, driverTimeData, vehicleTimeData, disputeRefunds, importWarnings } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
           localStorage.setItem('roam_fleet_name', organizationName);
@@ -365,6 +365,12 @@ export function ImportsPage() {
       setProcessedDisputeRefunds(disputeRefunds || []);
       if ((disputeRefunds || []).length > 0) {
           console.log(`[Import] Found ${disputeRefunds!.length} dispute refund(s) in CSV`);
+      }
+      if (importWarnings?.uberTripsMissingTripActivity) {
+          toast.warning(
+              `${importWarnings.uberTripsMissingTripActivity} Uber trip(s) have earnings but no trip_activity row — addresses were not imported. Use a trip_activity export that includes those Trip UUIDs, or import the next weekly bundle.`,
+              { duration: 12_000 }
+          );
       }
       setStep('preview_merged');
   };
@@ -418,6 +424,12 @@ export function ImportsPage() {
         // This also runs the robust "Bottom-Up" financial calculation we just fixed.
         const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
         const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName, fuelCards);
+        if (localResult.importWarnings?.uberTripsMissingTripActivity) {
+            toast.warning(
+                `${localResult.importWarnings.uberTripsMissingTripActivity} Uber trip(s) have earnings but no trip_activity row — addresses were not imported. Include trip_activity.csv that lists those trips, or re-import when Uber’s export includes them.`,
+                { duration: 12_000 }
+            );
+        }
         
         if (localResult.organizationName) {
             localStorage.setItem('roam_fleet_name', localResult.organizationName);

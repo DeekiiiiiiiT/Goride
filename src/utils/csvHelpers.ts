@@ -374,6 +374,10 @@ export interface ProcessedBatch {
         phantomLagDetected: boolean;
     };
     disputeRefunds?: DisputeRefund[];
+    /** Post-merge hints for the import UI (e.g. Uber payments without matching trip_activity rows). */
+    importWarnings?: {
+        uberTripsMissingTripActivity: number;
+    };
 }
 
 // Helper to extract and clean driver name
@@ -976,6 +980,8 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
 
 export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string, fuelCards: FuelCard[] = []): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
+    /** Trip UUIDs that appeared in Uber `trip_activity` / TRIP_ACTIVITY CSV (not payments-only). */
+    const uberTripActivityTripIds = new Set<string>();
     const genericTrips: Trip[] = [];
     const driverMetricsMap = new Map<string, DriverMetrics>();
     const vehicleMetrics: VehicleMetrics[] = [];
@@ -1246,6 +1252,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 const current = tripMap.get(tripId) || { id: tripId, platform: 'Uber' };
                 
                 if (file.type === 'uber_trip') {
+                    uberTripActivityTripIds.add(tripId);
                     const schema = UBER_SCHEMAS.TRIP_ACTIVITY.mapping;
                     
                     // Improved Date Parsing: Don't default to Now() immediately
@@ -2046,6 +2053,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         // For the Trip Object (UI), we usually show the magnitude (Absolute).
         // But for internal calculation above (Ledger Sum), we used the signed value from tripMap directly.
         
+        const platform = t.platform || 'Other';
+        const missingTripActivityInExport =
+            platform === 'Uber' && t.id && !uberTripActivityTripIds.has(cleanId(t.id))
+                ? true
+                : undefined;
+
         return {
             id: t.id || `trip-${Math.random()}`,
             date: t.date || new Date().toISOString(),
@@ -2053,11 +2066,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             cashCollected: Math.abs(cashCollectedSigned), // Show positive magnitude in UI
             netPayout: amount + cashCollectedSigned, // Phase 3: Auto-calculate reconciliation (Earnings + (-Cash))
             driverId: t.driverId || 'unknown',
-            platform: t.platform || 'Other',
+            platform,
             status: t.status || 'Completed',
             // Phase 4: Efficiency Calculation (Requires merging Amount + Distance)
             efficiency: (amount > 0 && distance > 0) ? amount / distance : 0,
-            ...t
+            ...t,
+            missingTripActivityInExport,
         } as Trip;
     });
 
@@ -2254,6 +2268,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             .sort((a, b) => b.count - a.count);
     }
 
+    const uberTripsMissingTripActivity = finalizedTrips.filter(
+        (t) => t.missingTripActivityInExport
+    ).length;
+
     return {
         trips: [...finalizedTrips, ...genericTrips],
         driverMetrics,
@@ -2270,6 +2288,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             phantomLagDetected: deductionPerTrip > 0
         },
         disputeRefunds: Array.from(disputeRefundsMap.values()),
+        importWarnings:
+            uberTripsMissingTripActivity > 0
+                ? { uberTripsMissingTripActivity }
+                : undefined,
     };
 }
 
