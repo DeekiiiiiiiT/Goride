@@ -144,6 +144,7 @@ import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { DistanceByPlatform } from './DistanceByPlatform';
 import { FinancialSubTabs } from './FinancialSubTabs';
 import { OverviewMetricsGrid, MetricCard as ExtractedMetricCard, PLATFORM_COLORS as EXTRACTED_PLATFORM_COLORS, getPlatformColor as extractedGetPlatformColor } from './OverviewMetricsGrid';
+import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
 import { FuelWalletView } from './FuelWalletView';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
@@ -2510,6 +2511,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             <TabsTrigger value="quality">Service Quality</TabsTrigger>
             <TabsTrigger value="trips">Trip History</TabsTrigger>
             <TabsTrigger value="wallet">Cash Wallet</TabsTrigger>
+            <TabsTrigger value="indrive-wallet">InDrive Wallet</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
          </TabsList>
 
@@ -4537,6 +4539,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     </div>
                 </CardContent>
             </Card>
+         </TabsContent>
+
+         <TabsContent value="indrive-wallet" className="space-y-6">
+            <DriverIndriveWalletTab
+              driverId={driverId}
+              range={ledgerDateRangeStrings}
+              ledgerRefreshKey={ledgerRefreshKey}
+            />
          </TabsContent>
 
          <TabsContent value="profile" className="space-y-6">

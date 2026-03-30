@@ -221,6 +221,27 @@ function invalidateDriverCache() {
     _driverCache = [];
 }
 
+/** Remove existing trip-sourced ledger rows so POST /trips can regenerate after edits (fare / net / fees). */
+async function deleteLedgerEntriesForTripSource(tripId: string): Promise<number> {
+  if (!tripId) return 0;
+  try {
+    const { data: existingEntries } = await supabase
+      .from("kv_store_37f42386")
+      .select("key")
+      .like("key", "ledger:%")
+      .eq("value->>sourceId", tripId)
+      .eq("value->>sourceType", "trip");
+    if (existingEntries && existingEntries.length > 0) {
+      const delKeys = existingEntries.map((e: any) => e.key);
+      await kv.mdel(delKeys);
+      return delKeys.length;
+    }
+  } catch (e) {
+    console.warn(`[Ledger] deleteLedgerEntriesForTripSource failed for ${tripId}:`, e);
+  }
+  return 0;
+}
+
 // ─── Trip → Ledger Entry Generator ────────────────────────────────────
 async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const entries: any[] = [];
@@ -313,9 +334,15 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         });
     }
 
-    // Entry 3: Platform Fee (if InDrive service fee is known)
-    const platformFee = trip.indriveServiceFee || 0;
-    if (platformFee > 0) {
+    // Entry 3: Platform Fee — explicit indriveServiceFee, or inferred (fare − net) for InDrive
+    let platformFee = Number(trip.indriveServiceFee) || 0;
+    if (trip.platform === 'InDrive' && trip.indriveNetIncome != null && Number(trip.amount) > 0) {
+        const inferred = Number(trip.amount) - Number(trip.indriveNetIncome);
+        if (platformFee <= 0.0001 && inferred > 0.0001) {
+            platformFee = inferred;
+        }
+    }
+    if (platformFee > 0.0001) {
         entries.push({
             ...baseEntry,
             id: crypto.randomUUID(),
@@ -2007,8 +2034,11 @@ app.post("/make-server-37f42386/trips", async (c) => {
     // Store using mset
     await kv.mset(keys, processedTrips);
     
-    // ── Write-Time Ledger: Generate ledger entries for each imported trip ──
+    // ── Write-Time Ledger: Replace trip-sourced ledger rows so edits to fare / net / fees apply ──
     try {
+        for (const trip of processedTrips) {
+            await deleteLedgerEntriesForTripSource(trip.id);
+        }
         const allLedgerEntries: any[] = [];
         for (const trip of processedTrips) {
             const tripEntries = await generateTripLedgerEntries(trip);
@@ -7787,10 +7817,13 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
         const tripKeys = uniqueTrips.map((t: any) => `trip:${t.id}`);
         operations.push(kv.mset(tripKeys, uniqueTrips));
 
-        // ── Write-Time Ledger: Generate ledger entries for each imported trip ──
+        // ── Write-Time Ledger: Replace trip-sourced ledger rows (same as POST /trips) ──
         // This mirrors the POST /trips ledger generation to ensure fleet/sync
         // imports (Uber Mega-JSON path) also populate the ledger.
         try {
+            for (const trip of uniqueTrips) {
+                await deleteLedgerEntriesForTripSource(trip.id);
+            }
             const allLedgerEntries: any[] = [];
             for (const trip of uniqueTrips) {
                 const tripEntries = await generateTripLedgerEntries(trip);
