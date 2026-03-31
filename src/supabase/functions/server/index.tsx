@@ -252,20 +252,23 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     }
 
     // Dedup check: skip if ledger entries already exist for this trip
-    try {
-        const { data: existing } = await supabase
-            .from("kv_store_37f42386")
-            .select("key")
-            .like("key", "ledger:%")
-            .eq("value->>sourceId", trip.id)
-            .eq("value->>sourceType", "trip")
-            .limit(1);
+    // Note: import/repair flows may set `_skipLedgerDedup` to force regeneration after deletion.
+    if (!trip?._skipLedgerDedup) {
+        try {
+            const { data: existing } = await supabase
+                .from("kv_store_37f42386")
+                .select("key")
+                .like("key", "ledger:%")
+                .eq("value->>sourceId", trip.id)
+                .eq("value->>sourceType", "trip")
+                .limit(1);
 
-        if (existing && existing.length > 0) {
-            return entries; // Already has ledger entries — skip
+            if (existing && existing.length > 0) {
+                return entries; // Already has ledger entries — skip
+            }
+        } catch (dedupErr) {
+            console.warn('[Ledger] Dedup check failed, proceeding with creation:', dedupErr);
         }
-    } catch (dedupErr) {
-        console.warn('[Ledger] Dedup check failed, proceeding with creation:', dedupErr);
     }
 
     // Resolve driver ID to canonical Roam UUID
@@ -295,8 +298,8 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const effectiveEarnings = (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
         ? trip.indriveNetIncome
         : trip.amount;
-    const pickupShort = (trip.pickupLocation || 'Unknown').substring(0, 30);
-    const dropoffShort = (trip.dropoffLocation || 'Unknown').substring(0, 30);
+    const pickupShort = String(trip.pickupLocation || 'Unknown').substring(0, 30);
+    const dropoffShort = String(trip.dropoffLocation || 'Unknown').substring(0, 30);
 
     // Entry 1: Fare Earning
     entries.push({
@@ -2037,12 +2040,22 @@ app.post("/make-server-37f42386/trips", async (c) => {
     // ── Write-Time Ledger: Replace trip-sourced ledger rows so edits to fare / net / fees apply ──
     try {
         for (const trip of processedTrips) {
-            await deleteLedgerEntriesForTripSource(trip.id);
+            try {
+                await deleteLedgerEntriesForTripSource(trip.id);
+            } catch (delErr) {
+                console.warn(`[Ledger] deleteLedgerEntriesForTripSource failed for trip ${trip?.id}:`, delErr);
+            }
         }
         const allLedgerEntries: any[] = [];
         for (const trip of processedTrips) {
-            const tripEntries = await generateTripLedgerEntries(trip);
-            allLedgerEntries.push(...tripEntries);
+            try {
+                // We just attempted deletion above; avoid a stale-read dedup early-return.
+                (trip as any)._skipLedgerDedup = true;
+                const tripEntries = await generateTripLedgerEntries(trip);
+                allLedgerEntries.push(...tripEntries);
+            } catch (tripLedgerErr) {
+                console.error(`[Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`, tripLedgerErr);
+            }
         }
         if (allLedgerEntries.length > 0) {
             // Batch save in chunks of 100
@@ -7822,12 +7835,21 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
         // imports (Uber Mega-JSON path) also populate the ledger.
         try {
             for (const trip of uniqueTrips) {
-                await deleteLedgerEntriesForTripSource(trip.id);
+                try {
+                    await deleteLedgerEntriesForTripSource(trip.id);
+                } catch (delErr) {
+                    console.warn(`[FleetSync Ledger] deleteLedgerEntriesForTripSource failed for trip ${trip?.id}:`, delErr);
+                }
             }
             const allLedgerEntries: any[] = [];
             for (const trip of uniqueTrips) {
-                const tripEntries = await generateTripLedgerEntries(trip);
-                allLedgerEntries.push(...tripEntries);
+                try {
+                    (trip as any)._skipLedgerDedup = true;
+                    const tripEntries = await generateTripLedgerEntries(trip);
+                    allLedgerEntries.push(...tripEntries);
+                } catch (tripLedgerErr) {
+                    console.error(`[FleetSync Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`, tripLedgerErr);
+                }
             }
             if (allLedgerEntries.length > 0) {
                 // Batch save in chunks of 100
