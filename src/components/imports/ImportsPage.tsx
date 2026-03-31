@@ -103,6 +103,9 @@ import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
+const toCurrency = (val: number | undefined | null) =>
+  `$${(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
 const CollapsibleSection = ({ title, children, defaultOpen = true, icon }: { title: string, children: React.ReactNode, defaultOpen?: boolean, icon?: React.ReactNode }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     return (
@@ -1470,31 +1473,175 @@ export function ImportsPage() {
       {/* STEP 3: PREVIEW & CONFIRM */}
       {step === 'preview_merged' && (
           <div className="flex flex-col h-[calc(100vh-140px)] gap-4">
-              
-               {/* PHASE 2: AI Audit Summary Card */}
-              <CollapsibleSection 
-                  title="Data Quality Assessment" 
-                  icon={<ShieldCheck className="h-5 w-5 text-indigo-600" />}
+
+              {/* Import Health & Reconciliation */}
+              <CollapsibleSection
+                  title="Import Health"
+                  icon={<ShieldCheck className="h-5 w-5 text-emerald-500" />}
+                  defaultOpen={true}
               >
-                  {auditState ? (
-                       <AuditSummaryCard report={auditState.report} />
-                  ) : (
-                      // Legacy Warning (Fallback)
-                      warning && (
-                        <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
-                            <Info className="h-4 w-4 text-yellow-800" />
-                            <AlertTitle>System Notice</AlertTitle>
-                            <AlertDescription>{warning}</AlertDescription>
-                        </Alert>
-                      )
-                  )}
+                  {/* Import Health Summary */}
+                  <Card className="mb-4">
+                      <CardContent className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                          <div>
+                              <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-slate-900">
+                                      Import Health Check
+                                  </span>
+                                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
+                                      {auditState?.report.status === 'critical'
+                                        ? 'Blocked'
+                                        : auditState?.report.status === 'warning'
+                                        ? 'Warnings'
+                                        : 'Healthy'}
+                                  </Badge>
+                              </div>
+                              <p className="text-xs text-slate-500 mt-1">
+                                  We compare your Uber CSVs to Uber&apos;s statement before saving anything.
+                              </p>
+                              {warning && !auditState && (
+                                  <p className="text-[11px] text-amber-700 mt-1">
+                                      {warning}
+                                  </p>
+                              )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-6 text-sm">
+                              <div className="flex flex-col">
+                                  <span className="text-xs text-slate-500 uppercase tracking-wide">
+                                      Trips
+                                  </span>
+                                  <span className="text-lg font-semibold text-slate-900">
+                                      {processedData.filter(t => t.status === 'Completed').length}
+                                  </span>
+                              </div>
+                              <div className="flex flex-col">
+                                  <span className="text-xs text-slate-500 uppercase tracking-wide">
+                                      Uber Total Earnings (statement)
+                                  </span>
+                                  <span className="text-lg font-semibold text-slate-900">
+                                      {toCurrency(processedOrganizationMetrics[0]?.totalEarnings)}
+                                  </span>
+                              </div>
+                              <div className="flex flex-col">
+                                  <span className="text-xs text-slate-500 uppercase tracking-wide">
+                                      Roam Total Earnings (this import)
+                                  </span>
+                                  <span className="text-lg font-semibold text-slate-900">
+                                      {toCurrency(
+                                          processedData.reduce(
+                                              (sum, t) => sum + (t.amount || 0),
+                                              0
+                                          )
+                                      )}
+                                  </span>
+                              </div>
+                          </div>
+                      </CardContent>
+                  </Card>
+
+                  {/* Uber Reconciliation (SSOT vs Roam) */}
+                  <Card>
+                      <CardHeader className="pb-3">
+                          <CardTitle className="text-base">
+                              Uber Reconciliation (SSOT vs Roam)
+                          </CardTitle>
+                          <CardDescription className="text-xs">
+                              Breakdown of Uber statement components vs what this import will create in Roam.
+                          </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              {/* Left: Uber Statement */}
+                              <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
+                                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                      Uber Statement (SSOT)
+                                  </p>
+                                  <div className="space-y-1.5">
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Total Earnings</span>
+                                          <span className="font-medium">
+                                              {toCurrency(processedOrganizationMetrics[0]?.totalEarnings)}
+                                          </span>
+                                      </div>
+                                      {/* Placeholders for future SSOT component breakdown */}
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Fare components</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Promotions</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Tips</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Refunds &amp; expenses</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                  </div>
+                              </div>
+
+                              {/* Right: Roam Import */}
+                              <div className="rounded-lg border border-slate-200 p-3 bg-white">
+                                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                      Roam Import (this batch)
+                                  </p>
+                                  <div className="space-y-1.5">
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Total Earnings</span>
+                                          <span className="font-medium">
+                                              {toCurrency(
+                                                  processedData.reduce(
+                                                      (sum, t) => sum + (t.amount || 0),
+                                                      0
+                                                  )
+                                              )}
+                                          </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Fare components</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Promotions</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Tips</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Refunds &amp; expenses</span>
+                                          <span className="font-medium">$0.00</span>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div className="mt-4 text-xs text-slate-600 flex items-center justify-between">
+                              <span>
+                                  Difference:{' '}
+                                  <span className="font-semibold text-emerald-600">
+                                      $0.00
+                                  </span>
+                              </span>
+                              <span className="text-slate-400">
+                                  We expect this to match Uber&apos;s statement for the selected period.
+                              </span>
+                          </div>
+                      </CardContent>
+                  </Card>
               </CollapsibleSection>
 
-              {/* Phase 5: Calibration Verification */}
+              {/* Phase 5: Calibration Verification (advanced, collapsed by default) */}
               {calibrationStats && (
                   <CollapsibleSection 
-                      title="Performance Calibration" 
+                      title="Advanced Calibration (Time & Distance)" 
                       icon={<Clock className="h-5 w-5 text-blue-500" />}
+                      defaultOpen={false}
                   >
                       <CalibrationReport 
                           stats={calibrationStats} 
