@@ -283,9 +283,29 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     // Resolve driver ID to canonical Roam UUID
     const resolved = await resolveCanonicalDriverId(trip.driverId || '');
 
+    const normalizedDate = (() => {
+        const raw = trip?.date;
+        if (typeof raw === 'string' && raw.trim()) {
+            const d = new Date(raw);
+            if (Number.isFinite(d.getTime())) return d.toISOString().split('T')[0];
+        }
+        if (raw instanceof Date && Number.isFinite(raw.getTime())) {
+            return raw.toISOString().split('T')[0];
+        }
+        return new Date().toISOString().split('T')[0];
+    })();
+
+    const normalizedTime = (() => {
+        const raw = trip?.requestTime;
+        if (raw === null || raw === undefined || raw === '') return undefined;
+        const d = new Date(raw);
+        if (!Number.isFinite(d.getTime())) return undefined;
+        return d.toISOString().split('T')[1]?.substring(0, 8);
+    })();
+
     const baseEntry = {
-        date: trip.date?.split('T')[0] || new Date().toISOString().split('T')[0],
-        time: trip.requestTime ? new Date(trip.requestTime).toISOString().split('T')[1]?.substring(0, 8) : undefined,
+        date: normalizedDate,
+        time: normalizedTime,
         createdAt: new Date().toISOString(),
         driverId: resolved.canonicalId,
         driverName: trip.driverName || resolved.driverName,
