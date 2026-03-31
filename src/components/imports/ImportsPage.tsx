@@ -106,6 +106,54 @@ type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | '
 const toCurrency = (val: number | undefined | null) =>
   `$${(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
+// Merge duplicate VehicleMetrics entries (e.g. from vehicle_performance.csv and
+// vehicle_time_and_distance.csv) into a single record per vehicleId/plate.
+const mergeVehicleMetrics = (metrics: VehicleMetrics[]): VehicleMetrics[] => {
+  if (!metrics || metrics.length === 0) return [];
+  const byKey = new Map<string, VehicleMetrics>();
+
+  for (const m of metrics) {
+    const key = (m.plateNumber || m.vehicleId || '').toString();
+    if (!key) continue;
+
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...m });
+      continue;
+    }
+
+    const merged: VehicleMetrics = { ...existing };
+
+    // Prefer non-zero earnings from performance report; otherwise additively merge.
+    merged.totalEarnings =
+      (existing.totalEarnings || 0) + (m.totalEarnings || 0);
+    merged.earningsPerHour =
+      (existing.earningsPerHour || 0) || (m.earningsPerHour || 0);
+
+    // Sum time and trip counts where it makes sense.
+    merged.onlineHours = (existing.onlineHours || 0) + (m.onlineHours || 0);
+    merged.onTripHours = (existing.onTripHours || 0) + (m.onTripHours || 0);
+    merged.hoursOnJob = (existing.hoursOnJob || 0) + (m.hoursOnJob || 0);
+    merged.totalTrips = (existing.totalTrips || 0) + (m.totalTrips || 0);
+
+    // Keep the richest plate/name information we have.
+    merged.plateNumber = existing.plateNumber || m.plateNumber;
+    merged.vehicleId = existing.vehicleId || m.vehicleId;
+    merged.vehicleName = existing.vehicleName || m.vehicleName;
+
+    // Merge utilization / ROI with a simple max (we just need a sensible single value).
+    merged.utilizationRate = Math.max(
+      existing.utilizationRate || 0,
+      m.utilizationRate || 0,
+    );
+    merged.roiScore = Math.max(existing.roiScore || 0, m.roiScore || 0);
+
+    byKey.set(key, merged);
+  }
+
+  return Array.from(byKey.values());
+};
+
 const CollapsibleSection = ({ title, children, defaultOpen = true, icon }: { title: string, children: React.ReactNode, defaultOpen?: boolean, icon?: React.ReactNode }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     return (
@@ -1054,7 +1102,7 @@ export function ImportsPage() {
         </div>
       </div>
 
-      {/* Top-Level Tab Switcher (Import only – Export/Delete hidden on this screen) */}
+      {/* Top-Level Tab Switcher */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
         <button
           onClick={() => setActiveTab('import')}
@@ -1065,6 +1113,26 @@ export function ImportsPage() {
           }`}
         >
           Import
+        </button>
+        <button
+          onClick={() => setActiveTab('export')}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+            activeTab === 'export'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Export
+        </button>
+        <button
+          onClick={() => setActiveTab('delete')}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+            activeTab === 'delete'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Delete
         </button>
       </div>
 
@@ -1503,19 +1571,6 @@ export function ImportsPage() {
                                       {toCurrency(processedOrganizationMetrics[0]?.totalEarnings)}
                                   </span>
                               </div>
-                              <div className="flex flex-col">
-                                  <span className="text-xs text-slate-500 uppercase tracking-wide">
-                                      Roam Total Earnings (this import)
-                                  </span>
-                                  <span className="text-lg font-semibold text-slate-900">
-                                      {toCurrency(
-                                          processedData.reduce(
-                                              (sum, t) => sum + (t.amount || 0),
-                                              0
-                                          )
-                                      )}
-                                  </span>
-                              </div>
                           </div>
                       </CardContent>
                   </Card>
@@ -1602,15 +1657,34 @@ export function ImportsPage() {
                           </div>
 
                           <div className="mt-4 text-xs text-slate-600 flex items-center justify-between">
-                              <span>
-                                  Difference:{' '}
-                                  <span className="font-semibold text-emerald-600">
-                                      $0.00
-                                  </span>
-                              </span>
-                              <span className="text-slate-400">
-                                  We expect this to match Uber&apos;s statement for the selected period.
-                              </span>
+                              {(() => {
+                                const uberTotal = Number(processedOrganizationMetrics[0]?.totalEarnings) || 0;
+                                const roamTotal = processedData.reduce(
+                                  (sum, t) => sum + (t.amount || 0),
+                                  0
+                                );
+                                const diff = roamTotal - uberTotal;
+                                const reconciled = Math.abs(diff) <= 0.01;
+                                return (
+                                  <>
+                                    <span>
+                                      Roam imported total:{' '}
+                                      <span className="font-semibold">
+                                        {toCurrency(roamTotal)}
+                                      </span>
+                                      {' '}| Difference:{' '}
+                                      <span className={`font-semibold ${reconciled ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                        {toCurrency(diff)}
+                                      </span>
+                                    </span>
+                                    <span className="text-slate-400">
+                                      {reconciled
+                                        ? 'Reconciled with Uber statement for the selected period.'
+                                        : 'Does not fully match Uber statement — review before confirming.'}
+                                    </span>
+                                  </>
+                                );
+                              })()}
                           </div>
                       </CardContent>
                   </Card>
@@ -2207,7 +2281,7 @@ export function ImportsPage() {
                             </div>
                             <div className="h-[500px] overflow-auto">
                               <VehicleHealthCard 
-                                metrics={processedVehicleMetrics} 
+                                metrics={mergeVehicleMetrics(processedVehicleMetrics)} 
                                 totalDistance={processedData.reduce((sum, t) => sum + (t.distance || 0), 0)}
                               />
                             </div>
