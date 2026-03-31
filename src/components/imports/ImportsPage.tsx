@@ -1054,7 +1054,7 @@ export function ImportsPage() {
         </div>
       </div>
 
-      {/* Top-Level Tab Switcher */}
+      {/* Top-Level Tab Switcher (Import only – Export/Delete hidden on this screen) */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
         <button
           onClick={() => setActiveTab('import')}
@@ -1065,26 +1065,6 @@ export function ImportsPage() {
           }`}
         >
           Import
-        </button>
-        <button
-          onClick={() => setActiveTab('export')}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
-            activeTab === 'export'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Export
-        </button>
-        <button
-          onClick={() => setActiveTab('delete')}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
-            activeTab === 'delete'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Delete
         </button>
       </div>
 
@@ -1781,9 +1761,6 @@ export function ImportsPage() {
                               </TabsTrigger>
                               <TabsTrigger value="trip_meter" disabled={processedData.length === 0} className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">
                                    Trip Meter {processedData.length > 0 && `(${processedData.length})`}
-                              </TabsTrigger>
-                              <TabsTrigger value="fuel" disabled={processedFuelEntries.length === 0} className="data-[state=active]:bg-rose-50 data-[state=active]:text-rose-700">
-                                   Fuel Data {processedFuelEntries.length > 0 && `(${processedFuelEntries.length})`}
                               </TabsTrigger>
                           </TabsList>
 
