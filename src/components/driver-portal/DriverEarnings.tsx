@@ -302,9 +302,18 @@ export function DriverEarnings() {
       // 1. Calculate Stats
       const tripNet = currentTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
       
-      const tips = currentTrips.reduce((sum, t) => sum + (t.fareBreakdown?.tips || 0), 0);
+      const tips = currentTrips.reduce((sum, t) => {
+        const platformNorm = String(t.platform || '').toLowerCase();
+        if (platformNorm === 'uber') return sum + (Number(t.uberTips) || 0);
+        return sum + (t.fareBreakdown?.tips || 0);
+      }, 0);
       const tolls = currentTrips.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
-      const promotions = currentTrips.reduce((sum, t) => sum + (t.fareBreakdown?.surge || 0), 0);
+      const promotions = currentTrips.reduce((sum, t) => {
+        const platformNorm = String(t.platform || '').toLowerCase();
+        if (platformNorm === 'uber') return sum + (Number(t.uberPromotionsAmount) || 0);
+        // Legacy: treat surge as promotions for non-Uber trips
+        return sum + (t.fareBreakdown?.surge || 0);
+      }, 0);
       const cash = currentTrips.reduce((sum, t) => sum + (t.cashCollected || 0), 0);
 
       // Financial Transactions: 

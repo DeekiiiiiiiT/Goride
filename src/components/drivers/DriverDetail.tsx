@@ -2061,6 +2061,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         disputeRefunds: ledgerOverview.period.disputeRefunds || 0,
         totalTips: ledgerOverview.period.tips,
         totalBaseFare: ledgerOverview.period.baseFare,
+        uberLedgerReconciliation: ledgerOverview.period.uber || undefined,
         platformFees: ledgerOverview.period.platformFees ?? 0,
         platformFeesByPlatform: ledgerOverview.period.platformFeesByPlatform || {},
         fareGrossMinusNetByPlatform: ledgerOverview.period.fareGrossMinusNetByPlatform || {},
@@ -2094,6 +2095,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       disputeRefunds: 0,
       totalTips: 0,
       totalBaseFare: 0,
+      uberLedgerReconciliation: undefined,
       platformFees: 0,
       platformFeesByPlatform: {} as Record<string, number>,
       fareGrossMinusNetByPlatform: {} as Record<string, number>,
@@ -3288,7 +3290,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          </TabsContent>
 
          <TabsContent value="financial" className="space-y-6">
-           <FinancialSubTabs driverId={driverId} transactions={transactions} allTrips={allTrips} quotaConfig={quotaConfig} platformBreakdownData={platformBreakdownData} platformTotalEarnings={platformTotalEarnings} csvMetrics={csvMetrics} />
+           <FinancialSubTabs
+             driverId={driverId}
+             transactions={transactions}
+             allTrips={allTrips}
+             quotaConfig={quotaConfig}
+             platformBreakdownData={platformBreakdownData}
+             platformTotalEarnings={platformTotalEarnings}
+             csvMetrics={csvMetrics}
+             uberLedgerReconciliation={resolvedFinancials.uberLedgerReconciliation}
+           />
             {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_1___ <Tabs defaultValue="earnings" className="space-y-4">
              <TabsList className="grid w-full grid-cols-3 max-w-[450px]">
                <TabsTrigger value="earnings">Earnings</TabsTrigger>

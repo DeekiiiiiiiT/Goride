@@ -246,8 +246,17 @@ async function deleteLedgerEntriesForTripSource(tripId: string): Promise<number>
 async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const entries: any[] = [];
 
-    // Only create ledger entries for completed trips with a positive amount
-    if (trip.status !== 'Completed' || !trip.amount || trip.amount <= 0) {
+    // Only create ledger entries for completed trips with meaningful money.
+    // Uber Phase 3: if SSOT decomposition exists, allow ledger generation when `amount` is 0
+    // but SSOT fare/tip components exist (e.g., edge-case rows).
+    const isUber = String(trip.platform || '').toLowerCase() === 'uber';
+    const hasUberSsot = isUber && (trip.uberFareComponents != null || trip.uberTips != null);
+    const uberFareComponents = hasUberSsot ? Number(trip.uberFareComponents) || 0 : 0;
+    const uberTips = hasUberSsot ? Number(trip.uberTips) || 0 : 0;
+    const uberGrossForLedger = uberFareComponents + uberTips;
+
+    const hasTripAmount = !!trip.amount && Number(trip.amount) > 0;
+    if (trip.status !== 'Completed' || (!hasTripAmount && uberGrossForLedger <= 0)) {
         return entries;
     }
 
@@ -281,7 +290,7 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         driverId: resolved.canonicalId,
         driverName: trip.driverName || resolved.driverName,
         vehicleId: trip.vehicleId || undefined,
-        platform: trip.platform || 'Unknown',
+        platform: isUber ? 'Uber' : (trip.platform || 'Unknown'),
         sourceType: 'trip' as const,
         sourceId: trip.id,
         batchId: trip.batchId || undefined,
@@ -293,11 +302,15 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const isCash = Math.abs(trip.cashCollected || 0) > 0 || trip.paymentMethod === 'Cash';
     // [Phase 2 DIAGNOSTIC] Log cash-related fields to verify stored trip data
     console.log(`[Ledger:CashDiag] tripId=${trip.id} platform=${trip.platform} cashCollected=${trip.cashCollected} paymentMethod=${trip.paymentMethod} isCash=${isCash} amount=${trip.amount}`);
-    // Use the same effective-earnings formula as the trip-computed path:
-    // InDrive → indriveNetIncome (after InDrive's fee), Uber/others → trip.amount (gross fare)
+    // Effective earnings (used as netAmount for fare_earning).
+    // InDrive: after InDrive's fee (indriveNetIncome).
+    // Uber Phase 3: netAmount for fare_earning becomes SSOT fare components (fare-only, excluding tips)
+    // so that fare_earning + tip equals Uber's gross.
     const effectiveEarnings = (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
         ? trip.indriveNetIncome
         : trip.amount;
+    const fareNetForEntry = isUber && hasUberSsot ? uberFareComponents : effectiveEarnings;
+    const fareGrossForEntry = isUber && hasUberSsot ? uberFareComponents : trip.amount;
     const pickupShort = String(trip.pickupLocation || 'Unknown').substring(0, 30);
     const dropoffShort = String(trip.dropoffLocation || 'Unknown').substring(0, 30);
 
@@ -308,8 +321,8 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         eventType: 'fare_earning',
         category: 'Fare Earnings',
         description: `${trip.platform || 'Trip'}${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
-        grossAmount: trip.amount,
-        netAmount: effectiveEarnings,
+        grossAmount: fareGrossForEntry,
+        netAmount: fareNetForEntry,
         paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
         direction: 'inflow',
         metadata: {
@@ -322,7 +335,7 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     });
 
     // Entry 2: Tip (if tips > 0)
-    const tips = trip.fareBreakdown?.tips || 0;
+    const tips = isUber && hasUberSsot ? uberTips : (trip.fareBreakdown?.tips || 0);
     if (tips > 0) {
         entries.push({
             ...baseEntry,
@@ -332,8 +345,40 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
             description: `Tip for ${trip.platform || 'trip'}: ${pickupShort} -> ${dropoffShort}`,
             grossAmount: tips,
             netAmount: tips,
-            paymentMethod: 'Digital Wallet',
+            paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
             direction: 'inflow',
+        });
+    }
+
+    // Entry 2b: Promotions (Uber statement-level component allocated to this trip)
+    const promotions = isUber ? (Number(trip.uberPromotionsAmount) || 0) : 0;
+    if (promotions > 0.0001) {
+        entries.push({
+            ...baseEntry,
+            id: crypto.randomUUID(),
+            eventType: 'promotion',
+            category: 'Promotions',
+            description: `Uber promotion for ${pickupShort} -> ${dropoffShort}`,
+            grossAmount: promotions,
+            netAmount: promotions,
+            paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
+            direction: 'inflow',
+        });
+    }
+
+    // Entry 2c: Refunds & expenses (Uber statement-level component allocated to this trip)
+    const refundExpense = isUber ? (Number(trip.uberRefundExpenseAmount) || 0) : 0;
+    if (refundExpense > 0.0001) {
+        entries.push({
+            ...baseEntry,
+            id: crypto.randomUUID(),
+            eventType: 'refund_expense',
+            category: 'Refunds & Expenses',
+            description: `Uber refunds/expenses for ${pickupShort} -> ${dropoffShort}`,
+            grossAmount: refundExpense,
+            netAmount: -refundExpense,
+            paymentMethod: 'Digital Wallet',
+            direction: 'outflow',
         });
     }
 
@@ -3032,6 +3077,7 @@ app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requirePermi
 const VALID_LEDGER_EVENT_TYPES = new Set([
   'fare_earning', 'tip', 'surge_bonus', 'fuel_expense', 'fuel_reimbursement',
   'toll_charge', 'toll_refund', 'maintenance', 'insurance', 'driver_payout',
+  'promotion', 'refund_expense',
   'cash_collection', 'platform_fee', 'wallet_credit', 'wallet_debit',
   'cancelled_trip_loss', 'adjustment', 'other',
 ]);
@@ -3499,6 +3545,11 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     let pTips = 0;
     let pBaseFare = 0;
     let pPlatformFees = 0;
+    // Uber SSOT component totals (ledger-derived)
+    let pUberFareComponents = 0;
+    let pUberTips = 0;
+    let pUberPromotions = 0;
+    let pUberRefundExpense = 0;
     const pPlatformFeesByPlatform: Record<string, number> = {};
     const pFareGrossMinusNetByPlatform: Record<string, number> = {};
     let pTripCount = 0;
@@ -3519,6 +3570,11 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         pTripCount += 1;
         pFareGrossMinusNetByPlatform[plat] = (pFareGrossMinusNetByPlatform[plat] || 0) + (gross - net);
         if (e.paymentMethod === "Cash") pCash += (e.metadata?.cashCollected ? Number(e.metadata.cashCollected) : Math.abs(net));
+
+        if (plat === "Uber") {
+          // For Uber, fare_earning lines store fareComponents (excluding tips)
+          pUberFareComponents += gross;
+        }
 
         // Platform stats
         if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
@@ -3543,6 +3599,41 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
           if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
           dailyMap[day].total += net;
           dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        }
+
+        if (plat === "Uber") {
+          pUberTips += net;
+        }
+      } else if (et === "promotion") {
+        // Promotions are statement-level components (allocated across Uber trips).
+        // They affect net earnings but are not separate "trips" for counting.
+        pEarnings += net;
+        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+        pPlatformStats[plat].earnings += net;
+        const day = e.date;
+        if (day) {
+          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
+          dailyMap[day].total += net;
+          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        }
+
+        if (plat === "Uber") {
+          pUberPromotions += net;
+        }
+      } else if (et === "refund_expense") {
+        // Refunds & expenses reduce net earnings (netAmount is negative).
+        pEarnings += net;
+        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+        pPlatformStats[plat].earnings += net;
+        const day = e.date;
+        if (day) {
+          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
+          dailyMap[day].total += net;
+          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        }
+
+        if (plat === "Uber") {
+          pUberRefundExpense += Math.abs(net);
         }
       } else if (et === "toll_charge") {
         pTolls += Math.abs(net);
@@ -3599,7 +3690,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
           .from("kv_store_37f42386")
           .select("value")
           .like("key", "ledger:%")
-          .in("value->>eventType", ["fare_earning", "tip", "toll_charge"]);
+          .in("value->>eventType", ["fare_earning", "tip", "toll_charge", "promotion", "refund_expense"]);
         // Use same multi-ID OR filter as baseQuery
         if (driverIdOrFilter) {
           q = q.or(driverIdOrFilter);
@@ -3616,6 +3707,11 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     let ltTripCount = 0;
     let ltCash = 0;
     let ltTolls = 0;
+    // Uber SSOT component totals (ledger-derived)
+    let ltUberFareComponents = 0;
+    let ltUberTips = 0;
+    let ltUberPromotions = 0;
+    let ltUberRefundExpense = 0;
     const ltPlatformStats: Record<string, { earnings: number; tripCount: number; cashCollected: number; tolls: number }> = {};
 
     {
@@ -3637,9 +3733,31 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
             ltCash += cashAmt;
             ltPlatformStats[platform].cashCollected += cashAmt;
           }
+
+          if (platform === "Uber") {
+            ltUberFareComponents += gross;
+          }
         } else if (v.eventType === "tip") {
           ltEarnings += net;
           ltPlatformStats[platform].earnings += net;
+
+          if (platform === "Uber") {
+            ltUberTips += net;
+          }
+        } else if (v.eventType === "promotion") {
+          ltEarnings += net;
+          ltPlatformStats[platform].earnings += net;
+
+          if (platform === "Uber") {
+            ltUberPromotions += net;
+          }
+        } else if (v.eventType === "refund_expense") {
+          ltEarnings += net;
+          ltPlatformStats[platform].earnings += net;
+
+          if (platform === "Uber") {
+            ltUberRefundExpense += Math.abs(net);
+          }
         } else if (v.eventType === "toll_charge") {
           ltTolls += Math.abs(net);
           ltPlatformStats[platform].tolls += Math.abs(net);
@@ -3670,9 +3788,21 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       let totalCompletedTrips = 0;
       for (const d of tripData) {
         const v = d.value;
-        if (!v || !v.amount || Number(v.amount) <= 0) continue;
+        if (!v) continue;
+
+        // Phase 5 (Uber SSOT integrity): some Uber trips may have `amount=0` but still have
+        // SSOT fare/tip components (parsed from payments_transaction.csv). Use those for
+        // completeness counting and repair readiness.
+        const isUber = String(v.platform || '').toLowerCase() === 'uber';
+        const uberGrossForLedger = isUber
+          ? (Number(v.uberFareComponents) || 0) + (Number(v.uberTips) || 0)
+          : 0;
+        const hasTripAmount = !!v.amount && Number(v.amount) > 0;
+        const hasMoney = isUber ? (hasTripAmount || uberGrossForLedger > 0) : hasTripAmount;
+        if (!hasMoney) continue;
+
         totalCompletedTrips += 1;
-        const plat = (v.platform === 'GoRide' ? 'Roam' : v.platform) || 'Other';
+        const plat = isUber ? 'Uber' : (v.platform === 'GoRide' ? 'Roam' : v.platform) || 'Other';
         tripPlatformCounts[plat] = (tripPlatformCounts[plat] || 0) + 1;
       }
       // Compare per-platform: trips vs ledger fare_earnings
@@ -3736,6 +3866,13 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         tolls: Number(pTolls.toFixed(2)),
         tips: Number(pTips.toFixed(2)),
         baseFare: Number(pBaseFare.toFixed(2)),
+        uber: {
+          fareComponents: Number(pUberFareComponents.toFixed(2)),
+          tips: Number(pUberTips.toFixed(2)),
+          promotions: Number(pUberPromotions.toFixed(2)),
+          refundExpense: Number(pUberRefundExpense.toFixed(2)),
+          netEarnings: Number((pUberFareComponents + pUberTips + pUberPromotions - pUberRefundExpense).toFixed(2)),
+        },
         platformFees: Number(pPlatformFees.toFixed(2)),
         platformFeesByPlatform: Object.fromEntries(
           Object.entries(pPlatformFeesByPlatform).map(([k, v]) => [k, Number(v.toFixed(2))])
@@ -3755,6 +3892,13 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         tripCount: ltTripCount,
         cashCollected: Number(ltCash.toFixed(2)),
         tolls: Number(ltTolls.toFixed(2)),
+        uber: {
+          fareComponents: Number(ltUberFareComponents.toFixed(2)),
+          tips: Number(ltUberTips.toFixed(2)),
+          promotions: Number(ltUberPromotions.toFixed(2)),
+          refundExpense: Number(ltUberRefundExpense.toFixed(2)),
+          netEarnings: Number((ltUberFareComponents + ltUberTips + ltUberPromotions - ltUberRefundExpense).toFixed(2)),
+        },
         disputeRefunds: Number(ltDisputeRefunds.toFixed(2)),
         platformStats: Object.fromEntries(
           Object.entries(ltPlatformStats).map(([k, v]) => [k, {
@@ -4690,7 +4834,8 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
         };
 
         for (const trip of allTrips) {
-            const plat = (trip.platform === 'GoRide' ? 'Roam' : trip.platform) || 'Other';
+            const isUber = String(trip.platform || '').toLowerCase() === 'uber';
+            const plat = isUber ? 'Uber' : (trip.platform === 'GoRide' ? 'Roam' : trip.platform) || 'Other';
             if (!stats.byPlatform[plat]) {
                 stats.byPlatform[plat] = { trips: 0, created: 0, existed: 0 };
             }
@@ -4700,7 +4845,18 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
                 stats.skippedNotCompleted += 1;
                 continue;
             }
-            if (!trip.amount || Number(trip.amount) <= 0) {
+
+            // Phase 5 (Uber SSOT integrity): allow ledger generation even if `amount` is 0,
+            // as long as Uber SSOT fare/tip components imply a positive gross for the ledger.
+            const uberGrossForLedger = isUber
+                ? (Number(trip.uberFareComponents) || 0) + (Number(trip.uberTips) || 0)
+                : 0;
+            const hasTripAmount = !!trip.amount && Number(trip.amount) > 0;
+            const hasMoneyForLedger = isUber
+                ? (hasTripAmount || uberGrossForLedger > 0)
+                : hasTripAmount;
+
+            if (!hasMoneyForLedger) {
                 stats.skippedNoAmount += 1;
                 continue;
             }
@@ -4710,21 +4866,53 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
             try {
                 // Force mode: delete existing ledger entries for this trip so they get regenerated
                 if (force) {
+                    // Repair without regressions:
+                    // Only delete the trip-sourced ledger rows if the expected Uber SSOT components
+                    // (fare/tip/promotion/refund_expense) are missing.
                     try {
+                        const isUber = String(trip.platform || '').toLowerCase() === 'uber';
+                        const hasUberSsot = isUber && (trip.uberFareComponents != null || trip.uberTips != null);
+                        const uberTips = isUber ? (Number(trip.uberTips) || 0) : 0;
+                        const expectedTip = hasUberSsot ? uberTips : (Number(trip.fareBreakdown?.tips) || 0);
+                        const expectedPromotion = isUber ? (Number(trip.uberPromotionsAmount) || 0) : 0;
+                        const expectedRefundExpense = isUber ? (Number(trip.uberRefundExpenseAmount) || 0) : 0;
+
+                        // generateTripLedgerEntries always attempts fare_earning for eligible trips.
+                        const expectedEventTypes = new Set<string>(["fare_earning"]);
+                        if (expectedTip > 0) expectedEventTypes.add("tip");
+                        if (expectedPromotion > 0) expectedEventTypes.add("promotion");
+                        if (expectedRefundExpense > 0) expectedEventTypes.add("refund_expense");
+
                         const { data: existingEntries } = await supabase
                             .from("kv_store_37f42386")
-                            .select("key")
+                            .select("key, value")
                             .like("key", "ledger:%")
                             .eq("value->>sourceId", trip.id)
                             .eq("value->>sourceType", "trip");
+
+                        const existingEventTypes = new Set<string>();
                         if (existingEntries && existingEntries.length > 0) {
-                            const delKeys = existingEntries.map((e: any) => e.key);
-                            await kv.mdel(delKeys);
-                            stats.forceDeleted += delKeys.length;
-                            console.log(`[Ledger RepairDriver] Force-deleted ${delKeys.length} existing ledger entries for trip ${trip.id}`);
+                            for (const e of existingEntries) {
+                                const et = e?.value?.eventType;
+                                if (et) existingEventTypes.add(String(et));
+                            }
+                        }
+
+                        const missingExpected = Array.from(expectedEventTypes).filter(et => !existingEventTypes.has(et));
+
+                        if (missingExpected.length > 0) {
+                            const delKeys = (existingEntries || []).map((e: any) => e.key).filter(Boolean);
+                            if (delKeys.length > 0) {
+                                await kv.mdel(delKeys);
+                                stats.forceDeleted += delKeys.length;
+                                console.log(`[Ledger RepairDriver] Deleted ${delKeys.length} ledger entries for trip ${trip.id} (missing: ${missingExpected.join(',')})`);
+                            }
+                        } else {
+                            // Ledger already has expected event types; keep it as-is.
+                            // generateTripLedgerEntries will dedup-skip anyway.
                         }
                     } catch (delErr: any) {
-                        console.warn(`[Ledger RepairDriver] Force-delete failed for trip ${trip.id}: ${delErr.message}`);
+                        console.warn(`[Ledger RepairDriver] Repair-delete failed for trip ${trip.id}: ${delErr.message}`);
                     }
                 }
                 // Normalize driverId to canonical Roam UUID before generating ledger entries.

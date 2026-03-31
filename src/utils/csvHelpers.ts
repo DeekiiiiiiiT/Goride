@@ -1,6 +1,7 @@
 import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics, VehicleMetrics, RentalContract, OrganizationMetrics, DisputeRefund } from '../types/data';
 import { FuelEntry, FuelCard } from '../types/fuel';
 import Papa from 'papaparse';
+import { parseUberDriverStatementSsot, parseUberPaymentTransactionSsotLine, UberSsotTotals } from './uberSsot';
 
 // ... (Legacy code support if needed, but we focus on new logic)
 
@@ -366,6 +367,11 @@ export interface ProcessedBatch {
     fuelEntries?: FuelEntry[];
     organizationName?: string; // Phase 1: Fleet Owner
     tripAnalytics?: TripAnalytics; // Phase 4
+    /**
+     * Phase 2: Uber driver statement SSOT totals parsed from `payments_driver.csv`.
+     * Used later to reconcile per-trip components into statement totals (Phase 4/5).
+     */
+    uberStatementsByDriverId?: Record<string, UberSsotTotals>;
     driverTimeData?: DriverTimeDistance[];
     vehicleTimeData?: VehicleTimeDistance[];
     calibrationStats?: {
@@ -984,6 +990,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     const uberTripActivityTripIds = new Set<string>();
     const genericTrips: Trip[] = [];
     const driverMetricsMap = new Map<string, DriverMetrics>();
+    const uberStatementsByDriverId = new Map<string, UberSsotTotals>();
     const vehicleMetrics: VehicleMetrics[] = [];
     const rentalContracts: RentalContract[] = [];
     const organizationMetrics: OrganizationMetrics[] = [];
@@ -1565,6 +1572,22 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     // Step 2.1 Calculations - ACCUMULATE
                     current.amount = (current.amount || 0) + addToGross; // Gross Accumulation
                     current.grossEarnings = (current.grossEarnings || 0) + addToGross;
+
+                    // Phase 2 (Uber SSOT canonical decomposition): populate per-trip fare vs tip components
+                    // from `payments_transaction.csv` rows. This is additive-only and does not change
+                    // the existing `amount` / `netPayout` behavior yet.
+                    const ssotLine = parseUberPaymentTransactionSsotLine(row as Record<string, unknown>);
+                    current.uberTips = (current.uberTips || 0) + (ssotLine.tips || 0);
+                    current.uberFareComponents = (current.uberFareComponents || 0) + (ssotLine.fareComponents || 0);
+                    if (ssotLine.fareComponents !== 0 || ssotLine.tips !== 0) {
+                        const farePlusTips = (ssotLine.fareComponents || 0) + (ssotLine.tips || 0);
+                        const tolerance = 0.05; // export rounding differences
+                        const rowMatches = Math.abs(farePlusTips - earnings) <= tolerance;
+                        current.uberSsotFarePlusTipsMatch =
+                            current.uberSsotFarePlusTipsMatch === undefined
+                                ? rowMatches
+                                : current.uberSsotFarePlusTipsMatch && rowMatches;
+                    }
                     
                     current.cashCollected = (current.cashCollected || 0) + cash;
                     // Phase 1 Cash Fix: Uber reports cash as negative — normalize to positive
@@ -1667,11 +1690,48 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
                      const totalEarnings = parseFloat(String(row['Total Earnings'] || '0').replace(/[^0-9.-]/g, '')) || 0;
                      const refundsAndExpenses = parseFloat(String(row['Refunds and Expenses'] || row['Refunds'] || '0').replace(/[^0-9.-]/g, '')) || 0;
+                    const tips = parseFloat(
+                        String(row['Total Earnings:Tip'] || row['Total Earnings : Tip'] || '0').replace(/[^0-9.-]/g, '')
+                    ) || 0;
+                    const promotions = parseFloat(
+                        String(
+                            row['Total Earnings : Promotions'] ||
+                            row['Total Earnings:Promotions'] ||
+                            row['Total Earnings : Promotion'] ||
+                            row['Total Earnings:Promotion'] ||
+                            '0'
+                        ).replace(/[^0-9.-]/g, '')
+                    ) || 0;
                      const cashCollected = parseFloat(String(row['Cash Collected'] || '0').replace(/[^0-9.-]/g, '')) || 0;
                      
                      current.totalEarnings = (current.totalEarnings || 0) + totalEarnings;
                      current.refundsAndExpenses = (current.refundsAndExpenses || 0) + refundsAndExpenses;
                      current.cashCollected = (current.cashCollected || 0) + cashCollected;
+
+                    // Phase 2: store canonical statement SSOT totals for later reconciliation/ledger generation.
+                    // These are statement-level (period) totals per driver from `payments_driver.csv`.
+                    const ssotStatement = parseUberDriverStatementSsot({
+                        'Total Earnings': totalEarnings,
+                        'Total Earnings:Tip': tips,
+                        'Total Earnings : Promotions': promotions,
+                        'Refunds & Expenses': refundsAndExpenses,
+                    } as any);
+
+                    const prevSsot = uberStatementsByDriverId.get(driverId);
+                    if (!prevSsot) {
+                        uberStatementsByDriverId.set(driverId, { ...ssotStatement });
+                    } else {
+                        uberStatementsByDriverId.set(driverId, {
+                            periodEarningsGross: prevSsot.periodEarningsGross + ssotStatement.periodEarningsGross,
+                            fareComponents: prevSsot.fareComponents + ssotStatement.fareComponents,
+                            promotions: prevSsot.promotions + ssotStatement.promotions,
+                            tips: prevSsot.tips + ssotStatement.tips,
+                            refundsAndExpenses: prevSsot.refundsAndExpenses + ssotStatement.refundsAndExpenses,
+                            netEarnings:
+                                (prevSsot.periodEarningsGross + ssotStatement.periodEarningsGross) -
+                                (prevSsot.refundsAndExpenses + ssotStatement.refundsAndExpenses),
+                        });
+                    }
                      
                      // Calculations Step 2.2
                      current.netEarnings = current.totalEarnings - current.refundsAndExpenses;
@@ -2075,6 +2135,51 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         } as Trip;
     });
 
+    // Phase 4: SSOT allocations (promotions + refunds/expenses) distributed across trips.
+    // Uber's `payments_driver.csv` provides statement-level totals, while the ledger is trip-sourced.
+    // We distribute those totals across Uber trips proportionally by each trip's gross component.
+    const uberStatementKeys = new Set<string>();
+    for (const [k] of uberStatementsByDriverId.entries()) uberStatementKeys.add(k);
+
+    const uberDriverGross = new Map<string, number>();
+    for (const tr of mergedTrips) {
+        // Identify Uber trips by SSOT component presence (Phase 2 output).
+        const hasUberComponents = tr.uberFareComponents != null || tr.uberTips != null;
+        if (!hasUberComponents) continue;
+
+        const driverKey = cleanId(tr.driverId).toLowerCase();
+        if (!uberStatementKeys.has(driverKey)) continue;
+
+        const farePlusTips = (Number(tr.uberFareComponents) || 0) + (Number(tr.uberTips) || 0);
+        const gross = farePlusTips > 0 ? farePlusTips : Math.abs(Number(tr.amount) || 0);
+        if (gross <= 0) continue;
+
+        uberDriverGross.set(driverKey, (uberDriverGross.get(driverKey) || 0) + gross);
+    }
+
+    for (const tr of mergedTrips) {
+        const hasUberComponents = tr.uberFareComponents != null || tr.uberTips != null;
+        if (!hasUberComponents) continue;
+
+        const driverKey = cleanId(tr.driverId).toLowerCase();
+        const statement = uberStatementsByDriverId.get(driverKey);
+        if (!statement) continue;
+
+        const farePlusTips = (Number(tr.uberFareComponents) || 0) + (Number(tr.uberTips) || 0);
+        const gross = farePlusTips > 0 ? farePlusTips : Math.abs(Number(tr.amount) || 0);
+        const totalGross = uberDriverGross.get(driverKey) || 0;
+
+        if (gross <= 0 || totalGross <= 0) {
+            tr.uberPromotionsAmount = 0;
+            tr.uberRefundExpenseAmount = 0;
+            continue;
+        }
+
+        const share = gross / totalGross;
+        tr.uberPromotionsAmount = (Number(statement.promotions) || 0) * share;
+        tr.uberRefundExpenseAmount = (Number(statement.refundsAndExpenses) || 0) * share;
+    }
+
     // Phase 1: Logic Correction (Phantom Trip Filtering)
     const finalizedTrips = mergedTrips.filter(t => {
         const hasMoney = Math.abs(t.amount) > 5;
@@ -2282,6 +2387,10 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         tripAnalytics,
         driverTimeData,
         vehicleTimeData,
+        uberStatementsByDriverId:
+            uberStatementsByDriverId.size > 0
+                ? Object.fromEntries(uberStatementsByDriverId.entries())
+                : undefined,
         calibrationStats: {
             fleetStats,
             deductionPerTrip,

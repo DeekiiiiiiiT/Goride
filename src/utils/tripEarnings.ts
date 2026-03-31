@@ -20,8 +20,9 @@ import { Trip } from '../types/data';
 export function getEffectiveTripEarnings(trip: Trip | null | undefined): number {
   if (!trip) return 0;
 
+  const platformNorm = String(trip.platform || '').toLowerCase();
   // InDrive true profit: use net income if fee data is present
-  if (trip.platform === 'InDrive' && trip.indriveNetIncome != null) {
+  if (platformNorm === 'indrive' && trip.indriveNetIncome != null) {
     return trip.indriveNetIncome;
   }
 
@@ -37,8 +38,28 @@ export function getEffectiveTripEarnings(trip: Trip | null | undefined): number 
  */
 export function getDriverPortalTripEarnings(trip: Trip | null | undefined): number {
   if (!trip) return 0;
-  if (trip.platform === 'InDrive' && trip.indriveNetIncome != null) {
+  const platformNorm = String(trip.platform || '').toLowerCase();
+  if (platformNorm === 'indrive' && trip.indriveNetIncome != null) {
     return trip.indriveNetIncome;
   }
+
+  // Uber: use SSOT decomposition when available so promotions & refunds/expenses
+  // (statement-level components) are reflected in driver portal totals.
+  if (platformNorm === 'uber') {
+    const hasUberSsot =
+      trip.uberFareComponents != null ||
+      trip.uberTips != null ||
+      trip.uberPromotionsAmount != null ||
+      trip.uberRefundExpenseAmount != null;
+
+    if (hasUberSsot) {
+      const fare = Number(trip.uberFareComponents) || 0;
+      const tips = Number(trip.uberTips) || 0;
+      const promotions = Number(trip.uberPromotionsAmount) || 0;
+      const refundsExpenses = Number(trip.uberRefundExpenseAmount) || 0;
+      return fare + tips + promotions - refundsExpenses;
+    }
+  }
+
   return trip.netPayout || trip.amount || 0;
 }

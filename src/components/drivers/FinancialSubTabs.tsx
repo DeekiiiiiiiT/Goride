@@ -9,7 +9,7 @@ import {
   Label as RechartsLabel
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { Trip, FinancialTransaction, QuotaConfig } from '../../types/data';
+import { Trip, FinancialTransaction, QuotaConfig, LedgerDriverOverview } from '../../types/data';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
@@ -27,6 +27,7 @@ interface FinancialSubTabsProps {
   platformBreakdownData: Array<{ name: string; value: number; color: string }>;
   platformTotalEarnings: number;
   csvMetrics?: import('../../types/data').DriverMetrics[];
+  uberLedgerReconciliation?: LedgerDriverOverview['period']['uber'] | null;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -41,14 +42,44 @@ export function FinancialSubTabs({
   platformBreakdownData,
   platformTotalEarnings,
   csvMetrics = [],
+  uberLedgerReconciliation = null,
 }: FinancialSubTabsProps) {
+  const uberSsotReconciliation = React.useMemo(() => {
+    let fareComponents = 0;
+    let tips = 0;
+    let promotions = 0;
+    let refundExpense = 0;
+
+    for (const t of allTrips) {
+      const platformNorm = String(t.platform || '').toLowerCase();
+      if (platformNorm !== 'uber') continue;
+      fareComponents += Number(t.uberFareComponents) || 0;
+      tips += Number(t.uberTips) || 0;
+      promotions += Number(t.uberPromotionsAmount) || 0;
+      refundExpense += Number(t.uberRefundExpenseAmount) || 0;
+    }
+
+    const netEarnings = fareComponents + tips + promotions - refundExpense;
+    return { fareComponents, tips, promotions, refundExpense, netEarnings };
+  }, [allTrips]);
+
+  const reconciliationStatus = React.useMemo(() => {
+    if (!uberLedgerReconciliation) return { label: 'No ledger reconciliation data', ok: false };
+    const deltaNet = uberSsotReconciliation.netEarnings - uberLedgerReconciliation.netEarnings;
+    return {
+      label: Math.abs(deltaNet) <= 0.05 ? 'Reconciled' : `Mismatch (delta ${deltaNet.toFixed(2)})`,
+      ok: Math.abs(deltaNet) <= 0.05,
+    };
+  }, [uberLedgerReconciliation, uberSsotReconciliation.netEarnings]);
+
   return (
     <Tabs defaultValue="earnings" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-4 max-w-[600px]">
+      <TabsList className="grid w-full grid-cols-5 max-w-[750px]">
         <TabsTrigger value="earnings">Earnings</TabsTrigger>
         <TabsTrigger value="expenses">Expenses</TabsTrigger>
         <TabsTrigger value="settlement">Settlement</TabsTrigger>
         <TabsTrigger value="payout">Payout</TabsTrigger>
+        <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
       </TabsList>
 
       {/* ── Earnings Sub-Tab ── */}
@@ -183,6 +214,97 @@ export function FinancialSubTabs({
           transactions={transactions}
           csvMetrics={csvMetrics}
         />
+      </TabsContent>
+
+      {/* ── Reconciliation Sub-Tab ── */}
+      <TabsContent value="reconciliation" className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Uber Reconciliation (SSOT vs Ledger)</CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              {reconciliationStatus.label}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  SSOT (allocated from payments_driver)
+                </p>
+                <div className="space-y-1.5 mt-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Fare Components</span>
+                    <span className="font-medium">
+                      ${uberSsotReconciliation.fareComponents.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Tips</span>
+                    <span className="font-medium">
+                      ${uberSsotReconciliation.tips.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Promotions</span>
+                    <span className="font-medium">
+                      ${uberSsotReconciliation.promotions.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Refunds/Expenses</span>
+                    <span className="font-medium">
+                      ${uberSsotReconciliation.refundExpense.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 flex justify-between">
+                    <span className="font-semibold">Net Earnings</span>
+                    <span className="font-semibold">
+                      ${uberSsotReconciliation.netEarnings.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Ledger (computed from kv_store)
+                </p>
+                <div className="space-y-1.5 mt-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Fare Components</span>
+                    <span className="font-medium">
+                      ${(uberLedgerReconciliation?.fareComponents ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Tips</span>
+                    <span className="font-medium">
+                      ${(uberLedgerReconciliation?.tips ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Promotions</span>
+                    <span className="font-medium">
+                      ${(uberLedgerReconciliation?.promotions ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Refunds/Expenses</span>
+                    <span className="font-medium">
+                      ${(uberLedgerReconciliation?.refundExpense ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 flex justify-between">
+                    <span className="font-semibold">Net Earnings</span>
+                    <span className="font-semibold">
+                      ${(uberLedgerReconciliation?.netEarnings ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </TabsContent>
     </Tabs>
   );

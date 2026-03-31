@@ -100,6 +100,23 @@ export interface Trip {
   /** Uber CSV: payments row(s) merged but no row from trip_activity.csv for this Trip UUID (e.g. date cutoff mismatch). */
   missingTripActivityInExport?: boolean;
 
+  /**
+   * Phase 2 (Uber SSOT canonical decomposition): per-trip fare vs tip components parsed from
+   * `payments_transaction.csv` (uber payment rows).
+   *
+   * These are additive components used for reconciliation later (ledger generation in Phase 3).
+   */
+  uberFareComponents?: number; // "fare-only" components, excluding tips
+  uberTips?: number; // per-trip tips extracted from Uber payments rows
+  uberSsotFarePlusTipsMatch?: boolean; // whether (fareComponents + tips) matches the row gross (within tolerance)
+
+  /**
+   * Phase 4: SSOT allocations (statement-level components distributed across trips).
+   * These values are derived from `payments_driver.csv` totals during the import merge phase.
+   */
+  uberPromotionsAmount?: number;
+  uberRefundExpenseAmount?: number;
+
   [key: string]: any; // Allow dynamic properties
 }
 
@@ -463,6 +480,8 @@ export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled
 export type LedgerEventType =
   | 'fare_earning'
   | 'tip'
+  | 'promotion'
+  | 'refund_expense'
   | 'surge_bonus'
   | 'fuel_expense'
   | 'fuel_reimbursement'
@@ -560,6 +579,17 @@ export interface LedgerDriverOverview {
     tolls: number;
     tips: number;
     baseFare: number;
+    /**
+     * Uber SSOT reconciliation view — ledger-derived totals for Uber components.
+     * (Includes allocated statement-level promotions + refund/expense outflows.)
+     */
+    uber?: {
+      fareComponents: number;
+      tips: number;
+      promotions: number;
+      refundExpense: number; // positive magnitude
+      netEarnings: number; // fare + tips + promotions - refundExpense
+    };
     /** Sum of ledger platform_fee events; gross−net on fares is separate (baseFare − earnings). */
     platformFees: number;
     /** platform_fee ledger entries, split by platform. */
@@ -578,6 +608,13 @@ export interface LedgerDriverOverview {
     tripCount: number;
     cashCollected: number;
     tolls: number;
+    uber?: {
+      fareComponents: number;
+      tips: number;
+      promotions: number;
+      refundExpense: number;
+      netEarnings: number;
+    };
     disputeRefunds?: number; // Phase 8: Lifetime dispute refund totals
   };
   platformStats: Record<string, {

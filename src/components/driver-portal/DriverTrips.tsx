@@ -313,7 +313,7 @@ export function DriverTrips() {
                                 <Separator className="my-2" />
                                 <div className="flex justify-between text-sm font-bold">
                                     <span>Total Earnings</span>
-                                    <span>${(selectedTrip.amount + (selectedTrip.fareBreakdown?.tips || 0) + (selectedTrip.tollCharges || 0) + (selectedTrip.fareBreakdown?.surge || 0)).toFixed(2)}</span>
+                                    <span>${getDriverPortalTripEarnings(selectedTrip).toFixed(2)}</span>
                                 </div>
                             </div>
 
