@@ -2005,7 +2005,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     if (!isLedgerComplete && ledgerHasData) {
       console.log(`[ResolvedFinancials] Ledger incomplete — missing platforms: ${missingFromLedger.join(', ')}. Auto-repair will regenerate.`);
     }
-    if (ledgerHasData && isLedgerComplete) {
+    if (ledgerHasData) {
       // Merge ledger financial fields with trip-computed operational fields
       const platformStats: Record<string, any> = {};
       // Start with trip-computed platforms (keeps distance, ratings, completed counts)
@@ -2069,8 +2069,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         weeklyEarningsData,
         tripCount: ledgerOverview.period.tripCount,
         source: 'ledger' as const,
-        isLedgerComplete: true,
-        missingPlatforms: [] as string[],
+        isLedgerComplete,
+        dataIncomplete: !isLedgerComplete,
+        missingPlatforms: missingFromLedger,
         lifetimeEarnings: ledgerOverview.lifetime.earnings,
         lifetimeTrips: ledgerOverview.lifetime.tripCount,
         lifetimeCashCollected: ledgerOverview.lifetime.cashCollected,
