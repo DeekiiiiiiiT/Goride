@@ -274,6 +274,10 @@ export function OverviewMetricsGrid({
     return ledgerFee > 0 ? ledgerFee : gap;
   }, [resolvedFinancials.platformFeesByPlatform, resolvedFinancials.fareGrossMinusNetByPlatform]);
 
+  // Show financial values whenever ledger is the source, even if completeness is partial.
+  // Incomplete status should warn, not blank valid totals.
+  const showFinancialValues = resolvedFinancials?.source === 'ledger';
+
   const walletAllZero =
     rangeReady &&
     !!walletData &&
@@ -342,7 +346,7 @@ export function OverviewMetricsGrid({
           </DialogHeader>
 
           <div className="space-y-6 text-sm">
-            {resolvedFinancials.dataIncomplete ? (
+            {!showFinancialValues ? (
               <p className="text-slate-600 dark:text-slate-400">
                 Ledger data is incomplete for this period. Repair the ledger or widen filters to see a full breakdown.
               </p>
@@ -620,13 +624,13 @@ export function OverviewMetricsGrid({
       {/* Card 1: Period Earnings — breakdown now from resolvedFinancials */}
       <MetricCard
         title={isToday ? "Today's Earnings" : "Period Earnings"}
-        subtext={resolvedFinancials.source === 'ledger' ? 'Ledger' : resolvedFinancials.dataIncomplete ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(', ')})` : ''}` : 'Unavailable'}
-        value={resolvedFinancials.dataIncomplete ? '—' : `$${resolvedFinancials.periodEarnings.toFixed(2)}`}
-        trend={resolvedFinancials.dataIncomplete ? undefined : `${resolvedFinancials.trendPercent}% vs prev`}
+        subtext={resolvedFinancials.source === 'ledger' ? `Ledger${resolvedFinancials.dataIncomplete ? `${resolvedFinancials.missingPlatforms?.length > 0 ? ` incomplete (missing: ${resolvedFinancials.missingPlatforms.join(', ')})` : ' incomplete'}` : ''}` : resolvedFinancials.dataIncomplete ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(', ')})` : ''}` : 'Unavailable'}
+        value={showFinancialValues ? `$${resolvedFinancials.periodEarnings.toFixed(2)}` : '—'}
+        trend={showFinancialValues ? `${resolvedFinancials.trendPercent}% vs prev` : undefined}
         trendUp={resolvedFinancials.trendUp}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         loading={localLoading}
-        breakdown={resolvedFinancials.dataIncomplete ? [] : earningsBreakdown}
+        breakdown={showFinancialValues ? earningsBreakdown : []}
         onClick={() => setPeriodEarningsOpen(true)}
         interactiveLabel="Open period earnings breakdown and cash allocation"
       />
@@ -634,11 +638,11 @@ export function OverviewMetricsGrid({
       {/* Card 2: Cash Collected */}
       <MetricCard
         title="Cash Collected"
-        value={resolvedFinancials.dataIncomplete ? '—' : `$${resolvedFinancials.cashCollected.toFixed(2)}`}
+        value={showFinancialValues ? `$${resolvedFinancials.cashCollected.toFixed(2)}` : '—'}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         tooltip="Total cash collected from trips during this period"
         loading={localLoading}
-        breakdown={resolvedFinancials.dataIncomplete ? [] : cashBreakdown}
+        breakdown={showFinancialValues ? cashBreakdown : []}
       />
 
       {/* Card 3: Km Driven (operational — stays on metrics) */}
@@ -818,11 +822,11 @@ export function OverviewMetricsGrid({
       {/* Card 5: Toll Refunded — breakdown now from resolvedFinancials */}
       <MetricCard
         title="Toll Refunded"
-        value={resolvedFinancials.dataIncomplete ? '—' : `$${resolvedFinancials.totalTolls.toFixed(2)}`}
+        value={showFinancialValues ? `$${resolvedFinancials.totalTolls.toFixed(2)}` : '—'}
         subtext="Added to Debt (Cash Risk)"
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         loading={localLoading}
-        breakdown={resolvedFinancials.dataIncomplete ? [] : tollsBreakdown}
+        breakdown={showFinancialValues ? tollsBreakdown : []}
       />
 
       {/* Card 6: Distance Metrics Donut */}
