@@ -2127,7 +2127,9 @@ app.post("/make-server-37f42386/trips", async (c) => {
             for (let i = 0; i < allLedgerEntries.length; i += 100) {
                 const chunk = allLedgerEntries.slice(i, i + 100);
                 const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
-                await kv.mset(ledgerKeys, chunk);
+                // Stamp org on each generated ledger row so /ledger/driver-overview
+                // (which filters by organizationId) can see trip-sourced ledger data.
+                await kv.mset(ledgerKeys, chunk.map((e: any) => stampOrg(e, c)));
             }
             console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
             // Phase 6.6: Verification — count completed trips with amount > 0 vs ledger entries created
