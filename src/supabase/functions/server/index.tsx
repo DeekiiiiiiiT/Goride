@@ -3751,6 +3751,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         if (!v) continue;
         if (!isOrgCompatible(v)) continue;
         const net = Number(v.netAmount) || 0;
+        const gross = Number(v.grossAmount) || 0;
         const platform = v.platform || 'Unknown';
         if (!ltPlatformStats[platform]) {
           ltPlatformStats[platform] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
