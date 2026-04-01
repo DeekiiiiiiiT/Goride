@@ -30,6 +30,20 @@ export const DEFAULT_FIELDS = DEFAULT_SYSTEM_FIELDS;
 // This UUID represents the Fleet Entity and must NEVER be treated as a Driver.
 export const FLEET_ORG_UUID = '73dfc14d-3798-4a00-8d86-b2a3eb632f54';
 
+/** Uber `trip_activity.csv` (and payment rows if column exists): `cash` vs `braintree` / other → app labels. */
+export function mapUberTripActivityPaymentType(raw: unknown): 'Cash' | 'Digital (card/Bank)' | undefined {
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (!s) return undefined;
+  if (s === 'cash') return 'Cash';
+  return 'Digital (card/Bank)';
+}
+
+function readUberCsvPaymentTypeCell(row: ParsedRow): unknown {
+  if (row['Payment Type'] !== undefined && row['Payment Type'] !== '') return row['Payment Type'];
+  const key = Object.keys(row).find(k => k.trim().toLowerCase() === 'payment type');
+  return key !== undefined ? row[key] : undefined;
+}
+
 // --- PRE-DEFINED UBER SCHEMAS ---
 export const UBER_SCHEMAS = {
   TRIP_ACTIVITY: {
@@ -1326,6 +1340,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     if (row['Product Type']) current.serviceType = String(row['Product Type']);
                     else current.serviceType = 'UberX'; 
 
+                    const payType = mapUberTripActivityPaymentType(readUberCsvPaymentTypeCell(row));
+                    if (payType) current.paymentMethod = payType;
+
                     // Robust Time Extraction (Dynamic Column Search)
                     // 1. Request Time
                     let reqVal = row['Trip request time'] || row['Request Time'] || row['Request time'];
@@ -1592,8 +1609,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     current.cashCollected = (current.cashCollected || 0) + cash;
                     // Phase 1 Cash Fix: Uber reports cash as negative — normalize to positive
                     current.cashCollected = Math.abs(current.cashCollected);
-                    // Tag payment method so ledger generator recognizes cash trips
+                    // Tag payment method: cash collected wins; else map Payment Type / braintree when column present
                     if (current.cashCollected > 0) current.paymentMethod = 'Cash';
+                    else {
+                      const fromRow = mapUberTripActivityPaymentType(readUberCsvPaymentTypeCell(row));
+                      if (fromRow) current.paymentMethod = fromRow;
+                    }
                     current.netTransaction = (current.netTransaction || 0) + addToNet;
                     
                     current.payouts = current.netTransaction;

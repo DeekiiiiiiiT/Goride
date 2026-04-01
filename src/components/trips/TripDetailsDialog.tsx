@@ -85,7 +85,13 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                 )}
                 {trip.paymentMethod && (
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    {trip.paymentMethod === 'Cash' ? '💵 Cash' : '💳 Card / Digital'}
+                    {trip.paymentMethod === 'Cash'
+                      ? '💵 Cash'
+                      : trip.paymentMethod === 'Digital (card/Bank)'
+                        ? '💳 Digital (card/Bank)'
+                        : trip.paymentMethod === 'Card'
+                          ? '💳 Card'
+                          : `💳 ${trip.paymentMethod}`}
                   </div>
                 )}
               </div>
