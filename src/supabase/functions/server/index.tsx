@@ -2095,12 +2095,36 @@ app.post("/make-server-37f42386/trips", async (c) => {
         }
     }
 
+    // Resolve organization scope for writes.
+    // Priority:
+    // 1) Auth-scoped org from request context
+    // 2) Driver record org (for legacy/anon import flows)
+    let writeOrgId: string | null = getOrgId(c);
+    if (!writeOrgId) {
+      for (const trip of processedTrips) {
+        const did = String(trip?.driverId || '').trim();
+        if (!did) continue;
+        try {
+          const driverRecord = await kv.get(`driver:${did}`);
+          const candidate = typeof driverRecord?.organizationId === 'string' ? driverRecord.organizationId.trim() : '';
+          if (candidate) {
+            writeOrgId = candidate;
+            break;
+          }
+        } catch {
+          // Ignore lookup failures; we'll continue without org stamping.
+        }
+      }
+    }
+    const stampWriteOrg = <T extends Record<string, any>>(record: T): T =>
+      writeOrgId ? ({ ...record, organizationId: writeOrgId } as T) : record;
+
     // Create keys for each trip
     // Assuming each trip has a unique 'id' field
     const keys = processedTrips.map((t: any) => `trip:${t.id}`);
     
     // Store using mset
-    await kv.mset(keys, processedTrips);
+    await kv.mset(keys, processedTrips.map((t: any) => stampWriteOrg(t)));
     
     // ── Write-Time Ledger: Replace trip-sourced ledger rows so edits to fare / net / fees apply ──
     try {
@@ -2127,9 +2151,7 @@ app.post("/make-server-37f42386/trips", async (c) => {
             for (let i = 0; i < allLedgerEntries.length; i += 100) {
                 const chunk = allLedgerEntries.slice(i, i + 100);
                 const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
-                // Stamp org on each generated ledger row so /ledger/driver-overview
-                // (which filters by organizationId) can see trip-sourced ledger data.
-                await kv.mset(ledgerKeys, chunk.map((e: any) => stampOrg(e, c)));
+                await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
             }
             console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
             // Phase 6.6: Verification — count completed trips with amount > 0 vs ledger entries created
@@ -3503,21 +3525,15 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
 
     console.log(`[Ledger DriverOverview] Searching with ${allDriverIds.length} driver IDs: [${allDriverIds.join(', ')}]`);
 
-    const requestOrgId = getOrgId(c);
-    const isOrgCompatible = (row: any): boolean => {
-      if (!requestOrgId) return true;
-      const rowOrg = row?.organizationId;
-      // Backward-compatible fallback: include legacy rows missing organizationId (null, undefined, or empty string).
-      if (rowOrg === null || rowOrg === undefined || rowOrg === '') return true;
-      return rowOrg === requestOrgId;
-    };
-
     // Helper: build a base query filtered by driverId(s) (and optional platforms)
     const baseQuery = () => {
       let q = supabase
         .from("kv_store_37f42386")
         .select("value")
         .like("key", "ledger:%");
+
+      const orgId = getOrgId(c);
+      if (orgId) q = q.eq("value->>organizationId", orgId);
 
       // Apply driver ID filter — single exact match or multi-ID OR
       if (driverIdOrFilter) {
@@ -3563,10 +3579,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         .lte("value->>date", endDate)
     );
 
-    const periodEntries = periodData
-      .map((d: any) => d.value)
-      .filter(Boolean)
-      .filter((v: any) => isOrgCompatible(v));
+    const periodEntries = periodData.map((d: any) => d.value).filter(Boolean);
     console.log(`[Ledger DriverOverview] Period entries fetched: ${periodEntries.length}`);
 
     // Accumulate period metrics in a single pass
@@ -3710,7 +3723,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     let prevEarnings = 0;
     for (const d of prevData) {
       const v = d.value;
-      if (v && isOrgCompatible(v)) prevEarnings += Number(v.netAmount) || 0;
+      if (v) prevEarnings += Number(v.netAmount) || 0;
     }
 
     // ── 3. Lifetime totals (no date filter) ──────────────────────────
@@ -3722,6 +3735,8 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
           .select("value")
           .like("key", "ledger:%")
           .in("value->>eventType", ["fare_earning", "tip", "toll_charge", "promotion", "refund_expense"]);
+        const orgId = getOrgId(c);
+        if (orgId) q = q.eq("value->>organizationId", orgId);
         // Use same multi-ID OR filter as baseQuery
         if (driverIdOrFilter) {
           q = q.or(driverIdOrFilter);
@@ -3749,7 +3764,6 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       for (const d of lifetimeData) {
         const v = d.value;
         if (!v) continue;
-        if (!isOrgCompatible(v)) continue;
         const net = Number(v.netAmount) || 0;
         const gross = Number(v.grossAmount) || 0;
         const platform = v.platform || 'Unknown';
@@ -3822,8 +3836,6 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       for (const d of tripData) {
         const v = d.value;
         if (!v) continue;
-        if (!isOrgCompatible(v)) continue;
-
         // Phase 5 (Uber SSOT integrity): some Uber trips may have `amount=0` but still have
         // SSOT fare/tip components (parsed from payments_transaction.csv). Use those for
         // completeness counting and repair readiness.
