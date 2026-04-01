@@ -265,20 +265,32 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         return entries;
     }
 
-    // Dedup check: skip if ledger entries already exist for this trip
+    // Dedup: skip only when a fare_earning row already exists for this trip.
+    // Any other trip-sourced rows alone (e.g. tip/promotion without fare) are incomplete — remove them and regenerate.
     // Note: import/repair flows may set `_skipLedgerDedup` to force regeneration after deletion.
     if (!trip?._skipLedgerDedup) {
         try {
             const { data: existing } = await supabase
                 .from("kv_store_37f42386")
-                .select("key")
+                .select("key, value")
                 .like("key", "ledger:%")
                 .eq("value->>sourceId", trip.id)
-                .eq("value->>sourceType", "trip")
-                .limit(1);
+                .eq("value->>sourceType", "trip");
 
             if (existing && existing.length > 0) {
-                return entries; // Already has ledger entries — skip
+                const hasFareEarning = existing.some(
+                    (e: any) => String(e?.value?.eventType) === "fare_earning"
+                );
+                if (hasFareEarning) {
+                    return entries;
+                }
+                const delKeys = existing.map((e: any) => e.key).filter(Boolean);
+                if (delKeys.length > 0) {
+                    console.warn(
+                        `[Ledger] Incomplete trip-sourced ledger (no fare_earning) for trip ${trip.id}; removing ${delKeys.length} stale row(s) before regenerate`
+                    );
+                    await kv.mdel(delKeys);
+                }
             }
         } catch (dedupErr) {
             console.warn('[Ledger] Dedup check failed, proceeding with creation:', dedupErr);
