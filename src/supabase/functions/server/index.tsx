@@ -2141,6 +2141,67 @@ app.post("/make-server-37f42386/trips", async (c) => {
                 // We just attempted deletion above; avoid a stale-read dedup early-return.
                 (trip as any)._skipLedgerDedup = true;
                 const tripEntries = await generateTripLedgerEntries(trip);
+
+                // Hard safety net: never allow eligible Uber completed trips to silently
+                // produce zero ledger rows. This prevents "Uber X trips / 0 ledger" gaps
+                // when import data is valid but a parser edge-case drops entries.
+                if (tripEntries.length === 0) {
+                  const isUber = String(trip?.platform || '').toLowerCase() === 'uber';
+                  const status = String(trip?.status || '').trim();
+                  const amountNum = Number(trip?.amount) || 0;
+                  const uberFare = Number(trip?.uberFareComponents) || 0;
+                  const uberTips = Number(trip?.uberTips) || 0;
+                  const uberGross = uberFare + uberTips;
+                  const isEligibleUber = isUber && status === 'Completed' && (amountNum > 0 || uberGross > 0);
+
+                  if (isEligibleUber) {
+                    const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+                    const dateObj = new Date(trip?.date);
+                    const date = Number.isFinite(dateObj.getTime())
+                      ? dateObj.toISOString().split('T')[0]
+                      : new Date().toISOString().split('T')[0];
+                    const requestObj = new Date(trip?.requestTime);
+                    const time = Number.isFinite(requestObj.getTime())
+                      ? requestObj.toISOString().split('T')[1]?.substring(0, 8)
+                      : undefined;
+                    const fareVal = uberFare > 0 ? uberFare : amountNum;
+                    const pickupShort = String(trip?.pickupLocation || 'Unknown').substring(0, 30);
+                    const dropoffShort = String(trip?.dropoffLocation || 'Unknown').substring(0, 30);
+                    const isCash = Math.abs(Number(trip?.cashCollected) || 0) > 0 || trip?.paymentMethod === 'Cash';
+
+                    tripEntries.push({
+                      id: crypto.randomUUID(),
+                      date,
+                      time,
+                      createdAt: new Date().toISOString(),
+                      driverId: resolved.canonicalId,
+                      driverName: trip?.driverName || resolved.driverName,
+                      vehicleId: trip?.vehicleId || undefined,
+                      platform: 'Uber',
+                      sourceType: 'trip',
+                      sourceId: trip?.id,
+                      batchId: trip?.batchId || undefined,
+                      currency: 'JMD',
+                      isReconciled: false,
+                      eventType: 'fare_earning',
+                      category: 'Fare Earnings',
+                      description: `Uber${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
+                      grossAmount: fareVal,
+                      netAmount: fareVal,
+                      paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
+                      direction: 'inflow',
+                      metadata: {
+                        distance: trip?.distance,
+                        duration: trip?.duration,
+                        serviceType: trip?.serviceType || trip?.productType,
+                        fareBreakdown: trip?.fareBreakdown || null,
+                        cashCollected: isCash ? Math.abs(Number(trip?.cashCollected) || 0) : undefined,
+                        ledgerFallback: true,
+                      },
+                    });
+                    console.warn(`[Ledger] Fallback fare_earning emitted for Uber trip ${trip?.id}`);
+                  }
+                }
                 allLedgerEntries.push(...tripEntries);
             } catch (tripLedgerErr) {
                 console.error(`[Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`, tripLedgerErr);
