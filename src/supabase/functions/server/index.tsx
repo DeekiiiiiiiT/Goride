@@ -3593,8 +3593,9 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         .select("value")
         .like("key", "ledger:%");
 
-      const orgId = getOrgId(c);
-      if (orgId) q = q.eq("value->>organizationId", orgId);
+      // Org filter applied in-memory via filterByOrg() after fetch (same rule as GET /trips):
+      // include rows with no organizationId (anon CSV import) OR matching org. Strict SQL
+      // .eq(organizationId, org) alone hid those rows → "Uber: N trips / 0 ledger".
 
       // Apply driver ID filter — single exact match or multi-ID OR
       if (driverIdOrFilter) {
@@ -3640,8 +3641,9 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         .lte("value->>date", endDate)
     );
 
-    const periodEntries = periodData.map((d: any) => d.value).filter(Boolean);
-    console.log(`[Ledger DriverOverview] Period entries fetched: ${periodEntries.length}`);
+    let periodEntries = periodData.map((d: any) => d.value).filter(Boolean);
+    periodEntries = filterByOrg(periodEntries, c);
+    console.log(`[Ledger DriverOverview] Period entries fetched (after org scope): ${periodEntries.length}`);
 
     // Accumulate period metrics in a single pass
     let pEarnings = 0;
@@ -3782,9 +3784,10 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     }
 
     let prevEarnings = 0;
-    for (const d of prevData) {
-      const v = d.value;
-      if (v) prevEarnings += Number(v.netAmount) || 0;
+    let prevVals = prevData.map((d: any) => d.value).filter(Boolean);
+    prevVals = filterByOrg(prevVals, c);
+    for (const v of prevVals) {
+      prevEarnings += Number(v.netAmount) || 0;
     }
 
     // ── 3. Lifetime totals (no date filter) ──────────────────────────
@@ -3796,8 +3799,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
           .select("value")
           .like("key", "ledger:%")
           .in("value->>eventType", ["fare_earning", "tip", "toll_charge", "promotion", "refund_expense"]);
-        const orgId = getOrgId(c);
-        if (orgId) q = q.eq("value->>organizationId", orgId);
+        // Org: filterByOrg in-memory after fetch (see period block).
         // Use same multi-ID OR filter as baseQuery
         if (driverIdOrFilter) {
           q = q.or(driverIdOrFilter);
@@ -3809,6 +3811,9 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     } catch (lifeErr: any) {
       console.log(`[Ledger DriverOverview] Lifetime query warning: ${lifeErr.message}`);
     }
+
+    let lifetimeValues = lifetimeData.map((d: any) => d.value).filter(Boolean);
+    lifetimeValues = filterByOrg(lifetimeValues, c);
 
     let ltEarnings = 0;
     let ltTripCount = 0;
@@ -3822,8 +3827,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     const ltPlatformStats: Record<string, { earnings: number; tripCount: number; cashCollected: number; tolls: number }> = {};
 
     {
-      for (const d of lifetimeData) {
-        const v = d.value;
+      for (const v of lifetimeValues) {
         if (!v) continue;
         const net = Number(v.netAmount) || 0;
         const gross = Number(v.grossAmount) || 0;
@@ -3877,14 +3881,14 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     let ltTripRecordCount: number | undefined = undefined;
     try {
       const tripRowPages = await paginatedFetch(() => {
-        let q = supabase.from("kv_store_37f42386").select("key").like("key", "trip:%");
-        const orgId = getOrgId(c);
-        if (orgId) q = q.eq("value->>organizationId", orgId);
+        let q = supabase.from("kv_store_37f42386").select("value").like("key", "trip:%");
         if (driverIdOrFilter) q = q.or(driverIdOrFilter);
         else q = q.eq("value->>driverId", driverId);
         return q;
       });
-      ltTripRecordCount = tripRowPages.length;
+      let tripVals = tripRowPages.map((d: any) => d.value).filter(Boolean);
+      tripVals = filterByOrg(tripVals, c);
+      ltTripRecordCount = tripVals.length;
     } catch (trcErr: any) {
       console.log(`[Ledger DriverOverview] Lifetime trip record count warning: ${trcErr.message}`);
     }
