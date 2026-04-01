@@ -1969,7 +1969,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   // ── Phase 15: Resolved Financials — prefer ledger, fall back to trips ──
   const resolvedFinancials = useMemo(() => {
-    const ledgerHasData = ledgerOverview && (ledgerOverview.period.tripCount > 0 || ledgerOverview.lifetime.tripCount > 0);
+    const ledgerHasData = !!ledgerOverview && (() => {
+      const period = ledgerOverview.period || {};
+      const lifetime = ledgerOverview.lifetime || {};
+      const platformStats = ledgerOverview.platformStats || {};
+      return (
+        (Number(period.tripCount) || 0) > 0 ||
+        (Number(lifetime.tripCount) || 0) > 0 ||
+        Math.abs(Number(period.earnings) || 0) > 0.0001 ||
+        Math.abs(Number(period.cashCollected) || 0) > 0.0001 ||
+        Math.abs(Number(period.baseFare) || 0) > 0.0001 ||
+        Object.keys(platformStats).length > 0
+      );
+    })();
 
     // ── Phase 1 Completeness Guard: detect if ledger covers all platforms with trip data ──
     // If any platform that has completed trips is missing from the ledger, the ledger is
