@@ -257,11 +257,6 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
 
     const hasTripAmount = !!trip.amount && Number(trip.amount) > 0;
     if (trip.status !== 'Completed' || (!hasTripAmount && uberGrossForLedger <= 0)) {
-        // #region agent log
-        if (isUber) {
-          fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'index.tsx:generateTripLedgerEntries',message:'uber early exit no ledger',data:{status:trip?.status,hasTripAmount,uberGrossForLedger,tripId:trip?.id},timestamp:Date.now(),hypothesisId:'H1',runId:'pre-fix'})}).catch(()=>{});
-        }
-        // #endregion
         return entries;
     }
 
@@ -2153,10 +2148,7 @@ app.post("/make-server-37f42386/trips", async (c) => {
             }
         }
         const allLedgerEntries: any[] = [];
-        let ledgerTripCatchCount = 0;
-        let uberInBatch = 0;
         for (const trip of processedTrips) {
-            if (String(trip?.platform || '').toLowerCase() === 'uber') uberInBatch++;
             try {
                 // We just attempted deletion above; avoid a stale-read dedup early-return.
                 (trip as any)._skipLedgerDedup = true;
@@ -2224,17 +2216,9 @@ app.post("/make-server-37f42386/trips", async (c) => {
                 }
                 allLedgerEntries.push(...tripEntries);
             } catch (tripLedgerErr) {
-                ledgerTripCatchCount++;
                 console.error(`[Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`, tripLedgerErr);
             }
         }
-        // #region agent log
-        {
-          const fareUber = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning' && String(e.platform).toLowerCase() === 'uber').length;
-          const fallbackN = allLedgerEntries.filter((e: any) => e.metadata?.ledgerFallback === true).length;
-          fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'index.tsx:POST/trips',message:'ledger batch summary',data:{ledgerTripCatchCount,uberInBatch,allLedgerLen:allLedgerEntries.length,fareUber,fallbackN,batchSize:processedTrips.length},timestamp:Date.now(),hypothesisId:'H2-H4',runId:'pre-fix'})}).catch(()=>{});
-        }
-        // #endregion
         if (allLedgerEntries.length > 0) {
             // Batch save in chunks of 100
             for (let i = 0; i < allLedgerEntries.length; i += 100) {
@@ -2253,9 +2237,6 @@ app.post("/make-server-37f42386/trips", async (c) => {
     } catch (ledgerErr) {
         // Ledger creation failure should NOT break trip import
         console.error('[Ledger] Failed to create ledger entries for trip import:', ledgerErr);
-        // #region agent log
-        fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'index.tsx:POST/trips',message:'ledger outer catch',data:{ledgerOuterFailed:true},timestamp:Date.now(),hypothesisId:'H3',runId:'pre-fix'})}).catch(()=>{});
-        // #endregion
     }
 
     // Invalidate stats cache since data has changed
@@ -2372,6 +2353,12 @@ app.delete("/make-server-37f42386/trips", requireAuth(), requirePermission('tran
 app.delete("/make-server-37f42386/trips/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
   const id = c.req.param("id");
   try {
+    // Remove trip-sourced ledger rows so delete + re-import does not leave stale ledger (batch delete already does this).
+    try {
+      await deleteLedgerEntriesForTripSource(id);
+    } catch (ledgerDelErr) {
+      console.warn(`[Trip delete] deleteLedgerEntriesForTripSource failed for ${id}:`, ledgerDelErr);
+    }
     await kv.del(`trip:${id}`);
     
     // Invalidate stats cache since data has changed

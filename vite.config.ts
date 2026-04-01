@@ -60,12 +60,5 @@
     server: {
       port: 3000,
       open: true,
-      proxy: {
-        '/__debug-ingest': {
-          target: 'http://127.0.0.1:7468',
-          changeOrigin: true,
-          rewrite: () => '/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',
-        },
-      },
     },
   });
