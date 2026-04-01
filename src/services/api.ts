@@ -2210,6 +2210,29 @@ export const api = {
     return json.data;
   },
 
+  /** Deep read-only compare: completed money trips vs fare_ledger rows (raw vs org scope). */
+  async getLedgerTripLedgerGapDiagnostic(params: {
+    driverId: string;
+    startDate: string;
+    endDate: string;
+  }): Promise<any> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || publicAnonKey;
+    const qp = new URLSearchParams();
+    qp.set('driverId', params.driverId);
+    qp.set('startDate', params.startDate);
+    qp.set('endDate', params.endDate);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/diagnostic-trip-ledger-gap?${qp.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!response.ok) {
+      const msg = await parseFinancialApiErrorBody(response);
+      throw new Error(`Trip/ledger gap diagnostic failed: ${msg}`);
+    }
+    return response.json();
+  },
+
   async getDriverIndriveWallet(params: {
     driverId: string;
     startDate: string;

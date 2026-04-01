@@ -4058,6 +4058,224 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
   }
 });
 
+// ─── GET /ledger/diagnostic-trip-ledger-gap — Why trips ≠ fare_earning (org, missing writes, IDs) ──
+// Same date range + multi-driver-id resolution as driver-overview. Read-only.
+app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth(), async (c) => {
+  const t0 = Date.now();
+  try {
+    const driverId = c.req.query("driverId");
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    if (!driverId || !startDate || !endDate) {
+      return c.json({ error: "Missing driverId, startDate, or endDate" }, 400);
+    }
+
+    const readerOrgId = getOrgId(c);
+
+    const allDriverIds: string[] = [driverId];
+    try {
+      const driverRecord = await kv.get(`driver:${driverId}`);
+      if (driverRecord?.uberDriverId) allDriverIds.push(driverRecord.uberDriverId);
+      if (driverRecord?.inDriveDriverId) allDriverIds.push(driverRecord.inDriveDriverId);
+    } catch {
+      /* ignore */
+    }
+
+    const driverIdOrFilter =
+      allDriverIds.length === 1 ? null : allDriverIds.map((id) => `value->>driverId.eq.${id}`).join(",");
+
+    const PAGE = 1000;
+    const MAX_ROWS = 50000;
+    const paginatedFetch = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
+    const tripRows = await paginatedFetch(() => {
+      let q = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "trip:%")
+        .eq("value->>status", "Completed")
+        .gte("value->>date", startDate)
+        .lte("value->>date", endDate);
+      if (driverIdOrFilter) q = q.or(driverIdOrFilter);
+      else q = q.eq("value->>driverId", driverId);
+      return q;
+    });
+
+    const tripValues = tripRows.map((d: any) => d.value).filter(Boolean);
+
+    type EligibleTrip = {
+      id: string;
+      platform: string;
+      driverId: string;
+      date: string;
+      amount: number;
+      organizationId: string | null;
+    };
+    const eligible: EligibleTrip[] = [];
+    const tripOrgStats = { nullOrEmpty: 0, matchesReaderOrg: 0, wrongOrg: 0, readerHasNoOrg: 0 };
+
+    for (const v of tripValues) {
+      const isUber = String(v.platform || "").toLowerCase() === "uber";
+      const uberGross = isUber ? (Number(v.uberFareComponents) || 0) + (Number(v.uberTips) || 0) : 0;
+      const hasTripAmount = !!v.amount && Number(v.amount) > 0;
+      const hasMoney = isUber ? hasTripAmount || uberGross > 0 : hasTripAmount;
+      if (!hasMoney) continue;
+
+      const plat = isUber ? "Uber" : (v.platform === "GoRide" ? "Roam" : v.platform) || "Other";
+      const oid =
+        typeof v.organizationId === "string" && v.organizationId.trim() !== ""
+          ? v.organizationId.trim()
+          : null;
+
+      if (!readerOrgId) {
+        tripOrgStats.readerHasNoOrg++;
+      } else if (oid == null) {
+        tripOrgStats.nullOrEmpty++;
+      } else if (oid === readerOrgId) {
+        tripOrgStats.matchesReaderOrg++;
+      } else {
+        tripOrgStats.wrongOrg++;
+      }
+
+      eligible.push({
+        id: v.id,
+        platform: plat,
+        driverId: String(v.driverId || ""),
+        date: typeof v.date === "string" ? v.date.slice(0, 10) : "",
+        amount: Number(v.amount) || 0,
+        organizationId: oid,
+      });
+    }
+
+    const ledgerRows = await paginatedFetch(() => {
+      let q = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", "ledger:%")
+        .eq("value->>eventType", "fare_earning")
+        .gte("value->>date", startDate)
+        .lte("value->>date", endDate);
+      if (driverIdOrFilter) q = q.or(driverIdOrFilter);
+      else q = q.eq("value->>driverId", driverId);
+      return q;
+    });
+
+    const fareRaw = ledgerRows.map((d: any) => d.value).filter(Boolean);
+    const fareScoped = filterByOrg(fareRaw, c);
+
+    const ledgerOrgOnFare = { nullOrEmpty: 0, matchesReaderOrg: 0, wrongOrg: 0 };
+    const droppedWrongOrg: { id: string; sourceId?: string; platform?: string; ledgerOrg: string }[] = [];
+    for (const e of fareRaw) {
+      const oid =
+        typeof e.organizationId === "string" && e.organizationId.trim() !== ""
+          ? e.organizationId.trim()
+          : null;
+      if (!readerOrgId) {
+        /* skip per-row org stats */
+      } else if (oid == null) {
+        ledgerOrgOnFare.nullOrEmpty++;
+      } else if (oid === readerOrgId) {
+        ledgerOrgOnFare.matchesReaderOrg++;
+      } else {
+        ledgerOrgOnFare.wrongOrg++;
+        if (droppedWrongOrg.length < 20) {
+          droppedWrongOrg.push({
+            id: e.id,
+            sourceId: e.sourceId,
+            platform: e.platform,
+            ledgerOrg: oid,
+          });
+        }
+      }
+    }
+
+    const sourceIdsRaw = new Set(fareRaw.map((e: any) => e.sourceId).filter(Boolean));
+    const sourceIdsScoped = new Set(fareScoped.map((e: any) => e.sourceId).filter(Boolean));
+
+    const missingFareLedgerEntirely = eligible.filter((t) => !sourceIdsRaw.has(t.id));
+    const missingAfterOrgScope = eligible.filter((t) => !sourceIdsScoped.has(t.id));
+    const fixedByScopeOnly = missingAfterOrgScope.filter((t) => sourceIdsRaw.has(t.id));
+
+    const tripsByPlatform: Record<string, number> = {};
+    for (const t of eligible) {
+      tripsByPlatform[t.platform] = (tripsByPlatform[t.platform] || 0) + 1;
+    }
+    const fareByPlatformRaw: Record<string, number> = {};
+    const fareByPlatformScoped: Record<string, number> = {};
+    for (const e of fareRaw) {
+      const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
+      fareByPlatformRaw[plat] = (fareByPlatformRaw[plat] || 0) + 1;
+    }
+    for (const e of fareScoped) {
+      const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
+      fareByPlatformScoped[plat] = (fareByPlatformScoped[plat] || 0) + 1;
+    }
+
+    const durationMs = Date.now() - t0;
+    return c.json({
+      success: true,
+      meta: {
+        durationMs,
+        startDate,
+        endDate,
+        readerOrgId: readerOrgId ?? null,
+        resolvedDriverIds: allDriverIds,
+      },
+      tripsEligibleCompletedWithMoney: {
+        count: eligible.length,
+        byPlatform: tripsByPlatform,
+        organizationIdOnTrip: tripOrgStats,
+      },
+      ledgerFareEarning: {
+        rawCount: fareRaw.length,
+        afterFilterByOrgCount: fareScoped.length,
+        droppedByFilterByOrg: fareRaw.length - fareScoped.length,
+        organizationIdOnLedgerFareRows: ledgerOrgOnFare,
+        byPlatformRaw: fareByPlatformRaw,
+        byPlatformAfterScope: fareByPlatformScoped,
+        sampleWrongOrgFareRows: droppedWrongOrg,
+      },
+      gap: {
+        missingFareLedgerNoRowForTripId: missingFareLedgerEntirely.length,
+        missingAfterOrgScope: missingAfterOrgScope.length,
+        tripsHiddenOnlyByOrgFilter: fixedByScopeOnly.length,
+        sampleMissingTripIdsNoLedgerAtAll: missingFareLedgerEntirely.slice(0, 25).map((t) => ({
+          id: t.id,
+          platform: t.platform,
+          tripDriverId: t.driverId,
+          date: t.date,
+          tripOrganizationId: t.organizationId,
+        })),
+        sampleTripIdsPresentInRawButDroppedByOrgScope: fixedByScopeOnly.slice(0, 15).map((t) => ({
+          id: t.id,
+          platform: t.platform,
+          date: t.date,
+        })),
+      },
+      hints: [
+        "missingFareLedgerNoRowForTripId > 0 → POST /trips did not create fare_earning, or ledger uses different driverId/sourceId.",
+        "droppedByFilterByOrg > 0 with sampleWrongOrgFareRows → ledger rows carry organizationId ≠ reader org (or scope mismatch).",
+        "tripsHiddenOnlyByOrgFilter > 0 → fare_earning exists in KV for that trip id but filterByOrg dropped it (wrong ledger organizationId vs reader org).",
+      ],
+    });
+  } catch (e: any) {
+    console.error("[diagnostic-trip-ledger-gap]", e);
+    return c.json({ success: false, error: e.message || String(e) }, 500);
+  }
+});
+
 // ─── GET /ledger/driver-indrive-wallet — Period loads, fees, lifetime loads (Phase 2) ──
 // Query: driverId, startDate, endDate (YYYY-MM-DD). Same multi-ID driver resolution as driver-overview.
 // periodFees: sum of ledger platform_fee for InDrive in range; if 0, sum (gross−net) on fare_earning for InDrive.

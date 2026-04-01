@@ -18,7 +18,7 @@
 //
 // INTEGRITY MONITORING (Phase 6):
 //   → Server: /ledger/driver-overview returns `completeness` object
-//   → Client: amber warning banner + "Repair Now" button when gaps detected
+//   → Client: amber warning banner + "Diagnose" (GET /ledger/diagnostic-trip-ledger-gap) + "Repair Now"
 //   → Repair: POST /ledger/repair-driver does targeted per-driver re-generation
 //
 // SAFETY NET (Phase 6): resolvedFinancials fallback now returns ZEROS
@@ -77,7 +77,8 @@ import {
   ChevronDown,
   ChevronRight,
   CornerDownRight,
-  RefreshCw
+  RefreshCw,
+  Stethoscope
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -364,6 +365,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
   const [cashDiagResult, setCashDiagResult] = useState<any>(null);
   const [cashDiagLoading, setCashDiagLoading] = useState(false);
+  const [tripGapDiagOpen, setTripGapDiagOpen] = useState(false);
+  const [tripGapDiagResult, setTripGapDiagResult] = useState<any>(null);
+  const [tripGapDiagLoading, setTripGapDiagLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -2318,6 +2322,30 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     }
   };
 
+  const handleTripLedgerGapDiagnostic = async () => {
+    if (!ledgerDateRangeStrings) {
+      toast.error('Select a date range first');
+      return;
+    }
+    setTripGapDiagLoading(true);
+    setTripGapDiagResult(null);
+    try {
+      const r = await api.getLedgerTripLedgerGapDiagnostic({
+        driverId,
+        startDate: ledgerDateRangeStrings.startDate,
+        endDate: ledgerDateRangeStrings.endDate,
+      });
+      setTripGapDiagResult(r);
+      setTripGapDiagOpen(true);
+      if (!r?.success) toast.error(r?.error || 'Diagnostic failed');
+    } catch (err: any) {
+      console.error('[TripLedgerGapDiag]', err);
+      toast.error(err?.message || 'Diagnostic failed');
+    } finally {
+      setTripGapDiagLoading(false);
+    }
+  };
+
   if (localLoading && (!metrics || metrics.totalTrips === 0)) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
@@ -2417,7 +2445,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
            </DropdownMenu>
 
            <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} inactive={activeTab !== 'overview' && activeTab !== 'trips'} />{/* Date Picker */}
-           <div className={cn("grid gap-2")}>
+           <div className="flex items-center gap-1">
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -2456,6 +2484,17 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 />
               </PopoverContent>
             </Popover>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-slate-500 hover:text-amber-700"
+              title="Trip ↔ Ledger diagnostic (same date range)"
+              onClick={handleTripLedgerGapDiagnostic}
+              disabled={tripGapDiagLoading}
+            >
+              {tripGapDiagLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stethoscope className="h-4 w-4" />}
+            </Button>
           </div>
 
            <Button variant="outline" size="sm">
@@ -2575,17 +2614,31 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">Repair failed: {repairResult.error}</p>
                    )}
                  </div>
-                 <button
-                   onClick={handleRepairLedger}
-                   disabled={repairInProgress}
-                   className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
-                 >
-                   {repairInProgress ? (
-                     <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Repairing...</>
-                   ) : (
-                     'Repair Now'
-                   )}
-                 </button>
+                 <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                   <button
+                     type="button"
+                     onClick={handleTripLedgerGapDiagnostic}
+                     disabled={tripGapDiagLoading}
+                     className="px-3 py-1.5 text-xs font-semibold border border-amber-700/40 bg-white dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 rounded-lg hover:bg-amber-100/80 dark:hover:bg-amber-900/50 disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                   >
+                     {tripGapDiagLoading ? (
+                       <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Diagnosing…</>
+                     ) : (
+                       <><Stethoscope className="h-3.5 w-3.5" /> Diagnose</>
+                     )}
+                   </button>
+                   <button
+                     onClick={handleRepairLedger}
+                     disabled={repairInProgress}
+                     className="px-3 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+                   >
+                     {repairInProgress ? (
+                       <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Repairing...</>
+                     ) : (
+                       'Repair Now'
+                     )}
+                   </button>
+                 </div>
                </div>
              )}
 
@@ -4760,6 +4813,43 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     </Button>
                  )}
             </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trip ↔ Ledger gap diagnostic (server: GET /ledger/diagnostic-trip-ledger-gap) */}
+      <Dialog open={tripGapDiagOpen} onOpenChange={setTripGapDiagOpen}>
+        <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-2">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Stethoscope className="h-5 w-5 text-amber-600" />
+              Trip ↔ Ledger diagnostic
+            </DialogTitle>
+            <DialogDescription>
+              Same date range as the overview. Compares completed trips with money to <code className="text-xs">fare_earning</code> rows (raw KV vs org scope).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 overflow-auto max-h-[60vh] text-xs font-mono leading-relaxed">
+            {tripGapDiagResult ? (
+              <pre className="whitespace-pre-wrap break-words text-slate-800 dark:text-slate-200">
+                {JSON.stringify(tripGapDiagResult, null, 2)}
+              </pre>
+            ) : (
+              <p className="text-slate-500">No data</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                tripGapDiagResult &&
+                navigator.clipboard.writeText(JSON.stringify(tripGapDiagResult, null, 2)).then(() => toast.success('Copied'))
+              }
+            >
+              Copy JSON
+            </Button>
+            <Button size="sm" onClick={() => setTripGapDiagOpen(false)}>Close</Button>
+          </div>
         </DialogContent>
       </Dialog>
 
