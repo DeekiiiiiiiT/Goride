@@ -8122,8 +8122,29 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
             }
         }
 
+        // Resolve organization scope for writes (same strategy as POST /trips).
+        let writeOrgId: string | null = getOrgId(c);
+        if (!writeOrgId) {
+            for (const trip of uniqueTrips) {
+                const did = String(trip?.driverId || '').trim();
+                if (!did) continue;
+                try {
+                    const driverRecord = await kv.get(`driver:${did}`);
+                    const candidate = typeof driverRecord?.organizationId === 'string' ? driverRecord.organizationId.trim() : '';
+                    if (candidate) {
+                        writeOrgId = candidate;
+                        break;
+                    }
+                } catch {
+                    // Ignore lookup failures; we can continue without stamping.
+                }
+            }
+        }
+        const stampWriteOrg = <T extends Record<string, any>>(record: T): T =>
+            writeOrgId ? ({ ...record, organizationId: writeOrgId } as T) : record;
+
         const tripKeys = uniqueTrips.map((t: any) => `trip:${t.id}`);
-        operations.push(kv.mset(tripKeys, uniqueTrips));
+        operations.push(kv.mset(tripKeys, uniqueTrips.map((t: any) => stampWriteOrg(t))));
 
         // ── Write-Time Ledger: Replace trip-sourced ledger rows (same as POST /trips) ──
         // This mirrors the POST /trips ledger generation to ensure fleet/sync
@@ -8141,6 +8162,66 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
                 try {
                     (trip as any)._skipLedgerDedup = true;
                     const tripEntries = await generateTripLedgerEntries(trip);
+
+                    // Hard safety net: if an eligible Uber trip yields zero rows, emit a
+                    // minimal fare_earning entry to prevent Uber ledger integrity gaps.
+                    if (tripEntries.length === 0) {
+                        const isUber = String(trip?.platform || '').toLowerCase() === 'uber';
+                        const status = String(trip?.status || '').trim();
+                        const amountNum = Number(trip?.amount) || 0;
+                        const uberFare = Number(trip?.uberFareComponents) || 0;
+                        const uberTips = Number(trip?.uberTips) || 0;
+                        const uberGross = uberFare + uberTips;
+                        const isEligibleUber = isUber && status === 'Completed' && (amountNum > 0 || uberGross > 0);
+
+                        if (isEligibleUber) {
+                            const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+                            const dateObj = new Date(trip?.date);
+                            const date = Number.isFinite(dateObj.getTime())
+                                ? dateObj.toISOString().split('T')[0]
+                                : new Date().toISOString().split('T')[0];
+                            const requestObj = new Date(trip?.requestTime);
+                            const time = Number.isFinite(requestObj.getTime())
+                                ? requestObj.toISOString().split('T')[1]?.substring(0, 8)
+                                : undefined;
+                            const fareVal = uberFare > 0 ? uberFare : amountNum;
+                            const pickupShort = String(trip?.pickupLocation || 'Unknown').substring(0, 30);
+                            const dropoffShort = String(trip?.dropoffLocation || 'Unknown').substring(0, 30);
+                            const isCash = Math.abs(Number(trip?.cashCollected) || 0) > 0 || trip?.paymentMethod === 'Cash';
+
+                            tripEntries.push({
+                                id: crypto.randomUUID(),
+                                date,
+                                time,
+                                createdAt: new Date().toISOString(),
+                                driverId: resolved.canonicalId,
+                                driverName: trip?.driverName || resolved.driverName,
+                                vehicleId: trip?.vehicleId || undefined,
+                                platform: 'Uber',
+                                sourceType: 'trip',
+                                sourceId: trip?.id,
+                                batchId: trip?.batchId || undefined,
+                                currency: 'JMD',
+                                isReconciled: false,
+                                eventType: 'fare_earning',
+                                category: 'Fare Earnings',
+                                description: `Uber${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
+                                grossAmount: fareVal,
+                                netAmount: fareVal,
+                                paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
+                                direction: 'inflow',
+                                metadata: {
+                                    distance: trip?.distance,
+                                    duration: trip?.duration,
+                                    serviceType: trip?.serviceType || trip?.productType,
+                                    fareBreakdown: trip?.fareBreakdown || null,
+                                    cashCollected: isCash ? Math.abs(Number(trip?.cashCollected) || 0) : undefined,
+                                    ledgerFallback: true,
+                                },
+                            });
+                            console.warn(`[FleetSync Ledger] Fallback fare_earning emitted for Uber trip ${trip?.id}`);
+                        }
+                    }
                     allLedgerEntries.push(...tripEntries);
                 } catch (tripLedgerErr) {
                     console.error(`[FleetSync Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`, tripLedgerErr);
@@ -8151,7 +8232,7 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
                 for (let i = 0; i < allLedgerEntries.length; i += 100) {
                     const chunk = allLedgerEntries.slice(i, i + 100);
                     const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
-                    await kv.mset(ledgerKeys, chunk);
+                    await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
                 }
                 console.log(`[FleetSync Ledger] Created ${allLedgerEntries.length} ledger entries for ${uniqueTrips.length} trips`);
                 // Verification: count completed trips with amount > 0 vs ledger entries created
