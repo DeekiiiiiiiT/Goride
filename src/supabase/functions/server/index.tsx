@@ -2041,7 +2041,7 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/trips", async (c) => {
+app.post("/make-server-37f42386/trips", requireAuth(), async (c) => {
   try {
     const trips = await c.req.json();
     if (!Array.isArray(trips)) {
