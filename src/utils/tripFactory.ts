@@ -121,7 +121,7 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     dropoffTime: endTimestamp,
     duration: data.duration, // Add duration to the trip object
     driverId: driverId,
-    driverName: driverName,
+    driverName: driverName?.trim() ? driverName.trim().toUpperCase() : driverName,
     amount: amount,
     status: data.tripStatus || 'Completed',
     pickupLocation: data.pickupLocation || (data.pickupCoords ? '' : 'Manual Entry'),

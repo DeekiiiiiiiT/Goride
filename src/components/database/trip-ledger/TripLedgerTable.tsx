@@ -97,7 +97,7 @@ function getSortValue(trip: Trip, key: string): string | number | null {
   switch (key) {
     case 'id': return trip.id || '';
     case 'date': return trip.date || '';
-    case 'driver': return (trip.driverName || trip.driverId || '').toLowerCase();
+    case 'driver': return (trip.driverName || trip.driverId || '').toUpperCase();
     case 'vehicle': return trip.vehicleId || '';
     case 'platform': return trip.platform || '';
     case 'status': return trip.status || '';
@@ -157,7 +157,10 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
   },
   {
     key: 'driver', label: 'Driver', defaultVisible: true, group: 'core',
-    render: (t) => t.driverName || (t.driverId ? truncateId(t.driverId) : '—'),
+    render: (t) => {
+      if (t.driverName?.trim()) return t.driverName.trim().toUpperCase();
+      return t.driverId ? truncateId(t.driverId) : '—';
+    },
     minWidth: '120px', sortable: true,
   },
   {
@@ -316,7 +319,10 @@ function TripDetailPanel({ trip, colSpan }: { trip: Trip; colSpan: number }) {
             <DetailField label="Status" value={trip.status} />
             <DetailField label="Service Type" value={trip.serviceType || trip.productType} />
             <DetailField label="Service Category" value={trip.serviceCategory === 'courier' ? 'Courier' : trip.serviceCategory === 'ride' ? 'Ride' : trip.serviceCategory} />
-            <DetailField label="Driver" value={trip.driverName || trip.driverId} />
+            <DetailField
+              label="Driver"
+              value={trip.driverName?.trim() ? trip.driverName.trim().toUpperCase() : trip.driverName || trip.driverId}
+            />
             <DetailField label="Vehicle" value={trip.vehicleId} />
 
             {/* ── Geography ── */}

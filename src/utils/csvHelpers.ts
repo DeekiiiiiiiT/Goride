@@ -430,7 +430,8 @@ const extractDriverName = (row: ParsedRow, schema: any = {}): string => {
         if (name === name.toUpperCase() && name.endsWith('CAS') && name.length > 5) {
              name = name.substring(0, name.length - 3).trim();
         }
-        return name;
+        // Fleet standard: driver names from imports are uppercase (Uber CSV, etc.) — case-insensitive identity.
+        return name.toUpperCase();
     }
     
     return 'Unknown Driver';

@@ -2085,7 +2085,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         dataIncomplete: !isLedgerComplete,
         missingPlatforms: missingFromLedger,
         lifetimeEarnings: ledgerOverview.lifetime.earnings,
-        lifetimeTrips: ledgerOverview.lifetime.tripCount,
+        // Trip Ledger totals use trip:* rows; lifetime.tripCount is fare_earning lines only.
+        lifetimeTrips:
+          ledgerOverview.lifetime.tripRecordCount != null
+            ? ledgerOverview.lifetime.tripRecordCount
+            : metrics.lifetimeTrips,
         lifetimeCashCollected: ledgerOverview.lifetime.cashCollected,
         lifetimeTolls: ledgerOverview.lifetime.tolls,
         lifetimeDisputeRefunds: ledgerOverview.lifetime.disputeRefunds || 0,

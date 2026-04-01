@@ -3873,6 +3873,22 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       }
     }
 
+    // ── 3b. Lifetime trip *records* (trip:* rows) — same notion as Trip Ledger "Total Trips"
+    let ltTripRecordCount: number | undefined = undefined;
+    try {
+      const tripRowPages = await paginatedFetch(() => {
+        let q = supabase.from("kv_store_37f42386").select("key").like("key", "trip:%");
+        const orgId = getOrgId(c);
+        if (orgId) q = q.eq("value->>organizationId", orgId);
+        if (driverIdOrFilter) q = q.or(driverIdOrFilter);
+        else q = q.eq("value->>driverId", driverId);
+        return q;
+      });
+      ltTripRecordCount = tripRowPages.length;
+    } catch (trcErr: any) {
+      console.log(`[Ledger DriverOverview] Lifetime trip record count warning: ${trcErr.message}`);
+    }
+
     // ── 4. Completeness check: compare trip:* count vs ledger fare_earning count (Phase 6) ──
     let completeness: any = { totalTrips: 0, ledgerTrips: pTripCount, isComplete: true, missingCount: 0, byPlatform: {} };
     try {
@@ -3997,6 +4013,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       lifetime: {
         earnings: Number(ltEarnings.toFixed(2)),
         tripCount: ltTripCount,
+        tripRecordCount: ltTripRecordCount,
         cashCollected: Number(ltCash.toFixed(2)),
         tolls: Number(ltTolls.toFixed(2)),
         uber: {
@@ -4028,7 +4045,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       completeness,
     };
 
-    console.log(`[Ledger DriverOverview] OK — period: ${pTripCount} trips, $${result.period.earnings} | lifetime: ${ltTripCount} trips, $${result.lifetime.earnings} | integrity: ${completeness.isComplete ? 'OK' : `GAPS (${completeness.missingCount} missing)`}`);
+    console.log(`[Ledger DriverOverview] OK — period: ${pTripCount} fare rows, $${result.period.earnings} | lifetime ledger fares: ${ltTripCount}, trip records: ${ltTripRecordCount ?? 'n/a'}, $${result.lifetime.earnings} | integrity: ${completeness.isComplete ? 'OK' : `GAPS (${completeness.missingCount} missing)`}`);
 
     return c.json({ success: true, data: result });
   } catch (e: any) {

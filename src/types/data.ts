@@ -605,7 +605,10 @@ export interface LedgerDriverOverview {
   };
   lifetime: {
     earnings: number;
+    /** Completed-trip fare lines in the ledger (`fare_earning` events only). */
     tripCount: number;
+    /** All `trip:*` records for this driver (all statuses); matches Trip Ledger totals. */
+    tripRecordCount?: number;
     cashCollected: number;
     tolls: number;
     uber?: {
