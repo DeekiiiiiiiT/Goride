@@ -25,6 +25,19 @@ const PLATFORM_ROLES: Set<Role> = new Set([
 ]);
 
 /**
+ * Early imports / manual trips used this string instead of a real fleet UUID.
+ * Must be treated like "no org" for reads so filterByOrg does not hide all rows
+ * when the fleet user has a real organizationId (UUID).
+ */
+const LEGACY_ORG_PLACEHOLDER = "roam-default-org";
+
+/** True if stored organizationId should be visible to any fleet-scoped reader. */
+export function isLegacyOrgPlaceholder(organizationId: unknown): boolean {
+  if (organizationId == null || organizationId === "") return false;
+  return String(organizationId).trim().toLowerCase() === LEGACY_ORG_PLACEHOLDER;
+}
+
+/**
  * Extract the organizationId from the Hono context (set by requireAuth()).
  * Returns null if not available (anon passthrough or platform roles).
  */
@@ -68,8 +81,8 @@ export function filterByOrg<T extends Record<string, unknown>>(
   const orgId = getOrgId(c);
   if (!orgId) return records; // no org context — return all (backward compat)
   return records.filter((r) => {
-    // Include records that have no organizationId (pre-backfill graceful fallback)
     if (!r.organizationId) return true;
+    if (isLegacyOrgPlaceholder(r.organizationId)) return true;
     return r.organizationId === orgId;
   });
 }
@@ -86,5 +99,6 @@ export function belongsToOrg(
   const orgId = getOrgId(c);
   if (!orgId) return true; // anon passthrough / platform — always allowed
   if (!record.organizationId) return true; // pre-backfill graceful fallback
+  if (isLegacyOrgPlaceholder(record.organizationId)) return true;
   return record.organizationId === orgId;
 }

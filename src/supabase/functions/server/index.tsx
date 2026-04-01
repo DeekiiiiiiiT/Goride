@@ -16,7 +16,7 @@ import * as fuelLogic from "./fuel_logic.ts";
 import { Buffer } from "node:buffer";
 import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
-import { stampOrg, filterByOrg, belongsToOrg, getOrgId } from "./org_scope.ts";
+import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -4124,7 +4124,13 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
       organizationId: string | null;
     };
     const eligible: EligibleTrip[] = [];
-    const tripOrgStats = { nullOrEmpty: 0, matchesReaderOrg: 0, wrongOrg: 0, readerHasNoOrg: 0 };
+    const tripOrgStats = {
+      nullOrEmpty: 0,
+      matchesReaderOrg: 0,
+      legacyPlaceholderRoamDefaultOrg: 0,
+      wrongOrg: 0,
+      readerHasNoOrg: 0,
+    };
 
     for (const v of tripValues) {
       const isUber = String(v.platform || "").toLowerCase() === "uber";
@@ -4145,6 +4151,8 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
         tripOrgStats.nullOrEmpty++;
       } else if (oid === readerOrgId) {
         tripOrgStats.matchesReaderOrg++;
+      } else if (isLegacyOrgPlaceholder(oid)) {
+        tripOrgStats.legacyPlaceholderRoamDefaultOrg++;
       } else {
         tripOrgStats.wrongOrg++;
       }
@@ -4175,7 +4183,12 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
     const fareRaw = ledgerRows.map((d: any) => d.value).filter(Boolean);
     const fareScoped = filterByOrg(fareRaw, c);
 
-    const ledgerOrgOnFare = { nullOrEmpty: 0, matchesReaderOrg: 0, wrongOrg: 0 };
+    const ledgerOrgOnFare = {
+      nullOrEmpty: 0,
+      matchesReaderOrg: 0,
+      legacyPlaceholderRoamDefaultOrg: 0,
+      wrongOrg: 0,
+    };
     const droppedWrongOrg: { id: string; sourceId?: string; platform?: string; ledgerOrg: string }[] = [];
     for (const e of fareRaw) {
       const oid =
@@ -4188,6 +4201,8 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
         ledgerOrgOnFare.nullOrEmpty++;
       } else if (oid === readerOrgId) {
         ledgerOrgOnFare.matchesReaderOrg++;
+      } else if (isLegacyOrgPlaceholder(oid)) {
+        ledgerOrgOnFare.legacyPlaceholderRoamDefaultOrg++;
       } else {
         ledgerOrgOnFare.wrongOrg++;
         if (droppedWrongOrg.length < 20) {
@@ -4265,9 +4280,10 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
         })),
       },
       hints: [
-        "missingFareLedgerNoRowForTripId > 0 → POST /trips did not create fare_earning, or ledger uses different driverId/sourceId.",
-        "droppedByFilterByOrg > 0 with sampleWrongOrgFareRows → ledger rows carry organizationId ≠ reader org (or scope mismatch).",
-        "tripsHiddenOnlyByOrgFilter > 0 → fare_earning exists in KV for that trip id but filterByOrg dropped it (wrong ledger organizationId vs reader org).",
+        "missingFareLedgerNoRowForTripId > 0 → no fare_earning row with sourceId = trip id (import/repair did not create ledger, or driverId mismatch on ledger).",
+        "legacyPlaceholderRoamDefaultOrg → trips/ledger stamped with roam-default-org; filterByOrg now treats that like unscoped so fleet UUID users still see data.",
+        "droppedByFilterByOrg with sampleWrongOrgFareRows (non-legacy) → real foreign-org rows excluded from this fleet.",
+        "tripsHiddenOnlyByOrgFilter → raw ledger had sourceId but filterByOrg removed it (should be 0 for roam-default-org after org_scope fix).",
       ],
     });
   } catch (e: any) {
