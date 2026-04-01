@@ -3503,15 +3503,20 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
 
     console.log(`[Ledger DriverOverview] Searching with ${allDriverIds.length} driver IDs: [${allDriverIds.join(', ')}]`);
 
+    const requestOrgId = getOrgId(c);
+    const isOrgCompatible = (row: any): boolean => {
+      if (!requestOrgId) return true;
+      const rowOrg = typeof row?.organizationId === 'string' ? row.organizationId.trim() : '';
+      // Backward-compatible fallback: include legacy rows missing organizationId.
+      return rowOrg === requestOrgId || rowOrg === '';
+    };
+
     // Helper: build a base query filtered by driverId(s) (and optional platforms)
     const baseQuery = () => {
       let q = supabase
         .from("kv_store_37f42386")
         .select("value")
         .like("key", "ledger:%");
-
-      const orgId = getOrgId(c);
-      if (orgId) q = q.eq("value->>organizationId", orgId);
 
       // Apply driver ID filter — single exact match or multi-ID OR
       if (driverIdOrFilter) {
@@ -3557,7 +3562,10 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         .lte("value->>date", endDate)
     );
 
-    const periodEntries = periodData.map((d: any) => d.value).filter(Boolean);
+    const periodEntries = periodData
+      .map((d: any) => d.value)
+      .filter(Boolean)
+      .filter((v: any) => isOrgCompatible(v));
     console.log(`[Ledger DriverOverview] Period entries fetched: ${periodEntries.length}`);
 
     // Accumulate period metrics in a single pass
@@ -3701,7 +3709,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     let prevEarnings = 0;
     for (const d of prevData) {
       const v = d.value;
-      if (v) prevEarnings += Number(v.netAmount) || 0;
+      if (v && isOrgCompatible(v)) prevEarnings += Number(v.netAmount) || 0;
     }
 
     // ── 3. Lifetime totals (no date filter) ──────────────────────────
@@ -3740,6 +3748,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       for (const d of lifetimeData) {
         const v = d.value;
         if (!v) continue;
+        if (!isOrgCompatible(v)) continue;
         const net = Number(v.netAmount) || 0;
         const platform = v.platform || 'Unknown';
         if (!ltPlatformStats[platform]) {
@@ -3811,6 +3820,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       for (const d of tripData) {
         const v = d.value;
         if (!v) continue;
+        if (!isOrgCompatible(v)) continue;
 
         // Phase 5 (Uber SSOT integrity): some Uber trips may have `amount=0` but still have
         // SSOT fare/tip components (parsed from payments_transaction.csv). Use those for
