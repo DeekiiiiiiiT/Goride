@@ -210,7 +210,12 @@ export const api = {
       }
       throw new Error(`Failed to save trips: ${errorMessage}`);
     }
-    
+    // #region agent log
+    {
+      const uberN = trips.filter((t) => String(t.platform || '').toLowerCase() === 'uber').length;
+      fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'api.ts:saveTrips',message:'client saveTrips ok',data:{tripCount:trips.length,uberCount:uberN},timestamp:Date.now(),hypothesisId:'H5',runId:'pre-fix'})}).catch(()=>{});
+    }
+    // #endregion
     return response.json();
   },
 
@@ -2395,6 +2400,12 @@ export const api = {
     }
     const result = await response.json();
     console.log('[Ledger] Repair complete:', result);
+    // #region agent log
+    {
+      const st = (result as any)?.stats;
+      fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'api.ts:repairDriverLedger',message:'repair ok',data:{ledgerCreated:st?.ledgerCreated,totalTrips:st?.totalTrips,errors:st?.errors,byPlatform:st?.byPlatform,skippedNoAmount:st?.skippedNoAmount},timestamp:Date.now(),hypothesisId:'H6',runId:'pre-fix'})}).catch(()=>{});
+    }
+    // #endregion
     return result;
   },
 
