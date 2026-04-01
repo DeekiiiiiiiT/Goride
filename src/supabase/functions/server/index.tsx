@@ -2041,7 +2041,7 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/trips", requireAuth(), async (c) => {
+app.post("/make-server-37f42386/trips", async (c) => {
   try {
     const trips = await c.req.json();
     if (!Array.isArray(trips)) {
@@ -3506,9 +3506,10 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     const requestOrgId = getOrgId(c);
     const isOrgCompatible = (row: any): boolean => {
       if (!requestOrgId) return true;
-      const rowOrg = typeof row?.organizationId === 'string' ? row.organizationId.trim() : '';
-      // Backward-compatible fallback: include legacy rows missing organizationId.
-      return rowOrg === requestOrgId || rowOrg === '';
+      const rowOrg = row?.organizationId;
+      // Backward-compatible fallback: include legacy rows missing organizationId (null, undefined, or empty string).
+      if (rowOrg === null || rowOrg === undefined || rowOrg === '') return true;
+      return rowOrg === requestOrgId;
     };
 
     // Helper: build a base query filtered by driverId(s) (and optional platforms)
