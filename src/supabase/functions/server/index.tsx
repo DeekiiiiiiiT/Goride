@@ -242,6 +242,34 @@ async function deleteLedgerEntriesForTripSource(tripId: string): Promise<number>
   return 0;
 }
 
+/** Canonical trip status for KV so ledger rules and GET filters agree (avoids completed vs Completed gaps). */
+function normalizeTripStatusForStorage(status: unknown): string {
+  const s = String(status ?? "").trim().toLowerCase();
+  if (!s) return "Completed";
+  if (s.includes("cancel") || s.includes("fail")) return "Cancelled";
+  if (s.includes("complet") || s === "complete") return "Completed";
+  if (s.includes("process")) return "Processing";
+  const raw = String(status ?? "").trim();
+  return raw || "Completed";
+}
+
+function isCompletedTripStatus(status: unknown): boolean {
+  const s = String(status ?? "").trim().toLowerCase();
+  if (!s) return false;
+  if (s.includes("cancel") || s.includes("fail")) return false;
+  return s.includes("complet") || s === "complete";
+}
+
+function isUberPlatform(platform: unknown): boolean {
+  const p = String(platform ?? "").trim().toLowerCase();
+  return p === "uber" || p.startsWith("uber ");
+}
+
+function coerceAmount(amount: unknown): number {
+  const n = Number(amount);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ─── Trip → Ledger Entry Generator ────────────────────────────────────
 async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const entries: any[] = [];
@@ -249,14 +277,15 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     // Only create ledger entries for completed trips with meaningful money.
     // Uber Phase 3: if SSOT decomposition exists, allow ledger generation when `amount` is 0
     // but SSOT fare/tip components exist (e.g., edge-case rows).
-    const isUber = String(trip.platform || '').toLowerCase() === 'uber';
+    const isUber = isUberPlatform(trip.platform);
     const hasUberSsot = isUber && (trip.uberFareComponents != null || trip.uberTips != null);
-    const uberFareComponents = hasUberSsot ? Number(trip.uberFareComponents) || 0 : 0;
-    const uberTips = hasUberSsot ? Number(trip.uberTips) || 0 : 0;
+    const uberFareComponents = hasUberSsot ? coerceAmount(trip.uberFareComponents) : 0;
+    const uberTips = hasUberSsot ? coerceAmount(trip.uberTips) : 0;
     const uberGrossForLedger = uberFareComponents + uberTips;
 
-    const hasTripAmount = !!trip.amount && Number(trip.amount) > 0;
-    if (trip.status !== 'Completed' || (!hasTripAmount && uberGrossForLedger <= 0)) {
+    const amountSafe = coerceAmount(trip.amount);
+    const hasTripAmount = amountSafe > 0;
+    if (!isCompletedTripStatus(trip.status) || (!hasTripAmount && uberGrossForLedger <= 0)) {
         return entries;
     }
 
@@ -322,7 +351,7 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         driverId: resolved.canonicalId,
         driverName: trip.driverName || resolved.driverName,
         vehicleId: trip.vehicleId || undefined,
-        platform: isUber ? 'Uber' : (trip.platform || 'Unknown'),
+        platform: isUber ? "Uber" : (trip.platform || "Unknown"),
         sourceType: 'trip' as const,
         sourceId: trip.id,
         batchId: trip.batchId || undefined,
@@ -340,9 +369,9 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     // so that fare_earning + tip equals Uber's gross.
     const effectiveEarnings = (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
         ? trip.indriveNetIncome
-        : trip.amount;
+        : amountSafe;
     const fareNetForEntry = isUber && hasUberSsot ? uberFareComponents : effectiveEarnings;
-    const fareGrossForEntry = isUber && hasUberSsot ? uberFareComponents : trip.amount;
+    const fareGrossForEntry = isUber && hasUberSsot ? uberFareComponents : amountSafe;
     const pickupShort = String(trip.pickupLocation || 'Unknown').substring(0, 30);
     const dropoffShort = String(trip.dropoffLocation || 'Unknown').substring(0, 30);
 
@@ -416,8 +445,8 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
 
     // Entry 3: Platform Fee — explicit indriveServiceFee, or inferred (fare − net) for InDrive
     let platformFee = Number(trip.indriveServiceFee) || 0;
-    if (trip.platform === 'InDrive' && trip.indriveNetIncome != null && Number(trip.amount) > 0) {
-        const inferred = Number(trip.amount) - Number(trip.indriveNetIncome);
+    if (trip.platform === 'InDrive' && trip.indriveNetIncome != null && amountSafe > 0) {
+        const inferred = amountSafe - Number(trip.indriveNetIncome);
         if (platformFee <= 0.0001 && inferred > 0.0001) {
             platformFee = inferred;
         }
@@ -2087,6 +2116,10 @@ app.post("/make-server-37f42386/trips", async (c) => {
         }
         return trip;
     });
+
+    for (const trip of processedTrips) {
+      trip.status = normalizeTripStatusForStorage(trip.status);
+    }
     
     // ── Normalize driverId to canonical Roam UUID ──────────────────────
     // Resolves platform-specific UUIDs (Uber, InDrive) and display names
@@ -2158,13 +2191,15 @@ app.post("/make-server-37f42386/trips", async (c) => {
                 // produce zero ledger rows. This prevents "Uber X trips / 0 ledger" gaps
                 // when import data is valid but a parser edge-case drops entries.
                 if (tripEntries.length === 0) {
-                  const isUber = String(trip?.platform || '').toLowerCase() === 'uber';
-                  const status = String(trip?.status || '').trim();
-                  const amountNum = Number(trip?.amount) || 0;
-                  const uberFare = Number(trip?.uberFareComponents) || 0;
-                  const uberTips = Number(trip?.uberTips) || 0;
+                  const isUber = isUberPlatform(trip?.platform);
+                  const amountNum = coerceAmount(trip?.amount);
+                  const uberFare = coerceAmount(trip?.uberFareComponents);
+                  const uberTips = coerceAmount(trip?.uberTips);
                   const uberGross = uberFare + uberTips;
-                  const isEligibleUber = isUber && status === 'Completed' && (amountNum > 0 || uberGross > 0);
+                  const isEligibleUber =
+                    isUber &&
+                    isCompletedTripStatus(trip?.status) &&
+                    (amountNum > 0 || uberGross > 0);
 
                   if (isEligibleUber) {
                     const resolved = await resolveCanonicalDriverId(trip.driverId || '');
@@ -2228,7 +2263,13 @@ app.post("/make-server-37f42386/trips", async (c) => {
             }
             console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
             // Phase 6.6: Verification — count completed trips with amount > 0 vs ledger entries created
-            const completedCount = processedTrips.filter((t: any) => t.status === 'Completed' && t.amount > 0).length;
+            const completedCount = processedTrips.filter((t: any) => {
+              if (!isCompletedTripStatus(t.status)) return false;
+              const amt = coerceAmount(t.amount);
+              if (amt > 0) return true;
+              if (!isUberPlatform(t.platform)) return false;
+              return coerceAmount(t.uberFareComponents) + coerceAmount(t.uberTips) > 0;
+            }).length;
             const fareEntries = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning').length;
             if (fareEntries < completedCount) {
                 console.warn(`[Ledger] INTEGRITY WARNING: ${completedCount} completed trips but only ${fareEntries} fare_earning entries created. ${completedCount - fareEntries} trips may be missing ledger entries.`);
@@ -3919,7 +3960,9 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
           .from("kv_store_37f42386")
           .select("value")
           .like("key", "trip:%")
-          .eq("value->>status", "Completed")
+          .or(
+            "value->>status.eq.Completed,value->>status.eq.completed,value->>status.eq.COMPLETED"
+          )
           .gte("value->>date", startDate)
           .lte("value->>date", endDate);
         // Use same multi-ID OR filter for trip completeness check
@@ -3938,11 +3981,13 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         // Phase 5 (Uber SSOT integrity): some Uber trips may have `amount=0` but still have
         // SSOT fare/tip components (parsed from payments_transaction.csv). Use those for
         // completeness counting and repair readiness.
-        const isUber = String(v.platform || '').toLowerCase() === 'uber';
+        if (!isCompletedTripStatus(v.status)) continue;
+        const isUber = isUberPlatform(v.platform);
         const uberGrossForLedger = isUber
-          ? (Number(v.uberFareComponents) || 0) + (Number(v.uberTips) || 0)
+          ? coerceAmount(v.uberFareComponents) + coerceAmount(v.uberTips)
           : 0;
-        const hasTripAmount = !!v.amount && Number(v.amount) > 0;
+        const amt = coerceAmount(v.amount);
+        const hasTripAmount = amt > 0;
         const hasMoney = isUber ? (hasTripAmount || uberGrossForLedger > 0) : hasTripAmount;
         if (!hasMoney) continue;
 
