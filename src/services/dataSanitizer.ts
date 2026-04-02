@@ -45,11 +45,14 @@ export class DataSanitizer {
       let status: AuditStatus = 'healthy';
       
       // 1. Phantom Trip Check: Earnings but no distance/duration
-      // Allow for tips or adjustments which might not have distance, but "UberX" service type should usually have distance.
+      // Allow tips/adjustments (often zero distance). Uber merge sets `transactionType` (e.g. "Fare Adjustment")
+      // but not `notes` — check both so trip fare adjust orders are not false-flagged.
       if (trip.amount > 0 && (trip.distance === 0 || trip.distance === undefined) && trip.status === 'Completed') {
-          // Check if it's just a tip, bonus, or adjustment
-          const isFare = !trip.notes?.toLowerCase().match(/tip|bonus|adjustment|gratuity|misc|other|cancel/);
-          if (isFare) {
+          const notes = (trip.notes || '').toLowerCase();
+          const transactionType = String(trip.transactionType ?? '').toLowerCase();
+          const combined = `${notes} ${transactionType}`;
+          const looksLikeAdjustmentOrTip = /tip|bonus|adjustment|gratuity|misc|other|cancel|settlement/.test(combined);
+          if (!looksLikeAdjustmentOrTip) {
               issues.push({ id: crypto.randomUUID(), field: 'distance', message: 'Financial Adjustment (Zero Distance Record)', severity: 'warning' });
               if (status !== 'critical') status = 'warning';
           }

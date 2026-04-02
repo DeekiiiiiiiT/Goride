@@ -19,6 +19,8 @@ export interface Trip {
   dropoffLocation?: string;
   vehicleId?: string;
   notes?: string;
+  /** Set when merging `payments_transaction.csv` (e.g. Completed Trip, Fare Adjustment, Tip). */
+  transactionType?: string;
   batchId?: string; // ID of the upload batch this trip belongs to
   
   // Financial Reconciliation (Phase 3)
