@@ -16,6 +16,7 @@ import {
   Info,
   ChevronRight,
   Wallet,
+  Banknote,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Progress } from '../ui/progress';
@@ -91,8 +92,15 @@ export function MetricCard({ title, value, trend, trendUp, target, progress, pro
                    {tooltip && (
                        <TooltipProvider>
                            <UiTooltip>
-                               <TooltipTrigger>
-                                   <Info className="h-3 w-3 text-slate-400" />
+                               <TooltipTrigger asChild>
+                                   <button
+                                     type="button"
+                                     className="inline-flex rounded-sm text-slate-400 outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                                     onClick={(e) => e.stopPropagation()}
+                                     onKeyDown={(e) => e.stopPropagation()}
+                                   >
+                                     <Info className="h-3 w-3" aria-hidden />
+                                   </button>
                                </TooltipTrigger>
                                <TooltipContent>
                                    <p className="max-w-[200px] text-xs">{tooltip}</p>
@@ -180,6 +188,7 @@ export function OverviewMetricsGrid({
 }: OverviewMetricsGridProps) {
   const { can } = usePermissions();
   const [periodEarningsOpen, setPeriodEarningsOpen] = useState(false);
+  const [cashCollectedOpen, setCashCollectedOpen] = useState(false);
   const [platformFeesExpanded, setPlatformFeesExpanded] = useState(false);
   const [logLoadOpen, setLogLoadOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
@@ -247,11 +256,35 @@ export function OverviewMetricsGrid({
     return gross - net;
   }, [resolvedFinancials.totalBaseFare, resolvedFinancials.periodEarnings]);
 
+  /** Period earnings modal — Cash allocation section (same as before dedicated Cash card). */
   const cashByPlatformRows = useMemo(() => {
     return Object.entries(resolvedFinancials.platformStats || {})
       .filter(([, stats]: [string, any]) => (stats?.cashCollected || 0) > 0)
       .sort((a, b) => (b[1].cashCollected || 0) - (a[1].cashCollected || 0));
   }, [resolvedFinancials.platformStats]);
+
+  /** Admin-focused cash metrics (period ledger). */
+  const cashAdminDetail = useMemo(() => {
+    const cashTotal = Number(resolvedFinancials.cashCollected) || 0;
+    const netFare = Number(resolvedFinancials.periodEarnings) || 0;
+    const tips = Number(resolvedFinancials.totalTips) || 0;
+    const accruedTripRevenue = netFare + tips;
+    const cashVsAccruedPct =
+      accruedTripRevenue > 0.0001 ? (cashTotal / accruedTripRevenue) * 100 : null;
+
+    const platformRows = Object.entries(resolvedFinancials.platformStats || {})
+      .map(([label, stats]: [string, any]) => {
+        const c = Number(stats?.cashCollected) || 0;
+        const e = Number(stats?.earnings) || 0;
+        const trips = Number(stats?.trips ?? stats?.completed) || 0;
+        const mixPct = e > 0.0001 ? (c / e) * 100 : c > 0 ? null : 0;
+        return { label, cash: c, earnings: e, trips, mixPct };
+      })
+      .filter((r) => r.cash > 0.0001 || r.earnings > 0.0001)
+      .sort((a, b) => b.cash - a.cash);
+
+    return { cashTotal, accruedTripRevenue, cashVsAccruedPct, platformRows };
+  }, [resolvedFinancials]);
 
   const platformFeesLedgerRows = useMemo(() => {
     return Object.entries(resolvedFinancials.platformFeesByPlatform || {})
@@ -530,25 +563,141 @@ export function OverviewMetricsGrid({
                     </div>
                     <Separator className="my-1 bg-slate-100 dark:bg-slate-800" />
                     {cashByPlatformRows.map(([label, stats]: [string, any]) => (
-                        <div key={label} className="flex justify-between gap-4 text-xs">
-                          <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                            <span
-                              className="h-2 w-2 shrink-0 rounded-full"
-                              style={{ backgroundColor: getPlatformColor(label) }}
-                            />
-                            {label}
-                          </span>
-                          <span className="tabular-nums font-medium">${fmtMoney(stats.cashCollected)}</span>
-                        </div>
-                      ))}
+                      <div key={label} className="flex justify-between gap-4 text-xs">
+                        <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: getPlatformColor(label) }}
+                          />
+                          {label}
+                        </span>
+                        <span className="tabular-nums font-medium">${fmtMoney(stats.cashCollected)}</span>
+                      </div>
+                    ))}
                     {cashByPlatformRows.length === 0 && (resolvedFinancials.cashCollected || 0) > 0 && (
-                        <p className="text-[11px] text-slate-500">Cash total is from the ledger; per-platform cash may be unallocated in older data.</p>
-                      )}
+                      <p className="text-[11px] text-slate-500">
+                        Cash total is from the ledger; per-platform cash may be unallocated in older data.
+                      </p>
+                    )}
                   </div>
                 </section>
 
                 <p className="text-[11px] leading-relaxed text-slate-500">
                   Financials → Earnings uses <span className="font-medium text-slate-600 dark:text-slate-400">gross fare</span> per week; this view matches the overview card (net fare) plus tips context.
+                </p>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cashCollectedOpen} onOpenChange={setCashCollectedOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+              <Banknote className="h-5 w-5 text-rose-600 shrink-0" aria-hidden />
+              Cash collected — admin detail
+            </DialogTitle>
+            <DialogDescription className="text-left text-sm text-slate-600 dark:text-slate-400">
+              Physical cash from completed trips in the ledger for{' '}
+              {walletRange?.startDate && walletRange?.endDate ? (
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {walletRange.startDate} → {walletRange.endDate}
+                </span>
+              ) : (
+                'the selected date range'
+              )}
+              . Does not include InDrive wallet loads, bank transfers, or payouts — use Financials and wallet tabs for those.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 text-sm">
+            {!showFinancialValues ? (
+              <p className="text-slate-600 dark:text-slate-400">
+                Ledger data is incomplete for this period. Repair the ledger or widen filters to see cash detail.
+              </p>
+            ) : (
+              <>
+                <section className="space-y-3 rounded-lg border border-rose-100/80 bg-rose-50/40 p-4 dark:border-rose-900/40 dark:bg-rose-950/20">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-rose-800 dark:text-rose-300">
+                    Period summary
+                  </h3>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-slate-600 dark:text-slate-400">Total cash collected</span>
+                    <span className="text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                      ${fmtMoney(cashAdminDetail.cashTotal)}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                    <div className="flex justify-between gap-4">
+                      <span>Net fare + tips (same period, ledger)</span>
+                      <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
+                        ${fmtMoney(cashAdminDetail.accruedTripRevenue)}
+                      </span>
+                    </div>
+                    {cashAdminDetail.cashVsAccruedPct != null && (
+                      <div className="flex justify-between gap-4 border-t border-rose-200/60 pt-2 dark:border-rose-900/50">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
+                          Cash as % of net fare + tips
+                        </span>
+                        <span className="tabular-nums font-semibold text-rose-800 dark:text-rose-200">
+                          {cashAdminDetail.cashVsAccruedPct.toFixed(1)}%
+                        </span>
+                      </div>
+                    )}
+                    <p className="pt-1 leading-snug text-slate-500">
+                      Use this ratio to see how much of trip revenue was collected as cash vs digital / card in the ledger.
+                    </p>
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    By platform
+                  </h3>
+                  <div className="overflow-hidden rounded-lg border border-slate-100 dark:border-slate-800">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-x-2 gap-y-1 border-b border-slate-100 bg-slate-50/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/50">
+                      <span>Platform</span>
+                      <span className="text-right">Cash</span>
+                      <span className="text-right">Mix</span>
+                      <span className="text-right">Trips</span>
+                    </div>
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {cashAdminDetail.platformRows.map((row) => (
+                        <div
+                          key={row.label}
+                          className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-2 px-3 py-2.5 text-xs"
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: getPlatformColor(row.label) }}
+                            />
+                            {row.label}
+                          </span>
+                          <span className="tabular-nums text-slate-800 dark:text-slate-100">
+                            ${fmtMoney(row.cash)}
+                          </span>
+                          <span className="text-right tabular-nums text-slate-600 dark:text-slate-400">
+                            {row.mixPct == null ? '—' : `${row.mixPct.toFixed(0)}%`}
+                          </span>
+                          <span className="text-right tabular-nums text-slate-600 dark:text-slate-400">
+                            {row.trips}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-slate-100 bg-slate-50/50 px-3 py-2 text-[10px] leading-snug text-slate-500 dark:border-slate-800 dark:bg-slate-900/30">
+                      <span className="font-medium text-slate-600 dark:text-slate-400">Mix</span>: cash ÷ platform trip
+                      earnings (ledger). <span className="font-medium text-slate-600 dark:text-slate-400">Trips</span>:
+                      ledger trip lines for the platform.
+                    </div>
+                  </div>
+                </section>
+
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  For settlement and bank reconciliation, see <span className="font-medium">Cash Wallet</span> and{' '}
+                  <span className="font-medium">Financials</span>. This view is for trip-level cash attribution only.
                 </p>
               </>
             )}
@@ -635,7 +784,7 @@ export function OverviewMetricsGrid({
         interactiveLabel="Open period earnings breakdown and cash allocation"
       />
 
-      {/* Card 2: Cash Collected */}
+      {/* Card 2: Cash Collected — dedicated admin cash detail */}
       <MetricCard
         title="Cash Collected"
         value={showFinancialValues ? `$${resolvedFinancials.cashCollected.toFixed(2)}` : '—'}
@@ -643,6 +792,8 @@ export function OverviewMetricsGrid({
         tooltip="Total cash collected from trips during this period"
         loading={localLoading}
         breakdown={showFinancialValues ? cashBreakdown : []}
+        onClick={() => setCashCollectedOpen(true)}
+        interactiveLabel="Open cash collected admin detail"
       />
 
       {/* Card 3: Km Driven (operational — stays on metrics) */}
