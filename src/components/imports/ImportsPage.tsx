@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
@@ -181,6 +182,7 @@ const CollapsibleSection = ({ title, children, defaultOpen = true, icon }: { tit
 }
 
 export function ImportsPage() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'import' | 'export' | 'delete'>('import');
   const [step, setStep] = useState<Step>('select_platform');
   
@@ -689,6 +691,10 @@ export function ImportsPage() {
                   toast.error(`Dispute refund import failed: ${drErr.message}`);
               }
           }
+
+          queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });
+          queryClient.invalidateQueries({ queryKey: ['trips'] });
+          queryClient.invalidateQueries({ queryKey: ['ledgerDriversSummary'] });
           
           setStep('success');
       } catch (e: any) {

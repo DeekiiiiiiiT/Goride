@@ -1204,8 +1204,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
              if (file.type === 'uber_trip' || file.type === 'uber_payment') {
                 // Excel SUM(L): every row in payments_transaction, regardless of Trip UUID (statement-level).
                 if (file.type === 'uber_payment') {
-                    const driverIdForCashSum = cleanId(row['Driver UUID'] || row['driver uuid'] || '');
-                    if (driverIdForCashSum && driverIdForCashSum.toLowerCase() !== FLEET_ORG_UUID) {
+                    // Lowercase UUID so this merges with payments_driver rows (they use .toLowerCase()).
+                    const driverIdForCashSum = cleanId(row['Driver UUID'] || row['driver uuid'] || '').toLowerCase();
+                    if (driverIdForCashSum && driverIdForCashSum !== FLEET_ORG_UUID) {
                         const parseCurrencyCashSum = (val: unknown) =>
                             parseFloat(String(val || '0').replace(/[^0-9.-]/g, '')) || 0;
                         const cashColRaw =

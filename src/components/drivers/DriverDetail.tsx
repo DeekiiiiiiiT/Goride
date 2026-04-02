@@ -1393,6 +1393,18 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         return mStart <= end && mEnd >= start;
      }) : [];
 
+     // Statement cash: include metrics that have `uberPaymentsTransactionCashColumnSum` even when
+     // period dates don't overlap the picker (e.g. report week ends Mar 30 vs range ends Mar 29).
+     const relevantCsvMetricsForUberCash = (isAllPlatforms && csvMetrics)
+       ? csvMetrics.filter(m => {
+           const rawSum = m.uberPaymentsTransactionCashColumnSum;
+           if (rawSum != null && !Number.isNaN(Number(rawSum))) return true;
+           const mStart = new Date(m.periodStart);
+           const mEnd = new Date(m.periodEnd);
+           return mStart <= end && mEnd >= start;
+         })
+       : [];
+
      // Initialize Accumulators for Reconstruction
      let recOnTripTime = 0; // Hours
      let recOnTripDist = 0; // Km
@@ -1919,10 +1931,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
      // Uber: statement cash = Excel SUM(payments_transaction Cash Collected) or payments_driver line (matches Uber app).
      let uberCsvCashCollectedMagnitude: number | null = null;
-     if (isAllPlatforms && relevantCsvMetrics.length > 0) {
+     if (isAllPlatforms && relevantCsvMetricsForUberCash.length > 0) {
        let sumTx = 0;
        let hasTx = false;
-       for (const m of relevantCsvMetrics) {
+       for (const m of relevantCsvMetricsForUberCash) {
          const v = m.uberPaymentsTransactionCashColumnSum;
          if (v != null && v !== 0) {
            sumTx += v;
@@ -1934,7 +1946,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
        } else {
          let sumDriver = 0;
          let hasDriver = false;
-         for (const m of relevantCsvMetrics) {
+         for (const m of relevantCsvMetricsForUberCash) {
            if (m.dataSources?.includes('payment') && m.cashCollected != null) {
              sumDriver += m.cashCollected;
              hasDriver = true;
@@ -2099,10 +2111,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       // Replace ledger Uber cash with CSV statement total (Excel SUM of Cash Collected) when available.
       let periodCashCollected = ledgerOverview.period.cashCollected;
       const uberCsvCash = metrics.uberCsvCashCollectedMagnitude;
-      if (uberCsvCash != null && platformStats.Uber) {
+      if (uberCsvCash != null) {
         const ledgerUber = Number(ledgerOverview.platformStats?.Uber?.cashCollected ?? 0);
         periodCashCollected = periodCashCollected - ledgerUber + uberCsvCash;
-        platformStats.Uber.cashCollected = uberCsvCash;
+        if (platformStats.Uber) {
+          platformStats.Uber.cashCollected = uberCsvCash;
+        } else if (metrics.platformStats?.Uber) {
+          platformStats.Uber = { ...metrics.platformStats.Uber, cashCollected: uberCsvCash };
+        }
       }
 
       return {
