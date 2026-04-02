@@ -1202,6 +1202,47 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         file.rows.forEach(row => {
              // ... existing trip logic ...
              if (file.type === 'uber_trip' || file.type === 'uber_payment') {
+                // Excel SUM(L): every row in payments_transaction, regardless of Trip UUID (statement-level).
+                if (file.type === 'uber_payment') {
+                    const driverIdForCashSum = cleanId(row['Driver UUID'] || row['driver uuid'] || '');
+                    if (driverIdForCashSum && driverIdForCashSum.toLowerCase() !== FLEET_ORG_UUID) {
+                        const parseCurrencyCashSum = (val: unknown) =>
+                            parseFloat(String(val || '0').replace(/[^0-9.-]/g, '')) || 0;
+                        const cashColRaw =
+                            row['Paid to you : Trip balance : Payouts : Cash Collected'] ||
+                            row['Paid to you:Trip balance:Payouts:Cash Collected'] ||
+                            row['Cash Collected'] ||
+                            row['Cash collected'] ||
+                            '0';
+                        const cashCell = parseCurrencyCashSum(cashColRaw);
+                        const dmCash = driverMetricsMap.get(driverIdForCashSum) || {
+                            id: `dm-ptx-${driverIdForCashSum}-${Math.random()}`,
+                            driverId: driverIdForCashSum,
+                            driverName: 'Unknown Driver',
+                            periodStart: safeDateISO(file.reportDate) || batchFallbackDate,
+                            periodEnd: safeDateISO(file.reportDate) || batchFallbackDate,
+                            acceptanceRate: 0,
+                            cancellationRate: 0,
+                            completionRate: 0,
+                            ratingLast500: 0,
+                            ratingLast4Weeks: 0,
+                            onlineHours: 0,
+                            onTripHours: 0,
+                            tripsCompleted: 0,
+                            dataSources: [] as string[],
+                        };
+                        if (!dmCash.dataSources) dmCash.dataSources = [];
+                        if (!dmCash.dataSources.includes('payment_transaction_cash_sum')) {
+                            dmCash.dataSources.push('payment_transaction_cash_sum');
+                        }
+                        dmCash.uberPaymentsTransactionCashColumnSum =
+                            (dmCash.uberPaymentsTransactionCashColumnSum || 0) + cashCell;
+                        const nm = extractDriverName(row, UBER_SCHEMAS.PAYMENTS_ORDER.mapping);
+                        if (nm && nm !== 'Unknown Driver') dmCash.driverName = nm;
+                        driverMetricsMap.set(driverIdForCashSum, dmCash);
+                    }
+                }
+
                 const tripId = cleanId(row['Trip UUID'] || row['trip uuid']);
 
                 // ── Dispute Refund Extraction ──
@@ -1726,7 +1767,16 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                             '0'
                         ).replace(/[^0-9.-]/g, '')
                     ) || 0;
-                     const cashCollected = parseFloat(String(row['Cash Collected'] || '0').replace(/[^0-9.-]/g, '')) || 0;
+                     const cashCollected =
+                         parseFloat(
+                             String(
+                                 row['Payouts : Cash Collected'] ||
+                                     row['Payouts: Cash Collected'] ||
+                                     row['Cash Collected'] ||
+                                     row['Cash collected'] ||
+                                     '0',
+                             ).replace(/[^0-9.-]/g, ''),
+                         ) || 0;
                      
                      current.totalEarnings = (current.totalEarnings || 0) + totalEarnings;
                      current.refundsAndExpenses = (current.refundsAndExpenses || 0) + refundsAndExpenses;

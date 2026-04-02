@@ -1209,6 +1209,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             misc: 0,
             total: 0
         },
+        uberCsvCashCollectedMagnitude: null as number | null,
         perPlatformDistance: {} as Record<string, { open: number; enroute: number; onTrip: number; unavailable: number; riderCancelled: number; driverCancelled: number; deliveryFailed: number; total: number }>
      };
 
@@ -1916,6 +1917,33 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      // Note: totalDistance is currently left as "Revenue Distance" (Trip Only).
 
+     // Uber: statement cash = Excel SUM(payments_transaction Cash Collected) or payments_driver line (matches Uber app).
+     let uberCsvCashCollectedMagnitude: number | null = null;
+     if (isAllPlatforms && relevantCsvMetrics.length > 0) {
+       let sumTx = 0;
+       let hasTx = false;
+       for (const m of relevantCsvMetrics) {
+         const v = m.uberPaymentsTransactionCashColumnSum;
+         if (v != null && v !== 0) {
+           sumTx += v;
+           hasTx = true;
+         }
+       }
+       if (hasTx) {
+         uberCsvCashCollectedMagnitude = Math.abs(sumTx);
+       } else {
+         let sumDriver = 0;
+         let hasDriver = false;
+         for (const m of relevantCsvMetrics) {
+           if (m.dataSources?.includes('payment') && m.cashCollected != null) {
+             sumDriver += m.cashCollected;
+             hasDriver = true;
+           }
+         }
+         if (hasDriver) uberCsvCashCollectedMagnitude = Math.abs(sumDriver);
+       }
+     }
+
      return {
         periodEarnings,
         prevPeriodEarnings,
@@ -1959,7 +1987,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         monthlyEarnings, // Added back
         currentTier, // Added back
         // Phase 2.1: Expose Time Metrics for Debug/Advanced View
-        timeMetrics: reconstructedTimeMetrics
+        timeMetrics: reconstructedTimeMetrics,
+        uberCsvCashCollectedMagnitude,
      };
   }, [allTrips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms, timeFilter, activeTab]);
 
@@ -2067,12 +2096,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         delete metrics.platformStats['Dispute Recoveries'];
       }
 
+      // Replace ledger Uber cash with CSV statement total (Excel SUM of Cash Collected) when available.
+      let periodCashCollected = ledgerOverview.period.cashCollected;
+      const uberCsvCash = metrics.uberCsvCashCollectedMagnitude;
+      if (uberCsvCash != null && platformStats.Uber) {
+        const ledgerUber = Number(ledgerOverview.platformStats?.Uber?.cashCollected ?? 0);
+        periodCashCollected = periodCashCollected - ledgerUber + uberCsvCash;
+        platformStats.Uber.cashCollected = uberCsvCash;
+      }
+
       return {
         periodEarnings: ledgerOverview.period.earnings,
         prevPeriodEarnings: ledgerOverview.prevPeriod.earnings,
         trendPercent: trendPercent.toFixed(1),
         trendUp: ledgerOverview.period.earnings >= ledgerOverview.prevPeriod.earnings,
-        cashCollected: ledgerOverview.period.cashCollected,
+        cashCollected: periodCashCollected,
         totalTolls: ledgerOverview.period.tolls,
         disputeRefunds: ledgerOverview.period.disputeRefunds || 0,
         totalTips: ledgerOverview.period.tips,

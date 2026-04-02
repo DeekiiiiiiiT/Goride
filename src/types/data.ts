@@ -295,6 +295,8 @@ export interface DriverMetrics {
   // Financial Metrics (REPORT_TYPE_PAYMENTS_DRIVER)
   totalEarnings?: number;
   cashCollected?: number;
+  /** Signed sum of every row in `payments_transaction` "Cash Collected" column (matches Excel SUM + Uber statement). */
+  uberPaymentsTransactionCashColumnSum?: number;
   
   // Phase 2 New Metrics
   netEarnings?: number;       // totalEarnings - expenses
