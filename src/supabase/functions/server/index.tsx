@@ -403,6 +403,9 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
             cashCollected: isCash ? Math.abs(trip.cashCollected || 0) : undefined,
         },
     });
+    // #region agent log
+    if(isUber){console.log(`[DEBUG-b8f371] fare_earning PUSHED tripId=${trip.id} grossAmount=${fareGrossForEntry} entriesNow=${entries.length}`);}
+    // #endregion
 
     // Entry 2: Tip (if tips > 0)
     const tips = isUber && hasUberSsot ? uberTips : (trip.fareBreakdown?.tips || 0);
@@ -507,6 +510,9 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         });
     }
 
+    // #region agent log
+    if(isUber){console.log(`[DEBUG-b8f371] generateTripLedgerEntries RETURNING tripId=${trip.id} entriesCount=${entries.length}`);}
+    // #endregion
     return entries;
 }
 
@@ -2321,10 +2327,16 @@ app.post("/make-server-37f42386/trips", async (c) => {
         // #endregion
         if (allLedgerEntries.length > 0) {
             // Batch save in chunks of 100
+            // #region agent log
+            console.log(`[DEBUG-b8f371] SAVING ledger entries count=${allLedgerEntries.length} uberFare=${allLedgerEntries.filter((e:any)=>e.platform==='Uber'&&e.eventType==='fare_earning').length}`);
+            // #endregion
             for (let i = 0; i < allLedgerEntries.length; i += 100) {
                 const chunk = allLedgerEntries.slice(i, i + 100);
                 const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
                 await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
+                // #region agent log
+                console.log(`[DEBUG-b8f371] kv.mset chunk done keys=${chunk.length}`);
+                // #endregion
             }
             console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
             // Phase 6.6: Verification — count completed trips with amount > 0 vs ledger entries created
