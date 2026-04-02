@@ -62,6 +62,45 @@ function fmtMoney(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function BreakdownMoneyRow({
+  label,
+  value,
+  bold,
+  valueClassName,
+}: {
+  label: React.ReactNode;
+  value: number;
+  bold?: boolean;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+      <span
+        className={cn(
+          'tabular-nums',
+          bold ? 'font-semibold text-slate-900 dark:text-slate-100' : 'font-medium',
+          valueClassName,
+        )}
+      >
+        ${fmtMoney(value)}
+      </span>
+    </div>
+  );
+}
+
+function DeductionRow({ label, magnitude }: { label: string; magnitude: number }) {
+  if (magnitude <= 0.0001) return null;
+  return (
+    <div className="flex justify-between gap-4 text-sm">
+      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+      <span className="tabular-nums font-medium text-rose-700 dark:text-rose-400">
+        −${fmtMoney(magnitude)}
+      </span>
+    </div>
+  );
+}
+
 // ── MetricCard (exported for use elsewhere in DriverDetail) ──
 export function MetricCard({ title, value, trend, trendUp, target, progress, progressColor = "bg-indigo-600", subtext, icon, breakdown, action, tooltip, loading, onClick, interactiveLabel }: any) {
    return (
@@ -163,9 +202,19 @@ export function MetricCard({ title, value, trend, trendUp, target, progress, pro
 }
 
 // ── Props ──
+/** Aggregated `payments_driver`-style totals for the selected range (from imported driver metrics). */
+export type UberPaymentCsvRollup = {
+  totalEarnings: number;
+  refundsAndExpenses: number;
+  netEarnings: number;
+  cashCollected: number;
+};
+
 interface OverviewMetricsGridProps {
   resolvedFinancials: any;
   metrics: any;
+  /** Statement-level Uber CSV totals overlapping the period — used to mirror payments_driver row labels. */
+  uberPaymentCsvRollup?: UberPaymentCsvRollup | null;
   localLoading: boolean;
   isToday: boolean;
   driverId?: string;
@@ -179,6 +228,7 @@ interface OverviewMetricsGridProps {
 export function OverviewMetricsGrid({
   resolvedFinancials,
   metrics,
+  uberPaymentCsvRollup = null,
   localLoading,
   isToday,
   driverId,
@@ -311,6 +361,42 @@ export function OverviewMetricsGrid({
   // Incomplete status should warn, not blank valid totals.
   const showFinancialValues = resolvedFinancials?.source === 'ledger';
 
+  const uberLedger = resolvedFinancials.uberLedgerReconciliation;
+
+  const showUberFareBlock = useMemo(() => {
+    if (uberPaymentCsvRollup) return true;
+    if (resolvedFinancials?.source === 'ledger' && uberLedger) return true;
+    const u = resolvedFinancials.platformStats?.Uber;
+    if (!u) return false;
+    return (
+      (u.earnings || 0) > 0.0001 ||
+      (u.completed || 0) > 0 ||
+      (u.trips || 0) > 0 ||
+      (u.cashCollected || 0) > 0.0001 ||
+      (u.tolls || 0) > 0.0001
+    );
+  }, [uberPaymentCsvRollup, uberLedger, resolvedFinancials.source, resolvedFinancials.platformStats]);
+
+  const nonUberFarePlatforms = useMemo(() => {
+    const stats = resolvedFinancials.platformStats || {};
+    const skip = new Set(['Uber', 'Dispute Recoveries']);
+    const keys = Object.keys(stats).filter((k) => !skip.has(k));
+    const prefer = ['InDrive', 'Roam'];
+    const ordered: string[] = [];
+    for (const p of prefer) if (keys.includes(p)) ordered.push(p);
+    for (const k of [...keys].sort()) if (!ordered.includes(k)) ordered.push(k);
+    return ordered.filter((platform) => {
+      const s = stats[platform];
+      return (
+        (s?.earnings || 0) > 0.0001 ||
+        (s.completed || 0) > 0 ||
+        (s.trips || 0) > 0 ||
+        (s.cashCollected || 0) > 0.0001 ||
+        (s.tolls || 0) > 0.0001
+      );
+    });
+  }, [resolvedFinancials.platformStats]);
+
   const walletAllZero =
     rangeReady &&
     !!walletData &&
@@ -374,7 +460,9 @@ export function OverviewMetricsGrid({
               {isToday ? "Today's earnings" : "Period earnings"} — breakdown
             </DialogTitle>
             <DialogDescription className="text-left text-sm text-slate-600 dark:text-slate-400">
-              Ledger totals for the selected date range. The card headline is net fare on trip lines; platform rows include tips.
+              Ledger totals for the selected range. Uber is grouped using the same row labels as{' '}
+              <span className="font-medium text-slate-700 dark:text-slate-300">payments_driver.csv</span>{' '}
+              (figures from the trip ledger and imports). Other platforms follow the same per-platform pattern as cash allocation.
             </DialogDescription>
           </DialogHeader>
 
@@ -385,21 +473,209 @@ export function OverviewMetricsGrid({
               </p>
             ) : (
               <>
-                <section className="space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fare & tips</h3>
-                  <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
-                    {(resolvedFinancials.tripCount || 0) > 0 && (
-                      <p className="text-[11px] text-slate-500">
-                        Ledger trip lines: {resolvedFinancials.tripCount}
-                      </p>
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Period</h3>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-900/40">
+                    {(resolvedFinancials.tripCount || 0) > 0 ? (
+                      <p>Ledger trip lines: {resolvedFinancials.tripCount}</p>
+                    ) : (
+                      <p>No ledger trip lines for this filter.</p>
                     )}
+                  </div>
+                </section>
+
+                {showUberFareBlock &&
+                  (() => {
+                    const u = resolvedFinancials.platformStats?.Uber;
+                    const ul = uberLedger;
+                    const csv = uberPaymentCsvRollup;
+                    const ledgerOk = resolvedFinancials.source === 'ledger' && !!ul;
+                    const totalEarningsRow = ledgerOk
+                      ? ul.fareComponents + ul.tips + ul.promotions
+                      : csv?.totalEarnings ?? null;
+                    const refundsMag = ledgerOk
+                      ? ul.refundExpense
+                      : Number(csv?.refundsAndExpenses) || 0;
+                    const statementMismatch =
+                      ledgerOk &&
+                      csv != null &&
+                      Math.abs(ul.fareComponents + ul.tips + ul.promotions - csv.totalEarnings) > 0.05;
+                    return (
+                      <section className="space-y-3">
+                        <div>
+                          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: getPlatformColor('Uber') }}
+                            />
+                            Uber
+                          </h3>
+                          <p className="mt-0.5 text-[10px] font-normal normal-case tracking-normal text-slate-400">
+                            Labels follow payments_driver.csv
+                          </p>
+                        </div>
+                        <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                          {totalEarningsRow != null && (
+                            <BreakdownMoneyRow label="Total earnings" value={totalEarningsRow} />
+                          )}
+                          {ledgerOk && (
+                            <BreakdownMoneyRow
+                              label="Net fare (fare components)"
+                              value={ul.fareComponents}
+                            />
+                          )}
+                          {ledgerOk && ul.promotions > 0.005 && (
+                            <BreakdownMoneyRow
+                              label="Total earnings : Promotions"
+                              value={ul.promotions}
+                              valueClassName="text-indigo-700 dark:text-indigo-400"
+                            />
+                          )}
+                          {ledgerOk && ul.tips > 0.005 && (
+                            <BreakdownMoneyRow
+                              label="Total earnings : Tip"
+                              value={ul.tips}
+                              valueClassName="text-emerald-700 dark:text-emerald-400"
+                            />
+                          )}
+                          <DeductionRow label="Refunds & expenses" magnitude={refundsMag} />
+                          {(u?.tolls || 0) > 0.005 && (
+                            <BreakdownMoneyRow label="Tolls & trip refunds (ledger)" value={u.tolls} />
+                          )}
+                          {(u?.earnings || 0) > 0.005 && (
+                            <>
+                              <Separator className="bg-slate-200/80 dark:bg-slate-700" />
+                              <BreakdownMoneyRow
+                                label="Trip earnings (ledger net, incl. tips on fare lines)"
+                                value={u.earnings}
+                                bold
+                              />
+                            </>
+                          )}
+                          {statementMismatch && (
+                            <p className="text-[10px] leading-snug text-amber-700 dark:text-amber-500">
+                              Imported statement &ldquo;Total earnings&rdquo; (
+                              ${fmtMoney(csv!.totalEarnings)}) differs from the ledger Uber gross components — ranges
+                              or rounding may not align.
+                            </p>
+                          )}
+                          {!ledgerOk && csv && (
+                            <p className="text-[10px] leading-snug text-slate-500">
+                              Tip and promotion lines appear when the ledger exposes Uber SSOT for this period.
+                              Statement subtotals above come from payments_driver imports.
+                            </p>
+                          )}
+                        </div>
+                      </section>
+                    );
+                  })()}
+
+                {nonUberFarePlatforms.map((platform) => {
+                  const s = resolvedFinancials.platformStats[platform];
+                  const fee = Number(resolvedFinancials.platformFeesByPlatform?.[platform]) || 0;
+                  const gap = Number(resolvedFinancials.fareGrossMinusNetByPlatform?.[platform]) || 0;
+                  return (
+                    <section key={platform} className="space-y-3">
+                      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: getPlatformColor(platform) }}
+                        />
+                        {platform}
+                      </h3>
+                      <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                        <BreakdownMoneyRow label="Trip earnings" value={s.earnings || 0} bold />
+                        {gap > 0.005 && (
+                          <div className="flex justify-between gap-4 text-xs">
+                            <span className="text-slate-500">Gross − net on fare</span>
+                            <span className="tabular-nums text-slate-600">${fmtMoney(gap)}</span>
+                          </div>
+                        )}
+                        {fee > 0.005 && (
+                          <div className="flex justify-between gap-4 text-xs">
+                            <span className="text-slate-500">Platform fees (ledger)</span>
+                            <span className="tabular-nums text-slate-600">${fmtMoney(fee)}</span>
+                          </div>
+                        )}
+                        {(s.tolls || 0) > 0.005 && (
+                          <BreakdownMoneyRow label="Tolls & refunds on trips" value={s.tolls} />
+                        )}
+                        {(s.cashCollected || 0) > 0.005 && (
+                          <div className="flex justify-between gap-4 text-[11px] text-slate-500">
+                            <span>Cash collected (trips)</span>
+                            <span className="tabular-nums font-medium text-slate-600 dark:text-slate-400">
+                              ${fmtMoney(s.cashCollected)}
+                            </span>
+                          </div>
+                        )}
+                        {platform === 'InDrive' && resolvedFinancials.source === 'ledger' && rangeReady && (
+                          <div className="mt-2 rounded-md border border-emerald-200/80 bg-emerald-50/40 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-400">
+                              InDrive fees — period alignment
+                            </p>
+                            {walletLoading ? (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                Loading InDrive wallet summary…
+                              </p>
+                            ) : walletError ? (
+                              <p className="mt-1 text-[11px] text-rose-600">{walletError}</p>
+                            ) : walletData ? (
+                              <>
+                                <div className="mt-1 flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                                  <span>Wallet API (period fees)</span>
+                                  <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
+                                    ${fmtMoney(walletData.periodFees)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                                  <span>Same rule from ledger rows</span>
+                                  <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
+                                    ${fmtMoney(inDriveFeesFromLedgerOverlay)}
+                                  </span>
+                                </div>
+                                {!platformFilterAllPlatforms && (
+                                  <p className="mt-2 text-[10px] leading-snug text-slate-500">
+                                    Platform filter is not All — overview totals may omit InDrive; the InDrive
+                                    wallet card still includes all InDrive ledger rows for these dates.
+                                  </p>
+                                )}
+                                {platformFilterAllPlatforms &&
+                                  Math.abs(walletData.periodFees - inDriveFeesFromLedgerOverlay) <= 0.02 && (
+                                    <p className="mt-2 text-[10px] text-emerald-700 dark:text-emerald-500">
+                                      Matches the InDrive wallet card (fees or gross−net rule).
+                                    </p>
+                                  )}
+                                {platformFilterAllPlatforms &&
+                                  Math.abs(walletData.periodFees - inDriveFeesFromLedgerOverlay) > 0.02 && (
+                                    <p className="mt-2 text-[10px] text-amber-700 dark:text-amber-500">
+                                      Values differ — check rounding or sync timing.
+                                    </p>
+                                  )}
+                              </>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  );
+                })}
+
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    All platforms — fare & tips
+                  </h3>
+                  <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-600 dark:text-slate-400">Gross fare</span>
-                      <span className="font-medium tabular-nums">${fmtMoney(resolvedFinancials.totalBaseFare || 0)}</span>
+                      <span className="font-medium tabular-nums">
+                        ${fmtMoney(resolvedFinancials.totalBaseFare || 0)}
+                      </span>
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-600 dark:text-slate-400">Net fare</span>
-                      <span className="font-semibold tabular-nums">${fmtMoney(resolvedFinancials.periodEarnings)}</span>
+                      <span className="font-semibold tabular-nums">
+                        ${fmtMoney(resolvedFinancials.periodEarnings)}
+                      </span>
                     </div>
                     <div className="flex justify-between gap-4 text-xs">
                       <span className="text-slate-500">Implied on fare</span>
@@ -417,7 +693,7 @@ export function OverviewMetricsGrid({
                             <ChevronRight
                               className={cn(
                                 'h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200',
-                                platformFeesExpanded && 'rotate-90'
+                                platformFeesExpanded && 'rotate-90',
                               )}
                               aria-hidden
                             />
@@ -489,68 +765,31 @@ export function OverviewMetricsGrid({
                     )}
                     <Separator className="bg-slate-200/80 dark:bg-slate-700" />
                     <div className="flex justify-between gap-4">
-                      <span className="text-slate-600 dark:text-slate-400">Tips</span>
-                      <span className="font-medium tabular-nums">${fmtMoney(resolvedFinancials.totalTips || 0)}</span>
+                      <span className="text-slate-600 dark:text-slate-400">Tips (all platforms)</span>
+                      <span className="font-medium tabular-nums">
+                        ${fmtMoney(resolvedFinancials.totalTips || 0)}
+                      </span>
                     </div>
                     {(resolvedFinancials.disputeRefunds || 0) > 0 && (
                       <div className="flex justify-between gap-4 text-xs">
                         <span className="text-slate-500">Dispute recoveries</span>
-                        <span className="tabular-nums text-emerald-700">${fmtMoney(resolvedFinancials.disputeRefunds)}</span>
+                        <span className="tabular-nums text-emerald-700">
+                          ${fmtMoney(resolvedFinancials.disputeRefunds)}
+                        </span>
                       </div>
                     )}
                     <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 dark:border-slate-700">
                       <span className="text-slate-700 dark:text-slate-300">Net fare + tips</span>
                       <span className="font-semibold tabular-nums">
-                        ${fmtMoney((resolvedFinancials.periodEarnings || 0) + (resolvedFinancials.totalTips || 0))}
+                        ${fmtMoney(
+                          (resolvedFinancials.periodEarnings || 0) + (resolvedFinancials.totalTips || 0),
+                        )}
                       </span>
                     </div>
                     <p className="text-[11px] leading-snug text-slate-500">
-                      Sum of platform lines (below) includes tips: ${fmtMoney(platformEarningsSum)}.
+                      Sum of platform trip earnings lines: ${fmtMoney(platformEarningsSum)} (includes tips on fare
+                      lines).
                     </p>
-                    {resolvedFinancials.source === 'ledger' && rangeReady && (
-                      <div className="mt-3 rounded-md border border-emerald-200/80 bg-emerald-50/40 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-400">
-                          InDrive fees — period alignment
-                        </p>
-                        {walletLoading ? (
-                          <p className="mt-1 text-[11px] text-slate-500">Loading InDrive wallet summary…</p>
-                        ) : walletError ? (
-                          <p className="mt-1 text-[11px] text-rose-600">{walletError}</p>
-                        ) : walletData ? (
-                          <>
-                            <div className="mt-1 flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
-                              <span>GET /ledger/driver-indrive-wallet (period)</span>
-                              <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
-                                ${fmtMoney(walletData.periodFees)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
-                              <span>Same rule from this breakdown</span>
-                              <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
-                                ${fmtMoney(inDriveFeesFromLedgerOverlay)}
-                              </span>
-                            </div>
-                            {!platformFilterAllPlatforms && (
-                              <p className="mt-2 text-[10px] leading-snug text-slate-500">
-                                Platform filter is not All — overview totals may omit InDrive; the InDrive wallet card always includes all InDrive ledger rows for these dates.
-                              </p>
-                            )}
-                            {platformFilterAllPlatforms &&
-                              Math.abs(walletData.periodFees - inDriveFeesFromLedgerOverlay) <= 0.02 && (
-                                <p className="mt-2 text-[10px] text-emerald-700 dark:text-emerald-500">
-                                  Matches the InDrive wallet card (server fee rule: ledger fees or gross−net when fees are zero).
-                                </p>
-                              )}
-                            {platformFilterAllPlatforms &&
-                              Math.abs(walletData.periodFees - inDriveFeesFromLedgerOverlay) > 0.02 && (
-                                <p className="mt-2 text-[10px] text-amber-700 dark:text-amber-500">
-                                  Values differ — check rounding or sync timing; see solution.md Phase 6.
-                                </p>
-                              )}
-                          </>
-                        ) : null}
-                      </div>
-                    )}
                   </div>
                 </section>
 

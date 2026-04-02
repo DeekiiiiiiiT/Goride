@@ -1405,6 +1405,27 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          })
        : [];
 
+     /** Sum of `payments_driver`-sourced rows overlapping the period (CSV visual template / statement totals). */
+     const uberPaymentCsvRollup = (() => {
+       const rows = relevantCsvMetrics.filter(
+         (m) => Array.isArray(m.dataSources) && m.dataSources.includes('payment'),
+       );
+       if (rows.length === 0) return null;
+       let totalEarnings = 0;
+       let refundsAndExpenses = 0;
+       let netEarnings = 0;
+       let cashCollected = 0;
+       for (const m of rows) {
+         const te = Number(m.totalEarnings) || 0;
+         const re = Number(m.refundsAndExpenses) || 0;
+         totalEarnings += te;
+         refundsAndExpenses += re;
+         netEarnings += m.netEarnings != null ? Number(m.netEarnings) : te - re;
+         cashCollected += Number(m.cashCollected) || 0;
+       }
+       return { totalEarnings, refundsAndExpenses, netEarnings, cashCollected };
+     })();
+
      // Initialize Accumulators for Reconstruction
      let recOnTripTime = 0; // Hours
      let recOnTripDist = 0; // Km
@@ -2001,6 +2022,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         // Phase 2.1: Expose Time Metrics for Debug/Advanced View
         timeMetrics: reconstructedTimeMetrics,
         uberCsvCashCollectedMagnitude,
+        uberPaymentCsvRollup,
      };
   }, [allTrips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms, timeFilter, activeTab]);
 
@@ -2800,6 +2822,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
               <OverviewMetricsGrid
                 resolvedFinancials={resolvedFinancials}
                 metrics={metrics}
+                uberPaymentCsvRollup={metrics.uberPaymentCsvRollup}
                 localLoading={localLoading}
                 isToday={!!isToday}
                 driverId={driverId}
