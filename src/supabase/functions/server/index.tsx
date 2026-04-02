@@ -505,6 +505,73 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     return entries;
 }
 
+/**
+ * Last-resort fare_earning when `generateTripLedgerEntries` throws or returns [].
+ * Ensures CSV import never leaves eligible Uber trips with zero trip-sourced ledger rows.
+ */
+async function buildUberFareEarningFallbackEntriesIfEligible(trip: any): Promise<any[]> {
+    const isUber = isUberPlatform(trip?.platform);
+    const amountNum = coerceAmount(trip?.amount);
+    const uberFare = coerceAmount(trip?.uberFareComponents);
+    const uberTips = coerceAmount(trip?.uberTips);
+    const uberPrior = coerceAmount(trip?.uberPriorPeriodAdjustment);
+    const uberGross = uberFare + uberTips + uberPrior;
+    const isEligibleUber =
+        isUber &&
+        isCompletedTripStatus(trip?.status) &&
+        (amountNum > 0 || uberGross > 0);
+    if (!isEligibleUber) return [];
+
+    const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+    const dateObj = new Date(trip?.date);
+    const date = Number.isFinite(dateObj.getTime())
+        ? dateObj.toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+    const requestObj = new Date(trip?.requestTime);
+    const time = Number.isFinite(requestObj.getTime())
+        ? requestObj.toISOString().split('T')[1]?.substring(0, 8)
+        : undefined;
+    const fareVal =
+        uberFare > 0 ? uberFare : amountNum > 0 ? amountNum : uberGross;
+    const pickupShort = String(trip?.pickupLocation || 'Unknown').substring(0, 30);
+    const dropoffShort = String(trip?.dropoffLocation || 'Unknown').substring(0, 30);
+    const isCash = Math.abs(Number(trip?.cashCollected) || 0) > 0 || trip?.paymentMethod === 'Cash';
+
+    console.warn(`[Ledger] Fallback fare_earning emitted for Uber trip ${trip?.id}`);
+    return [
+        {
+            id: crypto.randomUUID(),
+            date,
+            time,
+            createdAt: new Date().toISOString(),
+            driverId: resolved.canonicalId,
+            driverName: trip?.driverName || resolved.driverName,
+            vehicleId: trip?.vehicleId || undefined,
+            platform: 'Uber',
+            sourceType: 'trip' as const,
+            sourceId: trip?.id,
+            batchId: trip?.batchId || undefined,
+            currency: 'JMD',
+            isReconciled: false,
+            eventType: 'fare_earning',
+            category: 'Fare Earnings',
+            description: `Uber${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
+            grossAmount: fareVal,
+            netAmount: fareVal,
+            paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
+            direction: 'inflow',
+            metadata: {
+                distance: trip?.distance,
+                duration: trip?.duration,
+                serviceType: trip?.serviceType || trip?.productType,
+                fareBreakdown: trip?.fareBreakdown || null,
+                cashCollected: isCash ? Math.abs(Number(trip?.cashCollected) || 0) : undefined,
+                ledgerFallback: true,
+            },
+        },
+    ];
+}
+
 // ─── Transaction → Ledger Entry Generator ─────────────────────────────
 async function generateTransactionLedgerEntry(transaction: any): Promise<any | null> {
     // Skip if no meaningful amount
@@ -2203,78 +2270,26 @@ app.post("/make-server-37f42386/trips", async (c) => {
         }
         const allLedgerEntries: any[] = [];
         for (const trip of processedTrips) {
+            let tripEntries: any[] = [];
             try {
                 // We just attempted deletion above; avoid a stale-read dedup early-return.
                 (trip as any)._skipLedgerDedup = true;
-                const tripEntries = await generateTripLedgerEntries(trip);
-
-                // Hard safety net: never allow eligible Uber completed trips to silently
-                // produce zero ledger rows. This prevents "Uber X trips / 0 ledger" gaps
-                // when import data is valid but a parser edge-case drops entries.
-                if (tripEntries.length === 0) {
-                  const isUber = isUberPlatform(trip?.platform);
-                  const amountNum = coerceAmount(trip?.amount);
-                  const uberFare = coerceAmount(trip?.uberFareComponents);
-                  const uberTips = coerceAmount(trip?.uberTips);
-                  const uberPrior = coerceAmount(trip?.uberPriorPeriodAdjustment);
-                  const uberGross = uberFare + uberTips + uberPrior;
-                  const isEligibleUber =
-                    isUber &&
-                    isCompletedTripStatus(trip?.status) &&
-                    (amountNum > 0 || uberGross > 0);
-
-                  if (isEligibleUber) {
-                    const resolved = await resolveCanonicalDriverId(trip.driverId || '');
-                    const dateObj = new Date(trip?.date);
-                    const date = Number.isFinite(dateObj.getTime())
-                      ? dateObj.toISOString().split('T')[0]
-                      : new Date().toISOString().split('T')[0];
-                    const requestObj = new Date(trip?.requestTime);
-                    const time = Number.isFinite(requestObj.getTime())
-                      ? requestObj.toISOString().split('T')[1]?.substring(0, 8)
-                      : undefined;
-                    const fareVal = uberFare > 0 ? uberFare : amountNum;
-                    const pickupShort = String(trip?.pickupLocation || 'Unknown').substring(0, 30);
-                    const dropoffShort = String(trip?.dropoffLocation || 'Unknown').substring(0, 30);
-                    const isCash = Math.abs(Number(trip?.cashCollected) || 0) > 0 || trip?.paymentMethod === 'Cash';
-
-                    tripEntries.push({
-                      id: crypto.randomUUID(),
-                      date,
-                      time,
-                      createdAt: new Date().toISOString(),
-                      driverId: resolved.canonicalId,
-                      driverName: trip?.driverName || resolved.driverName,
-                      vehicleId: trip?.vehicleId || undefined,
-                      platform: 'Uber',
-                      sourceType: 'trip',
-                      sourceId: trip?.id,
-                      batchId: trip?.batchId || undefined,
-                      currency: 'JMD',
-                      isReconciled: false,
-                      eventType: 'fare_earning',
-                      category: 'Fare Earnings',
-                      description: `Uber${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
-                      grossAmount: fareVal,
-                      netAmount: fareVal,
-                      paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
-                      direction: 'inflow',
-                      metadata: {
-                        distance: trip?.distance,
-                        duration: trip?.duration,
-                        serviceType: trip?.serviceType || trip?.productType,
-                        fareBreakdown: trip?.fareBreakdown || null,
-                        cashCollected: isCash ? Math.abs(Number(trip?.cashCollected) || 0) : undefined,
-                        ledgerFallback: true,
-                      },
-                    });
-                    console.warn(`[Ledger] Fallback fare_earning emitted for Uber trip ${trip?.id}`);
-                  }
-                }
-                allLedgerEntries.push(...tripEntries);
+                tripEntries = await generateTripLedgerEntries(trip);
             } catch (tripLedgerErr) {
-                console.error(`[Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`, tripLedgerErr);
+                console.error(
+                    `[Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`,
+                    tripLedgerErr
+                );
+                tripEntries = [];
             }
+            if (tripEntries.length === 0) {
+                try {
+                    tripEntries = await buildUberFareEarningFallbackEntriesIfEligible(trip);
+                } catch (fbErr) {
+                    console.error(`[Ledger] Uber fallback failed for trip ${trip?.id}:`, fbErr);
+                }
+            }
+            allLedgerEntries.push(...tripEntries);
         }
         if (allLedgerEntries.length > 0) {
             // Batch save in chunks of 100
@@ -5421,7 +5436,18 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
                 // Trips found via Uber/InDrive UUID still have the platform UUID as driverId;
                 // the ledger must use the canonical Roam UUID so the overview query finds them.
                 const tripForLedger = trip.driverId === driverId ? trip : { ...trip, driverId };
-                const entries = await generateTripLedgerEntries(tripForLedger);
+                let entries: any[] = [];
+                try {
+                    entries = await generateTripLedgerEntries(tripForLedger);
+                } catch (genErr: any) {
+                    console.error(`[Ledger RepairDriver] generateTripLedgerEntries failed for trip ${trip.id}:`, genErr);
+                    try {
+                        entries = await buildUberFareEarningFallbackEntriesIfEligible(tripForLedger);
+                    } catch (fbErr) {
+                        console.error(`[Ledger RepairDriver] Uber fallback failed for trip ${trip.id}:`, fbErr);
+                        entries = [];
+                    }
+                }
                 if (entries.length > 0) {
                     const keys = entries.map((e: any) => `ledger:${e.id}`);
                     await kv.mset(keys, entries);
@@ -8554,74 +8580,25 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
             }
             const allLedgerEntries: any[] = [];
             for (const trip of uniqueTrips) {
+                let tripEntries: any[] = [];
                 try {
                     (trip as any)._skipLedgerDedup = true;
-                    const tripEntries = await generateTripLedgerEntries(trip);
-
-                    // Hard safety net: if an eligible Uber trip yields zero rows, emit a
-                    // minimal fare_earning entry to prevent Uber ledger integrity gaps.
-                    if (tripEntries.length === 0) {
-                        const isUber = String(trip?.platform || '').toLowerCase() === 'uber';
-                        const status = String(trip?.status || '').trim();
-                        const amountNum = Number(trip?.amount) || 0;
-                        const uberFare = Number(trip?.uberFareComponents) || 0;
-                        const uberTips = Number(trip?.uberTips) || 0;
-                        const uberPrior = Number(trip?.uberPriorPeriodAdjustment) || 0;
-                        const uberGross = uberFare + uberTips + uberPrior;
-                        const isEligibleUber = isUber && status === 'Completed' && (amountNum > 0 || uberGross > 0);
-
-                        if (isEligibleUber) {
-                            const resolved = await resolveCanonicalDriverId(trip.driverId || '');
-                            const dateObj = new Date(trip?.date);
-                            const date = Number.isFinite(dateObj.getTime())
-                                ? dateObj.toISOString().split('T')[0]
-                                : new Date().toISOString().split('T')[0];
-                            const requestObj = new Date(trip?.requestTime);
-                            const time = Number.isFinite(requestObj.getTime())
-                                ? requestObj.toISOString().split('T')[1]?.substring(0, 8)
-                                : undefined;
-                            const fareVal = uberFare > 0 ? uberFare : amountNum;
-                            const pickupShort = String(trip?.pickupLocation || 'Unknown').substring(0, 30);
-                            const dropoffShort = String(trip?.dropoffLocation || 'Unknown').substring(0, 30);
-                            const isCash = Math.abs(Number(trip?.cashCollected) || 0) > 0 || trip?.paymentMethod === 'Cash';
-
-                            tripEntries.push({
-                                id: crypto.randomUUID(),
-                                date,
-                                time,
-                                createdAt: new Date().toISOString(),
-                                driverId: resolved.canonicalId,
-                                driverName: trip?.driverName || resolved.driverName,
-                                vehicleId: trip?.vehicleId || undefined,
-                                platform: 'Uber',
-                                sourceType: 'trip',
-                                sourceId: trip?.id,
-                                batchId: trip?.batchId || undefined,
-                                currency: 'JMD',
-                                isReconciled: false,
-                                eventType: 'fare_earning',
-                                category: 'Fare Earnings',
-                                description: `Uber${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
-                                grossAmount: fareVal,
-                                netAmount: fareVal,
-                                paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
-                                direction: 'inflow',
-                                metadata: {
-                                    distance: trip?.distance,
-                                    duration: trip?.duration,
-                                    serviceType: trip?.serviceType || trip?.productType,
-                                    fareBreakdown: trip?.fareBreakdown || null,
-                                    cashCollected: isCash ? Math.abs(Number(trip?.cashCollected) || 0) : undefined,
-                                    ledgerFallback: true,
-                                },
-                            });
-                            console.warn(`[FleetSync Ledger] Fallback fare_earning emitted for Uber trip ${trip?.id}`);
-                        }
-                    }
-                    allLedgerEntries.push(...tripEntries);
+                    tripEntries = await generateTripLedgerEntries(trip);
                 } catch (tripLedgerErr) {
-                    console.error(`[FleetSync Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`, tripLedgerErr);
+                    console.error(
+                        `[FleetSync Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`,
+                        tripLedgerErr
+                    );
+                    tripEntries = [];
                 }
+                if (tripEntries.length === 0) {
+                    try {
+                        tripEntries = await buildUberFareEarningFallbackEntriesIfEligible(trip);
+                    } catch (fbErr) {
+                        console.error(`[FleetSync Ledger] Uber fallback failed for trip ${trip?.id}:`, fbErr);
+                    }
+                }
+                allLedgerEntries.push(...tripEntries);
             }
             if (allLedgerEntries.length > 0) {
                 // Batch save in chunks of 100
