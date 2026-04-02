@@ -366,6 +366,8 @@ export function OverviewMetricsGrid({
   const showUberFareBlock = useMemo(() => {
     if (uberPaymentCsvRollup) return true;
     if (resolvedFinancials?.source === 'ledger' && uberLedger) return true;
+    const pp = resolvedFinancials?.uberLedgerReconciliation?.priorPeriodAdjustments;
+    if (resolvedFinancials?.source === 'ledger' && pp != null && Math.abs(pp) > 0.0001) return true;
     const u = resolvedFinancials.platformStats?.Uber;
     if (!u) return false;
     return (
@@ -375,7 +377,13 @@ export function OverviewMetricsGrid({
       (u.cashCollected || 0) > 0.0001 ||
       (u.tolls || 0) > 0.0001
     );
-  }, [uberPaymentCsvRollup, uberLedger, resolvedFinancials.source, resolvedFinancials.platformStats]);
+  }, [
+    uberPaymentCsvRollup,
+    uberLedger,
+    resolvedFinancials.source,
+    resolvedFinancials.platformStats,
+    resolvedFinancials.uberLedgerReconciliation?.priorPeriodAdjustments,
+  ]);
 
   const nonUberFarePlatforms = useMemo(() => {
     const stats = resolvedFinancials.platformStats || {};
@@ -490,8 +498,9 @@ export function OverviewMetricsGrid({
                     const ul = uberLedger;
                     const csv = uberPaymentCsvRollup;
                     const ledgerOk = resolvedFinancials.source === 'ledger' && !!ul;
+                    const priorAdj = ledgerOk ? Number(ul.priorPeriodAdjustments) || 0 : 0;
                     const totalEarningsRow = ledgerOk
-                      ? ul.fareComponents + ul.tips + ul.promotions
+                      ? ul.fareComponents + ul.tips + ul.promotions + priorAdj
                       : csv?.totalEarnings ?? null;
                     const refundsMag = ledgerOk
                       ? ul.refundExpense
@@ -499,7 +508,9 @@ export function OverviewMetricsGrid({
                     const statementMismatch =
                       ledgerOk &&
                       csv != null &&
-                      Math.abs(ul.fareComponents + ul.tips + ul.promotions - csv.totalEarnings) > 0.05;
+                      Math.abs(
+                        ul.fareComponents + ul.tips + ul.promotions + priorAdj - csv.totalEarnings,
+                      ) > 0.05;
                     return (
                       <section className="space-y-3">
                         <div>
@@ -536,6 +547,13 @@ export function OverviewMetricsGrid({
                               label="Total earnings : Tip"
                               value={ul.tips}
                               valueClassName="text-emerald-700 dark:text-emerald-400"
+                            />
+                          )}
+                          {ledgerOk && Math.abs(priorAdj) > 0.005 && (
+                            <BreakdownMoneyRow
+                              label="Adjustments from previous periods"
+                              value={priorAdj}
+                              valueClassName="text-violet-700 dark:text-violet-400"
                             />
                           )}
                           <DeductionRow label="Refunds & expenses" magnitude={refundsMag} />

@@ -354,6 +354,13 @@ function TripDetailPanel({ trip, colSpan }: { trip: Trip; colSpan: number }) {
                 <DetailField label="Taxes" value={formatCurrency(fb.taxes)} />
               </>
             )}
+            {trip.uberPriorPeriodAdjustment != null &&
+              Math.abs(trip.uberPriorPeriodAdjustment) > 0.0001 && (
+                <DetailField
+                  label="Adj. previous periods"
+                  value={formatCurrency(trip.uberPriorPeriodAdjustment)}
+                />
+              )}
 
             {/* ── InDrive-specific ── */}
             {trip.indriveServiceFee != null && (

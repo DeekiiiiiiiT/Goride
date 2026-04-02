@@ -2,6 +2,7 @@ import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics,
 import { FuelEntry, FuelCard } from '../types/fuel';
 import Papa from 'papaparse';
 import { parseUberDriverStatementSsot, parseUberPaymentTransactionSsotLine, UberSsotTotals } from './uberSsot';
+import { isUberTripFareAdjustOrderDescription } from './uberTripFareAdjustOrder';
 
 // ... (Legacy code support if needed, but we focus on new logic)
 
@@ -1600,6 +1601,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     
                     // Check the dedicated Tip column (not just Description) for tip detection
                     const tipColumnVal = parseCurrency(row['Paid to you:Your earnings:Tip'] || row['Paid to you : Your earnings : Tip']);
+                    /** Uber app: "Adjustments from previous periods" — not rider tips (often duplicated in Tip column). */
+                    const isPriorPeriodFareAdjust = isUberTripFareAdjustOrderDescription(row['Description']);
 
                     let addToGross = 0;
                     let addToNet = 0;
@@ -1616,13 +1619,17 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     } else if (netPayoutRaw !== 0) {
                          // Edge case: Earnings is 0, but Payout exists (Adjustment/Tip)
                          const desc = String(row['Description'] || '').toLowerCase();
-                         
-                         if (desc.includes('tip') || tipColumnVal !== 0) {
+
+                         if (isPriorPeriodFareAdjust) {
+                             // Prior-period credits: treat like other inflow to gross for the trip total
+                             addToGross = netPayoutRaw;
+                             addToNet = netPayoutRaw;
+                         } else if (desc.includes('tip') || tipColumnVal !== 0) {
                              // Tips are new revenue
                              addToGross = netPayoutRaw;
                              addToNet = netPayoutRaw;
                          } else {
-                             // Adjustments (e.g. "trip fare adjust order") are usually Payout corrections, not new Revenue volume.
+                             // Adjustments (e.g. legacy fare adjust) are usually Payout corrections, not new Revenue volume.
                              // Do NOT add to Gross. Only Net.
                              addToGross = 0; 
                              addToNet = netPayoutRaw;
@@ -1639,7 +1646,16 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     const ssotLine = parseUberPaymentTransactionSsotLine(row as Record<string, unknown>);
                     current.uberTips = (current.uberTips || 0) + (ssotLine.tips || 0);
                     current.uberFareComponents = (current.uberFareComponents || 0) + (ssotLine.fareComponents || 0);
-                    if (ssotLine.fareComponents !== 0 || ssotLine.tips !== 0) {
+                    if (isPriorPeriodFareAdjust) {
+                        const priorAmt =
+                            tipColumnVal !== 0
+                                ? tipColumnVal
+                                : earnings !== 0
+                                  ? earnings
+                                  : Math.abs(netPayoutRaw);
+                        current.uberPriorPeriodAdjustment = (current.uberPriorPeriodAdjustment || 0) + priorAmt;
+                    }
+                    if (!isPriorPeriodFareAdjust && (ssotLine.fareComponents !== 0 || ssotLine.tips !== 0)) {
                         const farePlusTips = (ssotLine.fareComponents || 0) + (ssotLine.tips || 0);
                         const tolerance = 0.05; // export rounding differences
                         const rowMatches = Math.abs(farePlusTips - earnings) <= tolerance;
@@ -1672,7 +1688,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     
                     current.fareBreakdown = {
                         baseFare: existingBreakdown.baseFare + parseCurrency(row['Paid to you:Your earnings:Fare:Fare']),
-                        tips: existingBreakdown.tips + parseCurrency(row['Paid to you:Your earnings:Tip']),
+                        tips: existingBreakdown.tips + (isPriorPeriodFareAdjust ? 0 : tipColumnVal),
                         waitTime: existingBreakdown.waitTime + parseCurrency(row['Paid to you:Your earnings:Fare:Wait Time at Pickup']),
                         surge: existingBreakdown.surge + parseCurrency(row['Paid to you:Your earnings:Fare:Surge']),
                         airportFees: existingBreakdown.airportFees + parseCurrency(row['Paid to you:Your earnings:Fare:Airport Surcharge']),
@@ -1698,7 +1714,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     // Determine Transaction Type (Append if multiple)
                     const desc = String(row['Description'] || '').toLowerCase();
                     let type = 'Completed Trip';
-                    if (desc.includes('adjustment')) type = 'Fare Adjustment';
+                    if (isPriorPeriodFareAdjust) type = 'Prior Period Adjustment';
+                    else if (desc.includes('adjustment')) type = 'Fare Adjustment';
                     else if (desc.includes('tip') || tipColumnVal !== 0) type = 'Tip';
                     else if (desc.includes('settle')) type = 'Settlement';
                     

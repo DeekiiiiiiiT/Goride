@@ -278,7 +278,11 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
             </div>
 
             {/* Detailed Financials */}
-            {(trip.fareBreakdown || trip.cashCollected !== undefined || trip.indriveNetIncome) && (
+            {(trip.fareBreakdown ||
+              trip.cashCollected !== undefined ||
+              trip.indriveNetIncome ||
+              (trip.uberPriorPeriodAdjustment != null &&
+                Math.abs(Number(trip.uberPriorPeriodAdjustment) || 0) > 0.0001)) && (
               <>
                 <Separator />
                 <div className="space-y-4">
@@ -386,6 +390,16 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                             <Separator className="my-2" />
                           </>
                         )}
+                        {trip.uberPriorPeriodAdjustment != null &&
+                          Math.abs(trip.uberPriorPeriodAdjustment) > 0.0001 && (
+                            <div className="flex justify-between text-violet-700 dark:text-violet-300">
+                              <span>Adjustments from previous periods</span>
+                              <span className="font-medium">
+                                {trip.uberPriorPeriodAdjustment >= 0 ? '+' : ''}$
+                                {trip.uberPriorPeriodAdjustment.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
                         <div className="flex justify-between text-base font-bold text-slate-900 dark:text-slate-50">
                           <span>Total Earnings</span>
                           <span>${trip.amount.toFixed(2)}</span>

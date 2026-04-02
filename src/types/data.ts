@@ -110,6 +110,12 @@ export interface Trip {
    */
   uberFareComponents?: number; // "fare-only" components, excluding tips
   uberTips?: number; // per-trip tips extracted from Uber payments rows
+  /**
+   * Uber `payments_transaction.csv`: sum of rows whose Description is `trip fare adjust order` (see `isUberTripFareAdjustOrderDescription`).
+   * Positive = credit to the driver in this period. Often appears in the Tip column in CSV but is **not** a rider tip — Uber’s app labels it “Adjustments from previous periods”.
+   * Multiple payment rows for the same Trip UUID: **sum** into this field on merge.
+   */
+  uberPriorPeriodAdjustment?: number;
   uberSsotFarePlusTipsMatch?: boolean; // whether (fareComponents + tips) matches the row gross (within tolerance)
 
   /**
@@ -484,6 +490,8 @@ export type TransactionStatus = 'Completed' | 'Pending' | 'Failed' | 'Reconciled
 export type LedgerEventType =
   | 'fare_earning'
   | 'tip'
+  /** Uber: prior-period fare credits/debits from `trip fare adjust order` rows — separate from `tip`. */
+  | 'prior_period_adjustment'
   | 'promotion'
   | 'refund_expense'
   | 'surge_bonus'
@@ -590,9 +598,12 @@ export interface LedgerDriverOverview {
     uber?: {
       fareComponents: number;
       tips: number;
+      /** Sum of ledger `prior_period_adjustment` lines (Uber, date range). */
+      priorPeriodAdjustments?: number;
       promotions: number;
       refundExpense: number; // positive magnitude
-      netEarnings: number; // fare + tips + promotions - refundExpense
+      /** fare + tips + priorPeriodAdjustments + promotions − refundExpense (server rollup in Phase 3). */
+      netEarnings: number;
     };
     /** Sum of ledger platform_fee events; gross−net on fares is separate (baseFare − earnings). */
     platformFees: number;
@@ -618,6 +629,7 @@ export interface LedgerDriverOverview {
     uber?: {
       fareComponents: number;
       tips: number;
+      priorPeriodAdjustments?: number;
       promotions: number;
       refundExpense: number;
       netEarnings: number;

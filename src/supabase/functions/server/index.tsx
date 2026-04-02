@@ -282,10 +282,14 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const uberFareComponents = hasUberSsot ? coerceAmount(trip.uberFareComponents) : 0;
     const uberTips = hasUberSsot ? coerceAmount(trip.uberTips) : 0;
     const uberGrossForLedger = uberFareComponents + uberTips;
+    const uberPriorPeriodAdjustment = isUber ? coerceAmount(trip.uberPriorPeriodAdjustment) : 0;
 
     const amountSafe = coerceAmount(trip.amount);
     const hasTripAmount = amountSafe > 0;
-    if (!isCompletedTripStatus(trip.status) || (!hasTripAmount && uberGrossForLedger <= 0)) {
+    if (
+      !isCompletedTripStatus(trip.status) ||
+      (!hasTripAmount && uberGrossForLedger <= 0 && Math.abs(uberPriorPeriodAdjustment) <= 0.0001)
+    ) {
         return entries;
     }
 
@@ -408,6 +412,23 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
             netAmount: tips,
             paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
             direction: 'inflow',
+        });
+    }
+
+    // Entry 2a: Prior-period fare adjustments (`trip fare adjust order` in payments_transaction CSV)
+    if (isUber && Math.abs(uberPriorPeriodAdjustment) > 0.0001) {
+        const pp = uberPriorPeriodAdjustment;
+        const isCredit = pp >= 0;
+        entries.push({
+            ...baseEntry,
+            id: crypto.randomUUID(),
+            eventType: 'prior_period_adjustment',
+            category: 'Prior Period Adjustment',
+            description: `Uber adjustments from previous periods: ${pickupShort} -> ${dropoffShort}`,
+            grossAmount: Math.abs(pp),
+            netAmount: pp,
+            paymentMethod: 'Digital Wallet',
+            direction: isCredit ? 'inflow' : 'outflow',
         });
     }
 
@@ -2195,7 +2216,8 @@ app.post("/make-server-37f42386/trips", async (c) => {
                   const amountNum = coerceAmount(trip?.amount);
                   const uberFare = coerceAmount(trip?.uberFareComponents);
                   const uberTips = coerceAmount(trip?.uberTips);
-                  const uberGross = uberFare + uberTips;
+                  const uberPrior = coerceAmount(trip?.uberPriorPeriodAdjustment);
+                  const uberGross = uberFare + uberTips + uberPrior;
                   const isEligibleUber =
                     isUber &&
                     isCompletedTripStatus(trip?.status) &&
@@ -2268,7 +2290,12 @@ app.post("/make-server-37f42386/trips", async (c) => {
               const amt = coerceAmount(t.amount);
               if (amt > 0) return true;
               if (!isUberPlatform(t.platform)) return false;
-              return coerceAmount(t.uberFareComponents) + coerceAmount(t.uberTips) > 0;
+              return (
+                coerceAmount(t.uberFareComponents) +
+                  coerceAmount(t.uberTips) +
+                  coerceAmount(t.uberPriorPeriodAdjustment) >
+                0
+              );
             }).length;
             const fareEntries = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning').length;
             if (fareEntries < completedCount) {
@@ -3239,7 +3266,7 @@ app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requirePermi
 // ═══════════════════════════════════════════════════════════════════════
 
 const VALID_LEDGER_EVENT_TYPES = new Set([
-  'fare_earning', 'tip', 'surge_bonus', 'fuel_expense', 'fuel_reimbursement',
+  'fare_earning', 'tip', 'prior_period_adjustment', 'surge_bonus', 'fuel_expense', 'fuel_reimbursement',
   'toll_charge', 'toll_refund', 'maintenance', 'insurance', 'driver_payout',
   'promotion', 'refund_expense',
   'cash_collection', 'platform_fee', 'wallet_credit', 'wallet_debit',
@@ -3714,6 +3741,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     // Uber SSOT component totals (ledger-derived)
     let pUberFareComponents = 0;
     let pUberTips = 0;
+    let pUberPriorPeriodAdjustments = 0;
     let pUberPromotions = 0;
     let pUberRefundExpense = 0;
     const pPlatformFeesByPlatform: Record<string, number> = {};
@@ -3769,6 +3797,19 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
 
         if (plat === "Uber") {
           pUberTips += net;
+        }
+      } else if (et === "prior_period_adjustment") {
+        pEarnings += net;
+        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+        pPlatformStats[plat].earnings += net;
+        const day = e.date;
+        if (day) {
+          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
+          dailyMap[day].total += net;
+          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
+        }
+        if (plat === "Uber") {
+          pUberPriorPeriodAdjustments += net;
         }
       } else if (et === "promotion") {
         // Promotions are statement-level components (allocated across Uber trips).
@@ -3836,7 +3877,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         baseQuery()
           .gte("value->>date", prevStart)
           .lte("value->>date", prevEnd)
-          .in("value->>eventType", ["fare_earning", "tip"])
+          .in("value->>eventType", ["fare_earning", "tip", "prior_period_adjustment"])
       );
     } catch (prevErr: any) {
       console.log(`[Ledger DriverOverview] Prev period query warning: ${prevErr.message}`);
@@ -3857,7 +3898,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
           .from("kv_store_37f42386")
           .select("value")
           .like("key", "ledger:%")
-          .in("value->>eventType", ["fare_earning", "tip", "toll_charge", "promotion", "refund_expense"]);
+          .in("value->>eventType", ["fare_earning", "tip", "prior_period_adjustment", "toll_charge", "promotion", "refund_expense"]);
         // Org: filterByOrg in-memory after fetch (see period block).
         // Use same multi-ID OR filter as baseQuery
         if (driverIdOrFilter) {
@@ -3881,6 +3922,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     // Uber SSOT component totals (ledger-derived)
     let ltUberFareComponents = 0;
     let ltUberTips = 0;
+    let ltUberPriorPeriodAdjustments = 0;
     let ltUberPromotions = 0;
     let ltUberRefundExpense = 0;
     const ltPlatformStats: Record<string, { earnings: number; tripCount: number; cashCollected: number; tolls: number }> = {};
@@ -3914,6 +3956,13 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
 
           if (platform === "Uber") {
             ltUberTips += net;
+          }
+        } else if (v.eventType === "prior_period_adjustment") {
+          ltEarnings += net;
+          ltPlatformStats[platform].earnings += net;
+
+          if (platform === "Uber") {
+            ltUberPriorPeriodAdjustments += net;
           }
         } else if (v.eventType === "promotion") {
           ltEarnings += net;
@@ -3984,7 +4033,9 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         if (!isCompletedTripStatus(v.status)) continue;
         const isUber = isUberPlatform(v.platform);
         const uberGrossForLedger = isUber
-          ? coerceAmount(v.uberFareComponents) + coerceAmount(v.uberTips)
+          ? coerceAmount(v.uberFareComponents) +
+            coerceAmount(v.uberTips) +
+            coerceAmount(v.uberPriorPeriodAdjustment)
           : 0;
         const amt = coerceAmount(v.amount);
         const hasTripAmount = amt > 0;
@@ -4059,9 +4110,18 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         uber: {
           fareComponents: Number(pUberFareComponents.toFixed(2)),
           tips: Number(pUberTips.toFixed(2)),
+          priorPeriodAdjustments: Number(pUberPriorPeriodAdjustments.toFixed(2)),
           promotions: Number(pUberPromotions.toFixed(2)),
           refundExpense: Number(pUberRefundExpense.toFixed(2)),
-          netEarnings: Number((pUberFareComponents + pUberTips + pUberPromotions - pUberRefundExpense).toFixed(2)),
+          netEarnings: Number(
+            (
+              pUberFareComponents +
+              pUberTips +
+              pUberPriorPeriodAdjustments +
+              pUberPromotions -
+              pUberRefundExpense
+            ).toFixed(2)
+          ),
         },
         platformFees: Number(pPlatformFees.toFixed(2)),
         platformFeesByPlatform: Object.fromEntries(
@@ -4086,9 +4146,18 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         uber: {
           fareComponents: Number(ltUberFareComponents.toFixed(2)),
           tips: Number(ltUberTips.toFixed(2)),
+          priorPeriodAdjustments: Number(ltUberPriorPeriodAdjustments.toFixed(2)),
           promotions: Number(ltUberPromotions.toFixed(2)),
           refundExpense: Number(ltUberRefundExpense.toFixed(2)),
-          netEarnings: Number((ltUberFareComponents + ltUberTips + ltUberPromotions - ltUberRefundExpense).toFixed(2)),
+          netEarnings: Number(
+            (
+              ltUberFareComponents +
+              ltUberTips +
+              ltUberPriorPeriodAdjustments +
+              ltUberPromotions -
+              ltUberRefundExpense
+            ).toFixed(2)
+          ),
         },
         disputeRefunds: Number(ltDisputeRefunds.toFixed(2)),
         platformStats: Object.fromEntries(
@@ -4197,7 +4266,11 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
 
     for (const v of tripValues) {
       const isUber = String(v.platform || "").toLowerCase() === "uber";
-      const uberGross = isUber ? (Number(v.uberFareComponents) || 0) + (Number(v.uberTips) || 0) : 0;
+      const uberGross = isUber
+        ? (Number(v.uberFareComponents) || 0) +
+          (Number(v.uberTips) || 0) +
+          (Number(v.uberPriorPeriodAdjustment) || 0)
+        : 0;
       const hasTripAmount = !!v.amount && Number(v.amount) > 0;
       const hasMoney = isUber ? hasTripAmount || uberGross > 0 : hasTripAmount;
       if (!hasMoney) continue;
@@ -5274,7 +5347,9 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
             // Phase 5 (Uber SSOT integrity): allow ledger generation even if `amount` is 0,
             // as long as Uber SSOT fare/tip components imply a positive gross for the ledger.
             const uberGrossForLedger = isUber
-                ? (Number(trip.uberFareComponents) || 0) + (Number(trip.uberTips) || 0)
+                ? (Number(trip.uberFareComponents) || 0) +
+                  (Number(trip.uberTips) || 0) +
+                  (Number(trip.uberPriorPeriodAdjustment) || 0)
                 : 0;
             const hasTripAmount = !!trip.amount && Number(trip.amount) > 0;
             const hasMoneyForLedger = isUber
@@ -5301,10 +5376,12 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
                         const expectedTip = hasUberSsot ? uberTips : (Number(trip.fareBreakdown?.tips) || 0);
                         const expectedPromotion = isUber ? (Number(trip.uberPromotionsAmount) || 0) : 0;
                         const expectedRefundExpense = isUber ? (Number(trip.uberRefundExpenseAmount) || 0) : 0;
+                        const expectedPriorPeriod = isUber ? Math.abs(Number(trip.uberPriorPeriodAdjustment) || 0) : 0;
 
                         // generateTripLedgerEntries always attempts fare_earning for eligible trips.
                         const expectedEventTypes = new Set<string>(["fare_earning"]);
                         if (expectedTip > 0) expectedEventTypes.add("tip");
+                        if (expectedPriorPeriod > 0.0001) expectedEventTypes.add("prior_period_adjustment");
                         if (expectedPromotion > 0) expectedEventTypes.add("promotion");
                         if (expectedRefundExpense > 0) expectedEventTypes.add("refund_expense");
 
@@ -8489,7 +8566,8 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
                         const amountNum = Number(trip?.amount) || 0;
                         const uberFare = Number(trip?.uberFareComponents) || 0;
                         const uberTips = Number(trip?.uberTips) || 0;
-                        const uberGross = uberFare + uberTips;
+                        const uberPrior = Number(trip?.uberPriorPeriodAdjustment) || 0;
+                        const uberGross = uberFare + uberTips + uberPrior;
                         const isEligibleUber = isUber && status === 'Completed' && (amountNum > 0 || uberGross > 0);
 
                         if (isEligibleUber) {

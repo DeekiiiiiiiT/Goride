@@ -51,7 +51,12 @@ export class DataSanitizer {
           const notes = (trip.notes || '').toLowerCase();
           const transactionType = String(trip.transactionType ?? '').toLowerCase();
           const combined = `${notes} ${transactionType}`;
-          const looksLikeAdjustmentOrTip = /tip|bonus|adjustment|gratuity|misc|other|cancel|settlement/.test(combined);
+          const hasPriorPeriodAdj =
+            trip.uberPriorPeriodAdjustment != null &&
+            Math.abs(Number(trip.uberPriorPeriodAdjustment) || 0) > 0.0001;
+          const looksLikeAdjustmentOrTip =
+            hasPriorPeriodAdj ||
+            /tip|bonus|adjustment|gratuity|misc|other|cancel|settlement/.test(combined);
           if (!looksLikeAdjustmentOrTip) {
               issues.push({ id: crypto.randomUUID(), field: 'distance', message: 'Financial Adjustment (Zero Distance Record)', severity: 'warning' });
               if (status !== 'critical') status = 'warning';
