@@ -8544,6 +8544,10 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
 app.post("/make-server-37f42386/fleet/sync", async (c) => {
   try {
     const { drivers, vehicles, financials, trips, metadata, insights } = await c.req.json();
+    // #region agent log
+    const _uberTripsCount = Array.isArray(trips)?trips.filter((t:any)=>String(t?.platform||'').toLowerCase()==='uber').length:0;
+    console.log(`[DEBUG-b8f371] POST /fleet/sync called trips=${Array.isArray(trips)?trips.length:0} uberTrips=${_uberTripsCount}`);
+    // #endregion
     
     const operations = [];
 
@@ -8619,6 +8623,9 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
                 }
             }
             const allLedgerEntries: any[] = [];
+            // #region agent log
+            console.log(`[DEBUG-b8f371] FleetSync ledger loop start uniqueTrips=${uniqueTrips.length}`);
+            // #endregion
             for (const trip of uniqueTrips) {
                 let tripEntries: any[] = [];
                 try {
@@ -8640,12 +8647,22 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
                 }
                 allLedgerEntries.push(...tripEntries);
             }
+            // #region agent log
+            const _fsUberFare = allLedgerEntries.filter((e:any)=>e.platform==='Uber'&&e.eventType==='fare_earning').length;
+            console.log(`[DEBUG-b8f371] FleetSync ledger loop done totalEntries=${allLedgerEntries.length} uberFareEntries=${_fsUberFare}`);
+            // #endregion
             if (allLedgerEntries.length > 0) {
+                // #region agent log
+                console.log(`[DEBUG-b8f371] FleetSync SAVING ledger entries count=${allLedgerEntries.length}`);
+                // #endregion
                 // Batch save in chunks of 100
                 for (let i = 0; i < allLedgerEntries.length; i += 100) {
                     const chunk = allLedgerEntries.slice(i, i + 100);
                     const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
                     await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
+                    // #region agent log
+                    console.log(`[DEBUG-b8f371] FleetSync kv.mset done chunk=${chunk.length}`);
+                    // #endregion
                 }
                 console.log(`[FleetSync Ledger] Created ${allLedgerEntries.length} ledger entries for ${uniqueTrips.length} trips`);
                 // Verification: count completed trips with amount > 0 vs ledger entries created
