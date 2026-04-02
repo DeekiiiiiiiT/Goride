@@ -1607,11 +1607,13 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                                 : current.uberSsotFarePlusTipsMatch && rowMatches;
                     }
                     
+                    // Sum signed cash across all payment rows for this trip, then use magnitude only where needed.
+                    // Per-row Math.abs() was wrong: adjustment rows (e.g. fare adjust) offset completed-row cash;
+                    // abs-after-each-row inflated totals vs Uber's payments_driver statement.
                     current.cashCollected = (current.cashCollected || 0) + cash;
-                    // Phase 1 Cash Fix: Uber reports cash as negative — normalize to positive
-                    current.cashCollected = Math.abs(current.cashCollected);
-                    // Tag payment method: cash collected wins; else map Payment Type / braintree when column present
-                    if (current.cashCollected > 0) current.paymentMethod = 'Cash';
+                    const cashMag = Math.abs(current.cashCollected);
+                    // Tag payment method: any non-zero net cash activity → Cash; else map from trip_activity-style cell
+                    if (cashMag > 0.0001) current.paymentMethod = 'Cash';
                     else {
                       const fromRow = mapUberTripActivityPaymentType(readUberCsvPaymentTypeCell(row));
                       if (fromRow) current.paymentMethod = fromRow;
@@ -1620,7 +1622,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     
                     current.payouts = current.netTransaction;
                     const totalEarnings = current.amount || 0;
-                    const totalCash = current.cashCollected || 0;
+                    const totalCash = cashMag;
                     current.cashPercentage = totalEarnings !== 0 ? (totalCash / totalEarnings) * 100 : 0;
 
                     // Detailed Financial Breakdown (New Requirement) - Accumulate
