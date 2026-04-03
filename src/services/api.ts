@@ -2499,6 +2499,51 @@ export const api = {
     return result;
   },
 
+  /**
+   * After CSV / fleet import: writes legacy `ledger:*` fare rows for every trip id (same as POST /trips).
+   * Chunks requests so large imports do not exceed the edge limit.
+   */
+  async ensureLedgerFromTripIds(
+    tripIds: string[],
+  ): Promise<{ success: boolean; stats: Record<string, number>; durationMs: number }> {
+    const ids = [...new Set(tripIds.map((id) => String(id).trim()).filter(Boolean))];
+    if (ids.length === 0) {
+      return { success: true, stats: {}, durationMs: 0 };
+    }
+    const SLICE = 10_000;
+    let durationMs = 0;
+    const agg: Record<string, number> = {
+      tripIdsRequested: 0,
+      tripsLoaded: 0,
+      skippedNoMoney: 0,
+      ledgerRowsWritten: 0,
+      unresolvedAfterGenerate: 0,
+      errors: 0,
+      forceDeleted: 0,
+    };
+    for (let i = 0; i < ids.length; i += SLICE) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/ledger/ensure-from-trip-ids`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ tripIds: ids.slice(i, i + SLICE) }),
+      });
+      if (!response.ok) {
+        const msg = await parseFinancialApiErrorBody(response);
+        throw new Error(`Ledger ensure-from-trip-ids failed: ${msg}`);
+      }
+      const json = await response.json();
+      durationMs += Number(json.durationMs) || 0;
+      const st = json.stats || {};
+      for (const key of Object.keys(agg)) {
+        if (typeof st[key] === 'number') agg[key] += st[key];
+      }
+    }
+    return { success: true, stats: agg, durationMs };
+  },
+
   // Phase 2 Diagnostic: Cash field inspection for a driver's stored trips
   async getCashDiagnostic(driverId: string): Promise<any> {
     const response = await fetch(

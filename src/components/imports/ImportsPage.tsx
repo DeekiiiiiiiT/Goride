@@ -844,6 +844,28 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               }
           }
 
+          // Legacy `ledger:*` fare rows for driver overview / integrity banner.
+          // `fleet/sync` and large POSTs can omit or fail ledger writes; backfill from the trips we just saved.
+          if (calibratedTrips.length > 0) {
+              try {
+                  setWarning('Writing trip ledger rows…');
+                  const tripIds = calibratedTrips.map((t) => t.id).filter(Boolean) as string[];
+                  const ledgerRes = await api.ensureLedgerFromTripIds(tripIds);
+                  console.log('[Import] ensureLedgerFromTripIds:', ledgerRes);
+                  if ((ledgerRes.stats.unresolvedAfterGenerate ?? 0) > 0) {
+                      toast.warning(
+                          `Some trips could not get ledger fare rows (${ledgerRes.stats.unresolvedAfterGenerate}). Check trip amounts.`,
+                      );
+                  }
+              } catch (ensureErr: unknown) {
+                  const msg = ensureErr instanceof Error ? ensureErr.message : String(ensureErr);
+                  console.error('[Import] ensureLedgerFromTripIds failed:', ensureErr);
+                  toast.warning(`Trip ledger backfill failed (trips are saved): ${msg}`);
+              } finally {
+                  setWarning(null);
+              }
+          }
+
           // Phase 3: Canonical ledger events (idempotent; legacy ledger:* from POST /trips unchanged)
           const orgForCanonical =
               auditState?.sanitized.financials.data ?? processedOrganizationMetrics[0] ?? null;

@@ -5694,6 +5694,114 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
     }
 });
 
+// ─── POST /ledger/ensure-from-trip-ids — Idempotent ledger backfill for a list of trip UUIDs ─────────
+// Used after CSV / fleet import so drivers do not need manual "Repair Now" for missing fare_earning rows.
+// Same projection rules as POST /trips + repair-driver (delete trip-sourced rows → generate → Uber fallback).
+// Auth: none (matches POST /trips / fleet/sync — anon import key).
+app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
+    const startMs = Date.now();
+    try {
+        const body = await c.req.json();
+        const rawIds: unknown = body?.tripIds;
+        if (!Array.isArray(rawIds) || rawIds.length === 0) {
+            return c.json({ error: "Body must include non-empty tripIds: string[]" }, 400);
+        }
+        const tripIds = [...new Set(rawIds.map((id) => String(id).trim()).filter(Boolean))];
+        if (tripIds.length > 12_000) {
+            return c.json({ error: "Max 12000 trip ids per request — split the import batch" }, 400);
+        }
+
+        let writeOrgId: string | null = getOrgId(c);
+        const stampEntry = (trip: any, entry: any) => {
+            const oid =
+                writeOrgId ||
+                (typeof trip?.organizationId === "string" && trip.organizationId.trim() !== ""
+                    ? trip.organizationId.trim()
+                    : null);
+            return oid ? { ...entry, organizationId: oid } : entry;
+        };
+
+        const stats = {
+            tripIdsRequested: tripIds.length,
+            tripsLoaded: 0,
+            skippedNoMoney: 0,
+            ledgerRowsWritten: 0,
+            unresolvedAfterGenerate: 0,
+            errors: 0,
+            forceDeleted: 0,
+        };
+
+        const CHUNK = 100;
+        for (let i = 0; i < tripIds.length; i += CHUNK) {
+            const chunk = tripIds.slice(i, i + CHUNK);
+            const keys = chunk.map((id) => `trip:${id}`);
+            let values: any[] = [];
+            try {
+                const got = await kv.mget(keys);
+                values = Array.isArray(got) ? got.filter(Boolean) : [];
+            } catch (e) {
+                console.warn("[Ledger EnsureTripIds] mget failed, falling back to per-key get:", e);
+                for (const key of keys) {
+                    try {
+                        const v = await kv.get(key);
+                        if (v) values.push(v);
+                    } catch {
+                        /* skip */
+                    }
+                }
+            }
+            stats.tripsLoaded += values.length;
+
+            for (const trip of values) {
+                if (!trip?.id) continue;
+                if (!tripHasMoneyForLedgerProjection(trip)) {
+                    stats.skippedNoMoney += 1;
+                    continue;
+                }
+                try {
+                    const removed = await deleteLedgerEntriesForTripSource(trip.id);
+                    if (removed > 0) stats.forceDeleted += removed;
+
+                    const tripForLedger = { ...trip, _skipLedgerDedup: true };
+                    let entries: any[] = [];
+                    try {
+                        entries = await generateTripLedgerEntries(tripForLedger);
+                    } catch (genErr: any) {
+                        console.warn(`[Ledger EnsureTripIds] generate failed trip ${trip.id}:`, genErr?.message || genErr);
+                        entries = [];
+                    }
+                    if (entries.length === 0) {
+                        try {
+                            entries = await buildUberFareEarningFallbackEntriesIfEligible(tripForLedger);
+                        } catch (fbErr: any) {
+                            console.warn(`[Ledger EnsureTripIds] fallback failed trip ${trip.id}:`, fbErr?.message || fbErr);
+                        }
+                    }
+                    if (entries.length > 0) {
+                        const ledgerKeys = entries.map((e: any) => `ledger:${e.id}`);
+                        await kv.mset(ledgerKeys, entries.map((e: any) => stampEntry(trip, e)));
+                        stats.ledgerRowsWritten += entries.length;
+                    } else {
+                        stats.unresolvedAfterGenerate += 1;
+                    }
+                } catch (loopErr: any) {
+                    stats.errors += 1;
+                    console.error(`[Ledger EnsureTripIds] trip ${trip.id}:`, loopErr?.message || loopErr);
+                }
+            }
+        }
+
+        const durationMs = Date.now() - startMs;
+        console.log(
+            `[Ledger EnsureTripIds] OK — requested=${stats.tripIdsRequested} loaded=${stats.tripsLoaded} rows=${stats.ledgerRowsWritten} skipped=${stats.skippedNoMoney} unresolved=${stats.unresolvedAfterGenerate} errors=${stats.errors} (${durationMs}ms)`,
+        );
+        return c.json({ success: true, stats, durationMs });
+    } catch (e: any) {
+        console.error("[Ledger EnsureTripIds] Fatal:", e);
+        return c.json({ error: e?.message || "ensure-from-trip-ids failed" }, 500);
+    }
+});
+
 // ─── GET /diagnostic/unresolvable-driver-map — Step A: Discover Uber/InDrive UUID → Driver mapping ──
 // Scans all ledger entries, finds driverIds that are NOT known Roam UUIDs,
 // and groups them with their driverName, count, and platforms so we can

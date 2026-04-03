@@ -237,6 +237,15 @@ export const importExecutor = {
             onProgress(pct);
         }
 
+        // Match merged import: ensure legacy `ledger:*` fare rows exist (same as ImportsPage).
+        if (prepared.length > 0) {
+            try {
+                await api.ensureLedgerFromTripIds(prepared.map((t) => t.id).filter(Boolean) as string[]);
+            } catch (e) {
+                console.warn('[processTripBatch] ensureLedgerFromTripIds failed (trips saved):', e);
+            }
+        }
+
         return { ...result, batchId, weeksCovered };
     },
 
