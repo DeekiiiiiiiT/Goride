@@ -15,6 +15,7 @@ import {
   Fuel,
   Info,
   ChevronRight,
+  ChevronDown,
   Wallet,
   Banknote,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ import {
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { cn } from '../ui/utils';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 
 // ── Shared constants (exported for use by DriverDetail.tsx) ──
 export const PLATFORM_COLORS: Record<string, string> = {
@@ -98,6 +100,68 @@ function DeductionRow({ label, magnitude }: { label: string; magnitude: number }
         −${fmtMoney(magnitude)}
       </span>
     </div>
+  );
+}
+
+/** Same accordion pattern as Data Center → Roam Import reconciliation (collapsed by default). */
+function PeriodBreakdownCollapsible({
+  title,
+  headerAmount,
+  hideHeaderAmount,
+  children,
+}: {
+  title: React.ReactNode;
+  headerAmount?: number;
+  /** Payout-style sections with no summary number on the trigger. */
+  hideHeaderAmount?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Collapsible
+      defaultOpen={false}
+      className="py-1 [&[data-state=open]_.period-breakdown-chevron]:rotate-180"
+    >
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-md py-2 px-1 -mx-1 text-left text-sm outline-none transition-colors hover:bg-slate-100/80 focus-visible:ring-2 focus-visible:ring-slate-300 dark:hover:bg-slate-800/60">
+        <span className="font-medium text-slate-900 dark:text-slate-100">{title}</span>
+        <span className="flex items-center gap-2 shrink-0">
+          {!hideHeaderAmount && headerAmount !== undefined && (
+            <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+              ${fmtMoney(headerAmount)}
+            </span>
+          )}
+          <ChevronDown className="period-breakdown-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200" />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ul className="mb-2 mt-0.5 ml-1 space-y-1 border-l border-slate-200 pl-3 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-400">
+          {children}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function PeriodBreakdownSubLine({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: React.ReactNode;
+  value: number;
+  valueClassName?: string;
+}) {
+  return (
+    <li className="flex justify-between gap-4">
+      <span>{label}</span>
+      <span
+        className={cn(
+          'tabular-nums font-medium text-slate-800 dark:text-slate-200',
+          valueClassName,
+        )}
+      >
+        ${fmtMoney(value)}
+      </span>
+    </li>
   );
 }
 
@@ -511,6 +575,23 @@ export function OverviewMetricsGrid({
                       Math.abs(
                         ul.fareComponents + ul.tips + ul.promotions + priorAdj - csv.totalEarnings,
                       ) > 0.05;
+                    const tollSupportAmt = Number(resolvedFinancials.disputeRefunds) || 0;
+                    const tollsSub =
+                      (u?.tolls || 0) > 0.005
+                        ? u!.tolls
+                        : Math.max(0, refundsMag - tollSupportAmt);
+                    const periodTotalEarnings = ledgerOk
+                      ? ul.fareComponents + ul.promotions + ul.tips
+                      : 0;
+                    const uberGrandTotal = ledgerOk
+                      ? periodTotalEarnings + refundsMag + priorAdj
+                      : 0;
+                    const payoutCash =
+                      (u?.cashCollected || 0) > 0.005
+                        ? u!.cashCollected
+                        : Number(csv?.cashCollected) || 0;
+                    const payoutBank = 0;
+
                     return (
                       <section className="space-y-3">
                         <div>
@@ -525,62 +606,115 @@ export function OverviewMetricsGrid({
                             Labels follow payments_driver.csv
                           </p>
                         </div>
-                        <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                        <div className="space-y-0 divide-y divide-slate-100 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900/40">
                           {totalEarningsRow != null && (
-                            <BreakdownMoneyRow label="Total earnings" value={totalEarningsRow} />
+                            <div className="pb-2">
+                              <BreakdownMoneyRow label="Total earnings" value={totalEarningsRow} bold />
+                            </div>
                           )}
-                          {ledgerOk && (
-                            <BreakdownMoneyRow
-                              label="Net fare (fare components)"
-                              value={ul.fareComponents}
-                            />
-                          )}
-                          {ledgerOk && ul.promotions > 0.005 && (
-                            <BreakdownMoneyRow
-                              label="Total earnings : Promotions"
-                              value={ul.promotions}
-                              valueClassName="text-indigo-700 dark:text-indigo-400"
-                            />
-                          )}
-                          {ledgerOk && ul.tips > 0.005 && (
-                            <BreakdownMoneyRow
-                              label="Total earnings : Tip"
-                              value={ul.tips}
-                              valueClassName="text-emerald-700 dark:text-emerald-400"
-                            />
-                          )}
-                          {ledgerOk && Math.abs(priorAdj) > 0.005 && (
-                            <BreakdownMoneyRow
-                              label="Adjustments from previous periods"
-                              value={priorAdj}
-                              valueClassName="text-violet-700 dark:text-violet-400"
-                            />
-                          )}
-                          <DeductionRow label="Refunds & expenses" magnitude={refundsMag} />
-                          {(u?.tolls || 0) > 0.005 && (
-                            <BreakdownMoneyRow label="Tolls & trip refunds (ledger)" value={u.tolls} />
-                          )}
-                          {(u?.earnings || 0) > 0.005 && (
+
+                          {ledgerOk ? (
                             <>
-                              <Separator className="bg-slate-200/80 dark:bg-slate-700" />
-                              <BreakdownMoneyRow
-                                label="Trip earnings (ledger net, incl. tips on fare lines)"
-                                value={u.earnings}
-                                bold
-                              />
+                              <PeriodBreakdownCollapsible
+                                title="Period Total Earnings"
+                                headerAmount={periodTotalEarnings}
+                              >
+                                <PeriodBreakdownSubLine
+                                  label="Net fare (fare components)"
+                                  value={ul.fareComponents}
+                                />
+                                <PeriodBreakdownSubLine
+                                  label="Total earnings : Promotions"
+                                  value={ul.promotions}
+                                  valueClassName="text-indigo-700 dark:text-indigo-400"
+                                />
+                                <PeriodBreakdownSubLine
+                                  label="Total earnings : Tip"
+                                  value={ul.tips}
+                                  valueClassName="text-emerald-700 dark:text-emerald-400"
+                                />
+                              </PeriodBreakdownCollapsible>
+
+                              <PeriodBreakdownCollapsible
+                                title="Refunds & Expenses"
+                                headerAmount={refundsMag}
+                              >
+                                <PeriodBreakdownSubLine label="Tolls" value={tollsSub} />
+                                <PeriodBreakdownSubLine
+                                  label="Toll Support Adjustment"
+                                  value={tollSupportAmt}
+                                />
+                              </PeriodBreakdownCollapsible>
+
+                              <PeriodBreakdownCollapsible
+                                title="Adjustments from previous periods"
+                                headerAmount={priorAdj}
+                              >
+                                <PeriodBreakdownSubLine
+                                  label="Period Adjustment"
+                                  value={priorAdj}
+                                  valueClassName="text-violet-700 dark:text-violet-400"
+                                />
+                              </PeriodBreakdownCollapsible>
+
+                              <PeriodBreakdownCollapsible title="Payout" hideHeaderAmount>
+                                <PeriodBreakdownSubLine label="Cash Collected" value={payoutCash} />
+                                {payoutBank > 0.005 ? (
+                                  <PeriodBreakdownSubLine label="Transferred to Bank" value={payoutBank} />
+                                ) : (
+                                  <li className="flex justify-between gap-4">
+                                    <span>Transferred to Bank</span>
+                                    <span className="tabular-nums font-medium text-slate-400 dark:text-slate-500">
+                                      —
+                                    </span>
+                                  </li>
+                                )}
+                              </PeriodBreakdownCollapsible>
+
+                              <div className="flex justify-between gap-4 pt-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                <span>Total</span>
+                                <span className="tabular-nums">${fmtMoney(uberGrandTotal)}</span>
+                              </div>
+
+                              {(u?.earnings || 0) > 0.005 && (
+                                <>
+                                  <Separator className="bg-slate-200/80 dark:bg-slate-700" />
+                                  <BreakdownMoneyRow
+                                    label="Trip earnings (ledger net, incl. tips on fare lines)"
+                                    value={u.earnings}
+                                    bold
+                                  />
+                                </>
+                              )}
                             </>
+                          ) : (
+                            <div className="space-y-2 pt-1">
+                              {csv && (
+                                <>
+                                  <BreakdownMoneyRow label="Total earnings (import)" value={csv.totalEarnings} />
+                                  <DeductionRow label="Refunds & expenses" magnitude={refundsMag} />
+                                  {(csv.cashCollected || 0) > 0.005 && (
+                                    <BreakdownMoneyRow
+                                      label="Cash collected (import)"
+                                      value={csv.cashCollected}
+                                    />
+                                  )}
+                                </>
+                              )}
+                              {csv && (
+                                <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+                                  Open the ledger-backed view for the same date range to see Period Total,
+                                  refunds split, prior-period adjustment, and payout rows in the collapsible
+                                  layout.
+                                </p>
+                              )}
+                            </div>
                           )}
+
                           {statementMismatch && (
-                            <p className="text-[10px] leading-snug text-amber-700 dark:text-amber-500">
-                              Imported statement &ldquo;Total earnings&rdquo; (
-                              ${fmtMoney(csv!.totalEarnings)}) differs from the ledger Uber gross components — ranges
-                              or rounding may not align.
-                            </p>
-                          )}
-                          {!ledgerOk && csv && (
-                            <p className="text-[10px] leading-snug text-slate-500">
-                              Tip and promotion lines appear when the ledger exposes Uber SSOT for this period.
-                              Statement subtotals above come from payments_driver imports.
+                            <p className="pt-2 text-[10px] leading-snug text-amber-700 dark:text-amber-500">
+                              Imported statement &ldquo;Total earnings&rdquo; (${fmtMoney(csv!.totalEarnings)})
+                              differs from the ledger Uber gross components — ranges or rounding may not align.
                             </p>
                           )}
                         </div>
