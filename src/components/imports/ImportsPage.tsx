@@ -2832,9 +2832,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                </p>
                <p className="text-xs text-slate-500 max-w-md mx-auto mt-3 leading-relaxed">
                   Financial truth in Roam is the <span className="font-medium text-slate-700">posted ledger</span>
-                  {' '}(trip-sourced ledger rows plus canonical import events when sync succeeds). Open a driver&apos;s
-                  overview to see period totals from the ledger; enable the money read-model flag to aggregate from
-                  canonical events when you are ready for Phase 8 cutover.
+                  {' '}(trip-sourced ledger rows plus canonical import events when sync succeeds). Production builds
+                  use the <span className="font-medium text-slate-700">canonical money read model</span> for driver
+                  period totals when available; use localStorage <span className="font-mono text-[10px]">roam_ledger_money_read_model=0</span> to fall back to the legacy path.
                </p>
                {processedInsights && (processedInsights.alerts?.length || 0) > 0 && (
                    <div className="mt-4 p-4 bg-orange-50 text-orange-800 rounded-md text-sm border border-orange-100 max-w-md mx-auto">

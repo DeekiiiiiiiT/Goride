@@ -4,7 +4,7 @@
 
 **Process:** Phases below are **documentation and sequencing only**. **Do not start a phase until explicitly approved** for that phase. After each phase completes, wait for approval before starting the next.
 
-**Status:** **Phase 2 — COMPLETE** (2026-04-03). Canonical ledger storage + append/list API + client helpers. **Awaiting approval to start Phase 3.**
+**Status:** **Phase 8 — COMPLETE** (2026-04-03). Golden CSV bundle + Vitest integration tests; CI workflow; canonical money read model **on by default** in production builds (see Phase 8 cutover).
 
 ---
 
@@ -368,7 +368,7 @@
    - If needed, materialized projection per driver-week with invalidation on event append for that key.
 
 4. **Feature flag**  
-   - `useLedgerMoneyReadModel` (or similar) to toggle client between old and new API until Phase 8.
+   - `isLedgerMoneyReadModelEnabled()` toggles client between legacy and canonical `driver-overview`; Phase 8 defaults canonical **on** in production builds (opt-out documented in Phase 8 cutover).
 
 5. **Success criteria**  
    - All aggregations in one place; unit tests on synthetic event lists; no direct CSV merge in this layer.
@@ -500,6 +500,46 @@
 5. **Success criteria**  
    - CI green on golden bundle; stakeholder sign-off; Phase 8 complete = **enterprise SSOT path is default**.
 
+### Phase 8 — Completion record (2026-04-03)
+
+#### Golden bundle (fixtures)
+
+| File | Role |
+|------|------|
+| `src/fixtures/golden-import-bundle/golden_trip_activity.csv` | Minimal `trip_activity` (Trip UUID, driver, completed trip). |
+| `src/fixtures/golden-import-bundle/golden_payments_driver.csv` | `payments_driver` totals + explicit Net Fare. |
+| `src/fixtures/golden-import-bundle/golden_payment_organization.csv` | Org period, payouts, toll refunds column. |
+| `src/fixtures/golden-import-bundle/golden_payments_transaction.csv` | One trip payment row (fare components) + one `Support Adjustment` toll row (no Trip UUID). |
+| `src/fixtures/golden-import-bundle/golden-expected-read-model.json` | Expected canonical event counts, read-model numbers, reconciliation delta. |
+
+#### Automated tests
+
+- **`src/utils/goldenImportBundle.test.ts`** — `mergeAndProcessData` → `buildCanonicalImportEvents` → `aggregateCanonicalEventsToLedgerDriverOverview`; asserts event taxonomy counts, refund **outflow** sign, reconciliation variance vs `golden-expected-read-model.json`, deterministic idempotency keys.
+
+#### CI
+
+- **`.github/workflows/ci.yml`** — on push/PR to `main`: `npm ci`, `npm test`, `npm run build`.
+
+#### Cutover checklist (canonical read model)
+
+1. **Edge function** — Deploy **`make-server-37f42386`** so `GET /ledger/driver-overview?source=canonical` and canonical append routes match the client build you ship.
+2. **Production build** — `isLedgerMoneyReadModelEnabled()` is **true** when `import.meta.env.PROD` unless `VITE_LEDGER_MONEY_READ_MODEL=false`. For a legacy-first production build, set `VITE_LEDGER_MONEY_READ_MODEL=false` until data is trusted.
+3. **Rollback (no redeploy)** — In the browser: `localStorage.setItem('roam_ledger_money_read_model', '0')` then reload — forces legacy driver-overview path.
+4. **Rollback (redeploy)** — Ship a build with `VITE_LEDGER_MONEY_READ_MODEL=false` or revert the feature-flag commit.
+5. **Monitor** — Watch import errors, driver overview load failures, and variance spikes vs Phase 7 **Import batch audit → Recount**.
+
+#### Operational runbook (one page)
+
+| Symptom | Action |
+|---------|--------|
+| **Import saved trips but ledger toast failed** | Trips exist; canonical events may be partial. Phase 7 **Recount** vs batch record; re-append safe if idempotency keys unchanged; fix API/auth and re-import if needed. |
+| **Duplicate money / double events** | Do not delete blindly. Phase 7 repair: remove wrong `ledger_event:*` + matching `ledger_event_idem:*` for that batch, then re-import; or delete batch + clean canonical rows per runbook. |
+| **Variance spike (statement vs posted)** | Use merged import preview labels (Phase 6); check **Statement vs posted ledger** in period modal; confirm `payments_driver` present; verify period dates. |
+| **Replay / refresh projections** | Driver overview canonical mode re-aggregates from KV on each fetch; for batch-level truth use **canonical-batch-audit** (Phase 7). Full org recompute remains a future batch job. |
+| **Canonical read model wrong after deploy** | Roll back flag (`localStorage` `0` or env `false`); confirm edge version; invalidate caches if applicable. |
+
+**Stakeholder sign-off:** _Record name/date when production default is accepted._
+
 ---
 
 ## Phase dependency summary
@@ -526,4 +566,5 @@
 - **Phase 5** — Code complete (2026-04-03): canonical driver-overview mode + shared aggregate module + feature flag + Vitest.  
 - **Phase 6** — Code complete (2026-04-03): preview vs posted ledger labeling; period modal + overview subtext; driver ledger column context.  
 - **Phase 7** — Code complete (2026-04-03): batch audit fields + PATCH; canonical batch audit GET; Imports audit panel + Delete Center summary; repair/runbook in this doc.  
-- **Next:** Say **“Start Phase 8”** when ready. **No phase starts without your explicit go-ahead.**
+- **Phase 8** — Code complete (2026-04-03): golden CSV bundle + `goldenImportBundle` Vitest; `golden-expected-read-model.json`; GitHub Actions CI (`test` + `build`); production default **canonical** money read model via `featureFlags.ts` (opt-out with `VITE_LEDGER_MONEY_READ_MODEL=false` or `localStorage` `0`); cutover + operational runbook in Phase 8 section above.  
+- **Next:** Maintain fixtures when import/aggregate contracts change; record stakeholder sign-off when enterprise SSOT is accepted as default in your environment.
