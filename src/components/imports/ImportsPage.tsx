@@ -850,6 +850,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               try {
                   setWarning('Writing trip ledger rows…');
                   const tripIds = calibratedTrips.map((t) => t.id).filter(Boolean) as string[];
+                  // #region agent log
+                  fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'ImportsPage:handleConfirmImport',message:'before ensureLedger',data:{tripIdsLen:tripIds.length,useAuditMegaJson:!!auditState},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                  // #endregion
                   const ledgerRes = await api.ensureLedgerFromTripIds(tripIds);
                   console.log('[Import] ensureLedgerFromTripIds:', ledgerRes);
                   if ((ledgerRes.stats.unresolvedAfterGenerate ?? 0) > 0) {

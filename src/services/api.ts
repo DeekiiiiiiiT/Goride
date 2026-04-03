@@ -2510,6 +2510,9 @@ export const api = {
     if (ids.length === 0) {
       return { success: true, stats: {}, durationMs: 0 };
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'api.ts:ensureLedgerFromTripIds',message:'ensure start',data:{uniqueIds:ids.length,endpointSuffix:'/ledger/ensure-from-trip-ids'},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     const SLICE = 10_000;
     let durationMs = 0;
     const agg: Record<string, number> = {
@@ -2522,7 +2525,8 @@ export const api = {
       forceDeleted: 0,
     };
     for (let i = 0; i < ids.length; i += SLICE) {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/ledger/ensure-from-trip-ids`, {
+      const url = `${API_ENDPOINTS.fleet}/ledger/ensure-from-trip-ids`;
+      const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2530,17 +2534,29 @@ export const api = {
         },
         body: JSON.stringify({ tripIds: ids.slice(i, i + SLICE) }),
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'api.ts:ensureLedgerFromTripIds',message:'ensure http',data:{ok:response.ok,status:response.status,sliceLen:Math.min(SLICE,ids.length-i)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       if (!response.ok) {
         const msg = await parseFinancialApiErrorBody(response);
+        // #region agent log
+        fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'api.ts:ensureLedgerFromTripIds',message:'ensure error body',data:{msg:String(msg).slice(0,200)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
         throw new Error(`Ledger ensure-from-trip-ids failed: ${msg}`);
       }
       const json = await response.json();
       durationMs += Number(json.durationMs) || 0;
       const st = json.stats || {};
+      // #region agent log
+      fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'api.ts:ensureLedgerFromTripIds',message:'ensure slice stats',data:{stats:st},timestamp:Date.now(),hypothesisId:'H2-H4'})}).catch(()=>{});
+      // #endregion
       for (const key of Object.keys(agg)) {
         if (typeof st[key] === 'number') agg[key] += st[key];
       }
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8f371'},body:JSON.stringify({sessionId:'b8f371',location:'api.ts:ensureLedgerFromTripIds',message:'ensure done',data:{agg,durationMs},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     return { success: true, stats: agg, durationMs };
   },
 
