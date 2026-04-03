@@ -1036,6 +1036,18 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     // Phase 6.1: Determine Batch Date (Fallback for files missing explicit dates)
     const batchFallbackDate = files.find(f => f.reportDate)?.reportDate || new Date().toISOString();
 
+    // Pre-populate `trip_activity` Trip UUIDs BEFORE any `payments_transaction` merge.
+    // If `uber_payment` runs first in `files` order, `uberTripActivityTripIds` was still empty,
+    // so every `trip fare adjust order` row was misclassified as prior-period adjustment
+    // (e.g. all 8 rows ≈ $3,688.70; Tips stayed $0). Upload order must not affect classification.
+    for (const file of files) {
+        if (file.type !== 'uber_trip') continue;
+        for (const row of file.rows) {
+            const tid = cleanId(row['Trip UUID'] || row['trip uuid']);
+            if (tid) uberTripActivityTripIds.add(String(tid).toLowerCase());
+        }
+    }
+
     // Map to hold VehicleMetrics to avoid duplicates and allow merging
     // We didn't have this before (we just pushed to array), but we need it for merging Time & Distance data
     // with potentially existing Performance data (though usually they are separate files/rows).
