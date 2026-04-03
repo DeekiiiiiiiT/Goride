@@ -272,13 +272,28 @@ function coerceAmount(amount: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Same eligibility as GET /ledger/driver-overview completeness + repair-driver stats:
+ * completed trip with amount &gt; 0, or Uber with positive sum of fare/tip/prior components.
+ * Keeps trip:* vs ledger:* fare_earning counts aligned with the integrity banner.
+ */
+function tripHasMoneyForLedgerProjection(trip: any): boolean {
+  if (!isCompletedTripStatus(trip?.status)) return false;
+  const amt = coerceAmount(trip?.amount);
+  const hasTripAmount = amt > 0;
+  if (!isUberPlatform(trip?.platform)) return hasTripAmount;
+  const uberGrossForLedger =
+    coerceAmount(trip?.uberFareComponents) +
+    coerceAmount(trip?.uberTips) +
+    coerceAmount(trip?.uberPriorPeriodAdjustment);
+  return hasTripAmount || uberGrossForLedger > 0;
+}
+
 // ─── Trip → Ledger Entry Generator ────────────────────────────────────
 async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const entries: any[] = [];
 
-    // Only create ledger entries for completed trips with meaningful money.
-    // Uber Phase 3: if SSOT decomposition exists, allow ledger generation when `amount` is 0
-    // but SSOT fare/tip components exist (e.g., edge-case rows).
+    // Only create ledger entries for completed trips with meaningful money (aligned with driver-overview).
     const isUber = isUberPlatform(trip.platform);
     const hasUberSsot = isUber && (trip.uberFareComponents != null || trip.uberTips != null);
     const uberFareComponents = hasUberSsot ? coerceAmount(trip.uberFareComponents) : 0;
@@ -287,11 +302,7 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const uberPriorPeriodAdjustment = isUber ? coerceAmount(trip.uberPriorPeriodAdjustment) : 0;
 
     const amountSafe = coerceAmount(trip.amount);
-    const hasTripAmount = amountSafe > 0;
-    if (
-      !isCompletedTripStatus(trip.status) ||
-      (!hasTripAmount && uberGrossForLedger <= 0 && Math.abs(uberPriorPeriodAdjustment) <= 0.0001)
-    ) {
+    if (!tripHasMoneyForLedgerProjection(trip)) {
         return entries;
     }
 
@@ -513,16 +524,12 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
  */
 async function buildUberFareEarningFallbackEntriesIfEligible(trip: any): Promise<any[]> {
     const isUber = isUberPlatform(trip?.platform);
+    if (!isUber || !tripHasMoneyForLedgerProjection(trip)) return [];
     const amountNum = coerceAmount(trip?.amount);
     const uberFare = coerceAmount(trip?.uberFareComponents);
     const uberTips = coerceAmount(trip?.uberTips);
     const uberPrior = coerceAmount(trip?.uberPriorPeriodAdjustment);
     const uberGross = uberFare + uberTips + uberPrior;
-    const isEligibleUber =
-        isUber &&
-        isCompletedTripStatus(trip?.status) &&
-        (amountNum > 0 || uberGross > 0);
-    if (!isEligibleUber) return [];
 
     const resolved = await resolveCanonicalDriverId(trip.driverId || '');
     const dateObj = new Date(trip?.date);
@@ -5495,8 +5502,8 @@ app.post("/make-server-37f42386/ledger/repair-driver-ids", requireAuth(), requir
 });
 
 // ─── POST /ledger/repair-driver — Phase 6.3: Targeted per-driver ledger repair ──────
-// Fetches ALL completed trips for a driver, calls generateTripLedgerEntries() for each,
-// and writes only the missing ones (dedup check built into the generator).
+// Fetches trips for a driver, deletes trip-sourced ledger rows per trip (same as POST /trips),
+// then generateTripLedgerEntries + Uber fallback; stamps organizationId on new ledger rows.
 app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePermission('data.backfill'), async (c) => {
     try {
         const startMs = Date.now();
@@ -5587,10 +5594,26 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
             alreadyExisted: 0,
             skippedNotCompleted: 0,
             skippedNoAmount: 0,
+            fallbackFareRows: 0,
+            unresolvedAfterRepair: 0,
             errors: 0,
             forceDeleted: 0,
             byPlatform: {} as Record<string, { trips: number; created: number; existed: number }>,
         };
+
+        // Org stamp on new ledger rows (same as POST /trips / fleet/sync)
+        let repairWriteOrgId: string | null = getOrgId(c);
+        if (!repairWriteOrgId) {
+            try {
+                const driverRec = await kv.get(`driver:${driverId}`);
+                const cand = typeof driverRec?.organizationId === "string" ? driverRec.organizationId.trim() : "";
+                if (cand) repairWriteOrgId = cand;
+            } catch {
+                /* ignore */
+            }
+        }
+        const stampRepairOrg = <T extends Record<string, any>>(record: T): T =>
+            repairWriteOrgId ? ({ ...record, organizationId: repairWriteOrgId } as T) : record;
 
         for (const trip of allTrips) {
             const isUber = String(trip.platform || '').toLowerCase() === 'uber';
@@ -5605,19 +5628,7 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
                 continue;
             }
 
-            // Phase 5 (Uber SSOT integrity): allow ledger generation even if `amount` is 0,
-            // as long as Uber SSOT fare/tip components imply a positive gross for the ledger.
-            const uberGrossForLedger = isUber
-                ? (Number(trip.uberFareComponents) || 0) +
-                  (Number(trip.uberTips) || 0) +
-                  (Number(trip.uberPriorPeriodAdjustment) || 0)
-                : 0;
-            const hasTripAmount = !!trip.amount && Number(trip.amount) > 0;
-            const hasMoneyForLedger = isUber
-                ? (hasTripAmount || uberGrossForLedger > 0)
-                : hasTripAmount;
-
-            if (!hasMoneyForLedger) {
+            if (!tripHasMoneyForLedgerProjection(trip)) {
                 stats.skippedNoAmount += 1;
                 continue;
             }
@@ -5625,83 +5636,42 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
             stats.completedWithAmount += 1;
 
             try {
-                // Force mode: delete existing ledger entries for this trip so they get regenerated
-                if (force) {
-                    // Repair without regressions:
-                    // Only delete the trip-sourced ledger rows if the expected Uber SSOT components
-                    // (fare/tip/promotion/refund_expense) are missing.
-                    try {
-                        const isUber = String(trip.platform || '').toLowerCase() === 'uber';
-                        const hasUberSsot = isUber && (trip.uberFareComponents != null || trip.uberTips != null);
-                        const uberTips = isUber ? (Number(trip.uberTips) || 0) : 0;
-                        const expectedTip = hasUberSsot ? uberTips : (Number(trip.fareBreakdown?.tips) || 0);
-                        const expectedPromotion = isUber ? (Number(trip.uberPromotionsAmount) || 0) : 0;
-                        const expectedRefundExpense = isUber ? (Number(trip.uberRefundExpenseAmount) || 0) : 0;
-                        const expectedPriorPeriod = isUber ? Math.abs(Number(trip.uberPriorPeriodAdjustment) || 0) : 0;
+                // Same as POST /trips: remove stale trip-sourced rows so dedup never no-ops with
+                // "fare exists" when rows are partial/wrong; then regenerate the full set.
+                const removed = await deleteLedgerEntriesForTripSource(trip.id);
+                if (removed > 0) stats.forceDeleted += removed;
 
-                        // generateTripLedgerEntries always attempts fare_earning for eligible trips.
-                        const expectedEventTypes = new Set<string>(["fare_earning"]);
-                        if (expectedTip > 0) expectedEventTypes.add("tip");
-                        if (expectedPriorPeriod > 0.0001) expectedEventTypes.add("prior_period_adjustment");
-                        if (expectedPromotion > 0) expectedEventTypes.add("promotion");
-                        if (expectedRefundExpense > 0) expectedEventTypes.add("refund_expense");
-
-                        const { data: existingEntries } = await supabase
-                            .from("kv_store_37f42386")
-                            .select("key, value")
-                            .like("key", "ledger:%")
-                            .eq("value->>sourceId", trip.id)
-                            .eq("value->>sourceType", "trip");
-
-                        const existingEventTypes = new Set<string>();
-                        if (existingEntries && existingEntries.length > 0) {
-                            for (const e of existingEntries) {
-                                const et = e?.value?.eventType;
-                                if (et) existingEventTypes.add(String(et));
-                            }
-                        }
-
-                        const missingExpected = Array.from(expectedEventTypes).filter(et => !existingEventTypes.has(et));
-
-                        if (missingExpected.length > 0) {
-                            const delKeys = (existingEntries || []).map((e: any) => e.key).filter(Boolean);
-                            if (delKeys.length > 0) {
-                                await kv.mdel(delKeys);
-                                stats.forceDeleted += delKeys.length;
-                                console.log(`[Ledger RepairDriver] Deleted ${delKeys.length} ledger entries for trip ${trip.id} (missing: ${missingExpected.join(',')})`);
-                            }
-                        } else {
-                            // Ledger already has expected event types; keep it as-is.
-                            // generateTripLedgerEntries will dedup-skip anyway.
-                        }
-                    } catch (delErr: any) {
-                        console.warn(`[Ledger RepairDriver] Repair-delete failed for trip ${trip.id}: ${delErr.message}`);
-                    }
-                }
                 // Normalize driverId to canonical Roam UUID before generating ledger entries.
-                // Trips found via Uber/InDrive UUID still have the platform UUID as driverId;
-                // the ledger must use the canonical Roam UUID so the overview query finds them.
-                const tripForLedger = trip.driverId === driverId ? trip : { ...trip, driverId };
+                const baseTrip = trip.driverId === driverId ? trip : { ...trip, driverId };
+                const tripForLedger = { ...baseTrip, _skipLedgerDedup: true };
+
                 let entries: any[] = [];
                 try {
                     entries = await generateTripLedgerEntries(tripForLedger);
                 } catch (genErr: any) {
                     console.error(`[Ledger RepairDriver] generateTripLedgerEntries failed for trip ${trip.id}:`, genErr);
+                    entries = [];
+                }
+                // Mirror POST /trips: fallback when generator returns [] without throwing (Uber edge cases).
+                if (entries.length === 0) {
                     try {
-                        entries = await buildUberFareEarningFallbackEntriesIfEligible(tripForLedger);
-                    } catch (fbErr) {
+                        const fb = await buildUberFareEarningFallbackEntriesIfEligible(tripForLedger);
+                        if (fb.length > 0) {
+                            entries = fb;
+                            stats.fallbackFareRows += fb.filter((e: any) => e.eventType === "fare_earning").length;
+                        }
+                    } catch (fbErr: any) {
                         console.error(`[Ledger RepairDriver] Uber fallback failed for trip ${trip.id}:`, fbErr);
-                        entries = [];
                     }
                 }
+
                 if (entries.length > 0) {
                     const keys = entries.map((e: any) => `ledger:${e.id}`);
-                    await kv.mset(keys, entries);
+                    await kv.mset(keys, entries.map((e: any) => stampRepairOrg(e)));
                     stats.ledgerCreated += entries.length;
                     stats.byPlatform[plat].created += entries.length;
                 } else {
-                    stats.alreadyExisted += 1;
-                    stats.byPlatform[plat].existed += 1;
+                    stats.unresolvedAfterRepair += 1;
                 }
             } catch (err: any) {
                 stats.errors += 1;
