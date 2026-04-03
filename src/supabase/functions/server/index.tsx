@@ -286,14 +286,9 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
 
     const amountSafe = coerceAmount(trip.amount);
     const hasTripAmount = amountSafe > 0;
-    const _statusOk = isCompletedTripStatus(trip.status);
-    const _moneyOk = hasTripAmount || uberGrossForLedger > 0 || Math.abs(uberPriorPeriodAdjustment) > 0.0001;
-    // #region agent log
-    if(isUber){console.log(`[DEBUG-b8f371] eligibility check tripId=${trip.id} status=${trip.status} statusOk=${_statusOk} amount=${amountSafe} uberFare=${uberFareComponents} uberTips=${uberTips} uberGross=${uberGrossForLedger} uberPrior=${uberPriorPeriodAdjustment} moneyOk=${_moneyOk} skipDedup=${trip._skipLedgerDedup}`);}
-    // #endregion
     if (
-      !_statusOk ||
-      !_moneyOk
+      !isCompletedTripStatus(trip.status) ||
+      (!hasTripAmount && uberGrossForLedger <= 0 && Math.abs(uberPriorPeriodAdjustment) <= 0.0001)
     ) {
         return entries;
     }
@@ -403,9 +398,6 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
             cashCollected: isCash ? Math.abs(trip.cashCollected || 0) : undefined,
         },
     });
-    // #region agent log
-    if(isUber){console.log(`[DEBUG-b8f371] fare_earning PUSHED tripId=${trip.id} grossAmount=${fareGrossForEntry} entriesNow=${entries.length}`);}
-    // #endregion
 
     // Entry 2: Tip (if tips > 0)
     const tips = isUber && hasUberSsot ? uberTips : (trip.fareBreakdown?.tips || 0);
@@ -510,9 +502,6 @@ async function generateTripLedgerEntries(trip: any): Promise<any[]> {
         });
     }
 
-    // #region agent log
-    if(isUber){console.log(`[DEBUG-b8f371] generateTripLedgerEntries RETURNING tripId=${trip.id} entriesCount=${entries.length}`);}
-    // #endregion
     return entries;
 }
 
@@ -527,14 +516,10 @@ async function buildUberFareEarningFallbackEntriesIfEligible(trip: any): Promise
     const uberTips = coerceAmount(trip?.uberTips);
     const uberPrior = coerceAmount(trip?.uberPriorPeriodAdjustment);
     const uberGross = uberFare + uberTips + uberPrior;
-    const _statusOk = isCompletedTripStatus(trip?.status);
     const isEligibleUber =
         isUber &&
-        _statusOk &&
+        isCompletedTripStatus(trip?.status) &&
         (amountNum > 0 || uberGross > 0);
-    // #region agent log
-    console.log(`[DEBUG-b8f371] fallback eligibility tripId=${trip?.id} isUber=${isUber} status=${trip?.status} statusOk=${_statusOk} amount=${amountNum} uberGross=${uberGross} isEligibleUber=${isEligibleUber}`);
-    // #endregion
     if (!isEligibleUber) return [];
 
     const resolved = await resolveCanonicalDriverId(trip.driverId || '');
@@ -2188,9 +2173,6 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
 app.post("/make-server-37f42386/trips", async (c) => {
   try {
     const trips = await c.req.json();
-    // #region agent log
-    console.log(`[DEBUG-b8f371] POST /trips called tripCount=${Array.isArray(trips)?trips.length:0} uberCount=${Array.isArray(trips)?trips.filter((t:any)=>String(t?.platform||'').toLowerCase()==='uber').length:0}`);
-    // #endregion
     if (!Array.isArray(trips)) {
       return c.json({ error: "Expected array of trips" }, 400);
     }
@@ -2287,11 +2269,6 @@ app.post("/make-server-37f42386/trips", async (c) => {
             }
         }
         const allLedgerEntries: any[] = [];
-        // #region agent log
-        const _uberTripsForLog = processedTrips.filter((t:any)=>String(t?.platform||'').toLowerCase()==='uber');
-        console.log(`[DEBUG-b8f371] ledger loop start totalTrips=${processedTrips.length} uberTrips=${_uberTripsForLog.length}`);
-        if(_uberTripsForLog.length>0){const _sample=_uberTripsForLog.slice(0,3);console.log(`[DEBUG-b8f371] sample uber trips: ${JSON.stringify(_sample.map((t:any)=>({id:t.id,status:t.status,amount:t.amount,uberFare:t.uberFareComponents,uberTips:t.uberTips,uberPrior:t.uberPriorPeriodAdjustment})))}`);}
-        // #endregion
         for (const trip of processedTrips) {
             let tripEntries: any[] = [];
             try {
@@ -2305,38 +2282,21 @@ app.post("/make-server-37f42386/trips", async (c) => {
                 );
                 tripEntries = [];
             }
-            // #region agent log
-            const _isUberTrip = String(trip?.platform||'').toLowerCase()==='uber';
-            if(_isUberTrip){console.log(`[DEBUG-b8f371] after generateTripLedgerEntries tripId=${trip.id} entriesCount=${tripEntries.length} willCallFallback=${tripEntries.length===0}`);}
-            // #endregion
             if (tripEntries.length === 0) {
                 try {
                     tripEntries = await buildUberFareEarningFallbackEntriesIfEligible(trip);
-                    // #region agent log
-                    if(_isUberTrip){console.log(`[DEBUG-b8f371] fallback result tripId=${trip.id} fallbackEntriesCount=${tripEntries.length}`);}
-                    // #endregion
                 } catch (fbErr) {
                     console.error(`[Ledger] Uber fallback failed for trip ${trip?.id}:`, fbErr);
                 }
             }
             allLedgerEntries.push(...tripEntries);
         }
-        // #region agent log
-        const _uberFareEntries = allLedgerEntries.filter((e:any)=>e.platform==='Uber'&&e.eventType==='fare_earning').length;
-        console.log(`[DEBUG-b8f371] ledger loop done totalEntries=${allLedgerEntries.length} uberFareEntries=${_uberFareEntries}`);
-        // #endregion
         if (allLedgerEntries.length > 0) {
             // Batch save in chunks of 100
-            // #region agent log
-            console.log(`[DEBUG-b8f371] SAVING ledger entries count=${allLedgerEntries.length} uberFare=${allLedgerEntries.filter((e:any)=>e.platform==='Uber'&&e.eventType==='fare_earning').length}`);
-            // #endregion
             for (let i = 0; i < allLedgerEntries.length; i += 100) {
                 const chunk = allLedgerEntries.slice(i, i + 100);
                 const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
                 await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
-                // #region agent log
-                console.log(`[DEBUG-b8f371] kv.mset chunk done keys=${chunk.length}`);
-                // #endregion
             }
             console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
             // Phase 6.6: Verification — count completed trips with amount > 0 vs ledger entries created
@@ -8544,11 +8504,7 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
 app.post("/make-server-37f42386/fleet/sync", async (c) => {
   try {
     const { drivers, vehicles, financials, trips, metadata, insights } = await c.req.json();
-    // #region agent log
-    const _uberTripsCount = Array.isArray(trips)?trips.filter((t:any)=>String(t?.platform||'').toLowerCase()==='uber').length:0;
-    console.log(`[DEBUG-b8f371] POST /fleet/sync called trips=${Array.isArray(trips)?trips.length:0} uberTrips=${_uberTripsCount}`);
-    // #endregion
-    
+
     const operations = [];
 
     // 1. Driver Metrics
@@ -8571,6 +8527,10 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
     if (Array.isArray(trips) && trips.length > 0) {
         // Deduplicate trips by id
         const uniqueTrips = Array.from(new Map(trips.map(t => [t.id, t])).values());
+
+        for (const trip of uniqueTrips) {
+            trip.status = normalizeTripStatusForStorage(trip.status);
+        }
 
         // ── Normalize driverId to canonical Roam UUID (mirrors POST /trips) ──
         for (const trip of uniqueTrips) {
@@ -8609,7 +8569,11 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
             writeOrgId ? ({ ...record, organizationId: writeOrgId } as T) : record;
 
         const tripKeys = uniqueTrips.map((t: any) => `trip:${t.id}`);
-        operations.push(kv.mset(tripKeys, uniqueTrips.map((t: any) => stampWriteOrg(t))));
+        const tripValues = uniqueTrips.map((t: any) => stampWriteOrg(t));
+
+        // Match POST /trips: await trip KV write BEFORE ledger. Queueing trip mset in
+        // Promise.all runs it concurrently with the ledger loop and can race / lose writes.
+        await kv.mset(tripKeys, tripValues);
 
         // ── Write-Time Ledger: Replace trip-sourced ledger rows (same as POST /trips) ──
         // This mirrors the POST /trips ledger generation to ensure fleet/sync
@@ -8623,9 +8587,6 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
                 }
             }
             const allLedgerEntries: any[] = [];
-            // #region agent log
-            console.log(`[DEBUG-b8f371] FleetSync ledger loop start uniqueTrips=${uniqueTrips.length}`);
-            // #endregion
             for (const trip of uniqueTrips) {
                 let tripEntries: any[] = [];
                 try {
@@ -8647,26 +8608,18 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
                 }
                 allLedgerEntries.push(...tripEntries);
             }
-            // #region agent log
-            const _fsUberFare = allLedgerEntries.filter((e:any)=>e.platform==='Uber'&&e.eventType==='fare_earning').length;
-            console.log(`[DEBUG-b8f371] FleetSync ledger loop done totalEntries=${allLedgerEntries.length} uberFareEntries=${_fsUberFare}`);
-            // #endregion
             if (allLedgerEntries.length > 0) {
-                // #region agent log
-                console.log(`[DEBUG-b8f371] FleetSync SAVING ledger entries count=${allLedgerEntries.length}`);
-                // #endregion
                 // Batch save in chunks of 100
                 for (let i = 0; i < allLedgerEntries.length; i += 100) {
                     const chunk = allLedgerEntries.slice(i, i + 100);
                     const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
                     await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
-                    // #region agent log
-                    console.log(`[DEBUG-b8f371] FleetSync kv.mset done chunk=${chunk.length}`);
-                    // #endregion
                 }
                 console.log(`[FleetSync Ledger] Created ${allLedgerEntries.length} ledger entries for ${uniqueTrips.length} trips`);
                 // Verification: count completed trips with amount > 0 vs ledger entries created
-                const completedCount = uniqueTrips.filter((t: any) => t.status === 'Completed' && t.amount > 0).length;
+                const completedCount = uniqueTrips.filter(
+                    (t: any) => isCompletedTripStatus(t.status) && coerceAmount(t.amount) > 0
+                ).length;
                 const fareEntries = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning').length;
                 if (fareEntries < completedCount) {
                     console.warn(`[FleetSync Ledger] INTEGRITY WARNING: ${completedCount} completed trips but only ${fareEntries} fare_earning entries created. ${completedCount - fareEntries} trips may be missing ledger entries.`);
