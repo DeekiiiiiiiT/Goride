@@ -1635,28 +1635,62 @@ export function ImportsPage() {
                                           <span className="text-slate-600">Total Earnings</span>
                                           <span className="font-medium">
                                               {toCurrency(
+                                                  processedData.reduce((sum, t) => {
+                                                      // Uber gross total = fare components + tips + promotions + prior-period adjustments
+                                                      return (
+                                                          sum +
+                                                          (t.uberFareComponents || 0) +
+                                                          (t.uberTips || 0) +
+                                                          (t.uberPromotionsAmount || 0) +
+                                                          (t.uberPriorPeriodAdjustment || 0)
+                                                      );
+                                                  }, 0)
+                                              )}
+                                          </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Fare components</span>
+                                          <span className="font-medium">
+                                              {toCurrency(
                                                   processedData.reduce(
-                                                      (sum, t) => sum + (t.amount || 0),
+                                                      (sum, t) => sum + (t.uberFareComponents || 0),
                                                       0
                                                   )
                                               )}
                                           </span>
                                       </div>
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">Fare components</span>
-                                          <span className="font-medium">$0.00</span>
-                                      </div>
-                                      <div className="flex justify-between">
                                           <span className="text-slate-600">Promotions</span>
-                                          <span className="font-medium">$0.00</span>
+                                          <span className="font-medium">
+                                              {toCurrency(
+                                                  processedData.reduce(
+                                                      (sum, t) => sum + (t.uberPromotionsAmount || 0),
+                                                      0
+                                                  )
+                                              )}
+                                          </span>
                                       </div>
                                       <div className="flex justify-between">
                                           <span className="text-slate-600">Tips</span>
-                                          <span className="font-medium">$0.00</span>
+                                          <span className="font-medium">
+                                              {toCurrency(
+                                                  processedData.reduce(
+                                                      (sum, t) => sum + (t.uberTips || 0),
+                                                      0
+                                                  )
+                                              )}
+                                          </span>
                                       </div>
                                       <div className="flex justify-between">
                                           <span className="text-slate-600">Refunds &amp; expenses</span>
-                                          <span className="font-medium">$0.00</span>
+                                          <span className="font-medium">
+                                              {toCurrency(
+                                                  processedData.reduce(
+                                                      (sum, t) => sum + (t.uberRefundExpenseAmount || 0),
+                                                      0
+                                                  )
+                                              )}
+                                          </span>
                                       </div>
                                   </div>
                               </div>
@@ -1665,10 +1699,16 @@ export function ImportsPage() {
                           <div className="mt-4 text-xs text-slate-600 flex items-center justify-between">
                               {(() => {
                                 const uberTotal = Number(processedOrganizationMetrics[0]?.totalEarnings) || 0;
-                                const roamTotal = processedData.reduce(
-                                  (sum, t) => sum + (t.amount || 0),
-                                  0
-                                );
+                                const roamTotal = processedData.reduce((sum, t) => {
+                                  // Uber gross total = fare components + tips + promotions + prior-period adjustments
+                                  return (
+                                    sum +
+                                    (t.uberFareComponents || 0) +
+                                    (t.uberTips || 0) +
+                                    (t.uberPromotionsAmount || 0) +
+                                    (t.uberPriorPeriodAdjustment || 0)
+                                  );
+                                }, 0);
                                 const diff = roamTotal - uberTotal;
                                 const reconciled = Math.abs(diff) <= 0.01;
                                 return (
