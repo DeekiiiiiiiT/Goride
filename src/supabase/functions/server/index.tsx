@@ -7580,7 +7580,49 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     console.log(`[Batch delete] Deleted ${deletedLedger} ledger entries`);
 
     // ── 4. Smart driver_metric cleanup ──
-    //    Only delete if the driver has NO trips remaining in other batches
+    //    Only delete if the driver has NO trips remaining in other batches.
+    //    POST /driver-metrics stores keys as `driver_metric:${m.id}` (e.g. dm-pay-…), not
+    //    `driver_metric:${driverId}` — deleting only the latter left ghost payment cash fields.
+    const collectDriverMetricKeysForDriver = async (targetDriverId: string): Promise<string[]> => {
+      const raw = String(targetDriverId || "").trim();
+      if (!raw) return [];
+      const variants = Array.from(
+        new Set([raw, raw.toLowerCase(), raw.toUpperCase()].filter((v) => v.length > 0)),
+      );
+      const seen = new Set<string>();
+      const out: string[] = [];
+      const PAGE = 1000;
+      const MAX_PAGES = 50;
+      for (const vid of variants) {
+        let offset = 0;
+        for (let p = 0; p < MAX_PAGES; p++) {
+          const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("key")
+            .like("key", "driver_metric:%")
+            .eq("value->>driverId", vid)
+            .range(offset, offset + PAGE - 1);
+          if (error) throw error;
+          const page = data || [];
+          for (const row of page) {
+            const k = (row as { key?: string }).key;
+            if (k && !seen.has(k)) {
+              seen.add(k);
+              out.push(k);
+            }
+          }
+          if (page.length < PAGE) break;
+          offset += PAGE;
+        }
+      }
+      const legacy = `driver_metric:${raw}`;
+      if (!seen.has(legacy)) {
+        seen.add(legacy);
+        out.push(legacy);
+      }
+      return out;
+    };
+
     let deletedDriverMetrics = 0;
     let skippedDriverMetrics = 0;
     for (const driverId of driverIdSet) {
@@ -7597,16 +7639,24 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       }
       if ((count || 0) === 0) {
         try {
-          await kv.del(`driver_metric:${driverId}`);
-          deletedDriverMetrics++;
+          const dmKeys = await collectDriverMetricKeysForDriver(driverId);
+          if (dmKeys.length > 0) {
+            for (let i = 0; i < dmKeys.length; i += 100) {
+              await kv.mdel(dmKeys.slice(i, i + 100));
+            }
+            deletedDriverMetrics += dmKeys.length;
+            console.log(
+              `[Batch delete] Removed ${dmKeys.length} driver_metric key(s) for driver ${driverId}`,
+            );
+          }
         } catch (delErr: any) {
-          console.log(`[Batch delete] Failed to delete driver_metric:${driverId}: ${delErr.message}`);
+          console.log(`[Batch delete] Failed to delete driver_metric rows for ${driverId}: ${delErr.message}`);
         }
       } else {
         skippedDriverMetrics++;
       }
     }
-    console.log(`[Batch delete] Driver metrics: ${deletedDriverMetrics} deleted, ${skippedDriverMetrics} shared/skipped`);
+    console.log(`[Batch delete] Driver metrics: ${deletedDriverMetrics} KV rows deleted, ${skippedDriverMetrics} drivers skipped (still have trips elsewhere)`);
 
     // ── 5. Smart vehicle_metric cleanup ──
     //    Only delete if the vehicle has NO trips remaining in other batches

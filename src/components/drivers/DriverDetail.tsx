@@ -1400,12 +1400,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         return mStart <= end && mEnd >= start;
      }) : [];
 
-     // Statement cash: include metrics that have `uberPaymentsTransactionCashColumnSum` even when
-     // period dates don't overlap the picker (e.g. report week ends Mar 30 vs range ends Mar 29).
+     // Uber CSV cash override: only use driver_metric rows whose **period overlaps** the selected range.
+     // Including every row with `uberPaymentsTransactionCashColumnSum` (ignoring dates) caused one
+     // stale import total to appear as Uber cash on **every** date range after partial deletes.
      const relevantCsvMetricsForUberCash = (isAllPlatforms && csvMetrics)
        ? csvMetrics.filter(m => {
-           const rawSum = m.uberPaymentsTransactionCashColumnSum;
-           if (rawSum != null && !Number.isNaN(Number(rawSum))) return true;
            const mStart = new Date(m.periodStart);
            const mEnd = new Date(m.periodEnd);
            return mStart <= end && mEnd >= start;
