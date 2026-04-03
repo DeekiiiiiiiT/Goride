@@ -38,6 +38,7 @@ import {
   CloudDownload,
   AlertTriangle,
   ChevronsUpDown,
+  ChevronDown,
   ShieldCheck,
   Clock,
   BarChart2,
@@ -535,6 +536,11 @@ export function ImportsPage() {
     const statementRollup = netFare + promotions + tipsStatement;
     const roamTotalVsUber = statementRollup - totalEarnings;
 
+    const payoutCash = org != null ? Number(org.totalCashExposure) || 0 : 0;
+    const payoutBank = org != null ? Number(org.bankTransfer) || 0 : 0;
+    /** Period earnings subtotal + refunds & expenses + prior-period adjustments (your workbook rollup). */
+    const grandTotal = periodTotal + refundsTotal + priorSum;
+
     return {
       hasSsot,
       netFare,
@@ -549,6 +555,9 @@ export function ImportsPage() {
       totalEarnings,
       statementRollup,
       roamTotalVsUber,
+      payoutCash,
+      payoutBank,
+      grandTotal,
     };
   }, [
     processedOrganizationMetrics,
@@ -1744,54 +1753,141 @@ export function ImportsPage() {
                                   </div>
                               </div>
 
-                              {/* Right: Roam Import */}
+                              {/* Right: Roam Import — hierarchical breakdown (collapsed by default) */}
                               <div className="rounded-lg border border-slate-200 p-3 bg-white">
                                   <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
                                       Roam Import (this batch)
                                   </p>
-                                  <div className="space-y-1.5">
-                                      <div className="flex justify-between">
-                                          <span className="text-slate-600">Net fare</span>
-                                          <span className="font-medium">
-                                              {toCurrency(importUberReconciliation.netFare)}
-                                          </span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                          <span className="text-slate-600">Promotions</span>
-                                          <span className="font-medium">
-                                              {toCurrency(importUberReconciliation.promotions)}
-                                          </span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                          <span className="text-slate-600">Tips (in-period)</span>
-                                          <span className="font-medium">
-                                              {toCurrency(importUberReconciliation.tipsPeriod)}
-                                          </span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                          <span className="text-slate-600">Adjustments from previous periods</span>
-                                          <span className="font-medium">
-                                              {toCurrency(importUberReconciliation.priorSum)}
-                                          </span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                          <span className="text-slate-600">Tolls</span>
-                                          <span className="font-medium">
-                                              {toCurrency(importUberReconciliation.tolls)}
-                                          </span>
-                                      </div>
-                                      {importUberReconciliation.tollSupport > 0.005 && (
-                                          <div className="flex justify-between">
-                                              <span className="text-slate-600">Toll Support Adjustment</span>
-                                              <span className="font-medium">
-                                                  {toCurrency(importUberReconciliation.tollSupport)}
+                                  <div className="space-y-0 divide-y divide-slate-100">
+                                      <Collapsible
+                                          defaultOpen={false}
+                                          className="py-1 first:pt-0 [&[data-state=open]_.roam-import-chevron]:rotate-180"
+                                      >
+                                          <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-md py-2 px-1 -mx-1 text-left hover:bg-slate-50/80 outline-none focus-visible:ring-2 focus-visible:ring-slate-300">
+                                              <span className="text-sm font-medium text-slate-900">
+                                                  Period Total Earnings
                                               </span>
-                                          </div>
-                                      )}
-                                      <div className="flex justify-between border-t border-slate-100 pt-1.5 mt-1">
-                                          <span className="text-slate-600">Period Total Earnings</span>
-                                          <span className="font-medium">
-                                              {toCurrency(importUberReconciliation.periodTotal)}
+                                              <span className="flex items-center gap-2 shrink-0">
+                                                  <span className="text-sm font-semibold tabular-nums text-slate-900">
+                                                      {toCurrency(importUberReconciliation.periodTotal)}
+                                                  </span>
+                                                  <ChevronDown className="roam-import-chevron h-4 w-4 text-slate-400 transition-transform duration-200" />
+                                              </span>
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent>
+                                              <ul className="mb-2 mt-0.5 ml-1 space-y-1 border-l border-slate-200 pl-3 text-sm text-slate-600">
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Net fare</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.netFare)}
+                                                      </span>
+                                                  </li>
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Promotions</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.promotions)}
+                                                      </span>
+                                                  </li>
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Tips</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.tipsPeriod)}
+                                                      </span>
+                                                  </li>
+                                              </ul>
+                                          </CollapsibleContent>
+                                      </Collapsible>
+
+                                      <Collapsible
+                                          defaultOpen={false}
+                                          className="py-1 [&[data-state=open]_.roam-import-chevron]:rotate-180"
+                                      >
+                                          <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-md py-2 px-1 -mx-1 text-left hover:bg-slate-50/80 outline-none focus-visible:ring-2 focus-visible:ring-slate-300">
+                                              <span className="text-sm font-medium text-slate-900">
+                                                  Refunds &amp; Expenses
+                                              </span>
+                                              <span className="flex items-center gap-2 shrink-0">
+                                                  <span className="text-sm font-semibold tabular-nums text-slate-900">
+                                                      {toCurrency(importUberReconciliation.refundsTotal)}
+                                                  </span>
+                                                  <ChevronDown className="roam-import-chevron h-4 w-4 text-slate-400 transition-transform duration-200" />
+                                              </span>
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent>
+                                              <ul className="mb-2 mt-0.5 ml-1 space-y-1 border-l border-slate-200 pl-3 text-sm text-slate-600">
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Tolls</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.tolls)}
+                                                      </span>
+                                                  </li>
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Toll Support Adjustment</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.tollSupport)}
+                                                      </span>
+                                                  </li>
+                                              </ul>
+                                          </CollapsibleContent>
+                                      </Collapsible>
+
+                                      <Collapsible
+                                          defaultOpen={false}
+                                          className="py-1 [&[data-state=open]_.roam-import-chevron]:rotate-180"
+                                      >
+                                          <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-md py-2 px-1 -mx-1 text-left hover:bg-slate-50/80 outline-none focus-visible:ring-2 focus-visible:ring-slate-300">
+                                              <span className="text-sm font-medium text-slate-900">
+                                                  Adjustments from previous periods
+                                              </span>
+                                              <span className="flex items-center gap-2 shrink-0">
+                                                  <span className="text-sm font-semibold tabular-nums text-slate-900">
+                                                      {toCurrency(importUberReconciliation.priorSum)}
+                                                  </span>
+                                                  <ChevronDown className="roam-import-chevron h-4 w-4 text-slate-400 transition-transform duration-200" />
+                                              </span>
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent>
+                                              <ul className="mb-2 mt-0.5 ml-1 space-y-1 border-l border-slate-200 pl-3 text-sm text-slate-600">
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Period Adjustment</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.priorSum)}
+                                                      </span>
+                                                  </li>
+                                              </ul>
+                                          </CollapsibleContent>
+                                      </Collapsible>
+
+                                      <Collapsible
+                                          defaultOpen={false}
+                                          className="py-1 [&[data-state=open]_.roam-import-chevron]:rotate-180"
+                                      >
+                                          <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-md py-2 px-1 -mx-1 text-left hover:bg-slate-50/80 outline-none focus-visible:ring-2 focus-visible:ring-slate-300">
+                                              <span className="text-sm font-medium text-slate-900">Payout</span>
+                                              <ChevronDown className="roam-import-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200" />
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent>
+                                              <ul className="mb-2 mt-0.5 ml-1 space-y-1 border-l border-slate-200 pl-3 text-sm text-slate-600">
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Cash Collected</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.payoutCash)}
+                                                      </span>
+                                                  </li>
+                                                  <li className="flex justify-between gap-4">
+                                                      <span>Transferred to Bank</span>
+                                                      <span className="tabular-nums font-medium text-slate-800">
+                                                          {toCurrency(importUberReconciliation.payoutBank)}
+                                                      </span>
+                                                  </li>
+                                              </ul>
+                                          </CollapsibleContent>
+                                      </Collapsible>
+
+                                      <div className="flex justify-between gap-4 pt-3 text-sm font-semibold text-slate-900">
+                                          <span>Total</span>
+                                          <span className="tabular-nums">
+                                              {toCurrency(importUberReconciliation.grandTotal)}
                                           </span>
                                       </div>
                                   </div>
