@@ -1632,30 +1632,10 @@ export function ImportsPage() {
                                   </p>
                                   <div className="space-y-1.5">
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">Total Earnings</span>
+                                          <span className="text-slate-600">Net fare</span>
                                           <span className="font-medium">
                                               {toCurrency(
-                                                  processedData.reduce((sum, t) => {
-                                                      // Uber gross total = fare components + tips + promotions + prior-period adjustments
-                                                      return (
-                                                          sum +
-                                                          (t.uberFareComponents || 0) +
-                                                          (t.uberTips || 0) +
-                                                          (t.uberPromotionsAmount || 0) +
-                                                          (t.uberPriorPeriodAdjustment || 0)
-                                                      );
-                                                  }, 0)
-                                              )}
-                                          </span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                          <span className="text-slate-600">Fare components</span>
-                                          <span className="font-medium">
-                                              {toCurrency(
-                                                  processedData.reduce(
-                                                      (sum, t) => sum + (t.uberFareComponents || 0),
-                                                      0
-                                                  )
+                                                  processedData.reduce((sum, t) => sum + (t.uberFareComponents || 0), 0)
                                               )}
                                           </span>
                                       </div>
@@ -1663,10 +1643,7 @@ export function ImportsPage() {
                                           <span className="text-slate-600">Promotions</span>
                                           <span className="font-medium">
                                               {toCurrency(
-                                                  processedData.reduce(
-                                                      (sum, t) => sum + (t.uberPromotionsAmount || 0),
-                                                      0
-                                                  )
+                                                  processedData.reduce((sum, t) => sum + (t.uberPromotionsAmount || 0), 0)
                                               )}
                                           </span>
                                       </div>
@@ -1674,21 +1651,47 @@ export function ImportsPage() {
                                           <span className="text-slate-600">Tips</span>
                                           <span className="font-medium">
                                               {toCurrency(
+                                                  processedData.reduce((sum, t) => sum + (t.uberTips || 0), 0)
+                                              )}
+                                          </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">period adjustment</span>
+                                          <span className="font-medium">
+                                              {toCurrency(
                                                   processedData.reduce(
-                                                      (sum, t) => sum + (t.uberTips || 0),
+                                                      (sum, t) => sum + (t.uberPriorPeriodAdjustment || 0),
                                                       0
                                                   )
                                               )}
                                           </span>
                                       </div>
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">Refunds &amp; expenses</span>
+                                          <span className="text-slate-600">Tolls &amp; trip refunds</span>
                                           <span className="font-medium">
                                               {toCurrency(
                                                   processedData.reduce(
-                                                      (sum, t) => sum + (t.uberRefundExpenseAmount || 0),
+                                                      (sum, t) =>
+                                                          sum + (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0),
                                                       0
                                                   )
+                                              )}
+                                          </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-600">Period Total Earnings</span>
+                                          <span className="font-medium">
+                                              {toCurrency(
+                                                  processedData.reduce((sum, t) => {
+                                                      const gross =
+                                                          (t.uberFareComponents || 0) +
+                                                          (t.uberPromotionsAmount || 0) +
+                                                          (t.uberTips || 0) +
+                                                          (t.uberPriorPeriodAdjustment || 0);
+                                                      const deductions =
+                                                          (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0);
+                                                      return sum + gross - deductions;
+                                                  }, 0)
                                               )}
                                           </span>
                                       </div>
@@ -1697,17 +1700,16 @@ export function ImportsPage() {
                           </div>
 
                           <div className="mt-4 text-xs text-slate-600 flex items-center justify-between">
-                              {(() => {
+                          {(() => {
                                 const uberTotal = Number(processedOrganizationMetrics[0]?.totalEarnings) || 0;
                                 const roamTotal = processedData.reduce((sum, t) => {
-                                  // Uber gross total = fare components + tips + promotions + prior-period adjustments
-                                  return (
-                                    sum +
+                                  const gross =
                                     (t.uberFareComponents || 0) +
-                                    (t.uberTips || 0) +
                                     (t.uberPromotionsAmount || 0) +
-                                    (t.uberPriorPeriodAdjustment || 0)
-                                  );
+                                    (t.uberTips || 0) +
+                                    (t.uberPriorPeriodAdjustment || 0);
+                                  const deductions = (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0);
+                                  return sum + gross - deductions;
                                 }, 0);
                                 const diff = roamTotal - uberTotal;
                                 const reconciled = Math.abs(diff) <= 0.01;

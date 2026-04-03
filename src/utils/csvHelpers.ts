@@ -1002,7 +1002,9 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
 
 export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string, fuelCards: FuelCard[] = []): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
-    /** Trip UUIDs that appeared in Uber `trip_activity` / TRIP_ACTIVITY CSV (not payments-only). */
+    /** Trip UUIDs that appeared in Uber `trip_activity` / TRIP_ACTIVITY CSV (not payments-only).
+     * Stored in lower-case for case-insensitive matching with `payments_transaction` Trip UUIDs.
+     */
     const uberTripActivityTripIds = new Set<string>();
     const genericTrips: Trip[] = [];
     const driverMetricsMap = new Map<string, DriverMetrics>();
@@ -1317,7 +1319,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 const current = tripMap.get(tripId) || { id: tripId, platform: 'Uber' };
                 
                 if (file.type === 'uber_trip') {
-                    uberTripActivityTripIds.add(tripId);
+                    uberTripActivityTripIds.add(String(tripId).toLowerCase());
                     const schema = UBER_SCHEMAS.TRIP_ACTIVITY.mapping;
                     
                     // Improved Date Parsing: Don't default to Now() immediately
@@ -1610,7 +1612,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      * - Otherwise, treat the Tip column as real tips (extra gratuity).
                      */
                     const isUberFareAdjustOrderRow = isUberTripFareAdjustOrderDescription(row['Description']);
-                    const tripInUberTripActivity = !!tripId && uberTripActivityTripIds.has(tripId);
+                    const tripInUberTripActivity =
+                        !!tripId && uberTripActivityTripIds.has(String(tripId).toLowerCase());
                     const isPriorPeriodFareAdjust = isUberFareAdjustOrderRow && !tripInUberTripActivity;
 
                     let addToGross = 0;
@@ -2217,7 +2220,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         
         const platform = t.platform || 'Other';
         const missingTripActivityInExport =
-            platform === 'Uber' && t.id && !uberTripActivityTripIds.has(cleanId(t.id))
+            platform === 'Uber' &&
+            t.id &&
+            !uberTripActivityTripIds.has(String(cleanId(t.id)).toLowerCase())
                 ? true
                 : undefined;
 
