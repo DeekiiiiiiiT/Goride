@@ -14,8 +14,11 @@ function priorPeriodAdjustmentFromPaymentRow(row: {
   tipColumn: number;
   earnings: number;
   netPayoutRaw: number;
+  tripInUberTripActivity: boolean;
 }): number {
   if (!isUberTripFareAdjustOrderDescription(row.Description)) return 0;
+  // Only `trip fare adjust order` rows missing from `trip_activity` become prior-period adjustments.
+  if (row.tripInUberTripActivity) return 0;
   const tipColumnVal = row.tipColumn;
   const earnings = row.earnings;
   const netPayoutRaw = row.netPayoutRaw;
@@ -53,14 +56,14 @@ describe('normalizeUberPaymentsTransactionDescription', () => {
 });
 
 describe('parseUberPaymentTransactionSsotLine (fare-adjust rows)', () => {
-  it('zeros tips when Description is trip fare adjust order even if Tip column is non-zero', () => {
+  it('reads Tip column for fare-adjust rows (classification happens later)', () => {
     const row: Record<string, unknown> = {
       Description: 'trip fare adjust order',
       'Paid to you:Your earnings:Tip': '160.00',
       'Paid to you : Your earnings : Fare:Fare': '0',
     };
     const line = parseUberPaymentTransactionSsotLine(row);
-    expect(line.tips).toBe(0);
+    expect(line.tips).toBe(160);
   });
 
   it('keeps real tips for completed trip rows', () => {
@@ -82,25 +85,28 @@ describe('Fixture-style accumulation (Phase 5)', () => {
         tipColumn: 80,
         earnings: 0,
         netPayoutRaw: 80,
+        tripInUberTripActivity: false,
       },
       {
         Description: 'trip fare adjust order',
         tipColumn: 80,
         earnings: 0,
         netPayoutRaw: 80,
+        tripInUberTripActivity: false,
       },
     ];
     const sum = rows.reduce((acc, r) => acc + priorPeriodAdjustmentFromPaymentRow(r), 0);
     expect(sum).toBe(160);
   });
 
-  it('does not count completed-order tip toward prior-period bucket', () => {
+  it('does not count tips for rows that exist in trip activity', () => {
     const rows = [
       {
         Description: 'trip completed order',
         tipColumn: 5,
         earnings: 20,
         netPayoutRaw: 25,
+        tripInUberTripActivity: true,
       },
     ];
     const sum = rows.reduce((acc, r) => acc + priorPeriodAdjustmentFromPaymentRow(r), 0);
@@ -113,6 +119,7 @@ describe('Fixture-style accumulation (Phase 5)', () => {
       tipColumn: -10,
       earnings: 0,
       netPayoutRaw: -10,
+      tripInUberTripActivity: false,
     };
     expect(priorPeriodAdjustmentFromPaymentRow(row)).toBe(-10);
   });

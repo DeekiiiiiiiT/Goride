@@ -1601,8 +1601,17 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     
                     // Check the dedicated Tip column (not just Description) for tip detection
                     const tipColumnVal = parseCurrency(row['Paid to you:Your earnings:Tip'] || row['Paid to you : Your earnings : Tip']);
-                    /** Uber app: "Adjustments from previous periods" — not rider tips (often duplicated in Tip column). */
-                    const isPriorPeriodFareAdjust = isUberTripFareAdjustOrderDescription(row['Description']);
+                    /**
+                     * Uber app: "Adjustments from previous periods" vs real tips.
+                     *
+                     * Heuristic used for this import:
+                     * - If this is a `trip fare adjust order` row and the Trip UUID does NOT
+                     *   exist in Uber `trip_activity` exports, treat it as "prior-period adjustment".
+                     * - Otherwise, treat the Tip column as real tips (extra gratuity).
+                     */
+                    const isUberFareAdjustOrderRow = isUberTripFareAdjustOrderDescription(row['Description']);
+                    const tripInUberTripActivity = !!tripId && uberTripActivityTripIds.has(tripId);
+                    const isPriorPeriodFareAdjust = isUberFareAdjustOrderRow && !tripInUberTripActivity;
 
                     let addToGross = 0;
                     let addToNet = 0;
@@ -1644,7 +1653,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     // from `payments_transaction.csv` rows. This is additive-only and does not change
                     // the existing `amount` / `netPayout` behavior yet.
                     const ssotLine = parseUberPaymentTransactionSsotLine(row as Record<string, unknown>);
-                    current.uberTips = (current.uberTips || 0) + (ssotLine.tips || 0);
+                    // For prior-period adjustments, do not count the Tip column into tip buckets.
+                    current.uberTips = (current.uberTips || 0) + (isPriorPeriodFareAdjust ? 0 : (ssotLine.tips || 0));
                     current.uberFareComponents = (current.uberFareComponents || 0) + (ssotLine.fareComponents || 0);
                     if (isPriorPeriodFareAdjust) {
                         const priorAmt =

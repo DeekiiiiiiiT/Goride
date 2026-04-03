@@ -1,7 +1,9 @@
 /**
  * Uber `payments_transaction.csv` — rows with Description `trip fare adjust order` carry
- * “Adjustments from previous periods” in the app. Amounts often appear in the Tip column; use
- * `isUberTripFareAdjustOrderDescription` before classifying column values as tips.
+ * amounts that can represent either real tips (extra gratuity) or “Adjustments from previous periods”.
+ *
+ * This file only detects the row type. The actual classification (tip vs prior-period adjustment)
+ * is done later in `csvHelpers.ts` using whether the Trip UUID exists in Uber `trip_activity` exports.
  */
 
 /** Normalized primary token (trim, lower-case, single spaces). */

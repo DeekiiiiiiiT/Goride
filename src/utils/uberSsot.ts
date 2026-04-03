@@ -1,5 +1,3 @@
-import { isUberTripFareAdjustOrderDescription } from './uberTripFareAdjustOrder';
-
 export type UberSsotComponent =
   | 'fareComponents'
   | 'promotions'
@@ -70,11 +68,11 @@ export interface UberPaymentTransactionSsotLine {
 export function parseUberPaymentTransactionSsotLine(row: Record<string, unknown>): UberPaymentTransactionSsotLine {
   const tripUuid = String(row['Trip UUID'] || row['tripUuid'] || '').trim() || undefined;
 
-  // `trip fare adjust order` rows often duplicate the amount in the Tip column; that is not rider tip SSOT.
+  // "payments_transaction.csv" tip amount for SSOT comes from the Tip column.
+  // We intentionally do NOT force `tips = 0` for `trip fare adjust order` here.
+  // Classification (tip vs prior-period adjustment) is handled later in `csvHelpers.ts`
+  // where we have access to whether the Trip UUID exists in trip activity exports.
   let tips = toNum(row['Paid to you:Your earnings:Tip'] ?? row['Paid to you : Your earnings : Tip']);
-  if (isUberTripFareAdjustOrderDescription(row['Description'])) {
-    tips = 0;
-  }
 
   // Fare components are the fare-only parts; tips must be excluded.
   const fareParts = [
