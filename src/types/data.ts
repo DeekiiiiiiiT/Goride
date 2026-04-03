@@ -183,6 +183,26 @@ export interface ImportBatch {
   recordCount: number;
   type: string; // 'uber_trip', 'uber_payment', 'merged', etc.
   processedBy?: string;
+  /** Phase 3: SHA-256 of sorted name:rowCount for the uploaded file set (audit). */
+  contentFingerprint?: string;
+  /** Phase 7: org period (YYYY-MM-DD) from financials at import time. */
+  periodStart?: string;
+  periodEnd?: string;
+  /** Phase 7: uploader identity when session available. */
+  uploadedBy?: string;
+  /** Phase 7: totals from last canonical ledger append for this batch. */
+  canonicalEventsInserted?: number;
+  canonicalEventsSkipped?: number;
+  canonicalEventsFailed?: number;
+  canonicalAppendCompletedAt?: string;
+}
+
+/** Phase 7: live recount of `ledger_event:*` rows tagged with `batchId`. */
+export interface CanonicalBatchAuditSnapshot {
+  batchId: string;
+  total: number;
+  byDriver: Record<string, number>;
+  byEventType: Record<string, number>;
 }
 
 export type FieldType = 'text' | 'number' | 'date' | 'address';
@@ -588,6 +608,8 @@ export interface PaginatedLedgerResponse {
 }
 
 export interface LedgerDriverOverview {
+  /** Phase 5: present when `source=canonical` on driver-overview. */
+  readModelSource?: 'canonical_events';
   period: {
     earnings: number;
     cashCollected: number;

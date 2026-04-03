@@ -304,7 +304,7 @@ function AppContent() {
         {currentPage === 'dashboard' && <Dashboard />}
         {currentPage === 'imports' && (
           <PermissionGate permission="nav.imports" onNavigate={setCurrentPage}>
-            <ImportsPage />
+            <ImportsPage onNavigate={setCurrentPage} />
           </PermissionGate>
         )}
         {currentPage === 'drivers' && (

@@ -532,11 +532,31 @@ export function OverviewMetricsGrid({
               {isToday ? "Today's earnings" : "Period earnings"} — breakdown
             </DialogTitle>
             <DialogDescription className="text-left text-sm text-slate-600 dark:text-slate-400">
-              Ledger totals for the selected range. Uber is grouped using the same row labels as{' '}
-              <span className="font-medium text-slate-700 dark:text-slate-300">payments_driver.csv</span>{' '}
-              (figures from the trip ledger and imports). Other platforms follow the same per-platform pattern as cash allocation.
+              {resolvedFinancials.readModelSource === 'canonical_events' ? (
+                <>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">Posted ledger</span> totals from
+                  canonical events (<span className="font-mono text-[11px]">ledger_event:*</span>) for this range. Uber
+                  rows mirror <span className="font-medium">payments_driver.csv</span> labels; statement lines take
+                  precedence over duplicate trip fare amounts in the earnings total.
+                </>
+              ) : (
+                <>
+                  Ledger totals for the selected range. Uber is grouped using the same row labels as{' '}
+                  <span className="font-medium text-slate-700 dark:text-slate-300">payments_driver.csv</span>{' '}
+                  (figures from the trip ledger and imports). Other platforms follow the same per-platform pattern as
+                  cash allocation.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
+
+          {resolvedFinancials.readModelSource === 'canonical_events' && (
+            <div className="rounded-md border border-indigo-100 bg-indigo-50/90 px-3 py-2 text-[11px] text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-100">
+              Read model: canonical aggregation. Compare to imported CSV statement totals below when a variance banner
+              appears — that is <span className="font-medium">statement (import context)</span> vs{' '}
+              <span className="font-medium">posted ledger</span>.
+            </div>
+          )}
 
           <div className="space-y-6 text-sm">
             {!showFinancialValues ? (
@@ -713,8 +733,10 @@ export function OverviewMetricsGrid({
 
                           {statementMismatch && (
                             <p className="pt-2 text-[10px] leading-snug text-amber-700 dark:text-amber-500">
-                              Imported statement &ldquo;Total earnings&rdquo; (${fmtMoney(csv!.totalEarnings)})
-                              differs from the ledger Uber gross components — ranges or rounding may not align.
+                              <span className="font-semibold">Statement vs posted ledger: </span>
+                              imported &ldquo;Total earnings&rdquo; (${fmtMoney(csv!.totalEarnings)}) vs Uber
+                              components shown above (${fmtMoney(ul!.fareComponents + ul!.tips + ul!.promotions + priorAdj)}
+                              ) — date range, rounding, or read-model rules may differ.
                             </p>
                           )}
                         </div>

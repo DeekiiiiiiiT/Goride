@@ -25,7 +25,8 @@ import {
   CreditCard,
   Fuel,
   Car,
-  Receipt
+  Receipt,
+  HelpCircle,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -50,6 +51,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
 import { cn } from '../ui/utils';
 import { usePlatformConfig } from '../auth/PlatformConfigContext';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../ui/tooltip';
 
 /** YYYY-MM-DD from ledger date string (handles ISO timestamps). */
 function ledgerCalendarDay(dateStr: string | undefined): string {
@@ -617,8 +624,14 @@ export function DriverLedgerPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Transaction Ledger</CardTitle>
-              <CardDescription>
-                {filteredCount} transactions found
+              <CardDescription className="space-y-1">
+                <span>{filteredCount} transactions found</span>
+                <span className="block text-[11px] text-slate-500 font-normal leading-snug">
+                  Amounts are posted ledger <span className="font-mono text-[10px]">netAmount</span> (trip-sourced or
+                  other), not the operational <span className="font-mono text-[10px]">trip.amount</span> field.
+                  Canonical import events appear in financial totals when the read-model flag is on; this table still
+                  lists legacy <span className="font-mono text-[10px]">ledger:*</span> rows.
+                </span>
               </CardDescription>
             </div>
           </div>
@@ -636,6 +649,7 @@ export function DriverLedgerPage() {
             </div>
           ) : (
             <>
+              <TooltipProvider delayDuration={200}>
               <div className="rounded-md border overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -644,8 +658,34 @@ export function DriverLedgerPage() {
                       <TableHead className="w-[150px]">Driver</TableHead>
                       <TableHead className="w-[140px]">Type</TableHead>
                       <TableHead>Description</TableHead>
-                      <TableHead className="text-right w-[110px]">Debit</TableHead>
-                      <TableHead className="text-right w-[110px]">Credit</TableHead>
+                      <TableHead className="text-right w-[110px]">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center justify-end gap-1 cursor-help text-slate-700 dark:text-slate-200">
+                              Debit
+                              <HelpCircle className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-xs">
+                            Outflows: absolute <span className="font-mono">netAmount</span> from the ledger row (e.g.
+                            fees, refunds as outflow).
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableHead>
+                      <TableHead className="text-right w-[110px]">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center justify-end gap-1 cursor-help text-slate-700 dark:text-slate-200">
+                              Credit
+                              <HelpCircle className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-xs">
+                            Inflows: absolute <span className="font-mono">netAmount</span> from the ledger row (e.g.
+                            fare earning, tip). Not the same as unmerged trip CSV &ldquo;amount&rdquo;.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableHead>
                       <TableHead className="text-right w-[120px]">Balance</TableHead>
                       <TableHead className="w-[90px]">Status</TableHead>
                     </TableRow>
@@ -720,6 +760,7 @@ export function DriverLedgerPage() {
                   </TableBody>
                 </Table>
               </div>
+              </TooltipProvider>
 
               {/* Pagination */}
               {totalPages > 1 && (

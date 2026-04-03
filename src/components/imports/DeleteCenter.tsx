@@ -1302,6 +1302,16 @@ export function DeleteCenter() {
                         {batch.recordCount.toLocaleString()} record{batch.recordCount !== 1 ? 's' : ''}
                       </span>
                     </div>
+                    {(batch.canonicalAppendCompletedAt != null ||
+                      batch.canonicalEventsInserted != null) && (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Canonical ledger: +{batch.canonicalEventsInserted ?? '—'} / ↺
+                        {batch.canonicalEventsSkipped ?? '—'}
+                        {(batch.canonicalEventsFailed ?? 0) > 0 && (
+                          <span className="text-amber-700"> / failed {batch.canonicalEventsFailed}</span>
+                        )}
+                      </p>
+                    )}
                     <p className="text-[10px] text-slate-400 mt-1 font-mono truncate" title={batch.id}>
                       ID: {batch.id}
                     </p>

@@ -89,11 +89,16 @@ import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpe
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
 import { FuelEntry, FuelCard } from '../../types/fuel';
 import { api } from '../../services/api';
+import { supabase } from '../../utils/supabase/client';
 import { fuelService } from '../../services/fuelService';
 import { DataSanitizer } from '../../services/dataSanitizer';
 import { tripCalibrationService } from '../../services/tripCalibrationService';
 import { ImpactAnalysis } from './ImpactAnalysis';
 import type { UberSsotTotals } from '../../utils/uberSsot';
+import { computeImportBundleFingerprint } from '../../utils/importBundleFingerprint';
+import { validateMergedImportPreview } from '../../utils/importValidation';
+import { buildCanonicalImportEvents } from '../../utils/buildCanonicalImportEvents';
+import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { CalibrationReport } from './CalibrationReport';
@@ -102,6 +107,7 @@ import { TripReImportFlow } from './TripReImportFlow';
 import { BulkEntityImportFlow } from './BulkEntityImportFlow';
 import { SystemBackupRestore } from './SystemBackupRestore';
 import { ImportExportHistory } from './ImportExportHistory';
+import { ImportBatchAuditPanel } from './ImportBatchAuditPanel';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
@@ -183,7 +189,12 @@ const CollapsibleSection = ({ title, children, defaultOpen = true, icon }: { tit
     )
 }
 
-export function ImportsPage() {
+type ImportsPageProps = {
+  /** Phase 6: navigate after import (e.g. open Drivers to verify posted ledger). */
+  onNavigate?: (page: string) => void;
+};
+
+export function ImportsPage({ onNavigate }: ImportsPageProps) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'import' | 'export' | 'delete'>('import');
   const [step, setStep] = useState<Step>('select_platform');
@@ -566,6 +577,22 @@ export function ImportsPage() {
     processedDisputeRefunds,
   ]);
 
+  /** Phase 4: per-driver statement net fare vs sum of trip `uberFareComponents` in org period. */
+  const importNetFareVarianceByDriver = useMemo(() => {
+    const org = processedOrganizationMetrics[0];
+    const ps = org?.periodStart?.trim().slice(0, 10) ?? '';
+    const pe = org?.periodEnd?.trim().slice(0, 10) ?? '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ps) || !/^\d{4}-\d{2}-\d{2}$/.test(pe)) {
+      return [];
+    }
+    return reconcileUberNetFareByDriver({
+      trips: processedData,
+      uberStatementsByDriverId: processedUberStatementsByDriverId,
+      periodStartYmd: ps,
+      periodEndYmd: pe,
+    });
+  }, [processedData, processedUberStatementsByDriverId, processedOrganizationMetrics]);
+
   const handleAnalyze = async () => {
     setIsParsing(true);
     setWarning("AI is analyzing your fleet data... This may take 30-60 seconds.");
@@ -697,6 +724,21 @@ export function ImportsPage() {
   };
 
   const handleConfirmImport = async () => {
+      const validation = validateMergedImportPreview({
+          trips: processedData,
+          organizationMetrics: processedOrganizationMetrics,
+          uploadedFiles,
+          uberStatementsByDriverId: processedUberStatementsByDriverId,
+          disputeRefunds: processedDisputeRefunds,
+      });
+      if (!validation.ok) {
+          setError(validation.errors.join(' '));
+          return;
+      }
+      if (validation.warnings.length > 0) {
+          toast.warning(validation.warnings.join(' '));
+      }
+
       setIsUploading(true);
       try {
           // Phase 6: Automatic Anchor Calibration
@@ -706,6 +748,19 @@ export function ImportsPage() {
           
           // Generate a Batch ID
           const batchId = crypto.randomUUID();
+          const contentFingerprint = await computeImportBundleFingerprint(uploadedFiles);
+
+          const orgForBatch =
+              auditState?.sanitized.financials.data ?? processedOrganizationMetrics[0] ?? null;
+          const periodStartYmd = orgForBatch?.periodStart
+              ? String(orgForBatch.periodStart).slice(0, 10)
+              : undefined;
+          const periodEndYmd = orgForBatch?.periodEnd
+              ? String(orgForBatch.periodEnd).slice(0, 10)
+              : undefined;
+          const { data: { session } } = await supabase.auth.getSession();
+          const uploadedBy =
+              session?.user?.email?.trim() || session?.user?.id || undefined;
           
           // Create Batch Metadata
           const batchMeta = {
@@ -715,7 +770,11 @@ export function ImportsPage() {
             status: 'completed' as const,
             recordCount: calibratedTrips.length,
             type: 'merged_import',
-            processedBy: 'Admin' // In real app, use user name
+            processedBy: uploadedBy || 'Admin',
+            contentFingerprint,
+            periodStart: periodStartYmd,
+            periodEnd: periodEndYmd,
+            uploadedBy,
           };
 
           // Save Batch Record FIRST
@@ -785,6 +844,54 @@ export function ImportsPage() {
               }
           }
 
+          // Phase 3: Canonical ledger events (idempotent; legacy ledger:* from POST /trips unchanged)
+          const orgForCanonical =
+              auditState?.sanitized.financials.data ?? processedOrganizationMetrics[0] ?? null;
+          const canonicalEvents = buildCanonicalImportEvents({
+              batchId,
+              sourceFileHash: contentFingerprint,
+              trips: calibratedTrips,
+              organizationMetrics: orgForCanonical,
+              uberStatementsByDriverId: processedUberStatementsByDriverId,
+              disputeRefunds: processedDisputeRefunds,
+          });
+          const CANONICAL_APPEND_MAX = 200;
+          if (canonicalEvents.length > 0) {
+              let canonInserted = 0;
+              let canonSkipped = 0;
+              let canonFailed = 0;
+              try {
+                  for (let i = 0; i < canonicalEvents.length; i += CANONICAL_APPEND_MAX) {
+                      const chunk = canonicalEvents.slice(i, i + CANONICAL_APPEND_MAX);
+                      const r = await api.appendCanonicalLedgerEvents(chunk);
+                      canonInserted += r.inserted;
+                      canonSkipped += r.skipped;
+                      canonFailed += r.failed;
+                      if (r.failed > 0) {
+                          toast.warning(
+                              `Some canonical ledger events failed (${r.failed} in one batch).`,
+                          );
+                      }
+                  }
+                  try {
+                      await api.patchImportBatch(batchId, {
+                          canonicalEventsInserted: canonInserted,
+                          canonicalEventsSkipped: canonSkipped,
+                          canonicalEventsFailed: canonFailed,
+                          canonicalAppendCompletedAt: new Date().toISOString(),
+                      });
+                  } catch (patchErr) {
+                      console.warn('[Import] Batch audit patch failed (non-fatal):', patchErr);
+                  }
+              } catch (ledgerErr: unknown) {
+                  const msg = ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr);
+                  console.error('[Import] Canonical ledger append failed:', ledgerErr);
+                  toast.error(
+                      `Ledger event sync failed (trips saved): ${msg}`,
+                  );
+              }
+          }
+
           // Phase 5: Save Fuel Entries
           if (processedFuelEntries.length > 0) {
               await Promise.all(processedFuelEntries.map(entry => 
@@ -814,6 +921,8 @@ export function ImportsPage() {
           queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });
           queryClient.invalidateQueries({ queryKey: ['trips'] });
           queryClient.invalidateQueries({ queryKey: ['ledgerDriversSummary'] });
+          queryClient.invalidateQueries({ queryKey: ['driver-ledger'] });
+          queryClient.invalidateQueries({ queryKey: ['batches'] });
           
           setStep('success');
       } catch (e: any) {
@@ -1653,6 +1762,14 @@ export function ImportsPage() {
                   icon={<ShieldCheck className="h-5 w-5 text-emerald-500" />}
                   defaultOpen={true}
               >
+                  <p className="text-[11px] text-slate-500 mb-3 flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="font-normal text-slate-600 border-slate-300 bg-white">
+                          Preview (pre-post)
+                      </Badge>
+                      <span>
+                          Figures below are computed from staged CSVs only. Nothing is financial truth until you confirm import — then trips and ledger rows are posted.
+                      </span>
+                  </p>
                   {/* Import Health Summary */}
                   <Card className="mb-4">
                       <CardContent className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -1703,9 +1820,14 @@ export function ImportsPage() {
                   {/* Uber Reconciliation (SSOT vs Roam) */}
                   <Card>
                       <CardHeader className="pb-3">
-                          <CardTitle className="text-base">
-                              Uber Reconciliation (SSOT vs Roam)
-                          </CardTitle>
+                          <div className="flex flex-wrap items-center gap-2">
+                              <CardTitle className="text-base">
+                                  Uber Reconciliation (SSOT vs Roam)
+                              </CardTitle>
+                              <Badge variant="outline" className="text-[10px] font-normal text-slate-500 border-slate-200">
+                                  Preview
+                              </Badge>
+                          </div>
                           <CardDescription className="text-xs">
                               {importUberReconciliation.hasSsot
                                 ? 'Uses Uber statement columns from payments_driver / organization CSVs (not rolled-up trip fare lines).'
@@ -1923,6 +2045,67 @@ export function ImportsPage() {
                                 );
                               })()}
                           </div>
+
+                          {importNetFareVarianceByDriver.length > 0 && (
+                              <div className="mt-4 rounded-md border border-slate-200 bg-white p-3">
+                                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                      Net fare — statement vs trip components (by driver)
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 mb-3">
+                                      Statement uses Uber payments_driver net fare. Trip roll sums merged{' '}
+                                      <span className="font-mono text-[10px]">uberFareComponents</span> for
+                                      completed Uber trips in the organization period. Posted canonical events
+                                      mirror the statement; large deltas usually mean missing payment merges or
+                                      date/UUID mismatches.
+                                  </p>
+                                  <div className="overflow-x-auto">
+                                      <table className="w-full text-xs text-left border-collapse">
+                                          <thead>
+                                              <tr className="border-b border-slate-200 text-slate-500">
+                                                  <th className="py-1.5 pr-3 font-medium">Driver</th>
+                                                  <th className="py-1.5 pr-3 font-medium text-right">Statement</th>
+                                                  <th className="py-1.5 pr-3 font-medium text-right">Trip roll</th>
+                                                  <th className="py-1.5 font-medium text-right">Δ</th>
+                                              </tr>
+                                          </thead>
+                                          <tbody>
+                                              {importNetFareVarianceByDriver.map((row) => {
+                                                  const label =
+                                                      processedDriverMetrics.find(
+                                                          (m) =>
+                                                              m.driverId.trim().toLowerCase() ===
+                                                              row.driverId.trim().toLowerCase(),
+                                                      )?.driverName?.trim() ||
+                                                      `${row.driverId.slice(0, 8)}…`;
+                                                  return (
+                                                      <tr
+                                                          key={row.driverId}
+                                                          className="border-b border-slate-100 last:border-0"
+                                                      >
+                                                          <td className="py-1.5 pr-3 text-slate-800">{label}</td>
+                                                          <td className="py-1.5 pr-3 text-right tabular-nums">
+                                                              {toCurrency(row.statementNetFare)}
+                                                          </td>
+                                                          <td className="py-1.5 pr-3 text-right tabular-nums">
+                                                              {toCurrency(row.tripRollFareComponents)}
+                                                          </td>
+                                                          <td
+                                                              className={`py-1.5 text-right tabular-nums font-medium ${
+                                                                  row.withinTolerance
+                                                                      ? 'text-emerald-600'
+                                                                      : 'text-amber-700'
+                                                              }`}
+                                                          >
+                                                              {toCurrency(row.delta)}
+                                                          </td>
+                                                      </tr>
+                                                  );
+                                              })}
+                                          </tbody>
+                                      </table>
+                                  </div>
+                              </div>
+                          )}
                       </CardContent>
                   </Card>
               </CollapsibleSection>
@@ -2639,10 +2822,19 @@ export function ImportsPage() {
              </div>
              <div>
                <h3 className="text-2xl font-bold text-slate-900">Fleet Sync Complete!</h3>
+               <Badge className="mb-2 bg-slate-100 text-slate-700 border-slate-200 font-normal">
+                  Posted ledger
+               </Badge>
                <p className="text-slate-500">
                   Your fleet database has been updated successfully.<br/>
                   {processedData.length} trips and {processedDriverMetrics.length} driver records have been committed.
                   {processedFuelEntries.length > 0 && <><br/>{processedFuelEntries.length} fuel entries imported.</>}
+               </p>
+               <p className="text-xs text-slate-500 max-w-md mx-auto mt-3 leading-relaxed">
+                  Financial truth in Roam is the <span className="font-medium text-slate-700">posted ledger</span>
+                  {' '}(trip-sourced ledger rows plus canonical import events when sync succeeds). Open a driver&apos;s
+                  overview to see period totals from the ledger; enable the money read-model flag to aggregate from
+                  canonical events when you are ready for Phase 8 cutover.
                </p>
                {processedInsights && (processedInsights.alerts?.length || 0) > 0 && (
                    <div className="mt-4 p-4 bg-orange-50 text-orange-800 rounded-md text-sm border border-orange-100 max-w-md mx-auto">
@@ -2650,8 +2842,19 @@ export function ImportsPage() {
                    </div>
                )}
              </div>
-             <div className="flex gap-3">
-                <Button onClick={reset} size="lg" className="mt-4">
+             <div className="flex flex-wrap gap-3 justify-center">
+                {onNavigate && (
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="lg"
+                    className="mt-4"
+                    onClick={() => onNavigate('drivers')}
+                  >
+                    View drivers
+                  </Button>
+                )}
+                <Button onClick={reset} size="lg" variant={onNavigate ? 'outline' : 'default'} className="mt-4">
                   Import Another Batch
                 </Button>
              </div>
@@ -2667,6 +2870,8 @@ export function ImportsPage() {
       />
 
       </>)}
+
+      <ImportBatchAuditPanel />
 
       {/* Phase 8: Activity Log */}
       <ImportExportHistory />

@@ -1,6 +1,7 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
-import { Trip, Notification, ImportBatch, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
+import { Trip, Notification, ImportBatch, CanonicalBatchAuditSnapshot, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
+import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
@@ -159,6 +160,53 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to create batch");
     return response.json();
+  },
+
+  /** Phase 7: merge audit fields into `batch:{id}` (org-scoped). */
+  async patchImportBatch(
+    id: string,
+    patch: Partial<
+      Pick<
+        ImportBatch,
+        | 'canonicalEventsInserted'
+        | 'canonicalEventsSkipped'
+        | 'canonicalEventsFailed'
+        | 'canonicalAppendCompletedAt'
+        | 'periodStart'
+        | 'periodEnd'
+        | 'uploadedBy'
+        | 'processedBy'
+        | 'contentFingerprint'
+      >
+    >,
+  ): Promise<{ success: boolean; data: ImportBatch }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}`, {
+      method: 'PATCH',
+      headers: await getHeaders(),
+      body: JSON.stringify(patch),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to update batch (${response.status})`);
+    }
+    return response.json();
+  },
+
+  /** Phase 7: scan canonical ledger rows for `batchId` (org-scoped recount). */
+  async getCanonicalBatchAudit(batchId: string): Promise<CanonicalBatchAuditSnapshot> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/canonical-batch-audit/${encodeURIComponent(batchId)}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Canonical batch audit failed (${response.status})`);
+    }
+    const body = await response.json();
+    if (!body?.success || !body?.data) {
+      throw new Error('Invalid canonical batch audit response');
+    }
+    return body.data as CanonicalBatchAuditSnapshot;
   },
 
   async getBatchDeletePreview(id: string): Promise<{
@@ -2190,12 +2238,15 @@ export const api = {
     startDate: string;
     endDate: string;
     platforms?: string[];
+    /** Phase 5: `canonical` → aggregate `ledger_event:*` instead of legacy `ledger:*`. */
+    source?: 'ledger' | 'canonical';
   }): Promise<LedgerDriverOverview> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
     if (params.platforms?.length) qp.set('platforms', params.platforms.join(','));
+    if (params.source === 'canonical') qp.set('source', 'canonical');
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-overview?${qp.toString()}`,
@@ -2290,6 +2341,57 @@ export const api = {
     if (!response.ok) {
       const errText = await response.text();
       throw new Error(`Ledger batch create failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  /** Phase 2: idempotent canonical ledger events (`ledger_event:*`). Same idempotencyKey → skipped on retry. */
+  async appendCanonicalLedgerEvents(
+    events: CanonicalLedgerEventInput[],
+  ): Promise<AppendCanonicalLedgerResult> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/canonical-events/append`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ events }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Canonical ledger append failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async getCanonicalLedgerEvents(params: {
+    driverId?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    data: Record<string, unknown>[];
+    page: number;
+    limit: number;
+    hasMore: boolean;
+  }> {
+    const qp = new URLSearchParams();
+    if (params.driverId) qp.set('driverId', params.driverId);
+    if (params.startDate) qp.set('startDate', params.startDate);
+    if (params.endDate) qp.set('endDate', params.endDate);
+    if (params.limit != null) qp.set('limit', String(params.limit));
+    if (params.offset != null) qp.set('offset', String(params.offset));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/canonical-events?${qp.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Canonical ledger query failed: ${errText}`);
     }
     return response.json();
   },

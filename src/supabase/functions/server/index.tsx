@@ -17,6 +17,8 @@ import { Buffer } from "node:buffer";
 import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
+import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
+import { aggregateCanonicalEventsToLedgerDriverOverview } from "./ledger_money_aggregate.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -3664,6 +3666,108 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       return c.json({ error: "Missing required params: driverId, startDate, endDate" }, 400);
     }
 
+    const sourceRaw = (c.req.query("source") || "ledger").toLowerCase();
+    if (sourceRaw === "canonical" || sourceRaw === "canonical_events") {
+      console.log(
+        `[Ledger DriverOverview:canonical] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"}`,
+      );
+      const allDriverIdsCanon: string[] = [driverId];
+      try {
+        const driverRecord = await kv.get(`driver:${driverId}`);
+        if (driverRecord) {
+          if (driverRecord.uberDriverId) allDriverIdsCanon.push(driverRecord.uberDriverId);
+          if (driverRecord.inDriveDriverId) allDriverIdsCanon.push(driverRecord.inDriveDriverId);
+        }
+      } catch (lookupErr) {
+        console.warn(`[Ledger DriverOverview:canonical] driver lookup ${driverId}:`, lookupErr);
+      }
+      const driverIdOrFilterCanon = allDriverIdsCanon.length === 1
+        ? null
+        : allDriverIdsCanon.map((id) => `value->>driverId.eq.${id}`).join(",");
+
+      const PAGE_CANON = 1000;
+      const MAX_ROWS_CANON = 50000;
+      const paginatedFetchCanon = async (buildQuery: () => any): Promise<any[]> => {
+        let all: any[] = [];
+        let offset = 0;
+        while (offset < MAX_ROWS_CANON) {
+          const { data, error } = await buildQuery().range(offset, offset + PAGE_CANON - 1);
+          if (error) throw error;
+          const page = data || [];
+          all = all.concat(page);
+          if (page.length < PAGE_CANON) break;
+          offset += PAGE_CANON;
+        }
+        return all;
+      };
+
+      const baseQueryCanon = () => {
+        let q = supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "ledger_event:%");
+        if (driverIdOrFilterCanon) q = q.or(driverIdOrFilterCanon);
+        else q = q.eq("value->>driverId", driverId);
+        return q;
+      };
+
+      try {
+        const periodDataCanon = await paginatedFetchCanon(() =>
+          baseQueryCanon()
+            .gte("value->>date", startDate)
+            .lte("value->>date", endDate)
+        );
+        let periodValsCanon = periodDataCanon.map((d: any) => d.value).filter(Boolean);
+        periodValsCanon = filterByOrg(periodValsCanon, c);
+
+        const startDC = new Date(startDate + "T00:00:00Z");
+        const endDC = new Date(endDate + "T23:59:59Z");
+        const daysDiffC = Math.round((endDC.getTime() - startDC.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const prevEndDC = new Date(startDC);
+        prevEndDC.setUTCDate(prevEndDC.getUTCDate() - 1);
+        const prevStartDC = new Date(prevEndDC);
+        prevStartDC.setUTCDate(prevStartDC.getUTCDate() - daysDiffC + 1);
+        const prevStartC = prevStartDC.toISOString().slice(0, 10);
+        const prevEndC = prevEndDC.toISOString().slice(0, 10);
+
+        let prevDataCanon: any[] = [];
+        try {
+          prevDataCanon = await paginatedFetchCanon(() =>
+            baseQueryCanon()
+              .gte("value->>date", prevStartC)
+              .lte("value->>date", prevEndC)
+          );
+        } catch (prevErr: any) {
+          console.log(`[Ledger DriverOverview:canonical] prev period: ${prevErr.message}`);
+        }
+        let prevValsCanon = prevDataCanon.map((d: any) => d.value).filter(Boolean);
+        prevValsCanon = filterByOrg(prevValsCanon, c);
+
+        let lifetimeDataCanon: any[] = [];
+        try {
+          lifetimeDataCanon = await paginatedFetchCanon(() => baseQueryCanon());
+        } catch (lifeErr: any) {
+          console.log(`[Ledger DriverOverview:canonical] lifetime: ${lifeErr.message}`);
+        }
+        let lifetimeValsCanon = lifetimeDataCanon.map((d: any) => d.value).filter(Boolean);
+        lifetimeValsCanon = filterByOrg(lifetimeValsCanon, c);
+
+        const resultCanon = aggregateCanonicalEventsToLedgerDriverOverview(
+          periodValsCanon,
+          prevValsCanon,
+          lifetimeValsCanon,
+          platformsParam || undefined,
+        );
+        console.log(
+          `[Ledger DriverOverview:canonical] OK — period earnings=${(resultCanon.period as any)?.earnings} events=${periodValsCanon.length}`,
+        );
+        return c.json({ success: true, data: resultCanon });
+      } catch (canonErr: any) {
+        console.log(`[Ledger DriverOverview:canonical] Error: ${canonErr.message}`);
+        return c.json({ error: `Canonical driver overview failed: ${canonErr.message}` }, 500);
+      }
+    }
+
     console.log(`[Ledger DriverOverview] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"}`);
 
     // ── Resolve ALL known IDs for this driver (Roam UUID, Uber UUID, InDrive UUID) ──
@@ -4659,6 +4763,148 @@ app.post("/make-server-37f42386/ledger", requireAuth(), requirePermission('trans
     return c.json({ error: `Ledger create failed: ${e.message}` }, 500);
   }
 });
+
+// ─── POST /ledger/canonical-events/append — Phase 2 canonical SSOT events (idempotent) ──
+app.post(
+  "/make-server-37f42386/ledger/canonical-events/append",
+  requireAuth(),
+  requirePermission("transactions.edit"),
+  async (c) => {
+    try {
+      const body = await c.req.json();
+      const events = body?.events;
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      const importerUserId =
+        (rbacUser as any)?.userId || (rbacUser as any)?.email || undefined;
+      const enriched = Array.isArray(events)
+        ? events.map((e: any) => ({
+            ...e,
+            importerUserId: e?.importerUserId ?? importerUserId,
+          }))
+        : [];
+      const result = await appendCanonicalLedgerEvents(enriched, c);
+      if (result.inserted > 0) {
+        try {
+          await cache.invalidateCacheVersion("stats");
+          await cache.invalidateCacheVersion("performance");
+          await invalidateDashboardCache();
+        } catch (invErr) {
+          console.warn("[CanonicalLedger] cache invalidate (non-fatal):", invErr);
+        }
+      }
+      return c.json(result);
+    } catch (e: any) {
+      console.error("[CanonicalLedger] append route error:", e);
+      return c.json({ error: e.message || "Canonical ledger append failed" }, 500);
+    }
+  },
+);
+
+// ─── GET /ledger/canonical-events — List canonical events (org-scoped) ────────────────
+app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    const limitParam = c.req.query("limit");
+    const offsetParam = c.req.query("offset");
+    const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : 50, 1), 500);
+    const offset = Math.max(offsetParam ? parseInt(offsetParam, 10) : 0, 0);
+
+    let query = supabase
+      .from("kv_store_37f42386")
+      .select("key, value")
+      .like("key", "ledger_event:%");
+
+    if (driverId) query = query.eq("value->>driverId", driverId);
+    if (startDate) query = query.gte("value->>date", startDate);
+    if (endDate) query = query.lte("value->>date", endDate);
+
+    query = query
+      .order("value->>date", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = (data || []).map((d: any) => ({
+      key: d.key,
+      ...(d.value || {}),
+    }));
+    const filtered = filterByOrg(rows, c);
+    return c.json({
+      data: filtered,
+      page: Math.floor(offset / limit) + 1,
+      limit,
+      hasMore: (data || []).length === limit,
+    });
+  } catch (e: any) {
+    console.log(`[CanonicalLedger GET] Error: ${e.message}`);
+    return c.json({ error: `Canonical ledger query failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── GET /ledger/canonical-batch-audit/:batchId — Phase 7 live recount ───────────────
+app.get(
+  "/make-server-37f42386/ledger/canonical-batch-audit/:batchId",
+  requireAuth(),
+  async (c) => {
+    const batchId = c.req.param("batchId");
+    if (!batchId?.trim()) {
+      return c.json({ error: "batchId required" }, 400);
+    }
+    try {
+      const batchRow = await kv.get(`batch:${batchId}`);
+      if (!batchRow || typeof batchRow !== "object") {
+        return c.json({ error: "Batch not found" }, 404);
+      }
+      if (!belongsToOrg(batchRow as Record<string, unknown>, c)) {
+        return c.json({ error: "Forbidden" }, 403);
+      }
+
+      const PAGE = 1000;
+      const MAX_ROWS = 200_000;
+      const all: { value: Record<string, unknown> }[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "ledger_event:%")
+          .eq("value->>batchId", batchId)
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all.push(...(page as { value: Record<string, unknown> }[]));
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+
+      const values = all.map((r) => r.value).filter(Boolean);
+      const scoped = filterByOrg(values, c);
+      const byDriver: Record<string, number> = {};
+      const byEventType: Record<string, number> = {};
+      for (const v of scoped) {
+        const d = typeof v.driverId === "string" && v.driverId.trim() ? v.driverId.trim() : "unknown";
+        const t = typeof v.eventType === "string" && v.eventType.trim() ? v.eventType.trim() : "unknown";
+        byDriver[d] = (byDriver[d] || 0) + 1;
+        byEventType[t] = (byEventType[t] || 0) + 1;
+      }
+      return c.json({
+        success: true,
+        data: {
+          batchId,
+          total: scoped.length,
+          byDriver,
+          byEventType,
+        },
+      });
+    } catch (e: any) {
+      console.error("[CanonicalBatchAudit] Error:", e);
+      return c.json({ error: e.message || "Canonical batch audit failed" }, 500);
+    }
+  },
+);
 
 // ─── POST /ledger/batch — Create multiple ledger entries ────────────
 app.post("/make-server-37f42386/ledger/batch", requireAuth(), requirePermission('transactions.edit'), async (c) => {
@@ -7198,6 +7444,44 @@ app.post("/make-server-37f42386/batches", async (c) => {
     }
     await kv.set(`batch:${batch.id}`, stampOrg(batch, c));
     return c.json({ success: true, data: batch });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** Phase 7 — merge audit / canonical-append stats into an existing batch (org-scoped). */
+app.patch("/make-server-37f42386/batches/:id", requireAuth(), async (c) => {
+  const id = c.req.param("id");
+  const ALLOWED = new Set([
+    "canonicalEventsInserted",
+    "canonicalEventsSkipped",
+    "canonicalEventsFailed",
+    "canonicalAppendCompletedAt",
+    "periodStart",
+    "periodEnd",
+    "uploadedBy",
+    "processedBy",
+    "contentFingerprint",
+  ]);
+  try {
+    const existing = await kv.get(`batch:${id}`);
+    if (!existing || typeof existing !== "object") {
+      return c.json({ error: "Batch not found" }, 404);
+    }
+    if (!belongsToOrg(existing as Record<string, unknown>, c)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+    const patch = await c.req.json();
+    if (!patch || typeof patch !== "object") {
+      return c.json({ error: "Invalid body" }, 400);
+    }
+    const merged: Record<string, unknown> = { ...(existing as Record<string, unknown>) };
+    for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
+      if (!ALLOWED.has(k)) continue;
+      merged[k] = v;
+    }
+    await kv.set(`batch:${id}`, merged);
+    return c.json({ success: true, data: merged });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

@@ -149,6 +149,7 @@ import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
 import { FuelWalletView } from './FuelWalletView';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
+import { isLedgerMoneyReadModelEnabled } from '../../utils/featureFlags';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
@@ -1124,7 +1125,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       try {
         const { startDate, endDate } = ledgerDateRangeStrings;
         const platforms = selectedPlatforms.has('All') ? undefined : Array.from(selectedPlatforms);
-        const result = await api.getLedgerDriverOverview({ driverId, startDate, endDate, platforms });
+        const result = await api.getLedgerDriverOverview({
+          driverId,
+          startDate,
+          endDate,
+          platforms,
+          source: isLedgerMoneyReadModelEnabled() ? 'canonical' : undefined,
+        });
         if (!cancelled) {
           setLedgerOverview(result);
           console.log(`[DriverDetail LEDGER] Overview loaded for ${driverId} (${startDate}..${endDate}):`, result);
@@ -2160,6 +2167,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         platformStats,
         weeklyEarningsData,
         tripCount: ledgerOverview.period.tripCount,
+        readModelSource: ledgerOverview.readModelSource,
         source: 'ledger' as const,
         isLedgerComplete,
         dataIncomplete: !isLedgerComplete,
@@ -2199,6 +2207,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       platformStats: metrics.platformStats, // Keep operational fields (distance, completed, rating)
       weeklyEarningsData: [],
       tripCount: metrics.periodCompletedTrips,
+      readModelSource: undefined,
       source: 'trips' as const,
       isLedgerComplete,
       dataIncomplete: true,
@@ -2372,7 +2381,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         const startDate = format(dateRange.from, 'yyyy-MM-dd');
         const endDate = format(dateRange.to || dateRange.from, 'yyyy-MM-dd');
         const platforms = selectedPlatforms.has('All') ? undefined : Array.from(selectedPlatforms);
-        const refreshed = await api.getLedgerDriverOverview({ driverId, startDate, endDate, platforms });
+        const refreshed = await api.getLedgerDriverOverview({
+          driverId,
+          startDate,
+          endDate,
+          platforms,
+          source: isLedgerMoneyReadModelEnabled() ? 'canonical' : undefined,
+        });
         setLedgerOverview(refreshed);
       }
     } catch (err: any) {
@@ -2836,7 +2851,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              {false && (<div>
                <MetricCard 
                   title={isToday ? "Today's Earnings" : "Period Earnings"} 
-                   subtext={resolvedFinancials.source === 'ledger' ? 'Ledger' : 'Trips fallback'}
+                   subtext={
+                    resolvedFinancials.source === 'ledger'
+                      ? resolvedFinancials.readModelSource === 'canonical_events'
+                        ? 'Posted ledger (canonical)'
+                        : 'Posted ledger'
+                      : 'Trips fallback'
+                  }
                   value={`$${resolvedFinancials.periodEarnings.toFixed(2)}`} 
                   trend={`${resolvedFinancials.trendPercent}% vs prev`} 
                   trendUp={resolvedFinancials.trendUp}
