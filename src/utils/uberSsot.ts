@@ -7,13 +7,19 @@ export type UberSsotComponent =
 export interface UberDriverStatementRow {
   'Total Earnings'?: string | number;
   'Total Earnings:Tip'?: string | number;
+  'Total Earnings : Tip'?: string | number;
   'Total Earnings : Promotions'?: string | number;
   'Refunds & Expenses'?: string | number;
+  /** Uber `payments_driver` explicit column (preferred over derived fare residual). */
+  'Total Earnings : Net Fare'?: string | number;
+  'Total Earnings:Net Fare'?: string | number;
 }
 
 export interface UberSsotTotals {
   periodEarningsGross: number; // matches Uber "Total Earnings"
   fareComponents: number;
+  /** Statement `Total Earnings : Net Fare` when that column is present; otherwise equals derived `fareComponents`. */
+  statementNetFare: number;
   promotions: number;
   tips: number;
   refundsAndExpenses: number;
@@ -35,17 +41,32 @@ function toNum(val: unknown): number {
  * FareComponents is derived to avoid double-counting:
  *   FareComponents = Total Earnings - Promotions - Tips
  */
+function explicitNetFareFromRow(row: UberDriverStatementRow): number | undefined {
+  const keys: (keyof UberDriverStatementRow)[] = ['Total Earnings : Net Fare', 'Total Earnings:Net Fare'];
+  for (const k of keys) {
+    if (!Object.prototype.hasOwnProperty.call(row, k)) continue;
+    const raw = row[k];
+    if (raw === undefined || raw === null) continue;
+    if (typeof raw === 'string' && raw.trim() === '') continue;
+    return toNum(raw);
+  }
+  return undefined;
+}
+
 export function parseUberDriverStatementSsot(row: UberDriverStatementRow): UberSsotTotals {
   const periodEarningsGross = toNum(row['Total Earnings']);
-  const tips = toNum((row as any)['Total Earnings:Tip']);
-  const promotions = toNum((row as any)['Total Earnings : Promotions']);
+  const tips = toNum(row['Total Earnings:Tip'] ?? row['Total Earnings : Tip']);
+  const promotions = toNum(row['Total Earnings : Promotions']);
   const refundsAndExpenses = toNum(row['Refunds & Expenses']);
 
   const fareComponents = periodEarningsGross - promotions - tips;
+  const explicitNet = explicitNetFareFromRow(row);
+  const statementNetFare = explicitNet !== undefined ? explicitNet : fareComponents;
 
   return {
     periodEarningsGross,
     fareComponents,
+    statementNetFare,
     promotions,
     tips,
     refundsAndExpenses,

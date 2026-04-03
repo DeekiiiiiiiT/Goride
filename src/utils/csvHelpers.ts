@@ -1,7 +1,12 @@
 import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics, VehicleMetrics, RentalContract, OrganizationMetrics, DisputeRefund } from '../types/data';
 import { FuelEntry, FuelCard } from '../types/fuel';
 import Papa from 'papaparse';
-import { parseUberDriverStatementSsot, parseUberPaymentTransactionSsotLine, UberSsotTotals } from './uberSsot';
+import {
+    parseUberDriverStatementSsot,
+    parseUberPaymentTransactionSsotLine,
+    UberDriverStatementRow,
+    UberSsotTotals,
+} from './uberSsot';
 import { isUberTripFareAdjustOrderDescription } from './uberTripFareAdjustOrder';
 
 // ... (Legacy code support if needed, but we focus on new logic)
@@ -1829,10 +1834,15 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     // These are statement-level (period) totals per driver from `payments_driver.csv`.
                     const ssotStatement = parseUberDriverStatementSsot({
                         'Total Earnings': totalEarnings,
-                        'Total Earnings:Tip': tips,
-                        'Total Earnings : Promotions': promotions,
-                        'Refunds & Expenses': refundsAndExpenses,
-                    } as any);
+                        'Total Earnings:Tip': row['Total Earnings:Tip'] ?? row['Total Earnings : Tip'] ?? tips,
+                        'Total Earnings : Promotions':
+                            row['Total Earnings : Promotions'] ??
+                            row['Total Earnings:Promotions'] ??
+                            promotions,
+                        'Refunds & Expenses': row['Refunds & Expenses'] ?? row['Refunds'] ?? refundsAndExpenses,
+                        'Total Earnings : Net Fare': row['Total Earnings : Net Fare'],
+                        'Total Earnings:Net Fare': row['Total Earnings:Net Fare'],
+                    } as UberDriverStatementRow);
 
                     const prevSsot = uberStatementsByDriverId.get(driverId);
                     if (!prevSsot) {
@@ -1841,6 +1851,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                         uberStatementsByDriverId.set(driverId, {
                             periodEarningsGross: prevSsot.periodEarningsGross + ssotStatement.periodEarningsGross,
                             fareComponents: prevSsot.fareComponents + ssotStatement.fareComponents,
+                            statementNetFare:
+                                (prevSsot.statementNetFare ?? prevSsot.fareComponents) +
+                                ssotStatement.statementNetFare,
                             promotions: prevSsot.promotions + ssotStatement.promotions,
                             tips: prevSsot.tips + ssotStatement.tips,
                             refundsAndExpenses: prevSsot.refundsAndExpenses + ssotStatement.refundsAndExpenses,
@@ -1896,7 +1909,17 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                  const balanceEnd = parseFloat(String(getValue(['End Of Period Balance', 'Balance End'])).replace(/[^0-9.-]/g, '')) || 0;
                  const bankTransfer = parseFloat(String(getValue(['Transferred To Bank Account', 'Bank Transfer'])).replace(/[^0-9.-]/g, '')) || 0;
                  const totalEarnings = parseFloat(String(getValue(['Total Earnings', 'Gross Fares', 'Gross Revenue', 'Gross Earnings'])).replace(/[^0-9.-]/g, '')) || 0;
-                 const netFare = parseFloat(String(getValue(['NetFare', 'Net Fare'])).replace(/[^0-9.-]/g, '')) || 0;
+                 const netFare = parseFloat(String(getValue([
+                     'NetFare',
+                     'Net Fare',
+                     'Total Earnings : Net Fare',
+                     'Total Earnings:Net Fare',
+                 ])).replace(/[^0-9.-]/g, '')) || 0;
+                 const refundsToll = Math.abs(parseFloat(String(getValue([
+                     'Refunds & Expenses:Refunds:Toll',
+                     'Refunds & Expenses : Refunds : Toll',
+                     'Refunds:Refunds:Toll',
+                 ])).replace(/[^0-9.-]/g, '')) || 0);
                  
                  // IMPROVED CASH COLLECTION PARSING
                  // We look for specific variations found in Uber reports
@@ -1923,6 +1946,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      totalEarnings,
                      netFare,
                      totalCashExposure: cashCollected, // Explicitly store from Summary Report
+                     ...(refundsToll > 0.005 ? { refundsToll } : {}),
                      
                      // Calculations
                      periodChange: balanceEnd - balanceStart,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useDropzone } from 'react-dropzone';
@@ -92,6 +92,7 @@ import { fuelService } from '../../services/fuelService';
 import { DataSanitizer } from '../../services/dataSanitizer';
 import { tripCalibrationService } from '../../services/tripCalibrationService';
 import { ImpactAnalysis } from './ImpactAnalysis';
+import type { UberSsotTotals } from '../../utils/uberSsot';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { CalibrationReport } from './CalibrationReport';
@@ -214,6 +215,9 @@ export function ImportsPage() {
   const [processedDriverTime, setProcessedDriverTime] = useState<DriverTimeDistance[]>([]);
   const [processedVehicleTime, setProcessedVehicleTime] = useState<VehicleTimeDistance[]>([]);
   const [processedDisputeRefunds, setProcessedDisputeRefunds] = useState<DisputeRefund[]>([]);
+  const [processedUberStatementsByDriverId, setProcessedUberStatementsByDriverId] = useState<
+    Record<string, UberSsotTotals> | undefined
+  >(undefined);
 
   // UI States
   const [isParsing, setIsParsing] = useState(false);
@@ -379,7 +383,21 @@ export function ImportsPage() {
       // 1. Merge
       // Phase 1: Capture Organization Name
       const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
-      const { trips, driverMetrics, vehicleMetrics, rentalContracts, organizationMetrics, fuelEntries, organizationName, calibrationStats, driverTimeData, vehicleTimeData, disputeRefunds, importWarnings } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
+      const {
+        trips,
+        driverMetrics,
+        vehicleMetrics,
+        rentalContracts,
+        organizationMetrics,
+        fuelEntries,
+        organizationName,
+        calibrationStats,
+        driverTimeData,
+        vehicleTimeData,
+        disputeRefunds,
+        importWarnings,
+        uberStatementsByDriverId,
+      } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
           localStorage.setItem('roam_fleet_name', organizationName);
@@ -416,6 +434,7 @@ export function ImportsPage() {
       setProcessedDriverTime(driverTimeData || []);
       setProcessedVehicleTime(vehicleTimeData || []);
       setProcessedDisputeRefunds(disputeRefunds || []);
+      setProcessedUberStatementsByDriverId(uberStatementsByDriverId);
       if ((disputeRefunds || []).length > 0) {
           console.log(`[Import] Found ${disputeRefunds!.length} dispute refund(s) in CSV`);
       }
@@ -447,6 +466,96 @@ export function ImportsPage() {
         return { ...file, headers: newHeaders, rows: newRows };
     });
   }, [uploadedFiles, disabledColumns]);
+
+  /** Statement-aligned Uber preview (payments_driver SSOT + org row), with trip-level fallback when SSOT is missing. */
+  const importUberReconciliation = useMemo(() => {
+    const org = processedOrganizationMetrics[0];
+    const ssotMap = processedUberStatementsByDriverId;
+    const hasSsot = ssotMap != null && Object.keys(ssotMap).length > 0;
+
+    const ssotAgg = hasSsot
+      ? Object.values(ssotMap!).reduce(
+          (a, s) => ({
+            promotions: a.promotions + s.promotions,
+            tips: a.tips + s.tips,
+            refundsAndExpenses: a.refundsAndExpenses + s.refundsAndExpenses,
+            statementNetFare: a.statementNetFare + s.statementNetFare,
+            periodEarningsGross: a.periodEarningsGross + s.periodEarningsGross,
+          }),
+          {
+            promotions: 0,
+            tips: 0,
+            refundsAndExpenses: 0,
+            statementNetFare: 0,
+            periodEarningsGross: 0,
+          },
+        )
+      : null;
+
+    const tollSupport = processedDisputeRefunds.reduce((s, r) => s + Math.abs(r.amount || 0), 0);
+
+    const tripNetFare = processedData.reduce((sum, t) => sum + (t.uberFareComponents || 0), 0);
+    const tripPromos = processedData.reduce((sum, t) => sum + (t.uberPromotionsAmount || 0), 0);
+    const tripTips = processedData.reduce((sum, t) => sum + (t.uberTips || 0), 0);
+    const priorSum = processedData.reduce((s, t) => s + (t.uberPriorPeriodAdjustment || 0), 0);
+    const tripRefundsTolls = processedData.reduce(
+      (sum, t) => sum + (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0),
+      0,
+    );
+
+    const orgNetFare = org ? Number(org.netFare) || 0 : 0;
+    const netFare =
+      hasSsot && ssotAgg
+        ? orgNetFare > 0.005
+          ? orgNetFare
+          : ssotAgg.statementNetFare
+        : tripNetFare;
+
+    const promotions = hasSsot && ssotAgg ? ssotAgg.promotions : tripPromos;
+    const tipsStatement = hasSsot && ssotAgg ? ssotAgg.tips : tripTips + priorSum;
+    const tipsPeriod = hasSsot && ssotAgg ? tipsStatement - priorSum : tripTips;
+
+    const refundsTotal =
+      hasSsot && ssotAgg && ssotAgg.refundsAndExpenses > 0.005
+        ? ssotAgg.refundsAndExpenses
+        : tripRefundsTolls;
+
+    const refundsTollOrg = org?.refundsToll != null && org.refundsToll > 0.005 ? org.refundsToll : undefined;
+    const tolls =
+      refundsTollOrg !== undefined ? refundsTollOrg : Math.max(0, refundsTotal - tollSupport);
+
+    const totalEarnings =
+      org != null && Number(org.totalEarnings) > 0.005
+        ? org.totalEarnings
+        : hasSsot && ssotAgg
+          ? ssotAgg.periodEarningsGross
+          : netFare + promotions + tipsStatement;
+
+    const periodTotal = netFare + promotions + tipsPeriod;
+    const statementRollup = netFare + promotions + tipsStatement;
+    const roamTotalVsUber = statementRollup - totalEarnings;
+
+    return {
+      hasSsot,
+      netFare,
+      promotions,
+      tipsStatement,
+      tipsPeriod,
+      priorSum,
+      tolls,
+      tollSupport,
+      refundsTotal,
+      periodTotal,
+      totalEarnings,
+      statementRollup,
+      roamTotalVsUber,
+    };
+  }, [
+    processedOrganizationMetrics,
+    processedUberStatementsByDriverId,
+    processedData,
+    processedDisputeRefunds,
+  ]);
 
   const handleAnalyze = async () => {
     setIsParsing(true);
@@ -510,6 +619,7 @@ export function ImportsPage() {
         setProcessedDriverTime(localResult.driverTimeData || []);
         setProcessedVehicleTime(localResult.vehicleTimeData || []);
         setProcessedDisputeRefunds(localResult.disputeRefunds || []);
+        setProcessedUberStatementsByDriverId(localResult.uberStatementsByDriverId);
         if ((localResult.disputeRefunds || []).length > 0) {
             console.log(`[Import] Found ${localResult.disputeRefunds!.length} dispute refund(s) in CSV (AI flow)`);
         }
@@ -1588,7 +1698,9 @@ export function ImportsPage() {
                               Uber Reconciliation (SSOT vs Roam)
                           </CardTitle>
                           <CardDescription className="text-xs">
-                              Breakdown of Uber statement components vs what this import will create in Roam.
+                              {importUberReconciliation.hasSsot
+                                ? 'Uses Uber statement columns from payments_driver / organization CSVs (not rolled-up trip fare lines).'
+                                : 'Add payments_driver.csv for statement-level totals; until then, figures below use trip rollups.'}
                           </CardDescription>
                       </CardHeader>
                       <CardContent className="p-4">
@@ -1602,25 +1714,32 @@ export function ImportsPage() {
                                       <div className="flex justify-between">
                                           <span className="text-slate-600">Total Earnings</span>
                                           <span className="font-medium">
-                                              {toCurrency(processedOrganizationMetrics[0]?.totalEarnings)}
+                                              {toCurrency(importUberReconciliation.totalEarnings)}
                                           </span>
                                       </div>
-                                      {/* Placeholders for future SSOT component breakdown */}
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">Fare components</span>
-                                          <span className="font-medium">$0.00</span>
+                                          <span className="text-slate-600">Net fare</span>
+                                          <span className="font-medium">
+                                              {toCurrency(importUberReconciliation.netFare)}
+                                          </span>
                                       </div>
                                       <div className="flex justify-between">
                                           <span className="text-slate-600">Promotions</span>
-                                          <span className="font-medium">$0.00</span>
+                                          <span className="font-medium">
+                                              {toCurrency(importUberReconciliation.promotions)}
+                                          </span>
                                       </div>
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">Tips</span>
-                                          <span className="font-medium">$0.00</span>
+                                          <span className="text-slate-600">Tips (statement)</span>
+                                          <span className="font-medium">
+                                              {toCurrency(importUberReconciliation.tipsStatement)}
+                                          </span>
                                       </div>
                                       <div className="flex justify-between">
                                           <span className="text-slate-600">Refunds &amp; expenses</span>
-                                          <span className="font-medium">$0.00</span>
+                                          <span className="font-medium">
+                                              {toCurrency(importUberReconciliation.refundsTotal)}
+                                          </span>
                                       </div>
                                   </div>
                               </div>
@@ -1634,101 +1753,75 @@ export function ImportsPage() {
                                       <div className="flex justify-between">
                                           <span className="text-slate-600">Net fare</span>
                                           <span className="font-medium">
-                                              {toCurrency(
-                                                  processedData.reduce((sum, t) => sum + (t.uberFareComponents || 0), 0)
-                                              )}
+                                              {toCurrency(importUberReconciliation.netFare)}
                                           </span>
                                       </div>
                                       <div className="flex justify-between">
                                           <span className="text-slate-600">Promotions</span>
                                           <span className="font-medium">
-                                              {toCurrency(
-                                                  processedData.reduce((sum, t) => sum + (t.uberPromotionsAmount || 0), 0)
-                                              )}
+                                              {toCurrency(importUberReconciliation.promotions)}
                                           </span>
                                       </div>
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">Tips</span>
+                                          <span className="text-slate-600">Tips (in-period)</span>
                                           <span className="font-medium">
-                                              {toCurrency(
-                                                  processedData.reduce((sum, t) => sum + (t.uberTips || 0), 0)
-                                              )}
+                                              {toCurrency(importUberReconciliation.tipsPeriod)}
                                           </span>
                                       </div>
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">period adjustment</span>
+                                          <span className="text-slate-600">Adjustments from previous periods</span>
                                           <span className="font-medium">
-                                              {toCurrency(
-                                                  processedData.reduce(
-                                                      (sum, t) => sum + (t.uberPriorPeriodAdjustment || 0),
-                                                      0
-                                                  )
-                                              )}
+                                              {toCurrency(importUberReconciliation.priorSum)}
                                           </span>
                                       </div>
                                       <div className="flex justify-between">
-                                          <span className="text-slate-600">Tolls &amp; trip refunds</span>
+                                          <span className="text-slate-600">Tolls</span>
                                           <span className="font-medium">
-                                              {toCurrency(
-                                                  processedData.reduce(
-                                                      (sum, t) =>
-                                                          sum + (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0),
-                                                      0
-                                                  )
-                                              )}
+                                              {toCurrency(importUberReconciliation.tolls)}
                                           </span>
                                       </div>
-                                      <div className="flex justify-between">
+                                      {importUberReconciliation.tollSupport > 0.005 && (
+                                          <div className="flex justify-between">
+                                              <span className="text-slate-600">Toll Support Adjustment</span>
+                                              <span className="font-medium">
+                                                  {toCurrency(importUberReconciliation.tollSupport)}
+                                              </span>
+                                          </div>
+                                      )}
+                                      <div className="flex justify-between border-t border-slate-100 pt-1.5 mt-1">
                                           <span className="text-slate-600">Period Total Earnings</span>
                                           <span className="font-medium">
-                                              {toCurrency(
-                                                  processedData.reduce((sum, t) => {
-                                                      const gross =
-                                                          (t.uberFareComponents || 0) +
-                                                          (t.uberPromotionsAmount || 0) +
-                                                          (t.uberTips || 0) +
-                                                          (t.uberPriorPeriodAdjustment || 0);
-                                                      const deductions =
-                                                          (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0);
-                                                      return sum + gross - deductions;
-                                                  }, 0)
-                                              )}
+                                              {toCurrency(importUberReconciliation.periodTotal)}
                                           </span>
                                       </div>
                                   </div>
                               </div>
                           </div>
 
-                          <div className="mt-4 text-xs text-slate-600 flex items-center justify-between">
-                          {(() => {
-                                const uberTotal = Number(processedOrganizationMetrics[0]?.totalEarnings) || 0;
-                                const roamTotal = processedData.reduce((sum, t) => {
-                                  const gross =
-                                    (t.uberFareComponents || 0) +
-                                    (t.uberPromotionsAmount || 0) +
-                                    (t.uberTips || 0) +
-                                    (t.uberPriorPeriodAdjustment || 0);
-                                  const deductions = (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0);
-                                  return sum + gross - deductions;
-                                }, 0);
-                                const diff = roamTotal - uberTotal;
+                          <div className="mt-4 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                              {(() => {
+                                const uberTotal = importUberReconciliation.totalEarnings;
+                                const rollup = importUberReconciliation.statementRollup;
+                                const diff = importUberReconciliation.roamTotalVsUber;
                                 const reconciled = Math.abs(diff) <= 0.01;
                                 return (
                                   <>
                                     <span>
-                                      Roam imported total:{' '}
-                                      <span className="font-semibold">
-                                        {toCurrency(roamTotal)}
-                                      </span>
-                                      {' '}| Difference:{' '}
-                                      <span className={`font-semibold ${reconciled ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                      Statement check (net fare + promotions + tips):{' '}
+                                      <span className="font-semibold">{toCurrency(rollup)}</span>
+                                      {' vs Uber Total Earnings '}
+                                      <span className="font-semibold">{toCurrency(uberTotal)}</span>
+                                      {' — diff '}
+                                      <span
+                                        className={`font-semibold ${reconciled ? 'text-emerald-600' : 'text-amber-600'}`}
+                                      >
                                         {toCurrency(diff)}
                                       </span>
                                     </span>
                                     <span className="text-slate-400">
                                       {reconciled
-                                        ? 'Reconciled with Uber statement for the selected period.'
-                                        : 'Does not fully match Uber statement — review before confirming.'}
+                                        ? 'Matches Uber Total Earnings for this period.'
+                                        : 'Does not match Uber Total Earnings — check CSV columns or rounding.'}
                                     </span>
                                   </>
                                 );
@@ -1786,22 +1879,6 @@ export function ImportsPage() {
                             </CardContent>
                         </Card>
                     </div>
-
-                    {/* Dispute Refunds Detected */}
-                    {processedDisputeRefunds.length > 0 && (
-                        <Alert className="bg-teal-50 border-teal-200 text-teal-800">
-                            <DollarSign className="h-4 w-4 text-teal-600" />
-                            <AlertTitle className="flex items-center gap-2">
-                                Dispute Refunds Found
-                                <Badge className="bg-teal-600 text-white text-xs">{processedDisputeRefunds.length}</Badge>
-                            </AlertTitle>
-                            <AlertDescription>
-                                {processedDisputeRefunds.length} Support Adjustment refund{processedDisputeRefunds.length !== 1 ? 's' : ''} detected
-                                {' '}(${processedDisputeRefunds.reduce((s, r) => s + (r.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}).
-                                {' '}These will be saved to Toll Reconciliation &gt; Dispute Refunds on import.
-                            </AlertDescription>
-                        </Alert>
-                    )}
 
                     {/* Financial Health Checks (New Tiles) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

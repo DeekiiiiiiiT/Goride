@@ -436,6 +436,9 @@ export interface OrganizationMetrics {
     totalTrips?: number;
     fleetUtilization?: number; // Average of all vehicle utilizations
     totalCashExposure?: number; // Sum of all cash collected
+
+    /** From `payments_organization` when present: toll-only portion of refunds (excludes support adjustments). */
+    refundsToll?: number;
 }
 
 // Phase 8.4: Driver Portal & Maintenance Reporting
