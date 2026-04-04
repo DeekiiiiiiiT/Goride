@@ -1790,6 +1790,68 @@ export const api = {
     return result.data || [];
   },
 
+  /** IDEA 2: unified toll financial events (multi-source read model). */
+  async getTollUnifiedEvents(params?: {
+    driverId?: string;
+    from?: string;
+    to?: string;
+    kinds?: string;
+    batchId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    success: boolean;
+    data: import("../types/tollFinancialEvent").TollFinancialEvent[];
+    meta: import("../types/tollFinancialEvent").TollUnifiedEventsMeta;
+  }> {
+    const qs = new URLSearchParams();
+    if (params?.driverId) qs.set("driverId", params.driverId);
+    if (params?.from) qs.set("from", params.from);
+    if (params?.to) qs.set("to", params.to);
+    if (params?.kinds) qs.set("kinds", params.kinds);
+    if (params?.batchId) qs.set("batchId", params.batchId);
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params?.offset !== undefined) qs.set("offset", String(params.offset));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll-reconciliation/unified-events?${qs.toString()}`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Failed to fetch unified toll events");
+    }
+    return response.json();
+  },
+
+  /** CSV attachment — same query params as getTollUnifiedEvents. */
+  async getTollUnifiedEventsExportCsv(params?: {
+    driverId?: string;
+    from?: string;
+    to?: string;
+    kinds?: string;
+    batchId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<string> {
+    const qs = new URLSearchParams();
+    if (params?.driverId) qs.set("driverId", params.driverId);
+    if (params?.from) qs.set("from", params.from);
+    if (params?.to) qs.set("to", params.to);
+    if (params?.kinds) qs.set("kinds", params.kinds);
+    if (params?.batchId) qs.set("batchId", params.batchId);
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params?.offset !== undefined) qs.set("offset", String(params.offset));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll-reconciliation/unified-events/export?${qs.toString()}`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Failed to export unified toll events");
+    }
+    return response.text();
+  },
+
   // ── Dispute Refunds ────────────────────────────────────────────────────
 
   async importDisputeRefunds(refunds: DisputeRefund[]): Promise<{ imported: number; skipped: number; total: number; message: string }> {

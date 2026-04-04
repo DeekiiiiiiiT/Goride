@@ -10,6 +10,7 @@ import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, Dol
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { DisputeModal } from "../../claimable-loss/DisputeModal";
+import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction } from "../../../types/data";
 import { MatchResult, calculateTollFinancials } from "../../../utils/tollReconciliation";
 import { toast } from "sonner@2.0.3";
@@ -457,7 +458,7 @@ export function ReconciliationDashboard() {
       )}
 
       <Tabs defaultValue="unmatched" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
+        <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:max-w-4xl">
           <TabsTrigger value="unmatched">
             Unmatched Tolls
             {filteredUnreconciledTolls.length > 0 && (
@@ -479,6 +480,9 @@ export function ReconciliationDashboard() {
             <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
                     {reconciledTolls.length}
             </span>
+          </TabsTrigger>
+          <TabsTrigger value="activity">
+            All activity
           </TabsTrigger>
         </TabsList>
         
@@ -510,6 +514,16 @@ export function ReconciliationDashboard() {
                 claims={claims}
                 onUnmatch={unreconcile}
             />
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-4">
+          <div className="mb-2">
+            <p className="text-sm text-slate-600">
+              One timeline across toll ledger, legacy imports, unlinked trip refunds, and Uber support adjustments.
+              Amounts follow each source&apos;s sign convention (toll charges are usually negative; credits positive).
+            </p>
+          </div>
+          <UnifiedTollActivityTable driverId={selectedDriverId || undefined} />
         </TabsContent>
       </Tabs>
 

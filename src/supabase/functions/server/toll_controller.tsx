@@ -11,6 +11,8 @@
  *   GET  /toll-reconciliation/unclaimed-refunds – paginated trips with no matched expense
  *   GET  /toll-reconciliation/reconciled        – paginated matched history
  *   GET  /toll-reconciliation/export            – all toll txns flattened for CSV export
+ *   GET  /toll-reconciliation/unified-events     – IDEA 2 canonical multi-source toll financial events
+ *   GET  /toll-reconciliation/unified-events/export – CSV of unified events (same filters)
  *   POST /toll-reconciliation/reset-for-reconciliation – pending + clear trip/match (re-queue for Unmatched)
  */
 
@@ -31,6 +33,21 @@ import {
   subDays,
   addDays,
 } from "npm:date-fns";
+import {
+  TOLL_FINANCIAL_EVENT_SCHEMA_VERSION,
+  TOLL_UNIFIED_EVENTS_MAX_LIMIT,
+  countBySource,
+  dedupeTollFinancialEvents,
+  filterTollFinancialEvents,
+  mapDisputeRefundToEvent,
+  mapMergedTollTxToEvent,
+  mapTripUnclaimedToEvent,
+  parseKindFilter,
+  sortTollFinancialEventsDesc,
+  type TollEventSourceSystem,
+  type TollFinancialEvent,
+  type TollUnifiedEventsMeta,
+} from "../../../types/tollFinancialEvent.ts";
 
 const app = new Hono();
 
@@ -779,6 +796,61 @@ async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any
   return { tollTx, trips };
 }
 
+/** Support adjustments (`dispute-refund:*`), excluding dedup index keys. */
+async function loadDisputeRefundRecords(): Promise<any[]> {
+  const raw = await loadAllByPrefix("dispute-refund:");
+  return (raw || []).filter(
+    (item: any) => item && typeof item === "object" && item.id && item.supportCaseId,
+  );
+}
+
+/**
+ * IDEA 2 unified read model: merged toll rows + unlinked trip refund signals + dispute refunds.
+ * Toll merge follows `loadMergedTollTxArray` (ledger wins by id).
+ */
+async function buildUnifiedTollFinancialEventsList(): Promise<{
+  events: TollFinancialEvent[];
+  droppedDuplicatesCount: number;
+}> {
+  const [ledgerEntries, mergedToll, trips, disputeRaw] = await Promise.all([
+    getAllTollLedgerEntries(),
+    loadMergedTollTxArray(),
+    loadAllTrips(),
+    loadDisputeRefundRecords(),
+  ]);
+  const ledgerIds = new Set(ledgerEntries.map((e) => String(e.id)));
+
+  const tollEvents: TollFinancialEvent[] = [];
+  for (const tx of mergedToll) {
+    const ev = mapMergedTollTxToEvent(tx, ledgerIds);
+    if (ev) tollEvents.push(ev);
+  }
+
+  const linkedTripIds = new Set(
+    mergedToll.filter((tx: any) => tx.tripId).map((tx: any) => String(tx.tripId)),
+  );
+  const tripEvents: TollFinancialEvent[] = [];
+  for (const t of trips) {
+    const tc = Number(t.tollCharges) || 0;
+    if (tc <= 0 || linkedTripIds.has(String(t.id))) continue;
+    const ev = mapTripUnclaimedToEvent(t);
+    if (ev) tripEvents.push(ev);
+  }
+
+  const drEvents: TollFinancialEvent[] = [];
+  for (const r of disputeRaw) {
+    const ev = mapDisputeRefundToEvent(r);
+    if (ev) drEvents.push(ev);
+  }
+
+  const combined = [...tollEvents, ...tripEvents, ...drEvents];
+  const { events, droppedDuplicatesCount } = dedupeTollFinancialEvents(combined);
+  return {
+    events: sortTollFinancialEventsDesc(events),
+    droppedDuplicatesCount,
+  };
+}
+
 // ─── Route Helpers ─────────────────────────────────────────────────────
 
 function parseQueryParams(c: any) {
@@ -786,6 +858,76 @@ function parseQueryParams(c: any) {
   const limit = parseInt(c.req.query("limit") || "50", 10);
   const offset = parseInt(c.req.query("offset") || "0", 10);
   return { driverId, limit, offset };
+}
+
+function parseUnifiedQueryParams(c: any) {
+  const driverId = c.req.query("driverId") || undefined;
+  const from = c.req.query("from") || undefined;
+  const to = c.req.query("to") || undefined;
+  const kinds = parseKindFilter(c.req.query("kinds") || undefined);
+  const batchId = c.req.query("batchId") || undefined;
+  const rawLimit = parseInt(c.req.query("limit") || "50", 10);
+  const offset = parseInt(c.req.query("offset") || "0", 10);
+  return {
+    driverId,
+    from,
+    to,
+    kinds,
+    batchId,
+    rawLimit,
+    offset: isNaN(offset) ? 0 : offset,
+  };
+}
+
+function csvEscapeCell(val: string): string {
+  if (/[",\r\n]/.test(val)) return `"${val.replace(/"/g, '""')}"`;
+  return val;
+}
+
+type UnifiedQuery = ReturnType<typeof parseUnifiedQueryParams>;
+
+async function projectUnifiedTollEventsPage(q: UnifiedQuery): Promise<
+  | { ok: false; status: 400; error: string }
+  | {
+      ok: true;
+      page: TollFinancialEvent[];
+      total: number;
+      limit: number;
+      droppedDuplicatesCount: number;
+      sourcesIncluded: Partial<Record<TollEventSourceSystem, number>>;
+      durationMs: number;
+    }
+> {
+  const t0 = Date.now();
+  if (!isNaN(q.rawLimit) && q.rawLimit > TOLL_UNIFIED_EVENTS_MAX_LIMIT) {
+    return { ok: false, status: 400, error: `limit cannot exceed ${TOLL_UNIFIED_EVENTS_MAX_LIMIT}` };
+  }
+  const limit = isNaN(q.rawLimit) || q.rawLimit < 1 ? 50 : q.rawLimit;
+
+  const { events: allEvents, droppedDuplicatesCount } = await buildUnifiedTollFinancialEventsList();
+
+  const filtered = filterTollFinancialEvents(allEvents, {
+    driverId: q.driverId,
+    from: q.from,
+    to: q.to,
+    kinds: q.kinds,
+    batchId: q.batchId,
+  });
+
+  const total = filtered.length;
+  const page = filtered.slice(q.offset, q.offset + limit);
+  const sourcesIncluded = countBySource(filtered);
+  const durationMs = Date.now() - t0;
+
+  return {
+    ok: true,
+    page,
+    total,
+    limit,
+    droppedDuplicatesCount,
+    sourcesIncluded,
+    durationMs,
+  };
 }
 
 function filterByDriver(items: any[], driverId?: string): any[] {
@@ -3204,6 +3346,110 @@ app.get(`${BASE}/export`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollReconciliation] GET /export error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /unified-events (IDEA 2 read model) ────────────────────────────
+
+app.get(`${BASE}/unified-events`, async (c) => {
+  try {
+    const q = parseUnifiedQueryParams(c);
+    const out = await projectUnifiedTollEventsPage(q);
+    if (!out.ok) {
+      return c.json({ error: out.error }, out.status);
+    }
+
+    const meta: TollUnifiedEventsMeta = {
+      schemaVersion: TOLL_FINANCIAL_EVENT_SCHEMA_VERSION,
+      limit: out.limit,
+      offset: q.offset,
+      total: out.total,
+      sourcesIncluded: out.sourcesIncluded,
+      droppedDuplicatesCount: out.droppedDuplicatesCount,
+      durationMs: out.durationMs,
+    };
+
+    console.log(
+      `[TollReconciliation] GET /unified-events rows=${out.total} page=${out.page.length} deduped=${out.droppedDuplicatesCount} ${out.durationMs}ms`,
+    );
+
+    return c.json({
+      success: true,
+      data: out.page,
+      meta,
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /unified-events error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /unified-events/export (CSV) ──────────────────────────────────
+
+app.get(`${BASE}/unified-events/export`, async (c) => {
+  try {
+    const q = parseUnifiedQueryParams(c);
+    const out = await projectUnifiedTollEventsPage(q);
+    if (!out.ok) {
+      return c.json({ error: out.error }, out.status);
+    }
+    const { page, total, droppedDuplicatesCount } = out;
+
+    const headers = [
+      "eventId",
+      "kind",
+      "kindLabel",
+      "sourceSystem",
+      "amount",
+      "currency",
+      "driverId",
+      "driverName",
+      "occurredAt",
+      "workflowState",
+      "batchId",
+      "tripId",
+      "matchedTollId",
+      "description",
+      "schemaVersion",
+    ];
+    const lines = [
+      headers.join(","),
+      ...page.map((e: TollFinancialEvent) =>
+        [
+          csvEscapeCell(e.eventId),
+          csvEscapeCell(e.kind),
+          csvEscapeCell(e.kindLabel),
+          csvEscapeCell(e.sourceSystem),
+          csvEscapeCell(String(e.amount)),
+          csvEscapeCell(e.currency),
+          csvEscapeCell(e.driverId),
+          csvEscapeCell(e.driverName || ""),
+          csvEscapeCell(e.occurredAt),
+          csvEscapeCell(e.workflowState),
+          csvEscapeCell(e.batchId || ""),
+          csvEscapeCell(e.tripId || ""),
+          csvEscapeCell(e.matchedTollId || ""),
+          csvEscapeCell(e.description || ""),
+          csvEscapeCell(String(e.schemaVersion)),
+        ].join(","),
+      ),
+    ];
+    const csv = lines.join("\r\n");
+
+    console.log(
+      `[TollReconciliation] GET /unified-events/export bytes=${csv.length} rows=${total} page=${page.length} deduped=${droppedDuplicatesCount}`,
+    );
+
+    return new Response(csv, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="toll_unified_events_${new Date().toISOString().slice(0, 10)}.csv"`,
+      },
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /unified-events/export error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
