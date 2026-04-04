@@ -98,7 +98,6 @@ import type { UberSsotTotals } from '../../utils/uberSsot';
 import { computeImportBundleFingerprint } from '../../utils/importBundleFingerprint';
 import { validateMergedImportPreview } from '../../utils/importValidation';
 import { buildCanonicalImportEvents } from '../../utils/buildCanonicalImportEvents';
-import { aggregateCanonicalEventsToLedgerDriverOverview } from '../../utils/ledgerMoneyAggregate';
 import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
@@ -112,9 +111,6 @@ import { ImportBatchAuditPanel } from './ImportBatchAuditPanel';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
-
-/** Stable idempotency namespace for preview-only canonical aggregation (must not match real batch IDs). */
-const IMPORT_PREVIEW_BATCH_ID = '00000000-0000-0000-0000-0000000000preview';
 
 const toCurrency = (val: number | undefined | null) =>
   `$${(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
@@ -580,93 +576,6 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
     processedData,
     processedDisputeRefunds,
   ]);
-
-  /** Same canonical aggregate as GET /ledger/driver-overview — preview matches posted ledger math. */
-  const canonicalImportReadModel = useMemo(() => {
-    try {
-      const org = processedOrganizationMetrics[0];
-      const events = buildCanonicalImportEvents({
-        batchId: IMPORT_PREVIEW_BATCH_ID,
-        sourceFileHash: 'preview',
-        trips: processedData,
-        organizationMetrics: org ?? null,
-        uberStatementsByDriverId: processedUberStatementsByDriverId,
-        disputeRefunds: processedDisputeRefunds,
-      });
-      if (events.length === 0) return null;
-      return aggregateCanonicalEventsToLedgerDriverOverview(events as unknown[], [], [], undefined);
-    } catch {
-      return null;
-    }
-  }, [
-    processedData,
-    processedOrganizationMetrics,
-    processedUberStatementsByDriverId,
-    processedDisputeRefunds,
-  ]);
-
-  /** Roam Import column + checks: prefer canonical read model when available (parity with posted ledger). */
-  const importUberReconciliationDisplay = useMemo(() => {
-    const base = importUberReconciliation;
-    const raw = canonicalImportReadModel as Record<string, unknown> | null;
-    if (!raw?.period) return base;
-    const period = raw.period as {
-      earnings: number;
-      cashCollected: number;
-      bankTransferred?: number;
-      disputeRefunds?: number;
-      uber?: {
-        fareComponents: number;
-        tips: number;
-        promotions: number;
-        refundExpense: number;
-        priorPeriodAdjustments?: number;
-        statementTotalEarnings?: number;
-      };
-    };
-    const u = period.uber;
-    if (!u) return base;
-    const org = processedOrganizationMetrics[0];
-    const prior = Number(u.priorPeriodAdjustments) || 0;
-    const tipsSt = Number(u.tips) || 0;
-    const tipsPeriod = Math.max(0, tipsSt - prior);
-    const tollSupport = Number(period.disputeRefunds) || 0;
-    const refundsMag = Number(u.refundExpense) || 0;
-    const tollsSub = Math.max(0, refundsMag - tollSupport);
-    const periodTotal = Number(u.fareComponents) + Number(u.promotions) + tipsPeriod;
-    const grandTotal = periodTotal + refundsMag + prior;
-    const totalEarnings =
-      org != null && Number(org.totalEarnings) > 0.005
-        ? Number(org.totalEarnings)
-        : Number(u.statementTotalEarnings) > 0.005
-          ? Number(u.statementTotalEarnings)
-          : base.totalEarnings;
-    const statementRollup =
-      Number(u.fareComponents) + Number(u.promotions) + tipsSt;
-    return {
-      ...base,
-      netFare: u.fareComponents,
-      promotions: u.promotions,
-      tipsStatement: tipsSt,
-      tipsPeriod,
-      priorSum: prior,
-      tolls: tollsSub,
-      tollSupport,
-      refundsTotal: refundsMag,
-      periodTotal,
-      totalEarnings,
-      statementRollup,
-      roamTotalVsUber: statementRollup - totalEarnings,
-      payoutCash: period.cashCollected,
-      payoutBank:
-        org != null && org.bankTransfer != null && !Number.isNaN(Number(org.bankTransfer))
-          ? Number(org.bankTransfer)
-          : period.bankTransferred != null
-            ? -Math.abs(Number(period.bankTransferred))
-            : base.payoutBank,
-      grandTotal,
-    };
-  }, [canonicalImportReadModel, importUberReconciliation, processedOrganizationMetrics]);
 
   /** Phase 4: per-driver statement net fare vs sum of trip `uberFareComponents` in org period. */
   const importNetFareVarianceByDriver = useMemo(() => {
@@ -2009,7 +1918,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                               </span>
                                               <span className="flex items-center gap-2 shrink-0">
                                                   <span className="text-sm font-semibold tabular-nums text-slate-900">
-                                                      {toCurrency(importUberReconciliationDisplay.periodTotal)}
+                                                      {toCurrency(importUberReconciliation.periodTotal)}
                                                   </span>
                                                   <ChevronDown className="roam-import-chevron h-4 w-4 text-slate-400 transition-transform duration-200" />
                                               </span>
@@ -2019,19 +1928,19 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                                   <li className="flex justify-between gap-4">
                                                       <span>Net fare</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.netFare)}
+                                                          {toCurrency(importUberReconciliation.netFare)}
                                                       </span>
                                                   </li>
                                                   <li className="flex justify-between gap-4">
                                                       <span>Promotions</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.promotions)}
+                                                          {toCurrency(importUberReconciliation.promotions)}
                                                       </span>
                                                   </li>
                                                   <li className="flex justify-between gap-4">
                                                       <span>Tips</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.tipsPeriod)}
+                                                          {toCurrency(importUberReconciliation.tipsPeriod)}
                                                       </span>
                                                   </li>
                                               </ul>
@@ -2048,7 +1957,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                               </span>
                                               <span className="flex items-center gap-2 shrink-0">
                                                   <span className="text-sm font-semibold tabular-nums text-slate-900">
-                                                      {toCurrency(importUberReconciliationDisplay.refundsTotal)}
+                                                      {toCurrency(importUberReconciliation.refundsTotal)}
                                                   </span>
                                                   <ChevronDown className="roam-import-chevron h-4 w-4 text-slate-400 transition-transform duration-200" />
                                               </span>
@@ -2058,13 +1967,13 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                                   <li className="flex justify-between gap-4">
                                                       <span>Tolls</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.tolls)}
+                                                          {toCurrency(importUberReconciliation.tolls)}
                                                       </span>
                                                   </li>
                                                   <li className="flex justify-between gap-4">
                                                       <span>Toll Support Adjustment</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.tollSupport)}
+                                                          {toCurrency(importUberReconciliation.tollSupport)}
                                                       </span>
                                                   </li>
                                               </ul>
@@ -2081,7 +1990,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                               </span>
                                               <span className="flex items-center gap-2 shrink-0">
                                                   <span className="text-sm font-semibold tabular-nums text-slate-900">
-                                                      {toCurrency(importUberReconciliationDisplay.priorSum)}
+                                                      {toCurrency(importUberReconciliation.priorSum)}
                                                   </span>
                                                   <ChevronDown className="roam-import-chevron h-4 w-4 text-slate-400 transition-transform duration-200" />
                                               </span>
@@ -2091,7 +2000,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                                   <li className="flex justify-between gap-4">
                                                       <span>Period Adjustment</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.priorSum)}
+                                                          {toCurrency(importUberReconciliation.priorSum)}
                                                       </span>
                                                   </li>
                                               </ul>
@@ -2111,13 +2020,13 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                                   <li className="flex justify-between gap-4">
                                                       <span>Cash Collected</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.payoutCash)}
+                                                          {toCurrency(importUberReconciliation.payoutCash)}
                                                       </span>
                                                   </li>
                                                   <li className="flex justify-between gap-4">
                                                       <span>Transferred to Bank</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliationDisplay.payoutBank)}
+                                                          {toCurrency(importUberReconciliation.payoutBank)}
                                                       </span>
                                                   </li>
                                               </ul>
@@ -2127,7 +2036,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                       <div className="flex justify-between gap-4 pt-3 text-sm font-semibold text-slate-900">
                                           <span>Total</span>
                                           <span className="tabular-nums">
-                                              {toCurrency(importUberReconciliationDisplay.grandTotal)}
+                                              {toCurrency(importUberReconciliation.grandTotal)}
                                           </span>
                                       </div>
                                   </div>
@@ -2137,8 +2046,8 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                           <div className="mt-4 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                               {(() => {
                                 const uberTotal = importUberReconciliation.totalEarnings;
-                                const rollup = importUberReconciliationDisplay.statementRollup;
-                                const diff = importUberReconciliationDisplay.roamTotalVsUber;
+                                const rollup = importUberReconciliation.statementRollup;
+                                const diff = importUberReconciliation.roamTotalVsUber;
                                 const reconciled = Math.abs(diff) <= 0.01;
                                 return (
                                   <>
