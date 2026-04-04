@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { api } from '../../services/api';
 import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download } from 'lucide-react';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
@@ -111,6 +112,30 @@ export function LedgerBackfillPanel() {
   const [tollRepairError, setTollRepairError] = useState<string | null>(null);
   const [confirmTollRepair, setConfirmTollRepair] = useState(false);
   const [tollBackupLoading, setTollBackupLoading] = useState(false);
+
+  const [stripDriverId, setStripDriverId] = useState('');
+  const [stripLoading, setStripLoading] = useState(false);
+  const [stripResult, setStripResult] = useState<{ deletedKeys: number } | null>(null);
+  const [stripError, setStripError] = useState<string | null>(null);
+
+  const runStripUberPaymentMetrics = async () => {
+    const id = stripDriverId.trim();
+    if (!id) {
+      setStripError('Enter a driver UUID (Roam / internal id).');
+      return;
+    }
+    setStripLoading(true);
+    setStripError(null);
+    setStripResult(null);
+    try {
+      const data = await api.stripUberPaymentDriverMetrics(id);
+      setStripResult({ deletedKeys: data.deletedKeys });
+    } catch (e: any) {
+      setStripError(e?.message || 'Request failed');
+    } finally {
+      setStripLoading(false);
+    }
+  };
 
   const runBackfill = async (dryRun: boolean) => {
     setLoading(true);
@@ -296,6 +321,44 @@ export function LedgerBackfillPanel() {
             Create missing ledger entries from historical trips and transactions
           </p>
         </div>
+      </div>
+
+      {/* Stuck Uber cash — payment CSV metrics left in KV after batch delete */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Clear stuck Uber payment metrics</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Removes legacy <code className="text-[11px]">dm-pay-*</code> / <code className="text-[11px]">dm-ptx-*</code> rows for one driver when Cash
+            Collected still shows Uber after imports were deleted. Requires <span className="font-medium">data.backfill</span>.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={stripDriverId}
+            onChange={(e) => setStripDriverId(e.target.value)}
+            placeholder="Driver UUID (internal)"
+            className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+            disabled={stripLoading}
+          />
+          <button
+            type="button"
+            onClick={runStripUberPaymentMetrics}
+            disabled={stripLoading}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            {stripLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Strip metrics
+          </button>
+        </div>
+        {stripError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{stripError}</p>
+        )}
+        {stripResult && (
+          <p className="text-sm text-emerald-700 dark:text-emerald-400">
+            Removed {stripResult.deletedKeys} key(s). Refresh the driver page.
+          </p>
+        )}
       </div>
 
       {/* Backfill Controls */}

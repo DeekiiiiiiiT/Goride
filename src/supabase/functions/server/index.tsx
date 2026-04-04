@@ -90,6 +90,14 @@ function correctFutureDates(transactions: any[]): any[] {
   });
 }
 
+/** Matches `ledger_canonical.ts` idempotency key hashing for `ledger_event_idem:*` cleanup on batch delete. */
+async function sha256HexForLedgerIdem(text: string): Promise<string> {
+  const msgUint8 = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 const app = new Hono();
 
 // ─── Edge URL normalization (fixes 404 when gateway path ≠ Hono routes) ─────
@@ -3560,6 +3568,78 @@ app.post("/make-server-37f42386/ledger/purge-orphans", requireAuth(), requirePer
     return c.json({ error: `Orphan purge failed: ${e.message}` }, 500);
   }
 });
+
+/** One-off cleanup: remove `dm-pay-*` / `dm-ptx-*` driver_metric rows (Uber payment CSV ghosts) when no batch remains to cascade-delete. */
+app.post(
+  "/make-server-37f42386/maintenance/strip-uber-payment-driver-metrics",
+  requireAuth(),
+  requirePermission("data.backfill"),
+  async (c) => {
+    try {
+      const body = await c.req.json();
+      const driverId = typeof body?.driverId === "string" ? body.driverId.trim() : "";
+      if (!driverId) {
+        return c.json({ error: "driverId required" }, 400);
+      }
+      const raw = driverId;
+      const variants = Array.from(
+        new Set([raw, raw.toLowerCase(), raw.toUpperCase()].filter((v) => v.length > 0)),
+      );
+      const seen = new Set<string>();
+      const dmKeys: string[] = [];
+      const PAGE = 1000;
+      const MAX_PAGES = 50;
+      for (const vid of variants) {
+        let offset = 0;
+        for (let p = 0; p < MAX_PAGES; p++) {
+          const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("key")
+            .like("key", "driver_metric:%")
+            .eq("value->>driverId", vid)
+            .range(offset, offset + PAGE - 1);
+          if (error) throw error;
+          const page = data || [];
+          for (const row of page) {
+            const k = (row as { key?: string }).key;
+            if (k && !seen.has(k)) {
+              seen.add(k);
+              dmKeys.push(k);
+            }
+          }
+          if (page.length < PAGE) break;
+          offset += PAGE;
+        }
+      }
+      const legacy = `driver_metric:${raw}`;
+      if (!seen.has(legacy)) dmKeys.push(legacy);
+
+      const dd = driverId.toLowerCase();
+      const toDelete: string[] = [];
+      for (const key of dmKeys) {
+        const m = (await kv.get(key)) as { id?: string; driverId?: string } | null;
+        const mid = m?.id != null ? String(m.id) : "";
+        if (!mid.startsWith("dm-pay-") && !mid.startsWith("dm-ptx-")) continue;
+        const md = String(m?.driverId || "").trim().toLowerCase();
+        if (md && md === dd) toDelete.push(key);
+      }
+      if (toDelete.length > 0) {
+        for (let i = 0; i < toDelete.length; i += 100) {
+          await kv.mdel(toDelete.slice(i, i + 100));
+        }
+      }
+      await cache.invalidateCacheVersion("stats");
+      await cache.invalidateCacheVersion("performance");
+      console.log(
+        `[strip-uber-payment-driver-metrics] driverId=${driverId} removed ${toDelete.length} key(s)`,
+      );
+      return c.json({ success: true, deletedKeys: toDelete.length });
+    } catch (e: any) {
+      console.error(`[strip-uber-payment-driver-metrics] ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 // ─── GET /ledger/summary — Aggregate totals for a filter set ────────
 app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
@@ -7643,6 +7723,48 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       return all;
     };
 
+    // ── 0. Canonical ledger (`ledger_event:*`) + idempotency keys — not removed by legacy `ledger:*` trip cascade
+    let deletedCanonicalLedger = 0;
+    let deletedCanonicalIdem = 0;
+    const driverIdsFromCanonical = new Set<string>();
+    try {
+      const leRows = await paginatedKeyFetch(() =>
+        supabase
+          .from("kv_store_37f42386")
+          .select("key, value")
+          .like("key", "ledger_event:%")
+          .eq("value->>batchId", batchId)
+      );
+      const idemSeen = new Set<string>();
+      for (const row of leRows) {
+        const v = row.value as Record<string, unknown> | null;
+        if (v?.driverId) driverIdsFromCanonical.add(String(v.driverId).trim());
+        const idem = typeof v?.idempotencyKey === "string" ? String(v.idempotencyKey).trim() : "";
+        if (idem && !idemSeen.has(idem)) {
+          idemSeen.add(idem);
+          try {
+            const idemKvKey = `ledger_event_idem:${await sha256HexForLedgerIdem(idem)}`;
+            await kv.del(idemKvKey);
+            deletedCanonicalIdem++;
+          } catch {
+            /* non-fatal */
+          }
+        }
+      }
+      if (leRows.length > 0) {
+        const keys = leRows.map((r: { key: string }) => r.key);
+        for (let i = 0; i < keys.length; i += 100) {
+          await kv.mdel(keys.slice(i, i + 100));
+        }
+        deletedCanonicalLedger = keys.length;
+      }
+      console.log(
+        `[Batch delete] Removed ${deletedCanonicalLedger} ledger_event rows, ${deletedCanonicalIdem} idempotency keys (canonical)`,
+      );
+    } catch (canonicalErr: any) {
+      console.warn("[Batch delete] Canonical ledger cleanup failed (non-fatal):", canonicalErr?.message);
+    }
+
     // ── 1. Fetch all trips in this batch (paginated, with values for ID extraction) ──
     const tripRows = await paginatedKeyFetch(() =>
       supabase
@@ -7656,14 +7778,27 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     const tripIds: string[] = [];
     const driverIdSet = new Set<string>();
     const vehicleIdSet = new Set<string>();
+    const uberDriverIdsFromDeletedTrips = new Set<string>();
     for (const row of tripRows) {
-      const v = row.value;
+      const v = row.value as { id?: string; driverId?: string; vehicleId?: string; platform?: string } | null;
       if (!v) continue;
       tripIds.push(v.id || row.key.replace("trip:", ""));
       if (v.driverId) driverIdSet.add(v.driverId);
       if (v.vehicleId) vehicleIdSet.add(v.vehicleId);
+      const plat = String(v.platform || "").toLowerCase();
+      if (v.driverId && (plat === "uber" || plat.includes("uber"))) {
+        uberDriverIdsFromDeletedTrips.add(String(v.driverId).trim());
+      }
     }
-    console.log(`[Batch delete] Found ${tripKeys.length} trips, ${driverIdSet.size} drivers, ${vehicleIdSet.size} vehicles`);
+    for (const d of driverIdsFromCanonical) {
+      if (d) driverIdSet.add(d);
+    }
+    /** Drivers whose Uber payment CSV metrics (dm-pay/dm-ptx) should be stripped for this batch only */
+    const stripUberPaymentMetricsFor = new Set<string>();
+    for (const d of driverIdsFromCanonical) if (d) stripUberPaymentMetricsFor.add(d);
+    for (const d of uberDriverIdsFromDeletedTrips) if (d) stripUberPaymentMetricsFor.add(d);
+
+    console.log(`[Batch delete] Found ${tripKeys.length} trips, ${driverIdSet.size} drivers (${driverIdsFromCanonical.size} from canonical events), ${vehicleIdSet.size} vehicles`);
 
     // Delete trips in chunks
     if (tripKeys.length > 0) {
@@ -7792,6 +7927,38 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     }
     console.log(`[Batch delete] Driver metrics: ${deletedDriverMetrics} KV rows deleted, ${skippedDriverMetrics} drivers skipped (still have trips elsewhere)`);
 
+    // ── 4b. Uber payment CSV metrics (`dm-pay-*` / `dm-ptx-*` from csvHelpers) — only for drivers tied to
+    //        this batch (canonical events or deleted Uber trips), so Roam-only batch deletes do not wipe payment rows.
+    let deletedUberPaymentMetrics = 0;
+    for (const driverId of stripUberPaymentMetricsFor) {
+      try {
+        const dmKeys = await collectDriverMetricKeysForDriver(driverId);
+        const uberPaymentKeys: string[] = [];
+        const dd = String(driverId || "").trim().toLowerCase();
+        for (const key of dmKeys) {
+          const m = (await kv.get(key)) as { id?: string; driverId?: string } | null;
+          const mid = m?.id != null ? String(m.id) : "";
+          if (!mid.startsWith("dm-pay-") && !mid.startsWith("dm-ptx-")) continue;
+          const md = String(m?.driverId || "").trim().toLowerCase();
+          if (md && dd && md === dd) uberPaymentKeys.push(key);
+        }
+        if (uberPaymentKeys.length > 0) {
+          for (let i = 0; i < uberPaymentKeys.length; i += 100) {
+            await kv.mdel(uberPaymentKeys.slice(i, i + 100));
+          }
+          deletedUberPaymentMetrics += uberPaymentKeys.length;
+          console.log(
+            `[Batch delete] Removed ${uberPaymentKeys.length} Uber payment driver_metric key(s) for driver ${driverId}`,
+          );
+        }
+      } catch (ubErr: any) {
+        console.warn(`[Batch delete] Uber payment metric cleanup for ${driverId}:`, ubErr?.message);
+      }
+    }
+    console.log(
+      `[Batch delete] Uber payment metrics (dm-pay/dm-ptx): ${deletedUberPaymentMetrics} KV rows removed`,
+    );
+
     // ── 5. Smart vehicle_metric cleanup ──
     //    Only delete if the vehicle has NO trips remaining in other batches
     let deletedVehicleMetrics = 0;
@@ -7851,8 +8018,11 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       deletedTrips: tripKeys.length,
       deletedTransactions: txKeys.length,
       deletedLedgerEntries: deletedLedger,
+      deletedCanonicalLedger,
+      deletedCanonicalIdem,
       deletedDriverMetrics,
       skippedDriverMetrics,
+      deletedUberPaymentMetrics,
       deletedVehicleMetrics,
       skippedVehicleMetrics,
       deletedBatch: batchId

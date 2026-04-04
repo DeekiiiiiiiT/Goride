@@ -2212,6 +2212,21 @@ export const api = {
     return response.json();
   },
 
+  /** Removes stuck Uber payment CSV metrics (`dm-pay-*` / `dm-ptx-*`) for one driver (requires data.backfill). */
+  async stripUberPaymentDriverMetrics(driverId: string): Promise<{ success: boolean; deletedKeys: number }> {
+    const headers = await getHeaders('application/json');
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/maintenance/strip-uber-payment-driver-metrics`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ driverId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to strip Uber payment driver metrics');
+    }
+    return response.json();
+  },
+
   async getLedgerSummary(params: Partial<LedgerFilterParams> = {}): Promise<any> {
     const qp = new URLSearchParams();
     if (params.driverId) qp.set('driverId', params.driverId);
