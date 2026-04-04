@@ -304,6 +304,11 @@ function tripHasMoneyForLedgerProjection(trip: any): boolean {
 // ─── Trip → Ledger Entry Generator ────────────────────────────────────
 async function generateTripLedgerEntries(trip: any): Promise<any[]> {
     const entries: any[] = [];
+    /** Phase 6 migration: set `LEGACY_LEDGER_WRITES=false` to stop new `ledger:%` fare rows (canonical-only writes). */
+    if (Deno.env.get("LEGACY_LEDGER_WRITES") === "false") {
+      console.log("[Ledger] LEGACY_LEDGER_WRITES=false — skipping generateTripLedgerEntries");
+      return entries;
+    }
 
     // Only create ledger entries for completed trips with meaningful money (aligned with driver-overview).
     const isUber = isUberPlatform(trip.platform);
@@ -6120,11 +6125,61 @@ app.post("/make-server-37f42386/diagnostic/set-platform-id", async (c) => {
     }
 });
 
+/** Roam + Uber + InDrive UUIDs — align with canonical driver-overview ID resolution. */
+async function resolveDriverIdsForEarningsHistory(driverId: string): Promise<string[]> {
+  const ids = new Set<string>([String(driverId).trim()]);
+  try {
+    const dr: any = await kv.get(`driver:${driverId}`);
+    if (dr?.uberDriverId) ids.add(String(dr.uberDriverId).trim());
+    if (dr?.inDriveDriverId) ids.add(String(dr.inDriveDriverId).trim());
+  } catch {
+    /* ignore */
+  }
+  return Array.from(ids);
+}
+
+/** Paginate all `ledger_event:*` values for driver ID(s), org-filtered. */
+async function fetchAllLedgerEventValuesForDrivers(driverIds: string[], c: any): Promise<any[]> {
+  if (!driverIds.length) return [];
+  const PAGE = 1000;
+  const MAX_ROWS = 50000;
+  const all: any[] = [];
+  let offset = 0;
+  const orFilter =
+    driverIds.length === 1 ? null : driverIds.map((id) => `value->>driverId.eq.${id}`).join(",");
+  while (offset < MAX_ROWS) {
+    let q = supabase.from("kv_store_37f42386").select("value").like("key", "ledger_event:%");
+    if (orFilter) q = q.or(orFilter);
+    else q = q.eq("value->>driverId", driverIds[0]);
+    const { data, error } = await q.range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    const page = data || [];
+    all.push(...page.map((d: any) => d.value).filter(Boolean));
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return filterByOrg(all, c);
+}
+
+/** Sum `fare_earning` grossAmount in [startMs, endMs] for shadow compare. */
+function sumCanonicalFareGrossInWindow(events: any[], startMs: number, endMs: number): number {
+  let s = 0;
+  for (const e of events) {
+    const t = e?.date ? new Date(String(e.date).slice(0, 10) + "T12:00:00").getTime() : NaN;
+    if (isNaN(t) || t < startMs || t > endMs) continue;
+    if (String(e.eventType) !== "fare_earning") continue;
+    s += Number(e.grossAmount) || 0;
+  }
+  return s;
+}
+
 // ─── GET /ledger/driver-earnings-history — Phase 4: Server-Side Earnings History ──────
 // Computes the same weekly/daily/monthly earnings table as DriverEarningsHistory,
 // but from ledger entries instead of raw trips.
 // Query params: driverId (required), periodType (daily|weekly|monthly, default: weekly),
 //               startDate (optional), endDate (optional)
+//               readModel=legacy|canonical — canonical uses ledger_event:* (Phase 4 migration); default legacy.
+//               shadowCompare=1 — logs [LedgerEarningsShadow] legacy vs canonical fare gross per bucket (no UI change).
 app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), async (c) => {
   try {
     const startMs = Date.now();
@@ -6132,12 +6187,17 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
     const periodType = (c.req.query("periodType") || "weekly") as "daily" | "weekly" | "monthly";
     const startDateParam = c.req.query("startDate") || null;
     const endDateParam = c.req.query("endDate") || null;
+    const readModel = (c.req.query("readModel") || "legacy").toLowerCase();
+    const useCanonical = readModel === "canonical";
+    const shadowCompare = c.req.query("shadowCompare") === "1";
 
     if (!driverId) {
       return c.json({ error: "Missing required param: driverId" }, 400);
     }
 
-    console.log(`[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"}`);
+    console.log(
+      `[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} readModel=${useCanonical ? "canonical" : "legacy"} shadowCompare=${shadowCompare}`,
+    );
 
     // ── Paginated fetch helper ──
     const PAGE = 1000;
@@ -6156,16 +6216,29 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       return all;
     };
 
-    // ── Step 1: Fetch ALL ledger entries for this driver ──
-    const rawData = await paginatedFetchEH(() =>
-      supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "ledger:%")
-        .eq("value->>driverId", driverId)
-    );
-    const allEntries = rawData.map((d: any) => d.value).filter(Boolean);
-    console.log(`[Ledger EarningsHistory] Total ledger entries for driver: ${allEntries.length}`);
+    const driverIdsResolved = await resolveDriverIdsForEarningsHistory(driverId);
+
+    // ── Step 1: Fetch ALL ledger or canonical events for this driver (multi-ID) ──
+    let allEntries: any[];
+    if (useCanonical) {
+      allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);
+      console.log(`[Ledger EarningsHistory] Canonical ledger_event rows for driver(s): ${allEntries.length}`);
+    } else {
+      const rawData = await paginatedFetchEH(() => {
+        let q = supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "ledger:%");
+        if (driverIdsResolved.length === 1) {
+          q = q.eq("value->>driverId", driverIdsResolved[0]);
+        } else {
+          q = q.or(driverIdsResolved.map((id) => `value->>driverId.eq.${id}`).join(","));
+        }
+        return q;
+      });
+      allEntries = rawData.map((d: any) => d.value).filter(Boolean);
+      console.log(`[Ledger EarningsHistory] Total legacy ledger entries for driver(s): ${allEntries.length}`);
+    }
 
     if (allEntries.length === 0) {
       return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
@@ -6374,11 +6447,28 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       .filter((r: any) => r.tripCount > 0 || r.transactionCount > 0)
       .reverse();
 
+    if (shadowCompare && !useCanonical && activeRows.length > 0) {
+      try {
+        const canonEvents = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);
+        for (const row of activeRows) {
+          const bStart = new Date(row.periodStart + "T00:00:00").getTime();
+          const bEnd = new Date(row.periodEnd + "T23:59:59.999").getTime();
+          const cg = sumCanonicalFareGrossInWindow(canonEvents, bStart, bEnd);
+          const delta = row.grossRevenue - cg;
+          console.log(
+            `[LedgerEarningsShadow] driverId=${driverId} period=${row.periodStart}..${row.periodEnd} legacyGross=${Number(row.grossRevenue).toFixed(2)} canonicalFareGross=${cg.toFixed(2)} delta=${delta.toFixed(2)}`,
+          );
+        }
+      } catch (se: any) {
+        console.warn(`[LedgerEarningsShadow] failed: ${se?.message || se}`);
+      }
+    }
+
     const durationMs = Date.now() - startMs;
     const totalGross = activeRows.reduce((s: number, r: any) => s + r.grossRevenue, 0);
     console.log(`[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} — returned ${activeRows.length} rows, total gross $${totalGross.toFixed(2)}, ${durationMs}ms`);
 
-    return c.json({ success: true, data: activeRows, durationMs });
+    return c.json({ success: true, data: activeRows, durationMs, readModel: useCanonical ? "canonical" : "legacy" });
   } catch (e: any) {
     console.error("[Ledger EarningsHistory] Error:", e);
     return c.json({ error: e.message }, 500);

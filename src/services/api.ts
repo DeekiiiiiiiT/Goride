@@ -2528,12 +2528,18 @@ export const api = {
     periodType?: 'daily' | 'weekly' | 'monthly';
     startDate?: string;
     endDate?: string;
-  }): Promise<{ success: boolean; data: any[]; durationMs: number }> {
+    /** `canonical` = `ledger_event:*`; `legacy` = `ledger:%` (default). */
+    readModel?: 'legacy' | 'canonical';
+    /** Server logs `[LedgerEarningsShadow]` lines (legacy path only). */
+    shadowCompare?: boolean;
+  }): Promise<{ success: boolean; data: any[]; durationMs: number; readModel?: string }> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     if (params.periodType) qp.set('periodType', params.periodType);
     if (params.startDate) qp.set('startDate', params.startDate);
     if (params.endDate) qp.set('endDate', params.endDate);
+    if (params.readModel) qp.set('readModel', params.readModel);
+    if (params.shadowCompare) qp.set('shadowCompare', '1');
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-earnings-history?${qp.toString()}`,

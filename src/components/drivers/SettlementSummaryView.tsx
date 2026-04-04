@@ -23,6 +23,7 @@ import { exportToCSV } from '../../utils/csvHelpers';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { SettlementPeriodDetail } from './SettlementPeriodDetail';
 import { isTollCategory } from '../../utils/tollCategoryHelper';
+import { isLedgerEarningsReadModelEnabled } from '../../utils/featureFlags';
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -84,7 +85,11 @@ export function SettlementSummaryView({
     let cancelled = false;
     setLedgerLoaded(false);
 
-    api.getLedgerEarningsHistory({ driverId, periodType: 'weekly' })
+    api.getLedgerEarningsHistory({
+      driverId,
+      periodType: 'weekly',
+      readModel: isLedgerEarningsReadModelEnabled() ? 'canonical' : 'legacy',
+    })
       .then((result) => {
         if (cancelled) return;
         if (result.success && result.data) {

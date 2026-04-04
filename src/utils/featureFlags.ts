@@ -37,3 +37,32 @@ export function isLedgerMoneyReadModelEnabled(): boolean {
   }
   return false;
 }
+
+const STORAGE_KEY_EARNINGS_READ_MODEL = 'roam_ledger_earnings_read_model';
+
+/**
+ * When true, `getLedgerEarningsHistory` uses `readModel=canonical` (`ledger_event:*`).
+ * Default **false** until Phase 4 sign-off (legacy `ledger:%` remains default).
+ *
+ * - `localStorage.setItem('roam_ledger_earnings_read_model', '1')` — force canonical earnings table.
+ * - `localStorage.setItem('roam_ledger_earnings_read_model', '0')` — force legacy (default).
+ * - `VITE_LEDGER_EARNINGS_READ_MODEL=true|false` in `.env`.
+ */
+export function isLedgerEarningsReadModelEnabled(): boolean {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem(STORAGE_KEY_EARNINGS_READ_MODEL);
+      if (v === '0') return false;
+      if (v === '1') return true;
+    }
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LEDGER_EARNINGS_READ_MODEL === 'false') {
+      return false;
+    }
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LEDGER_EARNINGS_READ_MODEL === 'true') {
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
