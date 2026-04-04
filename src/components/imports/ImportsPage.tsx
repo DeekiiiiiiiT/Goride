@@ -1781,7 +1781,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
 
       {/* STEP 3: PREVIEW & CONFIRM */}
       {step === 'preview_merged' && (
-          <div className="flex flex-col h-[calc(100vh-140px)] gap-4">
+          <div className="flex flex-col gap-4 max-h-[calc(100vh-120px)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pr-1 -mr-1">
 
               {/* Import Health & Reconciliation */}
               <CollapsibleSection
@@ -2158,28 +2158,28 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               >
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Card>
-                            <CardContent className="p-4 flex flex-col items-center text-center">
-                                <span className="text-xs text-slate-500 uppercase font-medium">Trips Found</span>
-                                <span className="text-2xl font-bold text-slate-900">{processedData.filter(t => t.status === 'Completed').length}</span>
+                        <Card className="min-w-0">
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[5.5rem]">
+                                <span className="text-xs text-slate-500 uppercase font-medium leading-snug">Trips Found</span>
+                                <span className="text-2xl font-bold text-slate-900 tabular-nums leading-none">{processedData.filter(t => t.status === 'Completed').length}</span>
                             </CardContent>
                         </Card>
-                        <Card>
-                            <CardContent className="p-4 flex flex-col items-center text-center">
-                                <span className="text-xs text-slate-500 uppercase font-medium">Drivers</span>
-                                <span className="text-2xl font-bold text-slate-900">{processedDriverMetrics.length}</span>
+                        <Card className="min-w-0">
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[5.5rem]">
+                                <span className="text-xs text-slate-500 uppercase font-medium leading-snug">Drivers</span>
+                                <span className="text-2xl font-bold text-slate-900 tabular-nums leading-none">{processedDriverMetrics.length}</span>
                             </CardContent>
                         </Card>
-                        <Card>
-                            <CardContent className="p-4 flex flex-col items-center text-center">
-                                <span className="text-xs text-slate-500 uppercase font-medium">Vehicles</span>
-                                <span className="text-2xl font-bold text-slate-900">{processedVehicleMetrics.length}</span>
+                        <Card className="min-w-0">
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[5.5rem]">
+                                <span className="text-xs text-slate-500 uppercase font-medium leading-snug">Vehicles</span>
+                                <span className="text-2xl font-bold text-slate-900 tabular-nums leading-none">{processedVehicleMetrics.length}</span>
                             </CardContent>
                         </Card>
-                        <Card>
-                            <CardContent className="p-4 flex flex-col items-center text-center">
-                                <span className="text-xs text-slate-500 uppercase font-medium">Total Volume</span>
-                                <span className="text-2xl font-bold text-slate-900">
+                        <Card className="min-w-0">
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[5.5rem]">
+                                <span className="text-xs text-slate-500 uppercase font-medium leading-snug">Total Volume</span>
+                                <span className="text-2xl font-bold text-slate-900 tabular-nums leading-none break-all">
                                     ${processedOrganizationMetrics[0]?.totalEarnings?.toLocaleString() || "0"}
                                 </span>
                             </CardContent>
@@ -2187,29 +2187,29 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                     </div>
 
                     {/* Financial Health Checks (New Tiles) */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Card>
-                            <CardContent className="p-4 flex flex-col items-center text-center">
-                                <span className="text-xs text-slate-500 uppercase font-medium">Pending Balance</span>
-                                <span className="text-2xl font-bold text-slate-900">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <Card className="min-w-0">
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[5.5rem]">
+                                <span className="text-xs text-slate-500 uppercase font-medium leading-snug">Pending Balance</span>
+                                <span className="text-2xl font-bold text-slate-900 tabular-nums leading-none break-all">
                                     ${processedOrganizationMetrics[0]?.balanceEnd?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
                                 </span>
                             </CardContent>
                         </Card>
 
-                        <Card>
-                            <CardContent className="p-4 flex flex-col items-center text-center">
-                                <span className="text-xs text-slate-500 uppercase font-medium">Transferred To Bank Account</span>
-                                <span className="text-2xl font-bold text-slate-900">
+                        <Card className="min-w-0">
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[5.5rem]">
+                                <span className="text-xs text-slate-500 uppercase font-medium leading-snug">Transferred To Bank Account</span>
+                                <span className="text-2xl font-bold text-slate-900 tabular-nums leading-none break-all">
                                     {processedOrganizationMetrics[0]?.bankTransfer ? `$${processedOrganizationMetrics[0].bankTransfer.toLocaleString(undefined, {minimumFractionDigits: 2})}` : '-'}
                                 </span>
                             </CardContent>
                         </Card>
 
-                        <Card>
-                            <CardContent className="p-4 flex flex-col items-center text-center">
-                                <span className="text-xs text-slate-500 uppercase font-medium">Cash Collected in Hand</span>
-                                <span className="text-2xl font-bold text-red-600">
+                        <Card className="min-w-0">
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[5.5rem]">
+                                <span className="text-xs text-slate-500 uppercase font-medium leading-snug">Cash Collected in Hand</span>
+                                <span className="text-2xl font-bold text-red-600 tabular-nums leading-none break-all">
                                     ${processedOrganizationMetrics[0]?.totalCashExposure?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}
                                 </span>
                             </CardContent>
@@ -2223,8 +2223,8 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                   icon={<FileText className="h-5 w-5 text-slate-500" />}
                   defaultOpen={true}
               >
-                  <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm min-h-[600px]">
-                      <CardHeader className="pb-2 border-b border-slate-100 bg-white sticky top-0 z-10">
+                  <Card className="flex flex-col overflow-hidden border-slate-200 shadow-sm max-h-[min(85vh,920px)] min-h-0 w-full">
+                      <CardHeader className="shrink-0 pb-2 border-b border-slate-100 bg-white sticky top-0 z-[1]">
                           <div className="flex justify-between items-center">
                               <div className="space-y-1">
                                   <CardTitle className="text-xl">Import Preview</CardTitle>
@@ -2242,7 +2242,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                               </div>
                           </div>
                       </CardHeader>
-                      <CardContent className="flex-1 overflow-auto pt-4 bg-slate-50/50">
+                      <CardContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pt-4 bg-slate-50/50">
                           
                           <Tabs defaultValue={auditState && (auditState.report.warningCount > 0 || auditState.report.criticalCount > 0) ? "quarantine" : "fleet"} className="w-full">
                           <TabsList className="mb-4 bg-white border border-slate-200 p-1 h-auto flex-wrap">
