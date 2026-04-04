@@ -7,24 +7,21 @@ import {
 const driver = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 describe('canonicalEventInSelectedWindow', () => {
-  it('includes legacy statement/payout rows dated just after endDate when period fields are missing', () => {
+  it('includes legacy statement/payout rows in a ±7d band when period fields are missing', () => {
+    const range = ['2026-03-23', '2026-03-29'] as const;
     expect(
-      canonicalEventInSelectedWindow(
-        { eventType: 'statement_line', date: '2026-03-30' },
-        '2026-03-23',
-        '2026-03-29',
-      ),
+      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-03-30' }, ...range),
     ).toBe(true);
     expect(
-      canonicalEventInSelectedWindow(
-        { eventType: 'payout_bank', date: '2026-03-30' },
-        '2026-03-23',
-        '2026-03-29',
-      ),
+      canonicalEventInSelectedWindow({ eventType: 'payout_bank', date: '2026-03-30' }, ...range),
+    ).toBe(true);
+    // Mid-week posting date still inside band (runtime evidence: Mar 28–Apr 4 had data, Mar 23–29 did not)
+    expect(
+      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-03-28' }, ...range),
     ).toBe(true);
   });
 
-  it('does not include statement rows dated beyond the grace window', () => {
+  it('does not include statement rows outside the ±7d band', () => {
     expect(
       canonicalEventInSelectedWindow(
         { eventType: 'statement_line', date: '2026-04-15' },
