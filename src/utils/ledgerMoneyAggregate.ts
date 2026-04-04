@@ -428,8 +428,8 @@ export function addDaysYmd(ymd: string, days: number): string {
  * Driver overview date filter: include rows whose `date` falls in [startDate, endDate], OR
  * (for statement / payout lines) whose `periodStart`..`periodEnd` overlaps that range.
  *
- * Import canonical events set `date` to `periodEnd` for Uber statement lines (`buildCanonicalImportEvents`),
- * so a UI range of Mar 23–29 can miss statement rows when `periodEnd` is Mar 30 — unless we overlap-match.
+ * Import canonical events set `date` to `periodStart` for Uber statement/payout lines (`buildCanonicalImportEvents`),
+ * so a UI range like Mar 23–29 matches on `date`; overlap on `periodStart`/`periodEnd` still applies when present.
  */
 export function canonicalEventInSelectedWindow(
   v: Record<string, unknown>,

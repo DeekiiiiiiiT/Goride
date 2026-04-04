@@ -124,7 +124,8 @@ export function buildCanonicalImportEvents(
   const bounds = tripDateBounds(trips);
   const periodStart = org ? toYmd(org.periodStart, bounds.min) : bounds.min;
   const periodEnd = org ? toYmd(org.periodEnd, bounds.max) : bounds.max;
-  const reportingDate = periodEnd;
+  /** Ledger `date` for statement/payout rows — use period **start** so driver UI ranges (e.g. Mar 23–29) match on `date` without relying on overlap when `periodStart`/`periodEnd` are missing on read. */
+  const reportingDate = periodStart;
 
   const primary = pickPrimaryUberDriverId(trips);
   const out: CanonicalLedgerEventInput[] = [];

@@ -637,6 +637,19 @@ export function OverviewMetricsGrid({
                     const ledgerOk = resolvedFinancials.source === 'ledger' && !!ul;
                     const priorAdj = ledgerOk ? Number(ul.priorPeriodAdjustments) || 0 : 0;
                     const stmtTotal = ledgerOk ? Number(ul.statementTotalEarnings) : NaN;
+                    /** Tips line may include prior-period tip; if statement total already matches fare+promo+tips+prior as separate lines, do not subtract. */
+                    const sumAsSeparateLines =
+                      ul.fareComponents + ul.promotions + ul.tips + priorAdj;
+                    const matchesStmtAsSeparate =
+                      Number.isFinite(stmtTotal) &&
+                      Math.abs(sumAsSeparateLines - stmtTotal) < 0.05;
+                    const periodTips =
+                      ledgerOk &&
+                      priorAdj > 0.005 &&
+                      ul.tips > priorAdj + 0.005 &&
+                      !matchesStmtAsSeparate
+                        ? Math.max(0, ul.tips - priorAdj)
+                        : ul.tips;
                     const totalEarningsRow = ledgerOk
                       ? Number.isFinite(stmtTotal) && Math.abs(stmtTotal) > 0.005
                         ? stmtTotal
@@ -657,7 +670,7 @@ export function OverviewMetricsGrid({
                         ? u!.tolls
                         : Math.max(0, refundsMag - tollSupportAmt);
                     const periodTotalEarnings = ledgerOk
-                      ? ul.fareComponents + ul.promotions + ul.tips
+                      ? ul.fareComponents + ul.promotions + periodTips
                       : 0;
                     const uberGrandTotal = ledgerOk
                       ? periodTotalEarnings + refundsMag + priorAdj
@@ -666,9 +679,8 @@ export function OverviewMetricsGrid({
                       (u?.cashCollected || 0) > 0.005
                         ? u!.cashCollected
                         : Number(csv?.cashCollected) || 0;
-                    const bankMag = Number(resolvedFinancials.bankTransferred) || 0;
-                    const payoutBank =
-                      ledgerOk && bankMag > 0.005 ? -Math.abs(bankMag) : 0;
+                    const bankMag = Math.abs(Number(resolvedFinancials.bankTransferred) || 0);
+                    const showPayoutBank = ledgerOk && bankMag > 0.005;
 
                     return (
                       <section className="space-y-3">
@@ -708,7 +720,7 @@ export function OverviewMetricsGrid({
                                 />
                                 <PeriodBreakdownSubLine
                                   label="Total earnings : Tip"
-                                  value={ul.tips}
+                                  value={periodTips}
                                   valueClassName="text-emerald-700 dark:text-emerald-400"
                                 />
                               </PeriodBreakdownCollapsible>
@@ -737,8 +749,8 @@ export function OverviewMetricsGrid({
 
                               <PeriodBreakdownCollapsible title="Payout" hideHeaderAmount>
                                 <PeriodBreakdownSubLine label="Cash Collected" value={payoutCash} />
-                                {payoutBank > 0.005 ? (
-                                  <PeriodBreakdownSubLine label="Transferred to Bank" value={payoutBank} />
+                                {showPayoutBank ? (
+                                  <PeriodBreakdownSubLine label="Transferred to Bank" value={bankMag} />
                                 ) : (
                                   <li className="flex justify-between gap-4">
                                     <span>Transferred to Bank</span>

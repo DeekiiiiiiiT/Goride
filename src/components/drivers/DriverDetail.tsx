@@ -37,7 +37,7 @@
 // No financial computation from trip:* remains in any display path.
 // ════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, 
   Star, 
@@ -341,6 +341,37 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     from: subDays(new Date(), 7),
     to: new Date(),
   });
+
+  /** Once per driver, prefer the latest CSV metrics period (if any) over "last 7 days → today" so the calendar matches imported statement weeks. */
+  const didInitDateRangeFromCsv = useRef(false);
+  useEffect(() => {
+    didInitDateRangeFromCsv.current = false;
+  }, [driverId]);
+
+  useEffect(() => {
+    if (didInitDateRangeFromCsv.current) return;
+    if (!csvMetrics?.length) return;
+    const mine = csvMetrics.filter((m) => {
+      const id = String(m.driverId ?? '').trim();
+      return id === driverId || id.toLowerCase() === driverId.toLowerCase();
+    });
+    if (!mine.length) return;
+    const latest = [...mine].sort(
+      (a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime(),
+    )[0];
+    if (!latest?.periodStart || !latest?.periodEnd) return;
+    try {
+      const fromStr = String(latest.periodStart).slice(0, 10);
+      const toStr = String(latest.periodEnd).slice(0, 10);
+      const from = new Date(`${fromStr}T12:00:00`);
+      const to = new Date(`${toStr}T12:00:00`);
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return;
+      setDateRange({ from, to });
+      didInitDateRangeFromCsv.current = true;
+    } catch {
+      /* ignore */
+    }
+  }, [csvMetrics, driverId]);
 
   /** Single source for `getLedgerDriverOverview` and InDrive wallet GET — same `yyyy-MM-dd` bounds. */
   const ledgerDateRangeStrings = useMemo(() => {
