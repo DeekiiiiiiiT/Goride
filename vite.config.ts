@@ -58,6 +58,9 @@
     },
     server: {
       port: 3000,
+      /** Needed so Cursor’s Simple Browser / preview can reach the dev server (not only 127.0.0.1). */
+      host: true,
+      strictPort: true,
       open: true,
     },
     test: {
