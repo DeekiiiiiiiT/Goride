@@ -273,7 +273,13 @@ export const parseTripDate = (dateStr: string | Date): Date | null => {
     }
 };
 
-export const getSortedTripsInRange = (trips: Trip[], rangeStart: Date, rangeEnd: Date): Trip[] => {
+/** `asc` = oldest-first (required for gap analysis between consecutive trips). `desc` = newest-first (Trip History table). */
+export const getSortedTripsInRange = (
+    trips: Trip[],
+    rangeStart: Date,
+    rangeEnd: Date,
+    sortOrder: 'asc' | 'desc' = 'asc',
+): Trip[] => {
     return trips.filter(trip => {
         // Use requestTime if available, otherwise fall back to date
         // Note: We need to cast to any if requestTime isn't in the imported Trip type yet, 
@@ -284,7 +290,8 @@ export const getSortedTripsInRange = (trips: Trip[], rangeStart: Date, rangeEnd:
     }).sort((a, b) => {
         const dateA = parseTripDate((a as any).requestTime || a.date);
         const dateB = parseTripDate((b as any).requestTime || b.date);
-        return (dateA?.getTime() || 0) - (dateB?.getTime() || 0);
+        const diff = (dateA?.getTime() || 0) - (dateB?.getTime() || 0);
+        return sortOrder === 'asc' ? diff : -diff;
     });
 };
 
@@ -490,7 +497,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       }
       return false;
     });
-    return getSortedTripsInRange(scoped, start, end);
+    return getSortedTripsInRange(scoped, start, end, 'desc');
   }, [allTrips, dateRange, selectedPlatforms, timeFilter]);
   
   // Phase 1: Date Range & Data Context Filtering
@@ -2460,8 +2467,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   // ────────────────────────────────────────────────────────────
   // Platform Breakdown for Earnings donut chart (Step 5.6)
-  //   Prefers lifetime per-platform stats from the ledger.
-  //   Falls back to raw trips only when ledger has no lifetime platform data.
+  //   Base: completed-trip earnings per platform from merged trip list.
+  //   Ledger lifetime per-platform earnings override when > 0 (canonical Uber/statement).
+  //   Using ledger-only when it listed just Uber hid InDrive/Roam entirely — never hybrid.
   // ────────────────────────────────────────────────────────────
   const platformBreakdownData = useMemo(() => {
     const colors: Record<string, string> = {
@@ -2473,27 +2481,23 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       Other: '#94a3b8'
     };
 
-    const ltStats = resolvedFinancials.lifetimePlatformStats;
-    if (ltStats && Object.keys(ltStats).length > 0) {
-      // Ledger path: use lifetime per-platform earnings from the server
-      return Object.entries(ltStats)
-        .map(([rawPlat, stats]: [string, any]) => ({
-          name: normalizePlatform(rawPlat),
-          value: stats.earnings || 0,
-          color: colors[normalizePlatform(rawPlat)] || '#94a3b8',
-        }))
-        .filter(d => d.value > 0);
-    }
-
-    // Fallback: compute from raw trips (temporary — until ledger is fully populated)
     const completed = (allTrips || []).filter(t => t.status === 'Completed');
     const platformTotals: Record<string, number> = {};
     completed.forEach(trip => {
       const platform = normalizePlatform(trip.platform);
-      const earnings = getEffectiveTripEarnings(trip);
-      platformTotals[platform] = (platformTotals[platform] || 0) + earnings;
+      platformTotals[platform] = (platformTotals[platform] || 0) + getEffectiveTripEarnings(trip);
     });
-    return Object.entries(platformTotals)
+
+    const ltStats = resolvedFinancials.lifetimePlatformStats || {};
+    const merged: Record<string, number> = { ...platformTotals };
+    for (const [rawPlat, stats] of Object.entries(ltStats)) {
+      if (rawPlat === 'Dispute Recoveries') continue;
+      const name = normalizePlatform(rawPlat);
+      const le = Number((stats as any)?.earnings) || 0;
+      if (le > 0) merged[name] = le;
+    }
+
+    return Object.entries(merged)
       .filter(([_, value]) => value > 0)
       .map(([name, value]) => ({ name, value, color: colors[name] || '#94a3b8' }));
   }, [resolvedFinancials.lifetimePlatformStats, allTrips]);

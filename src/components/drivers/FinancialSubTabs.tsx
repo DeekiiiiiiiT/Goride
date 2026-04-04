@@ -6,7 +6,6 @@ import {
   Pie,
   Cell,
   Tooltip,
-  Label as RechartsLabel
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { Trip, FinancialTransaction, QuotaConfig, LedgerDriverOverview } from '../../types/data';
@@ -95,8 +94,8 @@ export function FinancialSubTabs({
             <CardContent>
               {platformBreakdownData.length > 0 ? (
                 <div className="flex flex-col md:flex-row items-center gap-6">
-                  <div className="w-full md:w-1/2">
-                    <ResponsiveContainer width="100%" height={260}>
+                  <div className="relative w-full md:w-1/2 h-[260px]">
+                    <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={platformBreakdownData}
@@ -110,22 +109,6 @@ export function FinancialSubTabs({
                           {platformBreakdownData.map((entry, index) => (
                             <Cell key={`plat-${index}`} fill={entry.color} />
                           ))}
-                          <RechartsLabel
-                            position="center"
-                            content={({ viewBox }: any) => {
-                              const { cx, cy } = viewBox || { cx: 130, cy: 130 };
-                              return (
-                                <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central">
-                                  <tspan x={cx} dy="-8" fontSize="18" fontWeight="bold" fill="#1e293b">
-                                    {`$${platformTotalEarnings.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-                                  </tspan>
-                                  <tspan x={cx} dy="22" fontSize="11" fill="#94a3b8">
-                                    Total Earnings
-                                  </tspan>
-                                </text>
-                              );
-                            }}
-                          />
                         </Pie>
                         <Tooltip
                           formatter={(value: number) => [
@@ -135,6 +118,16 @@ export function FinancialSubTabs({
                         />
                       </PieChart>
                     </ResponsiveContainer>
+                    {/* Recharts center Label often gets wrong/missing cx,cy in SVG — overlay keeps total visible */}
+                    <div
+                      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center"
+                      aria-hidden
+                    >
+                      <span className="text-lg font-bold tabular-nums text-slate-900">
+                        {`$${Number.isFinite(platformTotalEarnings) ? platformTotalEarnings.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}`}
+                      </span>
+                      <span className="text-[11px] text-slate-400 mt-0.5">Total Earnings</span>
+                    </div>
                   </div>
                   <div className="w-full md:w-1/2 space-y-2">
                     {platformBreakdownData.map((d) => {
