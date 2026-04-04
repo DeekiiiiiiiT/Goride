@@ -115,7 +115,12 @@ export function LedgerBackfillPanel() {
 
   const [stripDriverId, setStripDriverId] = useState('');
   const [stripLoading, setStripLoading] = useState(false);
-  const [stripResult, setStripResult] = useState<{ deletedKeys: number } | null>(null);
+  const [stripResult, setStripResult] = useState<{
+    resolvedAliases?: string[];
+    deletedDriverMetricKeys?: number;
+    deletedLedgerEventKeys?: number;
+    deletedIdempotencyKeys?: number;
+  } | null>(null);
   const [stripError, setStripError] = useState<string | null>(null);
 
   const runStripUberPaymentMetrics = async () => {
@@ -129,7 +134,12 @@ export function LedgerBackfillPanel() {
     setStripResult(null);
     try {
       const data = await api.stripUberPaymentDriverMetrics(id);
-      setStripResult({ deletedKeys: data.deletedKeys });
+      setStripResult({
+        resolvedAliases: data.resolvedAliases,
+        deletedDriverMetricKeys: data.deletedDriverMetricKeys ?? data.deletedKeys,
+        deletedLedgerEventKeys: data.deletedLedgerEventKeys,
+        deletedIdempotencyKeys: data.deletedIdempotencyKeys,
+      });
     } catch (e: any) {
       setStripError(e?.message || 'Request failed');
     } finally {
@@ -328,8 +338,8 @@ export function LedgerBackfillPanel() {
         <div>
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Clear stuck Uber payment metrics</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Removes legacy <code className="text-[11px]">dm-pay-*</code> / <code className="text-[11px]">dm-ptx-*</code> rows for one driver when Cash
-            Collected still shows Uber after imports were deleted. Requires <span className="font-medium">data.backfill</span>.
+            Resolves <span className="font-medium">Roam id + Uber UUID</span> from the driver profile, then removes matching payment metrics and Uber{' '}
+            <code className="text-[11px]">ledger_event:*</code> rows. Requires <span className="font-medium">data.backfill</span>.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -355,9 +365,17 @@ export function LedgerBackfillPanel() {
           <p className="text-sm text-red-600 dark:text-red-400">{stripError}</p>
         )}
         {stripResult && (
-          <p className="text-sm text-emerald-700 dark:text-emerald-400">
-            Removed {stripResult.deletedKeys} key(s). Refresh the driver page.
-          </p>
+          <div className="text-sm text-emerald-700 dark:text-emerald-400 space-y-1">
+            {stripResult.resolvedAliases && stripResult.resolvedAliases.length > 0 && (
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-mono break-all">
+                Aliases: {stripResult.resolvedAliases.join(' · ')}
+              </p>
+            )}
+            <p>
+              Driver metrics: {stripResult.deletedDriverMetricKeys ?? 0} · Ledger events: {stripResult.deletedLedgerEventKeys ?? 0} · Idempotency keys:{' '}
+              {stripResult.deletedIdempotencyKeys ?? 0}. Refresh the driver page.
+            </p>
+          </div>
         )}
       </div>
 

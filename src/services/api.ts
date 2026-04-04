@@ -2212,8 +2212,16 @@ export const api = {
     return response.json();
   },
 
-  /** Removes stuck Uber payment CSV metrics (`dm-pay-*` / `dm-ptx-*`) for one driver (requires data.backfill). */
-  async stripUberPaymentDriverMetrics(driverId: string): Promise<{ success: boolean; deletedKeys: number }> {
+  /** Strips stuck Uber payment metrics + Uber `ledger_event:*` rows (resolves Roam id + `uberDriverId` from `driver:*`). */
+  async stripUberPaymentDriverMetrics(driverId: string): Promise<{
+    success: boolean;
+    resolvedAliases?: string[];
+    deletedDriverMetricKeys?: number;
+    deletedLedgerEventKeys?: number;
+    deletedIdempotencyKeys?: number;
+    /** @deprecated use deletedDriverMetricKeys */
+    deletedKeys?: number;
+  }> {
     const headers = await getHeaders('application/json');
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/maintenance/strip-uber-payment-driver-metrics`, {
       method: 'POST',
@@ -2224,7 +2232,11 @@ export const api = {
       const err = await response.json().catch(() => ({}));
       throw new Error((err as { error?: string }).error || 'Failed to strip Uber payment driver metrics');
     }
-    return response.json();
+    const json = await response.json();
+    return {
+      ...json,
+      deletedKeys: json.deletedDriverMetricKeys ?? json.deletedKeys,
+    };
   },
 
   async getLedgerSummary(params: Partial<LedgerFilterParams> = {}): Promise<any> {

@@ -3569,7 +3569,7 @@ app.post("/make-server-37f42386/ledger/purge-orphans", requireAuth(), requirePer
   }
 });
 
-/** One-off cleanup: remove `dm-pay-*` / `dm-ptx-*` driver_metric rows (Uber payment CSV ghosts) when no batch remains to cascade-delete. */
+/** One-off cleanup: Uber payment ghosts — metrics may use **Uber UUID** as `driverId`, not Roam id; cash may remain in `ledger_event:*`. */
 app.post(
   "/make-server-37f42386/maintenance/strip-uber-payment-driver-metrics",
   requireAuth(),
@@ -3581,59 +3581,148 @@ app.post(
       if (!driverId) {
         return c.json({ error: "driverId required" }, 400);
       }
-      const raw = driverId;
-      const variants = Array.from(
-        new Set([raw, raw.toLowerCase(), raw.toUpperCase()].filter((v) => v.length > 0)),
-      );
-      const seen = new Set<string>();
-      const dmKeys: string[] = [];
+
+      /** Roam internal id + uberDriverId + inDriveDriverId from `driver:*` — payment CSV rows often key by Uber UUID. */
+      const idAliases = new Set<string>([driverId]);
+      try {
+        const prof = (await kv.get(`driver:${driverId}`)) as {
+          uberDriverId?: string;
+          inDriveDriverId?: string;
+        } | null;
+        if (prof?.uberDriverId && String(prof.uberDriverId).trim()) {
+          idAliases.add(String(prof.uberDriverId).trim());
+        }
+        if (prof?.inDriveDriverId && String(prof.inDriveDriverId).trim()) {
+          idAliases.add(String(prof.inDriveDriverId).trim());
+        }
+      } catch {
+        /* non-fatal */
+      }
+
+      const idNorm = new Set<string>();
+      for (const a of idAliases) idNorm.add(a.toLowerCase());
+
+      const normDriver = (s: unknown) => String(s ?? "").trim().toLowerCase();
+      const isUberPlatformEvent = (v: Record<string, unknown>) => {
+        const p = String(v.platform ?? (v.metadata as Record<string, unknown> | undefined)?.platform ?? "")
+          .toLowerCase();
+        return p === "uber" || p.includes("uber");
+      };
+
+      const isPaymentMetricGhost = (m: Record<string, unknown> | null) => {
+        if (!m) return false;
+        const mid = m.id != null ? String(m.id) : "";
+        if (mid.startsWith("dm-pay-") || mid.startsWith("dm-ptx-")) return true;
+        const txSum = m.uberPaymentsTransactionCashColumnSum;
+        if (txSum != null && Math.abs(Number(txSum)) > 1e-9) return true;
+        return false;
+      };
+
+      const seenDm = new Set<string>();
+      const dmKeyList: string[] = [];
       const PAGE = 1000;
       const MAX_PAGES = 50;
-      for (const vid of variants) {
+      for (const aid of idAliases) {
+        const variants = Array.from(
+          new Set([aid, aid.toLowerCase(), aid.toUpperCase()].filter((x) => x.length > 0)),
+        );
+        for (const vid of variants) {
+          let offset = 0;
+          for (let p = 0; p < MAX_PAGES; p++) {
+            const { data, error } = await supabase
+              .from("kv_store_37f42386")
+              .select("key")
+              .like("key", "driver_metric:%")
+              .eq("value->>driverId", vid)
+              .range(offset, offset + PAGE - 1);
+            if (error) throw error;
+            const page = data || [];
+            for (const row of page) {
+              const k = (row as { key?: string }).key;
+              if (k && !seenDm.has(k)) {
+                seenDm.add(k);
+                dmKeyList.push(k);
+              }
+            }
+            if (page.length < PAGE) break;
+            offset += PAGE;
+          }
+        }
+      }
+
+      const toDeleteDm: string[] = [];
+      for (const key of dmKeyList) {
+        const m = (await kv.get(key)) as Record<string, unknown> | null;
+        if (!isPaymentMetricGhost(m)) continue;
+        const md = normDriver(m?.driverId);
+        if (md && idNorm.has(md)) toDeleteDm.push(key);
+      }
+      if (toDeleteDm.length > 0) {
+        for (let i = 0; i < toDeleteDm.length; i += 100) {
+          await kv.mdel(toDeleteDm.slice(i, i + 100));
+        }
+      }
+
+      // Canonical ledger: Uber cash/statement lines may remain under Uber UUID or Roam id
+      const seenLe = new Set<string>();
+      const leRowsAccum: { key: string; value: Record<string, unknown> }[] = [];
+      for (const aid of idAliases) {
         let offset = 0;
         for (let p = 0; p < MAX_PAGES; p++) {
           const { data, error } = await supabase
             .from("kv_store_37f42386")
-            .select("key")
-            .like("key", "driver_metric:%")
-            .eq("value->>driverId", vid)
+            .select("key, value")
+            .like("key", "ledger_event:%")
+            .eq("value->>driverId", aid)
             .range(offset, offset + PAGE - 1);
           if (error) throw error;
           const page = data || [];
           for (const row of page) {
-            const k = (row as { key?: string }).key;
-            if (k && !seen.has(k)) {
-              seen.add(k);
-              dmKeys.push(k);
-            }
+            const k = (row as { key: string }).key;
+            const val = (row as { value: Record<string, unknown> }).value;
+            if (!k || seenLe.has(k) || !val) continue;
+            const dnorm = normDriver(val.driverId);
+            if (!dnorm || !idNorm.has(dnorm)) continue;
+            if (!isUberPlatformEvent(val)) continue;
+            seenLe.add(k);
+            leRowsAccum.push({ key: k, value: val });
           }
           if (page.length < PAGE) break;
           offset += PAGE;
         }
       }
-      const legacy = `driver_metric:${raw}`;
-      if (!seen.has(legacy)) dmKeys.push(legacy);
 
-      const dd = driverId.toLowerCase();
-      const toDelete: string[] = [];
-      for (const key of dmKeys) {
-        const m = (await kv.get(key)) as { id?: string; driverId?: string } | null;
-        const mid = m?.id != null ? String(m.id) : "";
-        if (!mid.startsWith("dm-pay-") && !mid.startsWith("dm-ptx-")) continue;
-        const md = String(m?.driverId || "").trim().toLowerCase();
-        if (md && md === dd) toDelete.push(key);
-      }
-      if (toDelete.length > 0) {
-        for (let i = 0; i < toDelete.length; i += 100) {
-          await kv.mdel(toDelete.slice(i, i + 100));
+      let deletedIdem = 0;
+      for (const { key, value } of leRowsAccum) {
+        const idem = typeof value.idempotencyKey === "string" ? String(value.idempotencyKey).trim() : "";
+        if (idem) {
+          try {
+            await kv.del(`ledger_event_idem:${await sha256HexForLedgerIdem(idem)}`);
+            deletedIdem++;
+          } catch {
+            /* non-fatal */
+          }
         }
       }
+      if (leRowsAccum.length > 0) {
+        const lk = leRowsAccum.map((r) => r.key);
+        for (let i = 0; i < lk.length; i += 100) {
+          await kv.mdel(lk.slice(i, i + 100));
+        }
+      }
+
       await cache.invalidateCacheVersion("stats");
       await cache.invalidateCacheVersion("performance");
       console.log(
-        `[strip-uber-payment-driver-metrics] driverId=${driverId} removed ${toDelete.length} key(s)`,
+        `[strip-uber-payment-driver-metrics] driverId=${driverId} aliases=${[...idAliases].join(",")} deletedDm=${toDeleteDm.length} deletedLedgerEvent=${leRowsAccum.length} idem=${deletedIdem}`,
       );
-      return c.json({ success: true, deletedKeys: toDelete.length });
+      return c.json({
+        success: true,
+        resolvedAliases: [...idAliases],
+        deletedDriverMetricKeys: toDeleteDm.length,
+        deletedLedgerEventKeys: leRowsAccum.length,
+        deletedIdempotencyKeys: deletedIdem,
+      });
     } catch (e: any) {
       console.error(`[strip-uber-payment-driver-metrics] ${e.message}`);
       return c.json({ error: e.message }, 500);
