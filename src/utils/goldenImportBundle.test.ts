@@ -9,7 +9,7 @@ import {
   type FileData,
 } from './csvHelpers';
 import { buildCanonicalImportEvents } from './buildCanonicalImportEvents';
-import { aggregateCanonicalEventsToLedgerDriverOverview } from '../supabase/functions/server/ledger_money_aggregate.ts';
+import { aggregateCanonicalEventsToLedgerDriverOverview } from './ledgerMoneyAggregate';
 import { reconcileUberNetFareByDriver } from './uberStatementReconciliation';
 import type { ParsedRow } from '../types/data';
 

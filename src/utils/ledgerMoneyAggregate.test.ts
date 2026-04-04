@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateCanonicalEventsToLedgerDriverOverview } from '../supabase/functions/server/ledger_money_aggregate.ts';
+import { aggregateCanonicalEventsToLedgerDriverOverview } from './ledgerMoneyAggregate';
 
 const driver = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
@@ -58,6 +58,46 @@ describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
     const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
     expect(data.period.earnings).toBe(25);
     expect(data.platformStats.InDrive.earnings).toBe(25);
+  });
+
+  it('does not double-count cash when org statement payout_cash and trip fare_earning Cash both exist', () => {
+    const period = [
+      {
+        eventType: 'statement_line',
+        driverId: driver,
+        netAmount: 100,
+        direction: 'inflow',
+        date: '2026-03-10',
+        platform: 'Uber',
+        metadata: { lineCode: 'NET_FARE' },
+        periodStart: '2026-03-01',
+        periodEnd: '2026-03-10',
+      },
+      {
+        eventType: 'payout_cash',
+        driverId: driver,
+        netAmount: 5000,
+        direction: 'inflow',
+        date: '2026-03-10',
+        platform: 'Uber',
+        periodStart: '2026-03-01',
+        periodEnd: '2026-03-10',
+      },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 80,
+        grossAmount: 80,
+        direction: 'inflow',
+        date: '2026-03-05',
+        platform: 'Uber',
+        paymentMethod: 'Cash',
+        metadata: { cashCollected: 80 },
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.cashCollected).toBe(5000);
+    expect(data.platformStats.Uber.cashCollected).toBe(5000);
   });
 
   it('includes toll_support_adjustment in earnings and disputeRefunds', () => {

@@ -636,8 +636,11 @@ export function OverviewMetricsGrid({
                     const csv = uberPaymentCsvRollup;
                     const ledgerOk = resolvedFinancials.source === 'ledger' && !!ul;
                     const priorAdj = ledgerOk ? Number(ul.priorPeriodAdjustments) || 0 : 0;
+                    const stmtTotal = ledgerOk ? Number(ul.statementTotalEarnings) : NaN;
                     const totalEarningsRow = ledgerOk
-                      ? ul.fareComponents + ul.tips + ul.promotions + priorAdj
+                      ? Number.isFinite(stmtTotal) && Math.abs(stmtTotal) > 0.005
+                        ? stmtTotal
+                        : ul.fareComponents + ul.tips + ul.promotions + priorAdj
                       : csv?.totalEarnings ?? null;
                     const refundsMag = ledgerOk
                       ? ul.refundExpense
@@ -663,7 +666,9 @@ export function OverviewMetricsGrid({
                       (u?.cashCollected || 0) > 0.005
                         ? u!.cashCollected
                         : Number(csv?.cashCollected) || 0;
-                    const payoutBank = 0;
+                    const bankMag = Number(resolvedFinancials.bankTransferred) || 0;
+                    const payoutBank =
+                      ledgerOk && bankMag > 0.005 ? -Math.abs(bankMag) : 0;
 
                     return (
                       <section className="space-y-3">

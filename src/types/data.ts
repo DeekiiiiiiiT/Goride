@@ -613,6 +613,8 @@ export interface LedgerDriverOverview {
   period: {
     earnings: number;
     cashCollected: number;
+    /** Canonical: sum of `payout_bank` lines (org bank transfer magnitude). */
+    bankTransferred?: number;
     tolls: number;
     tips: number;
     baseFare: number;
@@ -629,6 +631,8 @@ export interface LedgerDriverOverview {
       refundExpense: number; // positive magnitude
       /** fare + tips + priorPeriodAdjustments + promotions − refundExpense (server rollup in Phase 3). */
       netEarnings: number;
+      /** From `TOTAL_EARNINGS` statement lines when present (canonical import). */
+      statementTotalEarnings?: number;
     };
     /** Sum of ledger platform_fee events; gross−net on fares is separate (baseFare − earnings). */
     platformFees: number;
