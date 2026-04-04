@@ -98,6 +98,7 @@ import type { UberSsotTotals } from '../../utils/uberSsot';
 import { computeImportBundleFingerprint } from '../../utils/importBundleFingerprint';
 import { validateMergedImportPreview } from '../../utils/importValidation';
 import { buildCanonicalImportEvents } from '../../utils/buildCanonicalImportEvents';
+import { computeUberImportReconciliation } from '../../utils/uberImportReconciliation';
 import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
@@ -479,103 +480,22 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
     });
   }, [uploadedFiles, disabledColumns]);
 
-  /** Statement-aligned Uber preview (payments_driver SSOT + org row), with trip-level fallback when SSOT is missing. */
-  const importUberReconciliation = useMemo(() => {
-    const org = processedOrganizationMetrics[0];
-    const ssotMap = processedUberStatementsByDriverId;
-    const hasSsot = ssotMap != null && Object.keys(ssotMap).length > 0;
-
-    const ssotAgg = hasSsot
-      ? Object.values(ssotMap!).reduce(
-          (a, s) => ({
-            promotions: a.promotions + s.promotions,
-            tips: a.tips + s.tips,
-            refundsAndExpenses: a.refundsAndExpenses + s.refundsAndExpenses,
-            statementNetFare: a.statementNetFare + s.statementNetFare,
-            periodEarningsGross: a.periodEarningsGross + s.periodEarningsGross,
-          }),
-          {
-            promotions: 0,
-            tips: 0,
-            refundsAndExpenses: 0,
-            statementNetFare: 0,
-            periodEarningsGross: 0,
-          },
-        )
-      : null;
-
-    const tollSupport = processedDisputeRefunds.reduce((s, r) => s + Math.abs(r.amount || 0), 0);
-
-    const tripNetFare = processedData.reduce((sum, t) => sum + (t.uberFareComponents || 0), 0);
-    const tripPromos = processedData.reduce((sum, t) => sum + (t.uberPromotionsAmount || 0), 0);
-    const tripTips = processedData.reduce((sum, t) => sum + (t.uberTips || 0), 0);
-    const priorSum = processedData.reduce((s, t) => s + (t.uberPriorPeriodAdjustment || 0), 0);
-    const tripRefundsTolls = processedData.reduce(
-      (sum, t) => sum + (t.uberRefundExpenseAmount || 0) + (t.tollCharges || 0),
-      0,
-    );
-
-    const orgNetFare = org ? Number(org.netFare) || 0 : 0;
-    const netFare =
-      hasSsot && ssotAgg
-        ? orgNetFare > 0.005
-          ? orgNetFare
-          : ssotAgg.statementNetFare
-        : tripNetFare;
-
-    const promotions = hasSsot && ssotAgg ? ssotAgg.promotions : tripPromos;
-    const tipsStatement = hasSsot && ssotAgg ? ssotAgg.tips : tripTips + priorSum;
-    const tipsPeriod = hasSsot && ssotAgg ? tipsStatement - priorSum : tripTips;
-
-    const refundsTotal =
-      hasSsot && ssotAgg && ssotAgg.refundsAndExpenses > 0.005
-        ? ssotAgg.refundsAndExpenses
-        : tripRefundsTolls;
-
-    const refundsTollOrg = org?.refundsToll != null && org.refundsToll > 0.005 ? org.refundsToll : undefined;
-    const tolls =
-      refundsTollOrg !== undefined ? refundsTollOrg : Math.max(0, refundsTotal - tollSupport);
-
-    const totalEarnings =
-      org != null && Number(org.totalEarnings) > 0.005
-        ? org.totalEarnings
-        : hasSsot && ssotAgg
-          ? ssotAgg.periodEarningsGross
-          : netFare + promotions + tipsStatement;
-
-    const periodTotal = netFare + promotions + tipsPeriod;
-    const statementRollup = netFare + promotions + tipsStatement;
-    const roamTotalVsUber = statementRollup - totalEarnings;
-
-    const payoutCash = org != null ? Number(org.totalCashExposure) || 0 : 0;
-    const payoutBank = org != null ? Number(org.bankTransfer) || 0 : 0;
-    /** Period earnings subtotal + refunds & expenses + prior-period adjustments (your workbook rollup). */
-    const grandTotal = periodTotal + refundsTotal + priorSum;
-
-    return {
-      hasSsot,
-      netFare,
-      promotions,
-      tipsStatement,
-      tipsPeriod,
-      priorSum,
-      tolls,
-      tollSupport,
-      refundsTotal,
-      periodTotal,
-      totalEarnings,
-      statementRollup,
-      roamTotalVsUber,
-      payoutCash,
-      payoutBank,
-      grandTotal,
-    };
-  }, [
-    processedOrganizationMetrics,
-    processedUberStatementsByDriverId,
-    processedData,
-    processedDisputeRefunds,
-  ]);
+  /** Statement-aligned Uber preview — same `computeUberImportReconciliation` as canonical `statement_line` writes. */
+  const importUberReconciliation = useMemo(
+    () =>
+      computeUberImportReconciliation({
+        organizationMetrics: processedOrganizationMetrics[0],
+        uberStatementsByDriverId: processedUberStatementsByDriverId,
+        trips: processedData,
+        disputeRefunds: processedDisputeRefunds,
+      }),
+    [
+      processedOrganizationMetrics,
+      processedUberStatementsByDriverId,
+      processedData,
+      processedDisputeRefunds,
+    ],
+  );
 
   /** Phase 4: per-driver statement net fare vs sum of trip `uberFareComponents` in org period. */
   const importNetFareVarianceByDriver = useMemo(() => {

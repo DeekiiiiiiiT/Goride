@@ -1,6 +1,11 @@
 import type { CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import type { Trip, OrganizationMetrics, DisputeRefund } from '../types/data';
 import type { UberSsotTotals } from './uberSsot';
+import {
+  computeUberImportReconciliation,
+  sumPeriodEarningsGross,
+  sumStatementNetFare,
+} from './uberImportReconciliation';
 
 const LINE = {
   TOTAL_EARNINGS: 'TOTAL_EARNINGS',
@@ -124,22 +129,57 @@ export function buildCanonicalImportEvents(
   const primary = pickPrimaryUberDriverId(trips);
   const out: CanonicalLedgerEventInput[] = [];
 
+  const recon = computeUberImportReconciliation({
+    organizationMetrics: org,
+    uberStatementsByDriverId,
+    trips,
+    disputeRefunds,
+  });
+
   const ssot =
     uberStatementsByDriverId && Object.keys(uberStatementsByDriverId).length > 0
       ? uberStatementsByDriverId
       : null;
 
   if (ssot) {
+    const sumStmtNet = sumStatementNetFare(ssot);
+    const sumGross = sumPeriodEarningsGross(ssot);
+    let sumPromo = 0;
+    let sumTips = 0;
+    let sumRef = 0;
+    for (const s of Object.values(ssot)) {
+      sumPromo += s.promotions || 0;
+      sumTips += s.tips || 0;
+      sumRef += s.refundsAndExpenses || 0;
+    }
+    const scaleNet =
+      Math.abs(sumStmtNet) > 1e-9 ? recon.netFare / sumStmtNet : 1;
+    const scaleGross =
+      Math.abs(sumGross) > 1e-9 ? recon.totalEarnings / sumGross : 1;
+    const scalePromo =
+      Math.abs(sumPromo) > 1e-9 ? recon.promotions / sumPromo : 1;
+    const scaleTips =
+      Math.abs(sumTips) > 1e-9 ? recon.tipsStatement / sumTips : 1;
+    const scaleRef =
+      Math.abs(sumRef) > 1e-9 ? recon.refundsTotal / sumRef : 1;
+    const scaleNetUniform = Math.abs(scaleNet - 1) < 1e-9;
+
     const drivers = Object.keys(ssot).sort((a, b) => a.localeCompare(b));
     for (const driverId of drivers) {
       const s = ssot[driverId];
-      if (Math.abs(s.periodEarningsGross) > 1e-9) {
+      const totalEarn = s.periodEarningsGross * scaleGross;
+      const netFareEmit = s.statementNetFare * scaleNet;
+      const promoEmit = s.promotions * scalePromo;
+      const tipsEmit = s.tips * scaleTips;
+      const refEmit = s.refundsAndExpenses * scaleRef;
+
+      if (Math.abs(totalEarn) > 1e-9) {
         pushStatementLine(out, {
           batchId,
           sourceFileHash,
           driverId,
           lineCode: LINE.TOTAL_EARNINGS,
-          netAmount: s.periodEarningsGross,
+          netAmount: totalEarn,
           direction: 'inflow',
           date: reportingDate,
           periodStart,
@@ -147,13 +187,13 @@ export function buildCanonicalImportEvents(
           description: 'Uber statement: total earnings',
         });
       }
-      if (Math.abs(s.statementNetFare) > 1e-9) {
+      if (Math.abs(netFareEmit) > 1e-9) {
         pushStatementLine(out, {
           batchId,
           sourceFileHash,
           driverId,
           lineCode: LINE.NET_FARE,
-          netAmount: s.statementNetFare,
+          netAmount: netFareEmit,
           direction: 'inflow',
           date: reportingDate,
           periodStart,
@@ -162,7 +202,11 @@ export function buildCanonicalImportEvents(
         });
       }
       const fareDelta = Math.abs(s.fareComponents - s.statementNetFare);
-      if (Math.abs(s.fareComponents) > 1e-9 && fareDelta > 0.01) {
+      if (
+        scaleNetUniform &&
+        Math.abs(s.fareComponents) > 1e-9 &&
+        fareDelta > 0.01
+      ) {
         pushStatementLine(out, {
           batchId,
           sourceFileHash,
@@ -176,13 +220,13 @@ export function buildCanonicalImportEvents(
           description: 'Uber statement: fare components',
         });
       }
-      if (Math.abs(s.promotions) > 1e-9) {
+      if (Math.abs(promoEmit) > 1e-9) {
         pushStatementLine(out, {
           batchId,
           sourceFileHash,
           driverId,
           lineCode: LINE.PROMOTIONS,
-          netAmount: s.promotions,
+          netAmount: promoEmit,
           direction: 'inflow',
           date: reportingDate,
           periodStart,
@@ -190,13 +234,13 @@ export function buildCanonicalImportEvents(
           description: 'Uber statement: promotions',
         });
       }
-      if (Math.abs(s.tips) > 1e-9) {
+      if (Math.abs(tipsEmit) > 1e-9) {
         pushStatementLine(out, {
           batchId,
           sourceFileHash,
           driverId,
           lineCode: LINE.TIPS,
-          netAmount: s.tips,
+          netAmount: tipsEmit,
           direction: 'inflow',
           date: reportingDate,
           periodStart,
@@ -204,13 +248,13 @@ export function buildCanonicalImportEvents(
           description: 'Uber statement: tips',
         });
       }
-      if (Math.abs(s.refundsAndExpenses) > 1e-9) {
+      if (Math.abs(refEmit) > 1e-9) {
         pushStatementLine(out, {
           batchId,
           sourceFileHash,
           driverId,
           lineCode: LINE.REFUNDS_EXPENSES,
-          netAmount: -Math.abs(s.refundsAndExpenses),
+          netAmount: -Math.abs(refEmit),
           direction: 'outflow',
           date: reportingDate,
           periodStart,
@@ -220,13 +264,13 @@ export function buildCanonicalImportEvents(
       }
     }
   } else if (org && primary) {
-    if (Math.abs(org.totalEarnings) > 1e-9) {
+    if (Math.abs(recon.totalEarnings) > 1e-9) {
       pushStatementLine(out, {
         batchId,
         sourceFileHash,
         driverId: primary,
         lineCode: LINE.TOTAL_EARNINGS,
-        netAmount: org.totalEarnings,
+        netAmount: recon.totalEarnings,
         direction: 'inflow',
         date: reportingDate,
         periodStart,
@@ -234,13 +278,13 @@ export function buildCanonicalImportEvents(
         description: 'Organization import: total earnings',
       });
     }
-    if (Math.abs(org.netFare) > 1e-9) {
+    if (Math.abs(recon.netFare) > 1e-9) {
       pushStatementLine(out, {
         batchId,
         sourceFileHash,
         driverId: primary,
         lineCode: LINE.NET_FARE,
-        netAmount: org.netFare,
+        netAmount: recon.netFare,
         direction: 'inflow',
         date: reportingDate,
         periodStart,

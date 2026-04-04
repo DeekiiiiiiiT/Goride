@@ -1,14 +1,14 @@
 {
   "description": "Phase 8 golden bundle — expectations after merge → buildCanonicalImportEvents → aggregateCanonicalEventsToLedgerDriverOverview (single period window).",
-  "canonicalEventCount": 10,
+  "canonicalEventCount": 9,
   "eventTypes": {
-    "statement_line": 7,
+    "statement_line": 6,
     "payout_cash": 1,
     "payout_bank": 1,
     "toll_support_adjustment": 1
   },
   "readModel": {
-    "periodEarnings": 75.5,
+    "periodEarnings": 100.5,
     "periodCashCollected": 25,
     "periodDisputeRefunds": 7.5,
     "readModelSource": "canonical_events"
