@@ -1,50 +1,103 @@
 # Legacy `ledger:%` inventory (KV store)
 
-Generated for the canonical migration plan. **Update this file** when routes change.
+Register of every consumer of **`ledger:%`** keys for the canonical migration. **Update this file** when routes change.
 
-| Consumer | Read/Write | Location / route | Risk if legacy `ledger:%` reads stop |
-|----------|------------|------------------|--------------------------------------|
-| Trip edit / delete cleanup | Write (delete) | `deleteLedgerEntriesForTripSource` — `index.tsx` | Stale fare rows if trips change |
-| Trip → ledger generator | **Write** | `generateTripLedgerEntries` — `index.tsx` | **No new fare lines** — Phase 6 |
-| Integrity / repair helpers | Read | `generateTripLedgerEntries` area — `.like("ledger:%")` | Repair logic breaks |
-| POST trips / batch save | **Write** | `kv.set('ledger:...')` — `index.tsx` ~3135+ | Trips stop creating fare rows |
-| GET `/ledger` (list) | Read | `index.tsx` ~3342 | Driver ledger page empty |
-| GET `/ledger/count` | Read | `index.tsx` ~3450 | Diagnostics wrong |
-| POST `/ledger/purge-orphans` | Read/Delete | `index.tsx` ~3512 | Cleanup can't find orphans |
-| GET `/ledger/summary` | Read | `index.tsx` ~3737 | Summary wrong |
-| GET `/ledger/driver-overview` (non-canonical) | Read | `index.tsx` ~3964+ | Overview falls back wrong if branch removed |
-| GET `/ledger/diagnostic-trip-ledger-gap` | Read | `index.tsx` ~4505 | Gap diagnosis wrong |
-| GET `/ledger/driver-indrive-wallet` | Read | `index.tsx` ~4757 | May mix sources |
-| GET `/ledger/driver-earnings-history` | Read | `index.tsx` ~6128 | **Earnings table** — Phase 4 |
-| Batch delete import | Delete | `index.tsx` ~7930 | Batch delete still clears trip-linked rows |
-| GET `/ledger/drivers-summary` | Read | `index.tsx` ~13772 | **Drivers page** financials |
-| GET `/ledger/fleet-summary` | Read | `index.tsx` ~13917 | **Dashboard / FinancialsView** |
-| Repair / backfill | **Write** | `POST /ledger/repair-driver`, `POST /ledger/backfill` | **Phase 6** |
-| POST `/ledger/batch` | **Write** | `index.tsx` ~5102 | Manual batch writes |
-| PATCH/DELETE `/ledger/:id` | Read/Write | `index.tsx` ~5190+ | Single entry CRUD |
+**Plan / runbook:** [`src/solution.md`](../src/solution.md)
+
+---
+
+## Status summary
+
+| Area | State |
+|------|--------|
+| **Earnings history** | **`GET /ledger/driver-earnings-history?readModel=canonical`** uses **`ledger_event:*`**. Client: `isLedgerEarningsReadModelEnabled()` → `readModel` param. **`shadowCompare=1`** for logs. |
+| **Fleet + drivers summaries** | **`readModel=canonical`** uses **`ledger_event:*`**. Client (Dashboard, Drivers page): `isLedgerMoneyReadModelEnabled()` → `readModel`. |
+| **Driver overview** | **`GET /ledger/driver-overview?source=canonical`** uses canonical aggregation. |
+| **Legacy-only reads** | **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`**, some diagnostics — still **`ledger:%` only** until migrated or archived. |
+| **Write kill-switch** | Edge env **`LEGACY_LEDGER_WRITES=false`** blocks **all** new legacy row writes listed under [Writes](#writes-ledger) (trip generator, Uber fallback, transaction→ledger, POST/PATCH/batch, backfill live, repair, `ensure-from-trip-ids`). Dry-run repair/backfill still allowed where implemented. **`DELETE /ledger/:id`** remains for cleanup. |
+
+---
+
+## Reads (`ledger:%`)
+
+| Consumer | Location (server) | Canonical / notes | If legacy reads removed without replacement |
+|----------|-------------------|-------------------|---------------------------------------------|
+| GET `/ledger` (list + filters) | `index.tsx` | **Legacy only** — Trip Ledger / admin lists | Empty or wrong until migrated to `ledger_event:*` or projector |
+| GET `/ledger/count` | `index.tsx` | **Legacy only** | Diagnostics wrong |
+| GET `/ledger/summary` | `index.tsx` | **Legacy only** | Summary wrong |
+| GET `/ledger/driver-overview` | `index.tsx` | **`source=canonical`** → **`ledger_event:*`**; else legacy | Non-canonical branch wrong if removed early |
+| GET `/ledger/driver-earnings-history` | `index.tsx` | **`readModel=canonical`** → **`ledger_event:*`**; default **`readModel=legacy`** if param omitted | Earnings table wrong if default flipped before data ready |
+| GET `/ledger/drivers-summary` | `index.tsx` | **`readModel=canonical`** → **`ledger_event:*`** fare rows; default legacy | Drivers page financials |
+| GET `/ledger/fleet-summary` | `index.tsx` | **`readModel=canonical`** → period slice of **`ledger_event:*`**; default legacy | Dashboard fleet metrics |
+| GET `/ledger/diagnostic-trip-ledger-gap` | `index.tsx` | **Legacy-oriented** | Gap diagnosis wrong until aligned with canonical |
+| GET `/ledger/driver-indrive-wallet` | `index.tsx` | May mix / legacy-oriented | Verify before relying for cutover |
+| Dedup / integrity inside `generateTripLedgerEntries` | `index.tsx` | Reads **`ledger:%`** for trip-sourced dedup | N/A if generator skipped (`LEGACY_LEDGER_WRITES=false`) |
+| `deleteLedgerEntriesForTripSource` | `index.tsx` | **Delete** trip-linked **`ledger:%`** rows | Stale rows if trips change while legacy rows remain |
+| Batch delete import | `index.tsx` | **Delete** includes **`ledger:%`** keys | Orphans / cleanup behavior tied to legacy keys |
+| POST `/ledger/purge-orphans` | `index.tsx` | Read/delete orphans under **`ledger:%`** | Cleanup targets legacy shape |
+| Repair-driver-ids scan | `index.tsx` | Reads all **`ledger:%`** for UUID repair | N/A when only dry-run or kill-switch blocks writes |
+
+---
+
+## Writes (`ledger:%`)
+
+All are **no-ops or 403** when **`LEGACY_LEDGER_WRITES=false`** (except **`DELETE /ledger/:id`**, which remains for deleting existing legacy rows).
+
+| Writer | Route / function | Kill-switch behavior |
+|--------|------------------|----------------------|
+| Trip → ledger | `generateTripLedgerEntries` | Returns `[]` |
+| Uber fallback rows | `buildUberFareEarningFallbackEntriesIfEligible` | Returns `[]` |
+| Transaction → ledger | `generateTransactionLedgerEntry` | Returns `null` (no `kv.set`) |
+| Fuel / approval paths | `kv.set('ledger:…')` after `generateTransactionLedgerEntry` | Skipped when generator returns `null` |
+| POST trips / `fleet/sync` | `kv.mset` ledger chunk after trip save | No rows when generator + fallback return nothing |
+| POST `/ledger` | Single create | **403** |
+| POST `/ledger/batch` | Batch create | **403** |
+| PATCH `/ledger/:id` | Update | **403** |
+| POST `/ledger/backfill` | Trip + transaction backfill writes | **403** when **not** `dryRun=true` |
+| POST `/ledger/repair-driver-ids` | In-place driverId fix | **403** when **not** `dryRun=true` |
+| POST `/ledger/repair-driver` | Regenerate per trip | **403** |
+| POST `/ledger/ensure-from-trip-ids` | Import ensure | **403** |
+| DELETE `/ledger/:id` | Single delete | **Allowed** (cleanup of old rows) |
+
+---
 
 ## Client / API (`src/services/api.ts`)
 
 | Method | Endpoint | Notes |
-|--------|----------|--------|
-| `getLedger` | GET `/ledger` | |
-| `getLedgerCount` | GET `/ledger/count` | |
-| `purgeLedgerOrphans` | POST `/ledger/purge-orphans` | |
-| `getLedgerSummary` | GET `/ledger/summary` | |
+|--------|----------|-------|
+| `getLedger` | GET `/ledger` | Legacy list |
+| `getLedgerCount` | GET `/ledger/count` | Legacy |
+| `purgeLedgerOrphans` | POST `/ledger/purge-orphans` | Legacy keys |
+| `getLedgerSummary` | GET `/ledger/summary` | Legacy |
 | `getLedgerDriverOverview` | GET `/ledger/driver-overview` | `source=canonical` supported |
-| `getLedgerTripLedgerGapDiagnostic` | GET `/ledger/diagnostic-trip-ledger-gap` | |
+| `getLedgerTripLedgerGapDiagnostic` | GET `/ledger/diagnostic-trip-ledger-gap` | Legacy-oriented |
 | `getLedgerEarningsHistory` | GET `/ledger/driver-earnings-history` | `readModel`, `shadowCompare` — see `solution.md` |
-| `repairDriverLedger` | POST `/ledger/repair-driver` | |
-| `runLedgerBackfill` | POST `/ledger/backfill` | |
-| `ensureLedgerFromTripIds` | fleet `ledger/ensure-from-trip-ids` | |
+| `getLedgerDriversSummary` | GET `/ledger/drivers-summary` | Optional `readModel` (`legacy` \| `canonical`) |
+| `getLedgerFleetSummary` | GET `/ledger/fleet-summary` | Optional `readModel` (`legacy` \| `canonical`) |
+| `repairDriverLedger` | POST `/ledger/repair-driver` | Blocked when `LEGACY_LEDGER_WRITES=false` |
+| `runLedgerBackfill` | POST `/ledger/backfill` | Live write blocked when `LEGACY_LEDGER_WRITES=false` |
+| `ensureLedgerFromTripIds` | POST `.../ledger/ensure-from-trip-ids` | Blocked when `LEGACY_LEDGER_WRITES=false` |
+
+---
 
 ## Admin UI
 
 | File | Role |
 |------|------|
-| [`src/components/admin/LedgerBackfillPanel.tsx`](../src/components/admin/LedgerBackfillPanel.tsx) | Backfill, toll backup |
+| [`src/components/admin/LedgerBackfillPanel.tsx`](../src/components/admin/LedgerBackfillPanel.tsx) | Backfill, toll backup — align with kill-switch / dry-run |
+
+---
 
 ## External / manual
 
 - ETL, spreadsheets, or scripts **not in repo** — record separately.
-- **Tolls:** `toll_ledger:*` is separate from `ledger:%` (see `toll_controller.tsx`).
+- **Tolls:** **`toll_ledger:*`** is separate from **`ledger:%`** (see toll reconciliation / server toll helpers).
+
+---
+
+## Still to track for “legacy extinction”
+
+1. Migrate or deprecate **legacy-only** GETs: **`/ledger`**, **`/count`**, **`/summary`**, and diagnostics that have no **`ledger_event:*`** equivalent yet.
+2. Decide **default** `readModel` / `source` on the server (canonical-first vs legacy-first) after sign-off.
+3. **Backfill** historical **`ledger:%`** into **`ledger_event:*`**, or document **cutoff + archive**.
+4. Remove **dual-path** UI and flags per Phase 8 in `solution.md`.
