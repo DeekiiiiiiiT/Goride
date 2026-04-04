@@ -397,6 +397,39 @@ function toDailyEarnings(dailyMap: Accum["dailyMap"]) {
     .sort((x, y) => x.date.localeCompare(y.date));
 }
 
+/** ISO yyyy-MM-dd slice, or null if invalid. */
+export function ymdSlice(s: string | undefined): string | null {
+  if (!s || typeof s !== "string") return null;
+  const y = s.trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(y) ? y : null;
+}
+
+export function addDaysYmd(ymd: string, days: number): string {
+  const d = new Date(ymd + "T12:00:00.000Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Driver overview date filter: include rows whose `date` falls in [startDate, endDate], OR
+ * (for statement / payout lines) whose `periodStart`..`periodEnd` overlaps that range.
+ *
+ * Import canonical events set `date` to `periodEnd` for Uber statement lines (`buildCanonicalImportEvents`),
+ * so a UI range of Mar 23–29 can miss statement rows when `periodEnd` is Mar 30 — unless we overlap-match.
+ */
+export function canonicalEventInSelectedWindow(
+  v: Record<string, unknown>,
+  startDate: string,
+  endDate: string,
+): boolean {
+  const d = ymdSlice(v.date as string);
+  if (d && d >= startDate && d <= endDate) return true;
+  const ps = ymdSlice(v.periodStart as string);
+  const pe = ymdSlice(v.periodEnd as string);
+  if (ps && pe) return ps <= endDate && pe >= startDate;
+  return false;
+}
+
 /**
  * Maps canonical event rows into `LedgerDriverOverview`-compatible JSON (legacy driver-overview shape).
  */

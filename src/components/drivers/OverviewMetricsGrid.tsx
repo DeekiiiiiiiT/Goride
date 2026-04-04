@@ -1447,7 +1447,13 @@ export function OverviewMetricsGrid({
       {/* Card 5: Toll Refunded — breakdown now from resolvedFinancials */}
       <MetricCard
         title="Toll Refunded"
-        value={showFinancialValues ? `$${resolvedFinancials.totalTolls.toFixed(2)}` : '—'}
+        value={
+          showFinancialValues
+            ? `$${(
+                (resolvedFinancials.totalTolls || 0) + (resolvedFinancials.disputeRefunds || 0)
+              ).toFixed(2)}`
+            : '—'
+        }
         subtext="Added to Debt (Cash Risk)"
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         loading={localLoading}

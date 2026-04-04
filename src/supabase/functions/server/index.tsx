@@ -18,7 +18,11 @@ import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
-import { aggregateCanonicalEventsToLedgerDriverOverview } from "./ledger_money_aggregate.ts";
+import {
+  addDaysYmd,
+  aggregateCanonicalEventsToLedgerDriverOverview,
+  canonicalEventInSelectedWindow,
+} from "./ledger_money_aggregate.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -3888,13 +3892,21 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       };
 
       try {
+        // Widen SQL by `date` then filter in-memory: statement/payout canonical rows use
+        // `date = periodEnd`, which can fall outside a tight [startDate,endDate] even when
+        // the statement period overlaps the user's range (see canonicalEventInSelectedWindow).
+        const fetchLo = addDaysYmd(startDate, -45);
+        const fetchHi = addDaysYmd(endDate, 45);
         const periodDataCanon = await paginatedFetchCanon(() =>
           baseQueryCanon()
-            .gte("value->>date", startDate)
-            .lte("value->>date", endDate)
+            .gte("value->>date", fetchLo)
+            .lte("value->>date", fetchHi)
         );
         let periodValsCanon = periodDataCanon.map((d: any) => d.value).filter(Boolean);
         periodValsCanon = filterByOrg(periodValsCanon, c);
+        periodValsCanon = periodValsCanon.filter((v: any) =>
+          canonicalEventInSelectedWindow(v as Record<string, unknown>, startDate, endDate)
+        );
 
         const startDC = new Date(startDate + "T00:00:00Z");
         const endDC = new Date(endDate + "T23:59:59Z");
@@ -3908,16 +3920,21 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
 
         let prevDataCanon: any[] = [];
         try {
+          const prevLo = addDaysYmd(prevStartC, -45);
+          const prevHi = addDaysYmd(prevEndC, 45);
           prevDataCanon = await paginatedFetchCanon(() =>
             baseQueryCanon()
-              .gte("value->>date", prevStartC)
-              .lte("value->>date", prevEndC)
+              .gte("value->>date", prevLo)
+              .lte("value->>date", prevHi)
           );
         } catch (prevErr: any) {
           console.log(`[Ledger DriverOverview:canonical] prev period: ${prevErr.message}`);
         }
         let prevValsCanon = prevDataCanon.map((d: any) => d.value).filter(Boolean);
         prevValsCanon = filterByOrg(prevValsCanon, c);
+        prevValsCanon = prevValsCanon.filter((v: any) =>
+          canonicalEventInSelectedWindow(v as Record<string, unknown>, prevStartC, prevEndC)
+        );
 
         let lifetimeDataCanon: any[] = [];
         try {

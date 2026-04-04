@@ -2125,19 +2125,18 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         ? ((ledgerOverview.period.earnings - ledgerOverview.prevPeriod.earnings) / ledgerOverview.prevPeriod.earnings) * 100
         : ledgerOverview.period.earnings > 0 ? 100 : 0;
 
-      // Phase 8: Inject "Dispute Recoveries" into metrics.platformStats so the existing
-      // JSX breakdown (.filter stats.tolls > 0) naturally picks it up.
-      // NOTE: JSX reads metrics.platformStats, NOT resolvedFinancials.platformStats.
-      // Controlled mutation is safe — resolvedFinancials depends on metrics and both
-      // run in the same render cycle; metrics is recreated on every dep change.
+      // Phase 8: Surface dispute / toll-support refunds in overview breakdown (tolls column).
       const drAmt = Number(ledgerOverview.period.disputeRefunds) || 0;
       if (drAmt > 0) {
-        metrics.platformStats['Dispute Recoveries'] = {
+        const drRow = {
           earnings: 0, trips: 0, completed: 0, distance: 0,
           ratingSum: 0, ratingCount: 0, cashCollected: 0,
           tolls: drAmt,
         };
+        platformStats['Dispute Recoveries'] = drRow;
+        metrics.platformStats['Dispute Recoveries'] = drRow;
       } else {
+        delete platformStats['Dispute Recoveries'];
         delete metrics.platformStats['Dispute Recoveries'];
       }
 
