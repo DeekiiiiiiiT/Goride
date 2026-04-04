@@ -30,6 +30,26 @@ describe('sumUberTripRollFareComponents', () => {
     const s = sumUberTripRollFareComponents(trips, d, '2026-03-01', '2026-03-07');
     expect(s).toBe(10);
   });
+
+  it('single SSOT earner: attributes lone trip bucket when trip driverId differs from payments_driver UUID', () => {
+    const ssotKey = '52ff47da-ef48-41b8-93d5-80a09b85ce5b';
+    const tripDriver = 'wrong-id-0000-0000-0000-000000000001';
+    const ssot: Record<string, UberSsotTotals> = {
+      [ssotKey]: {
+        periodEarningsGross: 100,
+        fareComponents: 80,
+        statementNetFare: 80,
+        promotions: 0,
+        tips: 0,
+        refundsAndExpenses: 0,
+      },
+    };
+    const trips = [
+      trip({ driverId: tripDriver, date: '2026-03-04', uberFareComponents: 80 }),
+    ];
+    const roll = sumUberTripRollFareComponents(trips, ssotKey, '2026-03-01', '2026-03-07', ssot);
+    expect(roll).toBe(80);
+  });
 });
 
 describe('reconcileUberNetFareByDriver', () => {

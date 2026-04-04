@@ -28,6 +28,10 @@ export function isLedgerMoneyReadModelEnabled(): boolean {
     if (typeof import.meta !== 'undefined' && import.meta.env?.PROD) {
       return true;
     }
+    /** Development: use canonical driver-overview by default (same as prod); set `roam_ledger_money_read_model` to `0` to force legacy. */
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && localStorage.getItem(STORAGE_KEY) !== '0') {
+      return true;
+    }
   } catch {
     /* ignore */
   }
