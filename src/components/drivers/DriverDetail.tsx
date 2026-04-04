@@ -2152,10 +2152,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         ...d.byPlatform,
       }));
 
-      const trendPercent = ledgerOverview.prevPeriod.earnings > 0
-        ? ((ledgerOverview.period.earnings - ledgerOverview.prevPeriod.earnings) / ledgerOverview.prevPeriod.earnings) * 100
-        : ledgerOverview.period.earnings > 0 ? 100 : 0;
-
       // Phase 8: Surface dispute / toll-support refunds in overview breakdown (tolls column).
       const drAmt = Number(ledgerOverview.period.disputeRefunds) || 0;
       if (drAmt > 0) {
@@ -2184,12 +2180,42 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
       }
 
+      /** When canonical/ledger only has Uber (or partial platforms), `period.earnings` is not the sum of the rows we show — trip-backed platforms stay in the breakdown. Sum merged rows for headline. */
+      const sumMergedEarnings = (() => {
+        let t = 0;
+        for (const [name, s] of Object.entries(platformStats)) {
+          if (name === 'Dispute Recoveries') continue;
+          t += Number((s as any)?.earnings) || 0;
+        }
+        return t;
+      })();
+      const sumMergedCash = (() => {
+        let t = 0;
+        for (const [name, s] of Object.entries(platformStats)) {
+          if (name === 'Dispute Recoveries') continue;
+          t += Number((s as any)?.cashCollected) || 0;
+        }
+        return t;
+      })();
+
+      const displayPeriodEarnings = isLedgerComplete
+        ? ledgerOverview.period.earnings
+        : sumMergedEarnings;
+      const displayCashCollected = isLedgerComplete ? periodCashCollected : sumMergedCash;
+      const prevEarningsNum = Number(ledgerOverview.prevPeriod.earnings) || 0;
+      const trendPercentMerged =
+        prevEarningsNum > 0
+          ? ((displayPeriodEarnings - prevEarningsNum) / prevEarningsNum) * 100
+          : displayPeriodEarnings > 0
+            ? 100
+            : 0;
+
       return {
-        periodEarnings: ledgerOverview.period.earnings,
+        periodEarnings: displayPeriodEarnings,
         prevPeriodEarnings: ledgerOverview.prevPeriod.earnings,
-        trendPercent: trendPercent.toFixed(1),
-        trendUp: ledgerOverview.period.earnings >= ledgerOverview.prevPeriod.earnings,
-        cashCollected: periodCashCollected,
+        trendPercent: trendPercentMerged.toFixed(1),
+        trendUp: displayPeriodEarnings >= prevEarningsNum,
+        cashCollected: displayCashCollected,
         totalTolls: ledgerOverview.period.tolls,
         disputeRefunds: ledgerOverview.period.disputeRefunds || 0,
         totalTips: ledgerOverview.period.tips,
