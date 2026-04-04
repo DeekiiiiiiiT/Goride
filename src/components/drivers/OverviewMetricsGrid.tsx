@@ -473,9 +473,10 @@ export function OverviewMetricsGrid({
     return ledgerFee > 0 ? ledgerFee : gap;
   }, [resolvedFinancials.platformFeesByPlatform, resolvedFinancials.fareGrossMinusNetByPlatform]);
 
-  // Show financial values whenever ledger is the source, even if completeness is partial.
-  // Incomplete status should warn, not blank valid totals.
-  const showFinancialValues = resolvedFinancials?.source === 'ledger';
+  // Show financial values from ledger, or trip-log fallback when canonical ledger is empty (prod backfill gap).
+  const showFinancialValues =
+    resolvedFinancials?.source === "ledger" ||
+    (resolvedFinancials?.source === "trips" && resolvedFinancials?.tripFallback === true);
 
   const uberLedger = resolvedFinancials.uberLedgerReconciliation;
 
@@ -1238,7 +1239,15 @@ export function OverviewMetricsGrid({
       {/* Card 1: Period Earnings — breakdown now from resolvedFinancials */}
       <MetricCard
         title={isToday ? "Today's Earnings" : "Period Earnings"}
-        subtext={resolvedFinancials.source === 'ledger' ? `Ledger${resolvedFinancials.dataIncomplete ? `${resolvedFinancials.missingPlatforms?.length > 0 ? ` incomplete (missing: ${resolvedFinancials.missingPlatforms.join(', ')})` : ' incomplete'}` : ''}` : resolvedFinancials.dataIncomplete ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(', ')})` : ''}` : 'Unavailable'}
+        subtext={
+          resolvedFinancials.tripFallback
+            ? "Trip logs (ledger summary unavailable for this period)"
+            : resolvedFinancials.source === "ledger"
+              ? `Ledger${resolvedFinancials.dataIncomplete ? `${resolvedFinancials.missingPlatforms?.length > 0 ? ` incomplete (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : " incomplete"}` : ""}`
+              : resolvedFinancials.dataIncomplete
+                ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : ""}`
+                : "Unavailable"
+        }
         value={showFinancialValues ? `$${resolvedFinancials.periodEarnings.toFixed(2)}` : '—'}
         trend={showFinancialValues ? `${resolvedFinancials.trendPercent}% vs prev` : undefined}
         trendUp={resolvedFinancials.trendUp}

@@ -1186,6 +1186,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         completionRate: 0,
         cancellationRate: 0,
         totalTolls: 0,
+        totalTips: 0,
+        totalBaseFare: 0,
         platformStats: {
             Uber: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
             InDrive: { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 },
@@ -2029,6 +2031,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         timeMetrics: reconstructedTimeMetrics,
         uberCsvCashCollectedMagnitude,
         uberPaymentCsvRollup,
+        /** Period-level fare decomposition (for trip-sourced financial fallback when ledger is empty). */
+        totalTips,
+        totalBaseFare,
      };
   }, [allTrips, dateRange, csvMetrics, transactions, vehicleMetrics, driver, selectedPlatforms, timeFilter, activeTab]);
 
@@ -2181,6 +2186,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         lifetimeTolls: ledgerOverview.lifetime.tolls,
         lifetimeDisputeRefunds: ledgerOverview.lifetime.disputeRefunds || 0,
         lifetimePlatformStats: ledgerOverview.lifetime.platformStats || {},
+        tripFallback: false as const,
       };
     }
     // ⚠️ LEGACY FALLBACK — Phase 7 safety net. If this fires, ledger is incomplete.
@@ -2188,11 +2194,52 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     if (ledgerOverviewLoaded) {
       console.log(`[ResolvedFinancials] Awaiting ledger data — ledgerHasData=${!!ledgerHasData}, isLedgerComplete=${isLedgerComplete}, missing=[${missingFromLedger.join(',')}]. Auto-repair will resolve if needed.`);
     }
+
+    // ── Trip-sourced fallback (production): canonical ledger often empty until backfill; trip logs still match Trip Ledger. ──
+    const tripFinancialSignal =
+      (metrics.periodCompletedTrips || 0) > 0 ||
+      Math.abs(Number(metrics.periodEarnings) || 0) > 0.0001 ||
+      Math.abs(Number(metrics.cashCollected) || 0) > 0.0001 ||
+      Math.abs(Number(metrics.totalTolls) || 0) > 0.0001;
+
+    if (ledgerOverviewLoaded && !ledgerHasData && tripFinancialSignal) {
+      return {
+        periodEarnings: metrics.periodEarnings,
+        prevPeriodEarnings: metrics.prevPeriodEarnings,
+        trendPercent: metrics.trendPercent,
+        trendUp: metrics.trendUp,
+        cashCollected: metrics.cashCollected,
+        totalTolls: metrics.totalTolls,
+        disputeRefunds: 0,
+        totalTips: metrics.totalTips ?? 0,
+        totalBaseFare: metrics.totalBaseFare ?? 0,
+        uberLedgerReconciliation: undefined,
+        platformFees: 0,
+        platformFeesByPlatform: {} as Record<string, number>,
+        fareGrossMinusNetByPlatform: {} as Record<string, number>,
+        platformStats: metrics.platformStats,
+        weeklyEarningsData: metrics.weeklyEarningsData,
+        tripCount: metrics.periodCompletedTrips,
+        readModelSource: "trip_logs",
+        source: "trips" as const,
+        tripFallback: true as const,
+        isLedgerComplete,
+        dataIncomplete: true,
+        missingPlatforms: missingFromLedger,
+        lifetimeEarnings: metrics.totalEarnings,
+        lifetimeTrips: metrics.lifetimeTrips,
+        lifetimeCashCollected: metrics.totalCashCollected,
+        lifetimeTolls: metrics.lifetimeTolls,
+        lifetimeDisputeRefunds: 0,
+        lifetimePlatformStats: {} as Record<string, any>,
+      };
+    }
+
     return {
-      // Phase 6: Return zeros — no trip-sourced financial fallback
+      // No ledger and no usable trip signal in range — keep zeros
       periodEarnings: 0,
       prevPeriodEarnings: 0,
-      trendPercent: '0.0',
+      trendPercent: "0.0",
       trendUp: true,
       cashCollected: 0,
       totalTolls: 0,
@@ -2203,11 +2250,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       platformFees: 0,
       platformFeesByPlatform: {} as Record<string, number>,
       fareGrossMinusNetByPlatform: {} as Record<string, number>,
-      platformStats: metrics.platformStats, // Keep operational fields (distance, completed, rating)
+      platformStats: metrics.platformStats,
       weeklyEarningsData: [],
       tripCount: metrics.periodCompletedTrips,
       readModelSource: undefined,
-      source: 'trips' as const,
+      source: "trips" as const,
+      tripFallback: false as const,
       isLedgerComplete,
       dataIncomplete: true,
       missingPlatforms: missingFromLedger,
