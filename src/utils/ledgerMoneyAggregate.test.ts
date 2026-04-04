@@ -1,7 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateCanonicalEventsToLedgerDriverOverview } from './ledgerMoneyAggregate';
+import {
+  aggregateCanonicalEventsToLedgerDriverOverview,
+  canonicalEventInSelectedWindow,
+} from './ledgerMoneyAggregate';
 
 const driver = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+describe('canonicalEventInSelectedWindow', () => {
+  it('includes legacy statement/payout rows dated just after endDate when period fields are missing', () => {
+    expect(
+      canonicalEventInSelectedWindow(
+        { eventType: 'statement_line', date: '2026-03-30' },
+        '2026-03-23',
+        '2026-03-29',
+      ),
+    ).toBe(true);
+    expect(
+      canonicalEventInSelectedWindow(
+        { eventType: 'payout_bank', date: '2026-03-30' },
+        '2026-03-23',
+        '2026-03-29',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not include statement rows dated beyond the grace window', () => {
+    expect(
+      canonicalEventInSelectedWindow(
+        { eventType: 'statement_line', date: '2026-04-15' },
+        '2026-03-23',
+        '2026-03-29',
+      ),
+    ).toBe(false);
+  });
+});
 
 describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
   it('rolls up Uber statement_line into period earnings without double-counting fare_earning', () => {

@@ -430,6 +430,9 @@ export function addDaysYmd(ymd: string, days: number): string {
  *
  * Import canonical events set `date` to `periodStart` for Uber statement/payout lines (`buildCanonicalImportEvents`),
  * so a UI range like Mar 23–29 matches on `date`; overlap on `periodStart`/`periodEnd` still applies when present.
+ *
+ * Legacy rows used `date = periodEnd` (e.g. pay/post day the day after the week) and sometimes omitted
+ * `periodStart`/`periodEnd` in KV — without a grace window, Mar 23–29 excludes Mar 30-dated statement lines.
  */
 export function canonicalEventInSelectedWindow(
   v: Record<string, unknown>,
@@ -441,6 +444,14 @@ export function canonicalEventInSelectedWindow(
   const ps = ymdSlice(v.periodStart as string);
   const pe = ymdSlice(v.periodEnd as string);
   if (ps && pe) return ps <= endDate && pe >= startDate;
+
+  const et = typeof v.eventType === 'string' ? v.eventType : '';
+  const isStatementish =
+    et === 'statement_line' || et === 'payout_cash' || et === 'payout_bank';
+  if (isStatementish && d) {
+    const graceEnd = addDaysYmd(endDate, 7);
+    if (d > endDate && d <= graceEnd) return true;
+  }
   return false;
 }
 

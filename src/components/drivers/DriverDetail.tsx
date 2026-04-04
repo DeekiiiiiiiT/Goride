@@ -1166,6 +1166,36 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         if (!cancelled) {
           setLedgerOverview(result);
           console.log(`[DriverDetail LEDGER] Overview loaded for ${driverId} (${startDate}..${endDate}):`, result);
+          // #region agent log
+          fetch('http://127.0.0.1:7727/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b8f371' },
+            body: JSON.stringify({
+              sessionId: 'b8f371',
+              hypothesisId: 'H1-H2-H4',
+              location: 'DriverDetail.tsx:getLedgerDriverOverview:response',
+              message: 'ledger driver-overview API payload (canonical vs legacy)',
+              data: {
+                driverId,
+                startDate,
+                endDate,
+                sourceParam: isLedgerMoneyReadModelEnabled() ? 'canonical' : 'ledger',
+                platforms: selectedPlatforms.has('All') ? 'all' : Array.from(selectedPlatforms),
+                readModelSource: (result as any)?.readModelSource ?? null,
+                periodEarnings: (result as any)?.period?.earnings ?? null,
+                periodTripCount: (result as any)?.period?.tripCount ?? null,
+                periodUber: (result as any)?.period?.uber ?? null,
+                platformStatsEarnings: Object.fromEntries(
+                  Object.entries((result as any)?.platformStats || {}).map(([k, v]: [string, any]) => [
+                    k,
+                    { earnings: v?.earnings, tripCount: v?.tripCount, cashCollected: v?.cashCollected },
+                  ]),
+                ),
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
         }
       } catch (err) {
         console.error('[DriverDetail LEDGER] Overview fetch failed (non-blocking):', err);
@@ -2184,6 +2214,28 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7727/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b8f371' },
+        body: JSON.stringify({
+          sessionId: 'b8f371',
+          hypothesisId: 'H3-H5',
+          location: 'DriverDetail.tsx:resolvedFinancials:ledgerBranch',
+          message: 'resolvedFinancials merge: completeness + platforms',
+          data: {
+            ledgerHasData: true,
+            isLedgerComplete,
+            missingFromLedger,
+            tripPlatformsWithData: Array.from(tripPlatformsWithData),
+            ledgerPlatformKeys: ledgerOverview?.platformStats ? Object.keys(ledgerOverview.platformStats) : [],
+            outPeriodEarnings: ledgerOverview.period.earnings,
+            outUberLedger: ledgerOverview.period.uber ?? null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       return {
         periodEarnings: ledgerOverview.period.earnings,
         prevPeriodEarnings: ledgerOverview.prevPeriod.earnings,
