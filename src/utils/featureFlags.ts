@@ -41,11 +41,15 @@ export function isLedgerMoneyReadModelEnabled(): boolean {
 const STORAGE_KEY_EARNINGS_READ_MODEL = 'roam_ledger_earnings_read_model';
 
 /**
- * When true, `getLedgerEarningsHistory` uses `readModel=canonical` (`ledger_event:*`).
- * Default **false** until Phase 4 sign-off (legacy `ledger:%` remains default).
+ * When true, `getLedgerEarningsHistory` (and fleet/drivers summary when wired) uses
+ * `readModel=canonical` (`ledger_event:*`).
  *
- * - `localStorage.setItem('roam_ledger_earnings_read_model', '1')` — force canonical earnings table.
- * - `localStorage.setItem('roam_ledger_earnings_read_model', '0')` — force legacy (default).
+ * **Default:** matches driver money UI — production uses canonical unless
+ * `VITE_LEDGER_EARNINGS_READ_MODEL=false`. Development defaults to canonical; set
+ * `roam_ledger_earnings_read_model` to `0` for legacy.
+ *
+ * - `localStorage.setItem('roam_ledger_earnings_read_model', '0')` — force legacy.
+ * - `localStorage.setItem('roam_ledger_earnings_read_model', '1')` — force canonical.
  * - `VITE_LEDGER_EARNINGS_READ_MODEL=true|false` in `.env`.
  */
 export function isLedgerEarningsReadModelEnabled(): boolean {
@@ -59,6 +63,12 @@ export function isLedgerEarningsReadModelEnabled(): boolean {
       return false;
     }
     if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LEDGER_EARNINGS_READ_MODEL === 'true') {
+      return true;
+    }
+    if (typeof import.meta !== 'undefined' && import.meta.env?.PROD) {
+      return true;
+    }
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && localStorage.getItem(STORAGE_KEY_EARNINGS_READ_MODEL) !== '0') {
       return true;
     }
   } catch {

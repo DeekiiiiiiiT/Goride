@@ -2706,7 +2706,7 @@ export const api = {
   // Phase 1: Per-Driver Ledger Summary (for DriversPage migration)
   // ═══════════════════════════════════════════════════════════════════
 
-  async getLedgerDriversSummary(date?: string): Promise<{
+  async getLedgerDriversSummary(date?: string, opts?: { readModel?: 'legacy' | 'canonical' }): Promise<{
     success: boolean;
     data: Record<string, {
       lifetimeEarnings: number;
@@ -2724,10 +2724,15 @@ export const api = {
       skippedNoDriver: number;
       skippedBadDate: number;
       durationMs: number;
+      readModel?: 'legacy' | 'canonical';
     };
   }> {
     try {
-      const qp = date ? `?date=${date}` : '';
+      const params = new URLSearchParams();
+      if (date) params.set('date', date);
+      if (opts?.readModel) params.set('readModel', opts.readModel);
+      const qs = params.toString();
+      const qp = qs ? `?${qs}` : '';
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.financial}/ledger/drivers-summary${qp}`,
         { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
@@ -2763,6 +2768,7 @@ export const api = {
     days?: number;
     startDate?: string;
     endDate?: string;
+    readModel?: 'legacy' | 'canonical';
   }): Promise<{
     success: boolean;
     data: {
@@ -2779,6 +2785,7 @@ export const api = {
       periodEnd: string;
       totalEntriesProcessed: number;
       durationMs: number;
+      readModel?: 'legacy' | 'canonical';
     };
   }> {
     try {
@@ -2786,6 +2793,7 @@ export const api = {
       if (params?.days) qp.set('days', String(params.days));
       if (params?.startDate) qp.set('startDate', params.startDate);
       if (params?.endDate) qp.set('endDate', params.endDate);
+      if (params?.readModel) qp.set('readModel', params.readModel);
       const qs = qp.toString() ? `?${qp.toString()}` : '';
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.financial}/ledger/fleet-summary${qs}`,
