@@ -43,6 +43,7 @@ interface BatchDeletePreview {
   trips: number;
   transactions: number;
   ledgerEntries: number;
+  disputeRefunds?: number;
   driverMetrics: {
     affected: number;
     safeToDelete: number;
@@ -62,6 +63,8 @@ interface DeleteResult {
   deletedTrips: number;
   deletedTransactions: number;
   deletedLedgerEntries: number;
+  deletedDisputeRefundKeys?: number;
+  deletedDisputeRefundDedupKeys?: number;
   deletedDriverMetrics: number;
   skippedDriverMetrics: number;
   deletedVehicleMetrics: number;
@@ -124,7 +127,7 @@ export function BatchDeleteModal({ isOpen, batchId, onClose, onSuccess }: BatchD
       const res = await api.deleteBatch(batchId);
       setResult(res);
       toast.success(
-        `Batch deleted: ${res.deletedTrips} trips, ${res.deletedTransactions} transactions, ${res.deletedLedgerEntries} ledger entries removed`,
+        `Batch deleted: ${res.deletedTrips} trips, ${res.deletedTransactions} txns, ${res.deletedLedgerEntries} ledger, ${res.deletedDisputeRefundKeys ?? 0} dispute refunds`,
         { duration: 6000 }
       );
       onSuccess();
@@ -140,6 +143,7 @@ export function BatchDeleteModal({ isOpen, batchId, onClose, onSuccess }: BatchD
   // ─── Total impact count ─────────────────────────────────────────────
   const totalImpact = preview
     ? preview.trips + preview.transactions + preview.ledgerEntries +
+      (preview.disputeRefunds ?? 0) +
       preview.driverMetrics.safeToDelete + preview.vehicleMetrics.safeToDelete
     : 0;
 
@@ -201,6 +205,7 @@ export function BatchDeleteModal({ isOpen, batchId, onClose, onSuccess }: BatchD
               <StatRow icon={<FileText className="h-3.5 w-3.5" />} label="Trips deleted" value={result.deletedTrips} />
               <StatRow icon={<CreditCard className="h-3.5 w-3.5" />} label="Transactions deleted" value={result.deletedTransactions} />
               <StatRow icon={<BookOpen className="h-3.5 w-3.5" />} label="Ledger entries deleted" value={result.deletedLedgerEntries} />
+              <StatRow icon={<ShieldAlert className="h-3.5 w-3.5" />} label="Dispute refunds removed" value={result.deletedDisputeRefundKeys ?? 0} />
               <StatRow icon={<Users className="h-3.5 w-3.5" />} label="Driver metrics deleted" value={result.deletedDriverMetrics} />
               <StatRow icon={<Users className="h-3.5 w-3.5" />} label="Driver metrics kept" value={result.skippedDriverMetrics} color="text-emerald-600" />
               <StatRow icon={<Car className="h-3.5 w-3.5" />} label="Vehicle metrics deleted" value={result.deletedVehicleMetrics} />
@@ -255,6 +260,12 @@ export function BatchDeleteModal({ isOpen, batchId, onClose, onSuccess }: BatchD
                   icon={<BookOpen className="h-4 w-4" />}
                   label="Ledger Entries"
                   count={preview.ledgerEntries}
+                  color="rose"
+                />
+                <ImpactCard
+                  icon={<ShieldAlert className="h-4 w-4" />}
+                  label="Dispute refunds"
+                  count={preview.disputeRefunds ?? 0}
                   color="rose"
                 />
                 <ImpactCard

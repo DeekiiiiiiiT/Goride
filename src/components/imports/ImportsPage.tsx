@@ -927,7 +927,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
           // Dispute Refunds: Persist to server
           if (processedDisputeRefunds.length > 0) {
               try {
-                  const drResult = await api.importDisputeRefunds(processedDisputeRefunds);
+                  const drResult = await api.importDisputeRefunds(
+                      processedDisputeRefunds.map((r) => ({ ...r, batchId })),
+                  );
                   if (drResult.imported > 0) {
                       const msg = drResult.skipped > 0
                           ? `Imported ${drResult.imported} dispute refund(s) (${drResult.skipped} already existed)`

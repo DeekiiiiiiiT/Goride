@@ -7854,6 +7854,49 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       console.warn("[Batch delete] Canonical ledger cleanup failed (non-fatal):", canonicalErr?.message);
     }
 
+    // ── 0b. Dispute refunds (`dispute-refund:*`) + dedup index — same batchId as import (see ImportsPage + dispute_refund_controller)
+    let deletedDisputeRefundKeys = 0;
+    let deletedDisputeRefundDedupKeys = 0;
+    try {
+      const drRows = await paginatedKeyFetch(() =>
+        supabase
+          .from("kv_store_37f42386")
+          .select("key, value")
+          .like("key", "dispute-refund:%")
+          .eq("value->>batchId", batchId)
+      );
+      const mainRows = drRows.filter((row: { key: string }) => {
+        const k = row.key;
+        return k.startsWith("dispute-refund:") && !k.startsWith("dispute-refund-dedup");
+      });
+      if (mainRows.length > 0) {
+        const keysToDel = mainRows.map((r: { key: string }) => r.key);
+        for (let i = 0; i < keysToDel.length; i += 100) {
+          await kv.mdel(keysToDel.slice(i, i + 100));
+        }
+        deletedDisputeRefundKeys = keysToDel.length;
+        const dedupIds = new Set<string>();
+        for (const row of mainRows) {
+          const v = row.value as { supportCaseId?: string } | null;
+          const sid = v?.supportCaseId;
+          if (typeof sid === "string" && sid.trim()) dedupIds.add(sid.trim());
+        }
+        for (const sid of dedupIds) {
+          try {
+            await kv.del(`dispute-refund-dedup:${sid}`);
+            deletedDisputeRefundDedupKeys++;
+          } catch {
+            /* non-fatal */
+          }
+        }
+      }
+      console.log(
+        `[Batch delete] Removed ${deletedDisputeRefundKeys} dispute-refund record(s), ${deletedDisputeRefundDedupKeys} dedup key(s)`,
+      );
+    } catch (drErr: any) {
+      console.warn("[Batch delete] Dispute refund cleanup failed (non-fatal):", drErr?.message);
+    }
+
     // ── 1. Fetch all trips in this batch (paginated, with values for ID extraction) ──
     const tripRows = await paginatedKeyFetch(() =>
       supabase
@@ -8112,6 +8155,8 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       deletedDriverMetrics,
       skippedDriverMetrics,
       deletedUberPaymentMetrics,
+      deletedDisputeRefundKeys,
+      deletedDisputeRefundDedupKeys,
       deletedVehicleMetrics,
       skippedVehicleMetrics,
       deletedBatch: batchId
@@ -8247,13 +8292,28 @@ app.get("/make-server-37f42386/batches/:id/delete-preview", requireAuth(), async
       }
     }
 
-    console.log(`[Batch delete-preview] Batch ${batchId}: ${tripCount} trips, ${transactionCount} txns, ${ledgerCount} ledger entries, ${driverMetrics.safeToDelete}/${driverMetrics.affected} driver metrics deletable, ${vehicleMetrics.safeToDelete}/${vehicleMetrics.affected} vehicle metrics deletable`);
+    const drPreviewRows = await paginatedKeyFetch(() =>
+      supabase
+        .from("kv_store_37f42386")
+        .select("key")
+        .like("key", "dispute-refund:%")
+        .eq("value->>batchId", batchId)
+    );
+    const disputeRefundCount = drPreviewRows.filter(
+      (r: { key: string }) =>
+        r.key.startsWith("dispute-refund:") && !r.key.startsWith("dispute-refund-dedup"),
+    ).length;
+
+    console.log(
+      `[Batch delete-preview] Batch ${batchId}: ${tripCount} trips, ${transactionCount} txns, ${ledgerCount} ledger entries, ${disputeRefundCount} dispute refunds, ${driverMetrics.safeToDelete}/${driverMetrics.affected} driver metrics deletable, ${vehicleMetrics.safeToDelete}/${vehicleMetrics.affected} vehicle metrics deletable`,
+    );
 
     return c.json({
       batch: batchRecord,
       trips: tripCount,
       transactions: transactionCount,
       ledgerEntries: ledgerCount,
+      disputeRefunds: disputeRefundCount,
       driverMetrics,
       vehicleMetrics,
     });

@@ -214,6 +214,8 @@ export const api = {
     trips: number;
     transactions: number;
     ledgerEntries: number;
+    /** Support Adjustment dispute refunds (`dispute-refund:*`) tagged with this `batchId` */
+    disputeRefunds?: number;
     driverMetrics: { affected: number; safeToDelete: number; shared: number; details: any[] };
     vehicleMetrics: { affected: number; safeToDelete: number; shared: number; details: any[] };
   }> {

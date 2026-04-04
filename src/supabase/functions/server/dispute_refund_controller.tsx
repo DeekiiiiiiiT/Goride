@@ -66,9 +66,12 @@ app.post(`${BASE}/import`, async (c) => {
 
       // Generate a stable ID if not provided
       const id = refund.id || `dr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const batchId =
+        typeof refund.batchId === "string" && refund.batchId.trim() ? refund.batchId.trim() : undefined;
       const record = {
         ...refund,
         id,
+        ...(batchId ? { batchId } : {}),
         status: refund.status || "unmatched",
         matchedTollId: refund.matchedTollId || null,
         matchedClaimId: refund.matchedClaimId || null,

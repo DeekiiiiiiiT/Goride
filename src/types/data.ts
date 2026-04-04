@@ -1075,6 +1075,8 @@ export interface DisputeRefund {
   resolvedAt: string | null;           // ISO timestamp of when matched/resolved
   resolvedBy: string | null;           // Admin who resolved, or "auto" for auto-match
   rawDescription: string;              // Full original Description field for audit trail
+  /** Import batch that created this row — used to cascade-delete when the batch is removed */
+  batchId?: string;
 }
 
 // --- Phase 1 Extension: Dynamic Tiers & Expenses ---
