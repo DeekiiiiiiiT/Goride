@@ -439,7 +439,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     };
     fetchAllDriverTrips();
     return () => { cancelled = true; };
-  }, [driverId]);
+  }, [driverId, driver?.uberDriverId, driver?.inDriveDriverId, driver?.name, driver?.firstName, driver?.lastName, driverName]);
 
   // ── Ledger summary fetch (Phase 10) ──
   useEffect(() => {
@@ -474,6 +474,24 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     }
     return merged;
   }, [serverTrips, trips]);
+
+  /** Trip History tab: same trip universe as metrics (merged server + props), scoped by calendar + global platform/time filters. */
+  const tripsForHistoryTab = useMemo(() => {
+    if (!dateRange?.from) return [];
+    const start = startOfDay(dateRange.from);
+    const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    const scoped = allTrips.filter((t) => {
+      if (selectedPlatforms.has('All') || selectedPlatforms.has(t.platform || 'Other')) {
+        if (timeFilter.preset !== 'all') {
+          const h = new Date(t.date).getHours();
+          if (!isHourInTimeFilter(h, timeFilter)) return false;
+        }
+        return true;
+      }
+      return false;
+    });
+    return getSortedTripsInRange(scoped, start, end);
+  }, [allTrips, dateRange, selectedPlatforms, timeFilter]);
   
   // Phase 1: Date Range & Data Context Filtering
   const { minDate, maxDate, tripIds } = useMemo(() => {
@@ -657,6 +675,30 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [showHidden, setShowHidden] = useState<boolean>(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set()); // Phase 2: Debouncing/Locking
   const tripsPerPage = 10;
+
+  const tripHistoryFiltered = useMemo(() => {
+    return tripsForHistoryTab.filter((t) => {
+      const matchesSearch =
+        t.id.includes(tripSearch) ||
+        t.date.includes(tripSearch) ||
+        (t.status || '').toLowerCase().includes(tripSearch.toLowerCase()) ||
+        (t.platform || '').toLowerCase().includes(tripSearch.toLowerCase());
+      const matchesPlatform =
+        filterPlatform.length === 0 || filterPlatform.includes(t.platform || 'Other');
+      const matchesStatus = filterStatus.length === 0 || filterStatus.includes(t.status);
+      const matchesCash =
+        !filterCashOnly ||
+        Math.abs(Number(t.cashCollected || 0)) > 0 ||
+        (t.platform &&
+          ['indrive', 'bolt', 'goride', 'roam', 'private', 'cash'].includes(t.platform.toLowerCase())) ||
+        (t as any).paymentMethod === 'Cash';
+      return matchesSearch && matchesPlatform && matchesStatus && matchesCash;
+    });
+  }, [tripsForHistoryTab, tripSearch, filterPlatform, filterStatus, filterCashOnly]);
+
+  useEffect(() => {
+    setTripPage(1);
+  }, [dateRange?.from, dateRange?.to, selectedPlatforms, timeFilter, tripSearch, filterPlatform, filterStatus, filterCashOnly]);
 
   // Phase 2: Tier State
   const [tiers, setTiers] = useState<TierConfig[]>([]);
@@ -4725,36 +4767,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {trips
-                                .filter(t => {
-                                    // Search Filter
-                                    const matchesSearch = t.id.includes(tripSearch) || 
-                                        t.date.includes(tripSearch) ||
-                                        (t.status || '').toLowerCase().includes(tripSearch.toLowerCase()) ||
-                                        (t.platform || '').toLowerCase().includes(tripSearch.toLowerCase());
-                                    
-                                    // Platform Filter
-                                    const matchesPlatform = filterPlatform.length === 0 || filterPlatform.includes(t.platform || 'Other');
-                                    
-                                    // Status Filter
-                                    const matchesStatus = filterStatus.length === 0 || filterStatus.includes(t.status);
-
-                                    // Cash Filter
-                                    const matchesCash = !filterCashOnly || 
-                                        (Math.abs(Number(t.cashCollected || 0)) > 0) || 
-                                        (t.platform && ['indrive', 'bolt', 'goride', 'roam', 'private', 'cash'].includes(t.platform.toLowerCase())) ||
-                                        (t as any).paymentMethod === 'Cash';
-
-                                    return matchesSearch && matchesPlatform && matchesStatus && matchesCash;
-                                })
+                            {tripHistoryFiltered
                                 .slice((tripPage - 1) * tripsPerPage, tripPage * tripsPerPage)
                                 .map((trip) => {
                                     const isPhantom = trip.status === 'Cancelled' && (trip.distance || 0) > 0.1;
+                                    const displayDate = parseTripDate((trip as any).requestTime || trip.date) || new Date();
                                     return (
                                     <TableRow key={trip.id} className={isPhantom ? "bg-rose-50 hover:bg-rose-100 border-l-2 border-l-rose-500" : ""}>
                                     <TableCell>
-                                        <div className="font-medium">{format(parseTripDate(trip.date) || new Date(), 'MMM d, yyyy')}</div>
-                                        <div className="text-xs text-slate-500">{format(parseTripDate(trip.date) || new Date(), 'h:mm a')}</div>
+                                        <div className="font-medium">{format(displayDate, 'MMM d, yyyy')}</div>
+                                        <div className="text-xs text-slate-500">{format(displayDate, 'h:mm a')}</div>
                                         {isPhantom && <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Phantom Trip Detected</span>}
                                     </TableCell>
                                     <TableCell>
@@ -4794,7 +4816,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     </TableCell>
                                 </TableRow>
                                 ); })}
-                            {trips.length === 0 && (
+                            {tripHistoryFiltered.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={8} className="h-24 text-center text-slate-500">
                                         No trips found.
@@ -4818,7 +4840,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             variant="outline"
                             size="sm"
                             onClick={() => setTripPage(p => p + 1)}
-                            disabled={tripPage * tripsPerPage >= trips.length}
+                            disabled={tripPage * tripsPerPage >= tripHistoryFiltered.length}
                         >
                             Next
                         </Button>
