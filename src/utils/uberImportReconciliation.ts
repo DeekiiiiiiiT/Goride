@@ -91,9 +91,26 @@ export function computeUberImportReconciliation(
       ? ssotAgg.refundsAndExpenses
       : tripRefundsTolls;
 
-  const refundsTollOrg = org?.refundsToll != null && org.refundsToll > 0.005 ? org.refundsToll : undefined;
-  const tolls =
-    refundsTollOrg !== undefined ? refundsTollOrg : Math.max(0, refundsTotal - tollSupport);
+  const refundsTollFromOrg =
+    org?.refundsToll != null &&
+    !Number.isNaN(Number(org.refundsToll)) &&
+    Number(org.refundsToll) > 0.005
+      ? Number(org.refundsToll)
+      : undefined;
+  const tollsAfterSupport = Math.max(0, refundsTotal - tollSupport);
+  let tolls: number;
+  if (refundsTollFromOrg !== undefined) {
+    const tollColumnMatchesTotalRefunds =
+      Math.abs(refundsTollFromOrg - refundsTotal) <= 0.05;
+    if (tollSupport > 0.005 && tollColumnMatchesTotalRefunds) {
+      /** `Refunds:Toll` often repeats full Refunds & Expenses — split tolls vs support ($1,395 → $1,385 + $10). */
+      tolls = tollsAfterSupport;
+    } else {
+      tolls = refundsTollFromOrg;
+    }
+  } else {
+    tolls = tollsAfterSupport;
+  }
 
   const totalEarnings =
     org != null && Number(org.totalEarnings) > 0.005

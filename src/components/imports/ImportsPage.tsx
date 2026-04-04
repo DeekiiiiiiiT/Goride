@@ -1974,7 +1974,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                                                   <li className="flex justify-between gap-4">
                                                       <span>Transferred to Bank</span>
                                                       <span className="tabular-nums font-medium text-slate-800">
-                                                          {toCurrency(importUberReconciliation.payoutBank)}
+                                                          {toCurrency(Math.abs(importUberReconciliation.payoutBank))}
                                                       </span>
                                                   </li>
                                               </ul>
