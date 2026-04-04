@@ -5897,21 +5897,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
             return c.json({ error: "Max 12000 trip ids per request — split the import batch" }, 400);
         }
 
-        // #region agent log
-        fetch("http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b8f371" },
-            body: JSON.stringify({
-                sessionId: "b8f371",
-                location: "index.tsx:ensure-from-trip-ids:entry",
-                message: "ensure handler",
-                data: { tripIdsLen: tripIds.length },
-                timestamp: Date.now(),
-                hypothesisId: "H1",
-            }),
-        }).catch(() => {});
-        // #endregion
-
         let writeOrgId: string | null = getOrgId(c);
         const stampEntry = (trip: any, entry: any) => {
             const oid =
@@ -5933,7 +5918,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
         };
 
         const CHUNK = 100;
-        let uberSampleLogged = false;
         for (let i = 0; i < tripIds.length; i += CHUNK) {
             const chunk = tripIds.slice(i, i + CHUNK);
             const keys = chunk.map((id) => `trip:${id}`);
@@ -5953,21 +5937,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
                 }
             }
             stats.tripsLoaded += values.length;
-
-            // #region agent log
-            fetch("http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b8f371" },
-                body: JSON.stringify({
-                    sessionId: "b8f371",
-                    location: "index.tsx:ensure-from-trip-ids:chunk",
-                    message: "mget vs chunk",
-                    data: { chunkLen: chunk.length, valuesLen: values.length },
-                    timestamp: Date.now(),
-                    hypothesisId: "H2",
-                }),
-            }).catch(() => {});
-            // #endregion
 
             for (const trip of values) {
                 if (!trip?.id) continue;
@@ -5993,31 +5962,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
                         } catch (fbErr: any) {
                             console.warn(`[Ledger EnsureTripIds] fallback failed trip ${trip.id}:`, fbErr?.message || fbErr);
                         }
-                    }
-                    const isUber = String(trip.platform || "").toLowerCase().includes("uber");
-                    if (isUber && !uberSampleLogged) {
-                        uberSampleLogged = true;
-                        // #region agent log
-                        fetch("http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b8f371" },
-                            body: JSON.stringify({
-                                sessionId: "b8f371",
-                                location: "index.tsx:ensure-from-trip-ids:uberSample",
-                                message: "first uber money trip",
-                                data: {
-                                    id8: String(trip.id).slice(0, 8),
-                                    amt: coerceAmount(trip.amount),
-                                    ufc: coerceAmount(trip.uberFareComponents),
-                                    ut: coerceAmount(trip.uberTips),
-                                    upa: coerceAmount(trip.uberPriorPeriodAdjustment),
-                                    genLen: entries.length,
-                                },
-                                timestamp: Date.now(),
-                                hypothesisId: "H3-H4",
-                            }),
-                        }).catch(() => {});
-                        // #endregion
                     }
                     if (entries.length > 0) {
                         const ledgerKeys = entries.map((e: any) => `ledger:${e.id}`);

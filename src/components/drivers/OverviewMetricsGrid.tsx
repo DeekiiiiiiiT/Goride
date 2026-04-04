@@ -322,58 +322,6 @@ export function OverviewMetricsGrid({
     }
   }, [logLoadOpen]);
 
-  /** Debug: Uber overlay math (period earnings dialog) — session b8f371 */
-  useEffect(() => {
-    if (!periodEarningsOpen) return;
-    const ul = resolvedFinancials.uberLedgerReconciliation;
-    const u = resolvedFinancials.platformStats?.Uber;
-    const ledgerOk = resolvedFinancials?.source === 'ledger' && !!ul;
-    // #region agent log
-    fetch('http://127.0.0.1:7468/ingest/79a58ae7-e17e-42e5-8ba3-5b5d5c3ba194', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b8f371' },
-      body: JSON.stringify({
-        sessionId: 'b8f371',
-        location: 'OverviewMetricsGrid:periodEarningsOpen',
-        message: 'uber overlay snapshot',
-        data: {
-          source: resolvedFinancials?.source,
-          readModelSource: resolvedFinancials?.readModelSource ?? null,
-          ledgerOk,
-          hasUberLedger: !!ul,
-          hasCsvRollup: !!uberPaymentCsvRollup,
-          ...(ledgerOk && ul
-            ? (() => {
-                const priorAdj = Number(ul.priorPeriodAdjustments) || 0;
-                const ter = ul.fareComponents + ul.tips + ul.promotions + priorAdj;
-                const pte = ul.fareComponents + ul.promotions + ul.tips;
-                const refM = ul.refundExpense;
-                const grand = pte + refM + priorAdj;
-                return {
-                  ulFare: ul.fareComponents,
-                  ulTips: ul.tips,
-                  ulPromo: ul.promotions,
-                  priorAdj,
-                  totalEarningsRow: ter,
-                  periodTotalEarnings: pte,
-                  refundsMag: refM,
-                  uberGrandTotal: grand,
-                  ulNetEarnings: ul.netEarnings,
-                  platformStatsUberEarnings: u?.earnings ?? null,
-                  earningsVsNetDelta:
-                    (u?.earnings ?? 0) - (Number(ul.netEarnings) || 0),
-                  payoutBankUiHardcodedZero: true,
-                };
-              })()
-            : {}),
-        },
-        timestamp: Date.now(),
-        hypothesisId: 'UBER-OVERLAY',
-      }),
-    }).catch(() => {});
-    // #endregion
-  }, [periodEarningsOpen, resolvedFinancials, uberPaymentCsvRollup]);
-
   // Platform breakdowns computed from resolvedFinancials (ledger-preferred)
   const earningsBreakdown = useMemo(() =>
     Object.entries(resolvedFinancials.platformStats)
