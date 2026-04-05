@@ -18,6 +18,16 @@ function getRawValue(trip: Trip, key: string): string {
   switch (key) {
     case 'id': return trip.id || '';
     case 'date': return trip.date || '';
+    case 'tripDate': {
+      if (!trip.date) return '';
+      const d = new Date(trip.date);
+      return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    case 'tripTime': {
+      if (!trip.date) return '';
+      const d = new Date(trip.date);
+      return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
     case 'driver': return trip.driverName || trip.driverId || '';
     case 'vehicle': return trip.vehicleId || '';
     case 'platform': return trip.platform || '';

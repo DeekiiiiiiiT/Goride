@@ -77,6 +77,8 @@ const DEFAULT_COLUMNS: Record<LedgerType, ColumnConfig[]> = {
     // Core columns (default visible)
     { key: 'id', label: 'ID', visible: true },
     { key: 'date', label: 'Date/Time', visible: true },
+    { key: 'tripDate', label: 'Date', visible: false },
+    { key: 'tripTime', label: 'Time', visible: false },
     { key: 'driver', label: 'Driver', visible: true },
     { key: 'vehicle', label: 'Vehicle', visible: true },
     { key: 'platform', label: 'Platform', visible: true },
@@ -131,6 +133,28 @@ const DEFAULT_COLUMNS: Record<LedgerType, ColumnConfig[]> = {
 
 const DEFAULT_ENABLED_LEDGERS: LedgerType[] = ['trip', 'fuel', 'toll'];
 
+/**
+ * Merge saved trip columns with defaults so new keys (e.g. tripDate/tripTime) appear for legacy KV configs.
+ */
+export function mergeTripLedgerColumnConfig(saved: ColumnConfig[] | undefined): ColumnConfig[] {
+  const defaults = DEFAULT_COLUMNS.trip;
+  if (!saved?.length) return defaults.map(c => ({ ...c }));
+  const savedMap = new Map(saved.map(c => [c.key, c]));
+  const merged: ColumnConfig[] = [];
+  for (const def of defaults) {
+    const s = savedMap.get(def.key);
+    merged.push(
+      s
+        ? { ...def, ...s, label: s.label?.trim() ? s.label : def.label }
+        : { ...def }
+    );
+  }
+  for (const s of saved) {
+    if (!defaults.some(d => d.key === s.key)) merged.push(s);
+  }
+  return merged;
+}
+
 export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
   const { session } = useAuth();
   const accessToken = session?.access_token;
@@ -165,7 +189,12 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
   useEffect(() => {
     if (savedConfig) {
       setEnabledLedgers(savedConfig.enabledLedgers || DEFAULT_ENABLED_LEDGERS);
-      setColumns(savedConfig.columns || DEFAULT_COLUMNS);
+      setColumns({
+        main: savedConfig.columns?.main ?? DEFAULT_COLUMNS.main,
+        trip: mergeTripLedgerColumnConfig(savedConfig.columns?.trip),
+        fuel: savedConfig.columns?.fuel ?? DEFAULT_COLUMNS.fuel,
+        toll: savedConfig.columns?.toll ?? DEFAULT_COLUMNS.toll,
+      });
       setHasChanges(false);
     }
   }, [savedConfig]);

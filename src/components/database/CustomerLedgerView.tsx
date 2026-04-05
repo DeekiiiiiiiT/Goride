@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, HardDrive, Table2, Fuel, Tags, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../../services/apiConfig';
@@ -8,6 +8,7 @@ import { TripLedgerPage } from './TripLedgerPage';
 import { FuelLedgerPage } from './FuelLedgerPage';
 import { TollLedgerPage } from './TollLedgerPage';
 import { DatabaseLedgerPage } from './DatabaseLedgerPage';
+import { mergeTripLedgerColumnConfig } from './LedgerColumnSettings';
 
 interface CustomerLedgerViewProps {
   customerId: string;
@@ -69,6 +70,11 @@ export function CustomerLedgerView({ customerId, customerData, onBack }: Custome
   const enabledLedgers = ledgerConfig?.enabledLedgers || DEFAULT_ENABLED_LEDGERS;
   const visibleTabs = LEDGER_TABS.filter(tab => enabledLedgers.includes(tab.id));
 
+  const mergedTripColumnConfig = useMemo(
+    () => mergeTripLedgerColumnConfig(ledgerConfig?.columns?.trip),
+    [ledgerConfig?.columns?.trip]
+  );
+
   useEffect(() => {
     if (!enabledLedgers.includes(activeTab) && visibleTabs.length > 0) {
       setActiveTab(visibleTabs[0].id);
@@ -129,7 +135,7 @@ export function CustomerLedgerView({ customerId, customerData, onBack }: Custome
             {activeTab === 'trip' && (
               <TripLedgerPage 
                 organizationId={customerId} 
-                columnConfig={ledgerConfig?.columns?.trip}
+                columnConfig={mergedTripColumnConfig}
               />
             )}
             {activeTab === 'fuel' && (

@@ -12930,6 +12930,8 @@ app.get("/make-server-37f42386/admin/ledger-config/:businessType", async (c) => 
             // Core columns (default visible)
             { key: 'id', label: 'ID', visible: true },
             { key: 'date', label: 'Date/Time', visible: true },
+            { key: 'tripDate', label: 'Date', visible: false },
+            { key: 'tripTime', label: 'Time', visible: false },
             { key: 'driver', label: 'Driver', visible: true },
             { key: 'vehicle', label: 'Vehicle', visible: true },
             { key: 'platform', label: 'Platform', visible: true },

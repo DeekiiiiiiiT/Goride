@@ -24,6 +24,30 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
+/** Date only — same source as `date` column, split for display */
+function formatDateOnly(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '—';
+  }
+}
+
+/** Time only — same source as `date` column */
+function formatTimeOnly(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch {
+    return '—';
+  }
+}
+
 function formatDistance(km: number | null | undefined): string {
   if (km == null) return '—';
   return `${km.toFixed(1)} km`;
@@ -97,6 +121,8 @@ function getSortValue(trip: Trip, key: string): string | number | null {
   switch (key) {
     case 'id': return trip.id || '';
     case 'date': return trip.date || '';
+    case 'tripDate': return trip.date || '';
+    case 'tripTime': return trip.date || '';
     case 'driver': return (trip.driverName || trip.driverId || '').toUpperCase();
     case 'vehicle': return trip.vehicleId || '';
     case 'platform': return trip.platform || '';
@@ -154,6 +180,16 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
     key: 'date', label: 'Date/Time', defaultVisible: true, group: 'core',
     render: (t) => formatDate(t.date),
     minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'tripDate', label: 'Date', defaultVisible: false, group: 'core',
+    render: (t) => formatDateOnly(t.date),
+    minWidth: '120px', sortable: true,
+  },
+  {
+    key: 'tripTime', label: 'Time', defaultVisible: false, group: 'core',
+    render: (t) => formatTimeOnly(t.date),
+    minWidth: '100px', sortable: true,
   },
   {
     key: 'driver', label: 'Driver', defaultVisible: true, group: 'core',
@@ -323,6 +359,8 @@ const DETAIL_FIELD_EXTRACTORS: Record<string, { label: string; getValue: (t: Tri
   // Core fields
   id: { label: 'ID', getValue: (t) => <span className="font-mono text-xs">{t.id}</span> },
   date: { label: 'Date & Time', getValue: (t) => formatDate(t.date) },
+  tripDate: { label: 'Date', getValue: (t) => formatDateOnly(t.date) },
+  tripTime: { label: 'Time', getValue: (t) => formatTimeOnly(t.date) },
   requestTime: { label: 'Request Time', getValue: (t) => formatDate(t.requestTime) },
   dropoffTime: { label: 'Dropoff Time', getValue: (t) => formatDate(t.dropoffTime) },
   platform: { label: 'Platform', getValue: (t) => t.platform },
