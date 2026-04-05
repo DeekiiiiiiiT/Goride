@@ -161,6 +161,22 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 ---
 
+## Canonical data verification (after legacy purge)
+
+**Goal:** Money in the UI comes from **`ledger_event:*`**, populated by **Uber (and other) CSV imports** via **canonical append** — not from deleted **`ledger:%`** rows.
+
+**Do this for each import batch you care about:**
+
+1. **Run the merged import** (Uber CSVs through the normal **Data Center → Import** flow). On success, the **Fleet Sync Complete** screen shows **events built**, **appended**, and **skipped** for canonical ledger events.
+2. **If reconciliation failed** (toast or red flag on the success card), fix data or CSV coverage before trusting totals; trips may still save without canonical money events.
+3. **Delete Center check:** **Imports → Delete** → **Database Record Counts** → **Ledger events (canonical)** should increase after imports (refresh). Legacy should stay **0**.
+4. **Spot-check two drivers** for the imported period: open **Drivers →** pick a driver → **earnings / trip ledger** (or your usual money view). Totals should match expectations for that CSV period.
+5. **Optional:** sample **`shadowCompare=1`** on **`GET /ledger/driver-earnings-history`** in staging/logs until you trust canonical vs expectations.
+
+**CLI (rough health):** `npm run verify:legacy-ledger` prints canonical / trip / transaction **counts** (not per-driver). Use the app for driver-level verification.
+
+---
+
 ## Remaining work for full legacy extinction
 
 1. **Done (this repo):** Canonical-only reads; legacy writes no-ops / **403**; **`deleteLedgerEntriesForTripSource`** and **`POST /ledger/purge-orphans`** removed; **`GET /ledger/count`** no legacy field; **`POST /ledger/purge-legacy-all`** added.

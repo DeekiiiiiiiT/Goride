@@ -253,6 +253,15 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
     return localStorage.getItem('roam_data_center_onboarded') !== 'true';
   });
 
+  /** Last merged import: canonical `ledger_event:*` append stats (for success-screen verification). */
+  const [importCanonicalSummary, setImportCanonicalSummary] = useState<{
+    eventsBuilt: number;
+    inserted: number;
+    skipped: number;
+    failed: number;
+    verifyPassed: boolean;
+  } | null>(null);
+
   // Load Fields
   useEffect(() => {
     const saved = localStorage.getItem('roam_fields');
@@ -784,6 +793,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
           });
           const canonicalVerify = verifyCanonicalImportVsReconciliation(canonicalEvents, reconForAppend);
           const CANONICAL_APPEND_MAX = 200;
+          let canonInserted = 0;
+          let canonSkipped = 0;
+          let canonFailed = 0;
           if (canonicalEvents.length > 0) {
               if (!canonicalVerify.ok) {
                   console.error('[Import] Canonical vs preview mismatch:', canonicalVerify.errors);
@@ -791,9 +803,6 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                       `Canonical ledger not saved — totals differ from import preview: ${canonicalVerify.errors.join(' ')}`,
                   );
               }
-              let canonInserted = 0;
-              let canonSkipped = 0;
-              let canonFailed = 0;
               try {
                   if (canonicalVerify.ok) {
                       for (let i = 0; i < canonicalEvents.length; i += CANONICAL_APPEND_MAX) {
@@ -873,6 +882,14 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
           queryClient.invalidateQueries({ queryKey: ['ledgerDriversSummary'] });
           queryClient.invalidateQueries({ queryKey: ['driver-ledger'] });
           queryClient.invalidateQueries({ queryKey: ['batches'] });
+
+          setImportCanonicalSummary({
+              eventsBuilt: canonicalEvents.length,
+              inserted: canonInserted,
+              skipped: canonSkipped,
+              failed: canonFailed,
+              verifyPassed: canonicalVerify.ok,
+          });
           
           setStep('success');
       } catch (e: any) {
@@ -891,6 +908,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
       setError(null);
       setWarning(null);
       setProcessedDisputeRefunds([]);
+      setImportCanonicalSummary(null);
   };
 
   const handleTollBackup = async () => {
@@ -2780,10 +2798,29 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                   {processedData.length} trips and {processedDriverMetrics.length} driver records have been committed.
                   {processedFuelEntries.length > 0 && <><br/>{processedFuelEntries.length} fuel entries imported.</>}
                </p>
+               {importCanonicalSummary && (
+                 <div className="mt-4 max-w-lg mx-auto rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-left text-sm text-slate-700">
+                   <p className="font-medium text-slate-900 mb-2">Canonical ledger (<span className="font-mono text-xs">ledger_event:*</span>)</p>
+                   <ul className="space-y-1 text-xs text-slate-600">
+                     <li>Events built from this import: <span className="font-mono font-medium text-slate-800">{importCanonicalSummary.eventsBuilt}</span></li>
+                     <li>Appended: <span className="font-mono font-medium text-emerald-700">{importCanonicalSummary.inserted}</span>
+                       {' · '}Skipped (idempotent): <span className="font-mono">{importCanonicalSummary.skipped}</span>
+                       {importCanonicalSummary.failed > 0 && (
+                         <span className="text-amber-700"> · Failed: {importCanonicalSummary.failed}</span>
+                       )}
+                     </li>
+                     {!importCanonicalSummary.verifyPassed && (
+                       <li className="text-amber-800 font-medium">Reconciliation check failed — review the error toast; trips may be saved without canonical money events.</li>
+                     )}
+                   </ul>
+                   <p className="text-xs text-slate-500 mt-3 border-t border-slate-200 pt-3">
+                     <span className="font-medium text-slate-700">Verify:</span>{' '}
+                     open <span className="font-medium">Imports → Delete</span> and confirm canonical events count increased; pick one driver and check earnings / trip ledger for this period.
+                   </p>
+                 </div>
+               )}
                <p className="text-xs text-slate-500 max-w-md mx-auto mt-3 leading-relaxed">
-                  Financial truth in Roam is the <span className="font-medium text-slate-700">posted ledger</span>
-                  {' '}(trip-sourced rows plus canonical import events when sync succeeds). Driver and fleet money views
-                  read from <span className="font-medium text-slate-700">canonical ledger events</span> (<span className="font-mono text-[10px]">ledger_event:*</span>).
+                  Driver and fleet money views use <span className="font-medium text-slate-700">canonical ledger events</span> (<span className="font-mono text-[10px]">ledger_event:*</span>) from successful imports — not legacy <span className="font-mono text-[10px]">ledger:*</span>.
                </p>
                {processedInsights && (processedInsights.alerts?.length || 0) > 0 && (
                    <div className="mt-4 p-4 bg-orange-50 text-orange-800 rounded-md text-sm border border-orange-100 max-w-md mx-auto">
