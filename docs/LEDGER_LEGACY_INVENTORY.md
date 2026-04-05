@@ -72,7 +72,7 @@
 |--------|----------|--------|
 | `getLedger` | GET `/ledger` | Canonical list only. |
 | `getLedgerCount` | GET `/ledger/count` | Canonical **`ledgerEntries`**, trips, transactions. |
-| `purgeAllLegacyLedger` | POST `/ledger/purge-legacy-all` | **`data.backfill`** + session; **`dryRun`** or **`confirm`**. |
+| `purgeAllLegacyLedger` | POST `/ledger/purge-legacy-all` | **`data.backfill`** + session; **`dryRun`** or **`confirm`**. (Delete Center no longer surfaces this — use for rare stragglers or SQL.) |
 | `repairDriverLedger`, `runLedgerBackfill`, `ensureLedgerFromTripIds` | Various | **403** for live legacy writes. |
 
 ---

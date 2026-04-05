@@ -23,7 +23,7 @@ import {
   aggregateCanonicalEventsToLedgerDriverOverview,
   canonicalEventInSelectedWindow,
 } from "./ledger_money_aggregate.ts";
-import { ledgerKeyLikePrefix, resolveLedgerApiSourceParam } from "../../../utils/ledgerKvSource.ts";
+import { CANONICAL_LEDGER_KEY_LIKE } from "../../../utils/ledgerKvSource.ts";
 import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriveWalletMetrics.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
@@ -2924,13 +2924,9 @@ const VALID_LEDGER_EVENT_TYPES = new Set([
 ]);
 const VALID_LEDGER_DIRECTIONS = new Set(['inflow', 'outflow']);
 
-// ─── GET /ledger — Query with filters + pagination ──────────────────
-// Default `source=canonical` → `ledger_event:*`. `source=legacy` → `ledger:%` (rollback).
+// ─── GET /ledger — Query with filters + pagination (`ledger_event:*` only) ──
 app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
   try {
-    const ledgerSource = resolveLedgerApiSourceParam(c.req.query("source"));
-    const keyLike = ledgerKeyLikePrefix(ledgerSource);
-
     const driverId = c.req.query("driverId");
     const driverIdsParam = c.req.query("driverIds");
     const vehicleId = c.req.query("vehicleId");
@@ -2960,7 +2956,7 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
     let query = supabase
       .from("kv_store_37f42386")
       .select("value", { count: "exact" })
-      .like("key", keyLike);
+      .like("key", CANONICAL_LEDGER_KEY_LIKE);
 
     if (driverId) {
       query = query.eq("value->>driverId", driverId);
@@ -3036,7 +3032,7 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
         page: Math.floor(offset / limit) + 1,
         limit,
         hasMore: (offset + limit) < filteredTotal,
-        meta: { source: ledgerSource },
+        meta: { source: "canonical" as const },
       });
     }
 
@@ -3058,7 +3054,7 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
       page: Math.floor(offset / limit) + 1,
       limit,
       hasMore: (offset + limit) < total,
-      meta: { source: ledgerSource },
+      meta: { source: "canonical" as const },
     });
   } catch (e: any) {
     console.log(`[Ledger GET] Error: ${e.message}`);
@@ -3334,13 +3330,9 @@ app.post(
   },
 );
 
-// ─── GET /ledger/summary — Aggregate totals for a filter set ────────
-// Default `source=canonical` → `ledger_event:*`. `source=legacy` → `ledger:%`.
+// ─── GET /ledger/summary — Aggregate totals for a filter set (`ledger_event:*` only) ──
 app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
   try {
-    const ledgerSource = resolveLedgerApiSourceParam(c.req.query("source"));
-    const keyLike = ledgerKeyLikePrefix(ledgerSource);
-
     const driverId = c.req.query("driverId");
     const driverIdsParam = c.req.query("driverIds");
     const startDate = c.req.query("startDate");
@@ -3352,7 +3344,7 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
     let query = supabase
       .from("kv_store_37f42386")
       .select("value")
-      .like("key", keyLike);
+      .like("key", CANONICAL_LEDGER_KEY_LIKE);
     const orgId = getOrgId(c);
     if (orgId) query = query.eq("value->>organizationId", orgId);
 
@@ -3383,10 +3375,10 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
     const { data, error } = await query.limit(10000);
     if (error) throw error;
 
-    let entries = (data || []).map((d: any) => d.value).filter(Boolean);
-    if (ledgerSource === "canonical") {
-      entries = filterByOrg(entries, c);
-    }
+    let entries = filterByOrg(
+      (data || []).map((d: any) => d.value).filter(Boolean),
+      c,
+    );
 
     let totalInflow = 0;
     let totalOutflow = 0;
@@ -3434,7 +3426,7 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
         byEventType,
         byPlatform,
       },
-      meta: { source: ledgerSource },
+      meta: { source: "canonical" as const },
     });
   } catch (e: any) {
     console.log(`[Ledger Summary] Error: ${e.message}`);
@@ -3674,8 +3666,7 @@ function buildTripLedgerFareGapSection(
 }
 
 // ─── GET /ledger/diagnostic-trip-ledger-gap — Why trips ≠ fare_earning (org, missing writes, IDs) ──
-// Same date range + multi-driver-id resolution as driver-overview. Read-only.
-// Query `source=canonical` (default) | `legacy` | `both` — fare rows from `ledger_event:*` vs `ledger:%`.
+// Same date range + multi-driver-id resolution as driver-overview. Read-only. Fare rows: `ledger_event:*` only.
 app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth(), async (c) => {
   const t0 = Date.now();
   try {
@@ -3716,12 +3707,12 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
       return all;
     };
 
-    const fetchFareEarningRows = async (keyLike: "ledger:%" | "ledger_event:%") => {
+    const fetchFareEarningRows = async () => {
       const rows = await paginatedFetch(() => {
         let q = supabase
           .from("kv_store_37f42386")
           .select("value")
-          .like("key", keyLike)
+          .like("key", CANONICAL_LEDGER_KEY_LIKE)
           .eq("value->>eventType", "fare_earning")
           .gte("value->>date", startDate)
           .lte("value->>date", endDate);
@@ -3819,10 +3810,10 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
       "legacyPlaceholderRoamDefaultOrg → trips/ledger stamped with roam-default-org; filterByOrg treats that like unscoped for fleet UUID users.",
       "droppedByFilterByOrg with sampleWrongOrgFareRows (non-legacy org) → foreign-org rows excluded from this fleet.",
       "tripsHiddenOnlyByOrgFilter → raw row had sourceId but filterByOrg removed it (org mismatch).",
-      "Compared to ledger_event:* fare_earning only (legacy ledger:% retired).",
+      "Compared to ledger_event:* fare_earning only.",
     ];
 
-    const fareRaw = await fetchFareEarningRows("ledger_event:%");
+    const fareRaw = await fetchFareEarningRows();
     const section = buildTripLedgerFareGapSection(eligible, fareRaw, readerOrgId, c, "ledger_event");
 
     return c.json({
@@ -3841,8 +3832,7 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
 
 // ─── GET /ledger/driver-indrive-wallet — Period loads, fees, lifetime loads (Phase 2) ──
 // Query: driverId, startDate, endDate (YYYY-MM-DD). Same multi-ID driver resolution as driver-overview.
-// `source=canonical` (default) | `legacy` | `both` — fee side from `ledger_event:*` vs `ledger:%`.
-// Loads always from transaction:* (InDrive Wallet Credit).
+// Fee side from `ledger_event:*` only. Loads always from transaction:* (InDrive Wallet Credit).
 // Phase 7 estimatedBalance = lifetimeLoads − lifetimeInDriveFees (fleet estimate only).
 // Phase 8: read access aligned with financial transaction visibility (transactions.view).
 app.get(
@@ -3895,19 +3885,20 @@ app.get(
       return all;
     };
 
-    const ledgerBaseQuery = (keyLike: "ledger:%" | "ledger_event:%") => () => {
-      let q = supabase.from("kv_store_37f42386").select("value").like("key", keyLike);
+    const ledgerBaseQuery = () => {
+      let q = supabase.from("kv_store_37f42386").select("value").like("key", CANONICAL_LEDGER_KEY_LIKE);
       if (orgId) q = q.eq("value->>organizationId", orgId);
       if (driverIdOrFilter) q = q.or(driverIdOrFilter);
       else q = q.eq("value->>driverId", driverId);
       return q;
     };
 
-    const fetchLedgerEntryValues = async (keyLike: "ledger:%" | "ledger_event:%") => {
-      const rows = await paginatedFetch(() => ledgerBaseQuery(keyLike)());
-      let vals = rows.map((r: any) => r.value).filter(Boolean);
-      if (keyLike === "ledger_event:%") vals = filterByOrg(vals, c);
-      return vals;
+    const fetchLedgerEntryValues = async () => {
+      const rows = await paginatedFetch(() => ledgerBaseQuery());
+      return filterByOrg(
+        rows.map((r: any) => r.value).filter(Boolean),
+        c,
+      );
     };
 
     const txBaseQuery = () => {
@@ -3951,7 +3942,7 @@ app.get(
       };
     };
 
-    const ledgerVals = await fetchLedgerEntryValues("ledger_event:%");
+    const ledgerVals = await fetchLedgerEntryValues();
     const { periodFees, lifetimeInDriveFees } = computeIndriveWalletFeesFromLedgerEntries(
       ledgerVals,
       startDate,
@@ -4605,10 +4596,8 @@ app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", a
   }
 });
 
-// ─── POST /ledger/repair-driver-ids — Phase 5.2b: Fix Uber UUID → Roam UUID in ledger ──────
-// Old Uber imports stored the raw Uber UUID as driverId in ledger entries.
-// This endpoint scans all ledger entries, resolves each driverId to the canonical Roam UUID,
-// and updates any mismatched entries in place.
+// ─── POST /ledger/repair-driver-ids — Phase 5.2b: Fix Uber UUID → Roam UUID in canonical ledger ──────
+// Scans `ledger_event:*` rows, resolves each driverId to the canonical Roam UUID, updates mismatches in place.
 // Supports: ?dryRun=true (preview only), ?driverId=xxx (repair only one driver's entries)
 app.post("/make-server-37f42386/ledger/repair-driver-ids", requireAuth(), requirePermission('data.backfill'), async (c) => {
     try {
@@ -4627,7 +4616,7 @@ app.post("/make-server-37f42386/ledger/repair-driver-ids", requireAuth(), requir
 
         console.log(`[Ledger RepairDriverIds] Starting ${dryRun ? 'DRY RUN' : 'LIVE REPAIR'}${filterDriverId ? ` for driver ${filterDriverId}` : ' for ALL entries'}`);
 
-        // Paginated fetch of ALL ledger entries (key + value)
+        // Paginated fetch of all canonical ledger events (key + value)
         const PAGE = 1000;
         const MAX_ROWS = 100000;
         let allEntries: Array<{ key: string; value: any }> = [];
@@ -4636,7 +4625,7 @@ app.post("/make-server-37f42386/ledger/repair-driver-ids", requireAuth(), requir
             const { data, error } = await supabase
                 .from("kv_store_37f42386")
                 .select("key, value")
-                .like("key", "ledger:%")
+                .like("key", CANONICAL_LEDGER_KEY_LIKE)
                 .range(offset, offset + PAGE - 1);
             if (error) throw error;
             const page = data || [];
@@ -5121,15 +5110,13 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
 });
 
 // ─── GET /diagnostic/unresolvable-driver-map — Step A: Discover Uber/InDrive UUID → Driver mapping ──
-// Scans all ledger entries, finds driverIds that are NOT known Roam UUIDs,
-// and groups them with their driverName, count, and platforms so we can
-// figure out which Roam driver each platform UUID belongs to.
+// Scans `ledger_event:*` rows; finds driverIds that are NOT known Roam UUIDs and groups them for mapping.
 app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", requireAuth(), async (c) => {
     try {
         const drivers = await loadDriverCache();
         const roamIds = new Set(drivers.map((d: any) => d.id));
 
-        // Paginated fetch of all ledger entries
+        // Paginated fetch of canonical ledger events
         const PAGE = 1000;
         const MAX_ROWS = 50000;
         let allEntries: Array<{ key: string; value: any }> = [];
@@ -5138,7 +5125,7 @@ app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", requireAuth(
             const { data, error } = await supabase
                 .from("kv_store_37f42386")
                 .select("key, value")
-                .like("key", "ledger:%")
+                .like("key", CANONICAL_LEDGER_KEY_LIKE)
                 .range(offset, offset + PAGE - 1);
             if (error) throw error;
             const page = data || [];
@@ -5333,7 +5320,7 @@ async function fetchCanonicalLedgerEventsInPeriod(c: any, periodStart: string, p
   return filterByOrg(all, c);
 }
 
-/** Same aggregation shape as GET /ledger/fleet-summary (legacy `ledger:*` rows). */
+/** Same aggregation shape as GET /ledger/fleet-summary (canonical ledger_event rows). */
 function aggregateFleetSummaryFromLedgerLikeEntries(entries: any[]): {
   totalEarnings: number;
   totalTripCount: number;
@@ -7085,7 +7072,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       return all;
     };
 
-    // ── 0. Canonical ledger (`ledger_event:*`) + idempotency keys — not removed by legacy `ledger:*` trip cascade
+    // ── 0. Canonical ledger (`ledger_event:*`) + idempotency keys for this batch
     let deletedCanonicalLedger = 0;
     let deletedCanonicalIdem = 0;
     const driverIdsFromCanonical = new Set<string>();
@@ -7229,31 +7216,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     }
     console.log(`[Batch delete] Deleted ${tripKeys.length} trips, ${txKeys.length} transactions`);
 
-    // ── 3. Delete ledger entries tied to these trip IDs ──
-    //    Ledger keys are "ledger:RANDOM_UUID" with trip ID stored in value.sourceId
-    let deletedLedger = 0;
-    const CHUNK = 50;
-    for (let i = 0; i < tripIds.length; i += CHUNK) {
-      const chunk = tripIds.slice(i, i + CHUNK);
-      const ledgerRows = await paginatedKeyFetch(() =>
-        supabase
-          .from("kv_store_37f42386")
-          .select("key")
-          .like("key", "ledger:%")
-          .eq("value->>sourceType", "trip")
-          .in("value->>sourceId", chunk)
-      );
-      if (ledgerRows.length > 0) {
-        const ledgerKeys = ledgerRows.map(d => d.key);
-        for (let j = 0; j < ledgerKeys.length; j += 100) {
-          await kv.mdel(ledgerKeys.slice(j, j + 100));
-        }
-        deletedLedger += ledgerKeys.length;
-      }
-    }
-    console.log(`[Batch delete] Deleted ${deletedLedger} ledger entries`);
-
-    // ── 4. Smart driver_metric cleanup ──
+    // ── 3. Smart driver_metric cleanup ──
     //    Only delete if the driver has NO trips remaining in other batches.
     //    POST /driver-metrics stores keys as `driver_metric:${m.id}` (e.g. dm-pay-…), not
     //    `driver_metric:${driverId}` — deleting only the latter left ghost payment cash fields.
@@ -7332,7 +7295,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     }
     console.log(`[Batch delete] Driver metrics: ${deletedDriverMetrics} KV rows deleted, ${skippedDriverMetrics} drivers skipped (still have trips elsewhere)`);
 
-    // ── 4b. Uber payment CSV metrics (`dm-pay-*` / `dm-ptx-*` from csvHelpers) — only for drivers tied to
+    // ── 3b. Uber payment CSV metrics (`dm-pay-*` / `dm-ptx-*` from csvHelpers) — only for drivers tied to
     //        this batch (canonical events or deleted Uber trips), so Roam-only batch deletes do not wipe payment rows.
     let deletedUberPaymentMetrics = 0;
     for (const driverId of stripUberPaymentMetricsFor) {
@@ -7364,7 +7327,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       `[Batch delete] Uber payment metrics (dm-pay/dm-ptx): ${deletedUberPaymentMetrics} KV rows removed`,
     );
 
-    // ── 5. Smart vehicle_metric cleanup ──
+    // ── 4. Smart vehicle_metric cleanup ──
     //    Only delete if the vehicle has NO trips remaining in other batches
     let deletedVehicleMetrics = 0;
     let skippedVehicleMetrics = 0;
@@ -7393,7 +7356,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
     }
     console.log(`[Batch delete] Vehicle metrics: ${deletedVehicleMetrics} deleted, ${skippedVehicleMetrics} shared/skipped`);
 
-    // ── 6. Ghost Data Cleanup (safety net — catches edge cases) ──
+    // ── 5. Ghost Data Cleanup (safety net — catches edge cases) ──
     const { count: remainingTrips } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "trip:%");
     const { count: remainingTx } = await supabase.from("kv_store_37f42386").select('*', { count: 'exact', head: true }).like("key", "transaction:%");
 
@@ -7409,7 +7372,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       }
     }
 
-    // ── 7. Delete the batch record itself ──
+    // ── 6. Delete the batch record itself ──
     await kv.del(`batch:${batchId}`);
 
     // Invalidate caches
@@ -7422,8 +7385,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       success: true,
       deletedTrips: tripKeys.length,
       deletedTransactions: txKeys.length,
-      deletedLedgerEntries: deletedLedger,
-      deletedCanonicalLedger,
+      deletedLedgerEntries: deletedCanonicalLedger,
       deletedCanonicalIdem,
       deletedDriverMetrics,
       skippedDriverMetrics,
@@ -7501,22 +7463,18 @@ app.get("/make-server-37f42386/batches/:id/delete-preview", requireAuth(), async
     );
     const transactionCount = txRows.length;
 
-    // 3. Count ledger entries tied to these trip IDs
-    //    Ledger keys are "ledger:RANDOM_UUID" with trip ID stored in value.sourceId
+    // 3. Canonical ledger events for this batch (matches cascade step 0)
     let ledgerCount = 0;
-    const CHUNK = 50;
-    for (let i = 0; i < tripIds.length; i += CHUNK) {
-      const chunk = tripIds.slice(i, i + CHUNK);
+    {
       const { count, error } = await supabase
         .from("kv_store_37f42386")
         .select("*", { count: "exact", head: true })
-        .like("key", "ledger:%")
-        .eq("value->>sourceType", "trip")
-        .in("value->>sourceId", chunk);
+        .like("key", CANONICAL_LEDGER_KEY_LIKE)
+        .eq("value->>batchId", batchId);
       if (error) {
-        console.log(`Batch delete-preview ledger count error at chunk ${i}: ${error.message}`);
+        console.log(`Batch delete-preview ledger_event count error: ${error.message}`);
       } else {
-        ledgerCount += count || 0;
+        ledgerCount = count || 0;
       }
     }
 
@@ -7578,7 +7536,7 @@ app.get("/make-server-37f42386/batches/:id/delete-preview", requireAuth(), async
     ).length;
 
     console.log(
-      `[Batch delete-preview] Batch ${batchId}: ${tripCount} trips, ${transactionCount} txns, ${ledgerCount} ledger entries, ${disputeRefundCount} dispute refunds, ${driverMetrics.safeToDelete}/${driverMetrics.affected} driver metrics deletable, ${vehicleMetrics.safeToDelete}/${vehicleMetrics.affected} vehicle metrics deletable`,
+      `[Batch delete-preview] Batch ${batchId}: ${tripCount} trips, ${transactionCount} txns, ${ledgerCount} ledger_event rows, ${disputeRefundCount} dispute refunds, ${driverMetrics.safeToDelete}/${driverMetrics.affected} driver metrics deletable, ${vehicleMetrics.safeToDelete}/${vehicleMetrics.affected} vehicle metrics deletable`,
     );
 
     return c.json({

@@ -597,8 +597,6 @@ export interface LedgerFilterParams {
   offset?: number;
   sortBy?: 'date' | 'amount' | 'createdAt';
   sortDir?: 'asc' | 'desc';
-  /** List API uses `ledger_event:*` only; `source` is ignored for KV prefix (canonical). */
-  source?: 'canonical' | 'legacy';
 }
 
 export interface PaginatedLedgerResponse {
@@ -607,11 +605,12 @@ export interface PaginatedLedgerResponse {
   page: number;
   limit: number;
   hasMore: boolean;
-  meta?: { source?: 'canonical' | 'legacy' };
+  /** Server responds with canonical list metadata when present. */
+  meta?: { source?: 'canonical' };
 }
 
 export interface LedgerDriverOverview {
-  /** Phase 5: present when `source=canonical` on driver-overview. */
+  /** Present when overview aggregates from `ledger_event:*`. */
   readModelSource?: 'canonical_events';
   period: {
     earnings: number;

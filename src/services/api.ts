@@ -2231,7 +2231,6 @@ export const api = {
     if (params.offset) qp.set('offset', String(params.offset));
     if (params.sortBy) qp.set('sortBy', params.sortBy);
     if (params.sortDir) qp.set('sortDir', params.sortDir);
-    if (params.source) qp.set('source', params.source);
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger?${qp.toString()}`,
@@ -2316,7 +2315,6 @@ export const api = {
     if (params.eventType) qp.set('eventType', params.eventType);
     if (params.direction) qp.set('direction', params.direction);
     if (params.platform) qp.set('platform', params.platform);
-    if (params.source) qp.set('source', params.source);
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/summary?${qp.toString()}`,
@@ -2334,16 +2332,12 @@ export const api = {
     startDate: string;
     endDate: string;
     platforms?: string[];
-    /** Omit (default) — server uses `ledger_event:*` only for overview aggregation. */
-    source?: 'ledger' | 'canonical';
   }): Promise<LedgerDriverOverview> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
     if (params.platforms?.length) qp.set('platforms', params.platforms.join(','));
-    if (params.source === 'ledger') qp.set('source', 'ledger');
-    else if (params.source === 'canonical') qp.set('source', 'canonical');
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-overview?${qp.toString()}`,
@@ -2357,12 +2351,11 @@ export const api = {
     return json.data;
   },
 
-  /** Deep read-only compare: completed money trips vs fare_ledger rows (raw vs org scope). */
+  /** Deep read-only compare: completed money trips vs `ledger_event:*` fare rows. */
   async getLedgerTripLedgerGapDiagnostic(params: {
     driverId: string;
     startDate: string;
     endDate: string;
-    source?: 'canonical';
   }): Promise<any> {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || publicAnonKey;
@@ -2370,7 +2363,6 @@ export const api = {
     qp.set('driverId', params.driverId);
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
-    if (params.source) qp.set('source', params.source);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/diagnostic-trip-ledger-gap?${qp.toString()}`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -2386,13 +2378,11 @@ export const api = {
     driverId: string;
     startDate: string;
     endDate: string;
-    source?: 'canonical';
   }): Promise<IndriveWalletSummary> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
-    if (params.source) qp.set('source', params.source);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-indrive-wallet?${qp.toString()}`,
       { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
@@ -2538,15 +2528,12 @@ export const api = {
     periodType?: 'daily' | 'weekly' | 'monthly';
     startDate?: string;
     endDate?: string;
-    /** Omit = canonical `ledger_event:*` only (legacy removed). */
-    readModel?: 'legacy' | 'canonical';
   }): Promise<{ success: boolean; data: any[]; durationMs: number; readModel?: string }> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     if (params.periodType) qp.set('periodType', params.periodType);
     if (params.startDate) qp.set('startDate', params.startDate);
     if (params.endDate) qp.set('endDate', params.endDate);
-    if (params.readModel) qp.set('readModel', params.readModel);
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-earnings-history?${qp.toString()}`,
@@ -2713,7 +2700,7 @@ export const api = {
   // Phase 1: Per-Driver Ledger Summary (for DriversPage migration)
   // ═══════════════════════════════════════════════════════════════════
 
-  async getLedgerDriversSummary(date?: string, opts?: { readModel?: 'legacy' | 'canonical' }): Promise<{
+  async getLedgerDriversSummary(date?: string): Promise<{
     success: boolean;
     data: Record<string, {
       lifetimeEarnings: number;
@@ -2731,13 +2718,12 @@ export const api = {
       skippedNoDriver: number;
       skippedBadDate: number;
       durationMs: number;
-      readModel?: 'legacy' | 'canonical';
+      readModel?: string;
     };
   }> {
     try {
       const params = new URLSearchParams();
       if (date) params.set('date', date);
-      if (opts?.readModel) params.set('readModel', opts.readModel);
       const qs = params.toString();
       const qp = qs ? `?${qs}` : '';
       const response = await fetchWithRetry(
@@ -2775,7 +2761,6 @@ export const api = {
     days?: number;
     startDate?: string;
     endDate?: string;
-    readModel?: 'legacy' | 'canonical';
   }): Promise<{
     success: boolean;
     data: {
@@ -2792,7 +2777,7 @@ export const api = {
       periodEnd: string;
       totalEntriesProcessed: number;
       durationMs: number;
-      readModel?: 'legacy' | 'canonical';
+      readModel?: string;
     };
   }> {
     try {
@@ -2800,7 +2785,6 @@ export const api = {
       if (params?.days) qp.set('days', String(params.days));
       if (params?.startDate) qp.set('startDate', params.startDate);
       if (params?.endDate) qp.set('endDate', params.endDate);
-      if (params?.readModel) qp.set('readModel', params.readModel);
       const qs = qp.toString() ? `?${qp.toString()}` : '';
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.financial}/ledger/fleet-summary${qs}`,

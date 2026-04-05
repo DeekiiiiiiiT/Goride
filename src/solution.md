@@ -154,10 +154,10 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 |--------|--------|
 | **`GET /ledger/count`** | Canonical **`ledgerEntries`**, trip/transaction counts only (no legacy field). |
 | Legacy **write** routes (`POST /ledger`, repair, backfill, etc.) | **403** — use **canonical append** for money events. |
-| **`POST /ledger/purge-legacy-all`** | Deletes **all** **`ledger:%`** KV rows (`dryRun` or `confirm: "DELETE_ALL_LEGACY_LEDGER_KV"`); **`data.backfill`** required. Exposed in-app as **Delete Center → Remove all legacy ledger rows**. |
+| **`POST /ledger/purge-legacy-all`** | Deletes **all** **`ledger:%`** KV rows (`dryRun` or `confirm: "DELETE_ALL_LEGACY_LEDGER_KV"`); **`data.backfill`** required. **Not** in Delete Center UI — call from API client or **`scripts/purge-legacy-ledger-kv.sql`**. |
 | **`scripts/purge-legacy-ledger-kv.sql`** | Optional operator SQL (same end state as **`purge-legacy-all`**). |
 
-**Operator sequence:** (1) backup if desired; (2) deploy Edge; (3) sign in with **`data.backfill`** → **Imports → Delete Center** → confirm legacy count (dry run) → **Remove all legacy ledger rows**; or run raw SQL after backup.
+**Operator sequence (legacy purge):** (1) backup if desired; (2) deploy Edge; (3) **`POST /ledger/purge-legacy-all`** with confirm, **or** raw SQL — one-time. **Delete Center** now shows canonical counts only; use API/SQL if stray **`ledger:%`** keys ever reappear.
 
 ---
 
@@ -180,8 +180,11 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 ## Remaining work for full legacy extinction
 
 1. **Done (this repo):** Canonical-only reads; legacy writes no-ops / **403**; **`deleteLedgerEntriesForTripSource`** and **`POST /ledger/purge-orphans`** removed; **`GET /ledger/count`** no legacy field; **`POST /ledger/purge-legacy-all`** added.
-2. **Operator (production):** Deploy Edge, then run **Delete Center → Remove all legacy ledger rows** once, or equivalent SQL — irreversible for **`ledger:%`** keys.
+2. **Operator (production):** Deploy Edge, then run **`POST /ledger/purge-legacy-all`** once (or equivalent SQL) — irreversible for **`ledger:%`** keys.
 3. **Docs:** [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md) updated for the above.
+4. **Client types (nice-to-have):** **`LedgerFilterParams`** / **`api.ts`** — removed unused **`source`** / **`readModel`** query params from ledger list, summary, driver-overview, gap diagnostic, InDrive wallet, earnings history, drivers-summary, fleet-summary. Server response may still echo **`readModel: "canonical"`** for compatibility.
+5. **Delete Center:** Legacy purge button removed from UI (purge complete); canonical count + short ops note only. **`purge-legacy-all`** remains on the API for edge cases.
+6. **Server `index.tsx`:** Read paths and diagnostics now use **`ledger_event:%`** only; legacy **`ledger:%`** scans remain for **`POST /ledger/purge-legacy-all`**, optional legacy **POST /ledger** dedup when writes enabled, and retired write/repair helpers that still target **`ledger:`** keys.
 
 ---
 
