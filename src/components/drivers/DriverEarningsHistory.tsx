@@ -239,20 +239,35 @@ export function DriverEarningsHistory({ driverId, quotaConfig }: DriverEarningsH
   };
 
   // ────────────────────────────────────────────────────────────
-  // Empty state
+  // Loading / error / empty (error must not use the generic empty copy)
   // ───────────────────────────────────────────────────────────
-  if (activePeriodData.length === 0 && !serverDataLoading) {
-    return (
-      <div className="text-center p-8 border border-dashed rounded-lg text-slate-500">
-        No earnings history available.
-      </div>
-    );
-  }
-
   if (serverDataLoading && activePeriodData.length === 0) {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-400">
         <div className="animate-pulse">Loading earnings history...</div>
+      </div>
+    );
+  }
+
+  if (dataSource === 'error' && !serverDataLoading) {
+    return (
+      <div className="text-center p-6 border border-dashed border-rose-200 rounded-lg bg-rose-50/50 text-slate-700 space-y-2">
+        <p className="text-sm font-medium text-rose-800">Could not load earnings history</p>
+        <p className="text-xs text-slate-600 max-w-md mx-auto">
+          The ledger request failed. Check the browser console for details, refresh the page, or confirm you are signed in.
+        </p>
+      </div>
+    );
+  }
+
+  if (activePeriodData.length === 0 && !serverDataLoading) {
+    return (
+      <div className="text-center p-6 border border-dashed rounded-lg text-slate-600 space-y-2 max-w-lg mx-auto">
+        <p className="text-sm font-medium text-slate-800">No earnings history in the canonical ledger</p>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          This table is built only from <span className="font-medium text-slate-700">ledger_event</span> rows (Uber CSV import / canonical append).
+          The chart above can still use trip records and other summaries — they are not the same data source.
+        </p>
       </div>
     );
   }

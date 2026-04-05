@@ -5603,8 +5603,12 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       const periodEntries = parsedEntries.filter((e: any) => e._dateMs >= bStart && e._dateMs <= bEnd);
 
       const periodFares = periodEntries.filter((e: any) => e.eventType === "fare_earning");
-      const grossRevenue = periodFares.reduce((s: number, e: any) => s + (e.grossAmount || 0), 0);
+      const grossRevenue = periodFares.reduce((s: number, e: any) => {
+        const g = Number.isFinite(e.grossAmount) ? Number(e.grossAmount) : Math.abs(Number(e.netAmount) || 0);
+        return s + g;
+      }, 0);
       const tripCount = periodFares.length;
+      const ledgerEventCount = periodEntries.length;
 
       const tips = periodEntries
         .filter((e: any) => e.eventType === "tip")
@@ -5637,7 +5641,8 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
 
       const cumulativeEarnings = fareEntriesEH.reduce((s: number, e: any) => {
         if (e._dateMs >= refMonthStartMs && e._dateMs <= cumulativeCap) {
-          return s + (e.grossAmount || 0);
+          const g = Number.isFinite(e.grossAmount) ? Number(e.grossAmount) : Math.abs(Number(e.netAmount) || 0);
+          return s + g;
         }
         return s;
       }, 0);
@@ -5666,11 +5671,24 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
         platformFees: Math.round(platformFees * 100) / 100,
         quotaTarget: quotaTargetEH,
         quotaPercent: qPercent !== null ? Math.round(qPercent * 100) / 100 : null,
+        ledgerEventCount,
       };
     });
 
+    // Include any period with canonical ledger rows (tips/statement/adjustments without fare_earning
+    // were incorrectly hidden; trip-only filter matched legacy rows, not full canonical mix.)
     const activeRows = rowsEH
-      .filter((r: any) => r.tripCount > 0 || r.transactionCount > 0)
+      .filter((r: any) => {
+        if (r.tripCount > 0 || r.transactionCount > 0) return true;
+        if ((r.ledgerEventCount || 0) > 0) return true;
+        if (Math.abs(r.grossRevenue || 0) > 1e-6) return true;
+        if (Math.abs(r.tips || 0) > 1e-6) return true;
+        if (Math.abs(r.payouts || 0) > 1e-6) return true;
+        if (Math.abs(r.tolls || 0) > 1e-6) return true;
+        if (Math.abs(r.platformFees || 0) > 1e-6) return true;
+        if (Math.abs(r.expenses || 0) > 1e-6) return true;
+        return false;
+      })
       .reverse();
 
     const durationMs = Date.now() - startMs;
