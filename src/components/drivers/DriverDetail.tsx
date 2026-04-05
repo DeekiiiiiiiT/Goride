@@ -2575,7 +2575,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         driverId,
         startDate: ledgerDateRangeStrings.startDate,
         endDate: ledgerDateRangeStrings.endDate,
-        source: 'both',
       });
       setTripGapDiagResult(r);
       setTripGapDiagOpen(true);
@@ -5055,7 +5054,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             </DialogTitle>
             <DialogDescription>
               Same date range as the overview. Compares completed trips with money to <code className="text-xs">fare_earning</code> rows in{' '}
-              <code className="text-xs">ledger_event:*</code> and <code className="text-xs">ledger:%</code> (side-by-side; raw KV vs org scope).
+              <code className="text-xs">ledger_event:*</code> (org scope via server filters).
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 overflow-auto max-h-[60vh] text-xs font-mono leading-relaxed">
