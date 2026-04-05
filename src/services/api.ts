@@ -2364,6 +2364,8 @@ export const api = {
     driverId: string;
     startDate: string;
     endDate: string;
+    /** `canonical` (default) = `ledger_event:*`; `legacy` = `ledger:%`; `both` = side-by-side. */
+    source?: 'canonical' | 'legacy' | 'both';
   }): Promise<any> {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || publicAnonKey;
@@ -2371,6 +2373,7 @@ export const api = {
     qp.set('driverId', params.driverId);
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
+    if (params.source) qp.set('source', params.source);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/diagnostic-trip-ledger-gap?${qp.toString()}`,
       { headers: { Authorization: `Bearer ${token}` } }

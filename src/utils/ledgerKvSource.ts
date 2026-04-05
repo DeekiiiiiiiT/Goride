@@ -19,3 +19,19 @@ export function resolveLedgerApiSourceParam(raw: string | undefined | null): Led
   if (s === 'legacy' || s === 'ledger' || s === 'ledger_legacy') return 'legacy';
   return 'canonical';
 }
+
+/** `GET /ledger/diagnostic-trip-ledger-gap` — which fare rows to compare to trips. */
+export type TripLedgerGapSourceMode = 'canonical' | 'legacy' | 'both';
+
+/**
+ * Default **canonical** (`ledger_event:*` fare_earning). **`legacy`** = `ledger:%`.
+ * **`both`** runs two comparisons (canonical + legacy) in one response.
+ */
+export function resolveTripLedgerGapSourceParam(raw: string | undefined | null): TripLedgerGapSourceMode {
+  const s = String(raw ?? '')
+    .toLowerCase()
+    .trim();
+  if (s === 'legacy' || s === 'ledger' || s === 'ledger_legacy') return 'legacy';
+  if (s === 'both' || s === 'compare' || s === 'all') return 'both';
+  return 'canonical';
+}

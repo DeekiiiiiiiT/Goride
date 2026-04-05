@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { ledgerKeyLikePrefix, resolveLedgerApiSourceParam } from './ledgerKvSource';
+import {
+  ledgerKeyLikePrefix,
+  resolveLedgerApiSourceParam,
+  resolveTripLedgerGapSourceParam,
+} from './ledgerKvSource';
 
 describe('ledgerKvSource', () => {
   it('prefixes KV keys for canonical vs legacy', () => {
@@ -19,5 +23,19 @@ describe('ledgerKvSource', () => {
     expect(resolveLedgerApiSourceParam('legacy')).toBe('legacy');
     expect(resolveLedgerApiSourceParam('ledger')).toBe('legacy');
     expect(resolveLedgerApiSourceParam('ledger_legacy')).toBe('legacy');
+  });
+});
+
+describe('resolveTripLedgerGapSourceParam', () => {
+  it('defaults to canonical', () => {
+    expect(resolveTripLedgerGapSourceParam(undefined)).toBe('canonical');
+    expect(resolveTripLedgerGapSourceParam('')).toBe('canonical');
+  });
+
+  it('resolves legacy and both', () => {
+    expect(resolveTripLedgerGapSourceParam('legacy')).toBe('legacy');
+    expect(resolveTripLedgerGapSourceParam('both')).toBe('both');
+    expect(resolveTripLedgerGapSourceParam('compare')).toBe('both');
+    expect(resolveTripLedgerGapSourceParam('all')).toBe('both');
   });
 });

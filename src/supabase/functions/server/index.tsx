@@ -23,7 +23,11 @@ import {
   aggregateCanonicalEventsToLedgerDriverOverview,
   canonicalEventInSelectedWindow,
 } from "./ledger_money_aggregate.ts";
-import { ledgerKeyLikePrefix, resolveLedgerApiSourceParam } from "../../../utils/ledgerKvSource.ts";
+import {
+  ledgerKeyLikePrefix,
+  resolveLedgerApiSourceParam,
+  resolveTripLedgerGapSourceParam,
+} from "../../../utils/ledgerKvSource.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -4535,8 +4539,110 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
   }
 });
 
+/** Trip side of GET /ledger/diagnostic-trip-ledger-gap (shared with canonical + legacy fare rows). */
+type TripGapEligibleTrip = {
+  id: string;
+  platform: string;
+  driverId: string;
+  date: string;
+  amount: number;
+  organizationId: string | null;
+};
+
+function buildTripLedgerFareGapSection(
+  eligible: TripGapEligibleTrip[],
+  fareRaw: any[],
+  readerOrgId: string | null,
+  c: any,
+  fareRowLabel: "ledger_event" | "ledger",
+) {
+  const fareScoped = filterByOrg(fareRaw, c);
+
+  const ledgerOrgOnFare = {
+    nullOrEmpty: 0,
+    matchesReaderOrg: 0,
+    legacyPlaceholderRoamDefaultOrg: 0,
+    wrongOrg: 0,
+  };
+  const droppedWrongOrg: { id: string; sourceId?: string; platform?: string; ledgerOrg: string }[] = [];
+  for (const e of fareRaw) {
+    const oid =
+      typeof e.organizationId === "string" && e.organizationId.trim() !== ""
+        ? e.organizationId.trim()
+        : null;
+    if (!readerOrgId) {
+      /* skip per-row org stats */
+    } else if (oid == null) {
+      ledgerOrgOnFare.nullOrEmpty++;
+    } else if (oid === readerOrgId) {
+      ledgerOrgOnFare.matchesReaderOrg++;
+    } else if (isLegacyOrgPlaceholder(oid)) {
+      ledgerOrgOnFare.legacyPlaceholderRoamDefaultOrg++;
+    } else {
+      ledgerOrgOnFare.wrongOrg++;
+      if (droppedWrongOrg.length < 20) {
+        droppedWrongOrg.push({
+          id: e.id,
+          sourceId: e.sourceId,
+          platform: e.platform,
+          ledgerOrg: oid,
+        });
+      }
+    }
+  }
+
+  const sourceIdsRaw = new Set(fareRaw.map((e: any) => e.sourceId).filter(Boolean));
+  const sourceIdsScoped = new Set(fareScoped.map((e: any) => e.sourceId).filter(Boolean));
+
+  const missingFareLedgerEntirely = eligible.filter((t) => !sourceIdsRaw.has(t.id));
+  const missingAfterOrgScope = eligible.filter((t) => !sourceIdsScoped.has(t.id));
+  const fixedByScopeOnly = missingAfterOrgScope.filter((t) => sourceIdsRaw.has(t.id));
+
+  const fareByPlatformRaw: Record<string, number> = {};
+  const fareByPlatformScoped: Record<string, number> = {};
+  for (const e of fareRaw) {
+    const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
+    fareByPlatformRaw[plat] = (fareByPlatformRaw[plat] || 0) + 1;
+  }
+  for (const e of fareScoped) {
+    const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
+    fareByPlatformScoped[plat] = (fareByPlatformScoped[plat] || 0) + 1;
+  }
+
+  return {
+    ledgerFareEarning: {
+      fareRowSource: fareRowLabel,
+      rawCount: fareRaw.length,
+      afterFilterByOrgCount: fareScoped.length,
+      droppedByFilterByOrg: fareRaw.length - fareScoped.length,
+      organizationIdOnLedgerFareRows: ledgerOrgOnFare,
+      byPlatformRaw: fareByPlatformRaw,
+      byPlatformAfterScope: fareByPlatformScoped,
+      sampleWrongOrgFareRows: droppedWrongOrg,
+    },
+    gap: {
+      missingFareLedgerNoRowForTripId: missingFareLedgerEntirely.length,
+      missingAfterOrgScope: missingAfterOrgScope.length,
+      tripsHiddenOnlyByOrgFilter: fixedByScopeOnly.length,
+      sampleMissingTripIdsNoLedgerAtAll: missingFareLedgerEntirely.slice(0, 25).map((t) => ({
+        id: t.id,
+        platform: t.platform,
+        tripDriverId: t.driverId,
+        date: t.date,
+        tripOrganizationId: t.organizationId,
+      })),
+      sampleTripIdsPresentInRawButDroppedByOrgScope: fixedByScopeOnly.slice(0, 15).map((t) => ({
+        id: t.id,
+        platform: t.platform,
+        date: t.date,
+      })),
+    },
+  };
+}
+
 // ─── GET /ledger/diagnostic-trip-ledger-gap — Why trips ≠ fare_earning (org, missing writes, IDs) ──
 // Same date range + multi-driver-id resolution as driver-overview. Read-only.
+// Query `source=canonical` (default) | `legacy` | `both` — fare rows from `ledger_event:*` vs `ledger:%`.
 app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth(), async (c) => {
   const t0 = Date.now();
   try {
@@ -4546,6 +4652,8 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
     if (!driverId || !startDate || !endDate) {
       return c.json({ error: "Missing driverId, startDate, or endDate" }, 400);
     }
+
+    const gapSource = resolveTripLedgerGapSourceParam(c.req.query("source"));
 
     const readerOrgId = getOrgId(c);
 
@@ -4577,6 +4685,22 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
       return all;
     };
 
+    const fetchFareEarningRows = async (keyLike: "ledger:%" | "ledger_event:%") => {
+      const rows = await paginatedFetch(() => {
+        let q = supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", keyLike)
+          .eq("value->>eventType", "fare_earning")
+          .gte("value->>date", startDate)
+          .lte("value->>date", endDate);
+        if (driverIdOrFilter) q = q.or(driverIdOrFilter);
+        else q = q.eq("value->>driverId", driverId);
+        return q;
+      });
+      return rows.map((d: any) => d.value).filter(Boolean);
+    };
+
     const tripRows = await paginatedFetch(() => {
       let q = supabase
         .from("kv_store_37f42386")
@@ -4592,15 +4716,7 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
 
     const tripValues = tripRows.map((d: any) => d.value).filter(Boolean);
 
-    type EligibleTrip = {
-      id: string;
-      platform: string;
-      driverId: string;
-      date: string;
-      amount: number;
-      organizationId: string | null;
-    };
-    const eligible: EligibleTrip[] = [];
+    const eligible: TripGapEligibleTrip[] = [];
     const tripOrgStats = {
       nullOrEmpty: 0,
       matchesReaderOrg: 0,
@@ -4648,124 +4764,60 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
       });
     }
 
-    const ledgerRows = await paginatedFetch(() => {
-      let q = supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "ledger:%")
-        .eq("value->>eventType", "fare_earning")
-        .gte("value->>date", startDate)
-        .lte("value->>date", endDate);
-      if (driverIdOrFilter) q = q.or(driverIdOrFilter);
-      else q = q.eq("value->>driverId", driverId);
-      return q;
-    });
-
-    const fareRaw = ledgerRows.map((d: any) => d.value).filter(Boolean);
-    const fareScoped = filterByOrg(fareRaw, c);
-
-    const ledgerOrgOnFare = {
-      nullOrEmpty: 0,
-      matchesReaderOrg: 0,
-      legacyPlaceholderRoamDefaultOrg: 0,
-      wrongOrg: 0,
-    };
-    const droppedWrongOrg: { id: string; sourceId?: string; platform?: string; ledgerOrg: string }[] = [];
-    for (const e of fareRaw) {
-      const oid =
-        typeof e.organizationId === "string" && e.organizationId.trim() !== ""
-          ? e.organizationId.trim()
-          : null;
-      if (!readerOrgId) {
-        /* skip per-row org stats */
-      } else if (oid == null) {
-        ledgerOrgOnFare.nullOrEmpty++;
-      } else if (oid === readerOrgId) {
-        ledgerOrgOnFare.matchesReaderOrg++;
-      } else if (isLegacyOrgPlaceholder(oid)) {
-        ledgerOrgOnFare.legacyPlaceholderRoamDefaultOrg++;
-      } else {
-        ledgerOrgOnFare.wrongOrg++;
-        if (droppedWrongOrg.length < 20) {
-          droppedWrongOrg.push({
-            id: e.id,
-            sourceId: e.sourceId,
-            platform: e.platform,
-            ledgerOrg: oid,
-          });
-        }
-      }
-    }
-
-    const sourceIdsRaw = new Set(fareRaw.map((e: any) => e.sourceId).filter(Boolean));
-    const sourceIdsScoped = new Set(fareScoped.map((e: any) => e.sourceId).filter(Boolean));
-
-    const missingFareLedgerEntirely = eligible.filter((t) => !sourceIdsRaw.has(t.id));
-    const missingAfterOrgScope = eligible.filter((t) => !sourceIdsScoped.has(t.id));
-    const fixedByScopeOnly = missingAfterOrgScope.filter((t) => sourceIdsRaw.has(t.id));
-
     const tripsByPlatform: Record<string, number> = {};
     for (const t of eligible) {
       tripsByPlatform[t.platform] = (tripsByPlatform[t.platform] || 0) + 1;
     }
-    const fareByPlatformRaw: Record<string, number> = {};
-    const fareByPlatformScoped: Record<string, number> = {};
-    for (const e of fareRaw) {
-      const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
-      fareByPlatformRaw[plat] = (fareByPlatformRaw[plat] || 0) + 1;
-    }
-    for (const e of fareScoped) {
-      const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
-      fareByPlatformScoped[plat] = (fareByPlatformScoped[plat] || 0) + 1;
+
+    const tripsEligibleCompletedWithMoney = {
+      count: eligible.length,
+      byPlatform: tripsByPlatform,
+      organizationIdOnTrip: tripOrgStats,
+    };
+
+    const sharedMeta = {
+      startDate,
+      endDate,
+      readerOrgId: readerOrgId ?? null,
+      resolvedDriverIds: allDriverIds,
+      gapSource,
+    };
+
+    const hintsCommon = [
+      "missingFareLedgerNoRowForTripId > 0 → no fare_earning row with sourceId = trip id (canonical append / import repair, or driverId mismatch).",
+      "legacyPlaceholderRoamDefaultOrg → trips/ledger stamped with roam-default-org; filterByOrg treats that like unscoped for fleet UUID users.",
+      "droppedByFilterByOrg with sampleWrongOrgFareRows (non-legacy org) → foreign-org rows excluded from this fleet.",
+      "tripsHiddenOnlyByOrgFilter → raw row had sourceId but filterByOrg removed it (org mismatch).",
+      "Default source=canonical compares trips to ledger_event:* fare_earning. Use source=legacy for old ledger:% only; source=both for side-by-side.",
+    ];
+
+    if (gapSource === "both") {
+      const fareCanon = await fetchFareEarningRows("ledger_event:%");
+      const fareLeg = await fetchFareEarningRows("ledger:%");
+      const canon = buildTripLedgerFareGapSection(eligible, fareCanon, readerOrgId, c, "ledger_event");
+      const leg = buildTripLedgerFareGapSection(eligible, fareLeg, readerOrgId, c, "ledger");
+      return c.json({
+        success: true,
+        meta: { ...sharedMeta, durationMs: Date.now() - t0 },
+        tripsEligibleCompletedWithMoney,
+        canonical: { ledgerFareEarning: canon.ledgerFareEarning, gap: canon.gap },
+        legacy: { ledgerFareEarning: leg.ledgerFareEarning, gap: leg.gap },
+        hints: hintsCommon,
+      });
     }
 
-    const durationMs = Date.now() - t0;
+    const keyLike = gapSource === "canonical" ? "ledger_event:%" : "ledger:%";
+    const fareLabel = gapSource === "canonical" ? "ledger_event" : "ledger";
+    const fareRaw = await fetchFareEarningRows(keyLike);
+    const section = buildTripLedgerFareGapSection(eligible, fareRaw, readerOrgId, c, fareLabel);
+
     return c.json({
       success: true,
-      meta: {
-        durationMs,
-        startDate,
-        endDate,
-        readerOrgId: readerOrgId ?? null,
-        resolvedDriverIds: allDriverIds,
-      },
-      tripsEligibleCompletedWithMoney: {
-        count: eligible.length,
-        byPlatform: tripsByPlatform,
-        organizationIdOnTrip: tripOrgStats,
-      },
-      ledgerFareEarning: {
-        rawCount: fareRaw.length,
-        afterFilterByOrgCount: fareScoped.length,
-        droppedByFilterByOrg: fareRaw.length - fareScoped.length,
-        organizationIdOnLedgerFareRows: ledgerOrgOnFare,
-        byPlatformRaw: fareByPlatformRaw,
-        byPlatformAfterScope: fareByPlatformScoped,
-        sampleWrongOrgFareRows: droppedWrongOrg,
-      },
-      gap: {
-        missingFareLedgerNoRowForTripId: missingFareLedgerEntirely.length,
-        missingAfterOrgScope: missingAfterOrgScope.length,
-        tripsHiddenOnlyByOrgFilter: fixedByScopeOnly.length,
-        sampleMissingTripIdsNoLedgerAtAll: missingFareLedgerEntirely.slice(0, 25).map((t) => ({
-          id: t.id,
-          platform: t.platform,
-          tripDriverId: t.driverId,
-          date: t.date,
-          tripOrganizationId: t.organizationId,
-        })),
-        sampleTripIdsPresentInRawButDroppedByOrgScope: fixedByScopeOnly.slice(0, 15).map((t) => ({
-          id: t.id,
-          platform: t.platform,
-          date: t.date,
-        })),
-      },
-      hints: [
-        "missingFareLedgerNoRowForTripId > 0 → no fare_earning row with sourceId = trip id (import/repair did not create ledger, or driverId mismatch on ledger).",
-        "legacyPlaceholderRoamDefaultOrg → trips/ledger stamped with roam-default-org; filterByOrg now treats that like unscoped so fleet UUID users still see data.",
-        "droppedByFilterByOrg with sampleWrongOrgFareRows (non-legacy) → real foreign-org rows excluded from this fleet.",
-        "tripsHiddenOnlyByOrgFilter → raw ledger had sourceId but filterByOrg removed it (should be 0 for roam-default-org after org_scope fix).",
-      ],
+      meta: { ...sharedMeta, durationMs: Date.now() - t0 },
+      tripsEligibleCompletedWithMoney,
+      ledgerFareEarning: section.ledgerFareEarning,
+      gap: section.gap,
+      hints: hintsCommon,
     });
   } catch (e: any) {
     console.error("[diagnostic-trip-ledger-gap]", e);
