@@ -627,10 +627,9 @@ export function DriverLedgerPage() {
               <CardDescription className="space-y-1">
                 <span>{filteredCount} transactions found</span>
                 <span className="block text-[11px] text-slate-500 font-normal leading-snug">
-                  Amounts are posted ledger <span className="font-mono text-[10px]">netAmount</span> (trip-sourced or
-                  other), not the operational <span className="font-mono text-[10px]">trip.amount</span> field.
-                  Canonical import events appear in financial totals when the read-model flag is on; this table still
-                  lists legacy <span className="font-mono text-[10px]">ledger:*</span> rows.
+                  Rows come from <span className="font-mono text-[10px]">ledger_event:*</span> (posted{' '}
+                  <span className="font-mono text-[10px]">netAmount</span>), not operational{' '}
+                  <span className="font-mono text-[10px]">trip.amount</span>. Matches fleet Trip Ledger / finance list.
                 </span>
               </CardDescription>
             </div>

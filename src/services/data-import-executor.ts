@@ -237,7 +237,7 @@ export const importExecutor = {
             onProgress(pct);
         }
 
-        // Match merged import: ensure legacy `ledger:*` fare rows exist (same as ImportsPage).
+        // Match merged import: optional ensure-from-trip-ids (legacy writes retired; canonical append is separate).
         if (prepared.length > 0) {
             try {
                 await api.ensureLedgerFromTripIds(prepared.map((t) => t.id).filter(Boolean) as string[]);

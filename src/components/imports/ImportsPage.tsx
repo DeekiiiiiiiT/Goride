@@ -765,8 +765,8 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               }
           }
 
-          // Legacy `ledger:*` fare rows for driver overview / integrity banner.
-          // `fleet/sync` and large POSTs can omit or fail ledger writes; backfill from the trips we just saved.
+          // Optional ensure-from-trip-ids (legacy trip→ledger writes are retired server-side; may 403).
+          // Canonical money events are appended below; keep this for parity with older import flows.
           if (calibratedTrips.length > 0) {
               try {
                   setWarning('Writing trip ledger rows…');
@@ -787,7 +787,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               }
           }
 
-          // Phase 3: Canonical ledger events (idempotent; legacy ledger:* from POST /trips unchanged)
+          // Phase 3: Canonical ledger events (idempotent append to ledger_event:*)
           const orgForCanonical =
               auditState?.sanitized.financials.data ?? processedOrganizationMetrics[0] ?? null;
           const canonicalEvents = buildCanonicalImportEvents({

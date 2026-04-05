@@ -597,7 +597,7 @@ export interface LedgerFilterParams {
   offset?: number;
   sortBy?: 'date' | 'amount' | 'createdAt';
   sortDir?: 'asc' | 'desc';
-  /** `canonical` (default) = `ledger_event:*`; `legacy` = `ledger:%` rollback. */
+  /** List API uses `ledger_event:*` only; `source` is ignored for KV prefix (canonical). */
   source?: 'canonical' | 'legacy';
 }
 

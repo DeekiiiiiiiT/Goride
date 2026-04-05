@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 //
 // FINANCIAL DATA (earnings, cash collected, tolls, tips, base fare):
-//   → Source: ledger:* KV entries, aggregated by server endpoints
+//   → Source: canonical ledger_event:* KV (via server aggregation), not trip:* amounts
 //   → Overview tab: GET /ledger/driver-overview  →  `resolvedFinancials`
 //   → Financials > Earnings tab: GET /ledger/driver-earnings-history
 //   → Financials > Donut chart: `resolvedFinancials.lifetimePlatformStats`
@@ -33,8 +33,7 @@
 //   → DriverExpensesHistory: uses trips only for date-range detection
 //   → earningsPerKm: MIGRATED (Phase 6.2) — now hybrid: ledger earnings ÷ trip distance
 //
-// As of Phase 6, ALL dollar amounts in the app read from ledger:*.
-// No financial computation from trip:* remains in any display path.
+// Money display paths use canonical ledger APIs (ledger_event:*); not raw trip:* for posted money.
 // ════════════════════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';

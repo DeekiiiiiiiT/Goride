@@ -2337,7 +2337,7 @@ export const api = {
     startDate: string;
     endDate: string;
     platforms?: string[];
-    /** Omit or `canonical` → `ledger_event:*` (server default). `ledger` → legacy `ledger:%` rollback. */
+    /** Omit (default) — server uses `ledger_event:*` only for overview aggregation. */
     source?: 'ledger' | 'canonical';
   }): Promise<LedgerDriverOverview> {
     const qp = new URLSearchParams();
@@ -2607,8 +2607,8 @@ export const api = {
   },
 
   /**
-   * After CSV / fleet import: writes legacy `ledger:*` fare rows for every trip id (same as POST /trips).
-   * Chunks requests so large imports do not exceed the edge limit.
+   * After import: optional call to legacy ensure endpoint (trip→`ledger:%` writes are retired; expect 403 or no-op).
+   * Canonical money is written via `ledger_event:*` append in import flows. Chunks large id lists for Edge limits.
    */
   async ensureLedgerFromTripIds(
     tripIds: string[],

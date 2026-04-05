@@ -1,14 +1,14 @@
 /**
  * Phase 2 — Canonical ledger events (`ledger_event:*` in KV).
- * Legacy trip-sourced rows remain under `ledger:*` until later phases merge read paths.
+ * Product reads use this prefix; legacy `ledger:%` may remain only until KV cleanup.
  */
 
 export const CANONICAL_LEDGER_SCHEMA_VERSION = 1 as const;
 export const CANONICAL_LEDGER_EVENT_KIND = 'canonical' as const;
 
-/** Allowed eventType values for canonical events (extends legacy ledger taxonomy). */
+/** Allowed eventType values for canonical events. */
 export const CANONICAL_LEDGER_EVENT_TYPES = [
-  // Trip-aligned (may mirror legacy `ledger:*` types)
+  // Trip-aligned
   'fare_earning',
   'tip',
   'prior_period_adjustment',
