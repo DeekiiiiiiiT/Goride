@@ -24,9 +24,9 @@ flowchart LR
     OV[driver-overview]
     FS[fleet-summary / drivers-summary]
   end
-  L --> EH_legacy[readModel=legacy]
-  L --> OV_legacy[source≠canonical]
-  L --> FS_legacy[readModel=legacy]
+    L --> EH_legacy[readModel=legacy explicit]
+    L --> OV_legacy[source=ledger]
+    L --> FS_legacy[readModel=legacy explicit]
   E --> EH_canon[readModel=canonical]
   E --> OV_canon[source=canonical]
   E --> FS_canon[readModel=canonical]
@@ -168,7 +168,7 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 Track in [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md):
 
 1. **Done (this repo):** **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** (`ledger_event:*`); **`/ledger/diagnostic-trip-ledger-gap`** and **`/ledger/driver-indrive-wallet`** — **`source=canonical`** / **`both`** / **`legacy`**; count returns **`legacyLedgerEntries`** for diagnostics.
-2. **API defaults elsewhere:** **`readModel`** on fleet/drivers/earnings history still **legacy** if param omitted — optional flip to canonical-default per endpoint after sign-off.
+2. **API defaults:** **`readModel`** on fleet/drivers/earnings history and **`source`** on driver-overview default to **canonical** when the param is omitted; pass **`readModel=legacy`** or **`source=ledger`** for rollback.
 3. **Trip delete / batch delete:** **`deleteLedgerEntriesForTripSource`** and related cleanup still target **`ledger:%`** until legacy data is gone or policy changes.
 4. **Data:** Backfill historical **`ledger:%`** into **`ledger_event:*`**, or formal **cutoff date** + exports.
 5. **Phase 8:** Remove dual UI, flags, and dead code paths after sign-off.

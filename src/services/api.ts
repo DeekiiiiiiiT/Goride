@@ -2337,7 +2337,7 @@ export const api = {
     startDate: string;
     endDate: string;
     platforms?: string[];
-    /** Phase 5: `canonical` → aggregate `ledger_event:*` instead of legacy `ledger:*`. */
+    /** Omit or `canonical` → `ledger_event:*` (server default). `ledger` → legacy `ledger:%` rollback. */
     source?: 'ledger' | 'canonical';
   }): Promise<LedgerDriverOverview> {
     const qp = new URLSearchParams();
@@ -2345,7 +2345,8 @@ export const api = {
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
     if (params.platforms?.length) qp.set('platforms', params.platforms.join(','));
-    if (params.source === 'canonical') qp.set('source', 'canonical');
+    if (params.source === 'ledger') qp.set('source', 'ledger');
+    else if (params.source === 'canonical') qp.set('source', 'canonical');
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-overview?${qp.toString()}`,

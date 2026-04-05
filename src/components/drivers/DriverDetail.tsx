@@ -1210,7 +1210,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           startDate,
           endDate,
           platforms,
-          source: isLedgerMoneyReadModelEnabled() ? 'canonical' : undefined,
+          source: isLedgerMoneyReadModelEnabled() ? undefined : 'ledger',
         });
         if (!cancelled) {
           setLedgerOverview(result);
@@ -2539,7 +2539,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           startDate,
           endDate,
           platforms,
-          source: isLedgerMoneyReadModelEnabled() ? 'canonical' : undefined,
+          source: isLedgerMoneyReadModelEnabled() ? undefined : 'ledger',
         });
         setLedgerOverview(refreshed);
       }

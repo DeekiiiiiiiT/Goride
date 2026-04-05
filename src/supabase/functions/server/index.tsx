@@ -3884,7 +3884,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       return c.json({ error: "Missing required params: driverId, startDate, endDate" }, 400);
     }
 
-    const sourceRaw = (c.req.query("source") || "ledger").toLowerCase();
+    const sourceRaw = (c.req.query("source") || "canonical").toLowerCase();
     if (sourceRaw === "canonical" || sourceRaw === "canonical_events") {
       console.log(
         `[Ledger DriverOverview:canonical] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"}`,
@@ -6493,7 +6493,7 @@ function aggregateFleetSummaryFromLedgerLikeEntries(entries: any[]): {
 // but from ledger entries instead of raw trips.
 // Query params: driverId (required), periodType (daily|weekly|monthly, default: weekly),
 //               startDate (optional), endDate (optional)
-//               readModel=legacy|canonical — canonical uses ledger_event:* (Phase 4 migration); default legacy.
+//               readModel=legacy|canonical — canonical uses ledger_event:* (Phase 4 migration); default canonical.
 //               shadowCompare=1 — logs [LedgerEarningsShadow] legacy vs canonical fare gross per bucket (no UI change).
 app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), async (c) => {
   try {
@@ -6502,7 +6502,7 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
     const periodType = (c.req.query("periodType") || "weekly") as "daily" | "weekly" | "monthly";
     const startDateParam = c.req.query("startDate") || null;
     const endDateParam = c.req.query("endDate") || null;
-    const readModel = (c.req.query("readModel") || "legacy").toLowerCase();
+    const readModel = (c.req.query("readModel") || "canonical").toLowerCase();
     const useCanonical = readModel === "canonical";
     const shadowCompare = c.req.query("shadowCompare") === "1";
 
@@ -14177,7 +14177,7 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
 app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth(), async (c) => {
   const t0 = Date.now();
   try {
-    const readModel = (c.req.query("readModel") || "legacy").toLowerCase();
+    const readModel = (c.req.query("readModel") || "canonical").toLowerCase();
     const useCanonical = readModel === "canonical";
     // Date param (for "today" bucket) — defaults to server's current date
     const dateParam = c.req.query("date");
@@ -14330,7 +14330,7 @@ app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth(), async (c)
 app.get("/make-server-37f42386/ledger/fleet-summary", requireAuth(), async (c) => {
   const t0 = Date.now();
   try {
-    const readModel = (c.req.query("readModel") || "legacy").toLowerCase();
+    const readModel = (c.req.query("readModel") || "canonical").toLowerCase();
     const useCanonical = readModel === "canonical";
     // ── Parse query params ─────────────────────────────────────────
     const daysParam = c.req.query("days");
