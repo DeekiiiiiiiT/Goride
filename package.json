@@ -75,6 +75,7 @@
     "build": "vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc"
+    "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc",
+    "verify:legacy-ledger": "node scripts/verify-legacy-ledger-count.mjs"
   }
 }

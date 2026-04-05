@@ -152,21 +152,20 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 | Switch | Effect |
 |--------|--------|
-| **`GET /ledger/count`** | Still returns **`legacyLedgerEntries`** (count of **`ledger:%`** keys) until you run the KV purge. |
-| Legacy **write** routes (`POST /ledger`, repair, backfill, etc.) | **403** — trip/txn generators return empty; use **canonical append** APIs for money events. |
-| **`scripts/purge-legacy-ledger-kv.sql`** | Operator SQL template: verify counts, then **`DELETE`** **`ledger:%`** rows after backup (commented until you uncomment). |
+| **`GET /ledger/count`** | Canonical **`ledgerEntries`**, trip/transaction counts only (no legacy field). |
+| Legacy **write** routes (`POST /ledger`, repair, backfill, etc.) | **403** — use **canonical append** for money events. |
+| **`POST /ledger/purge-legacy-all`** | Deletes **all** **`ledger:%`** KV rows (`dryRun` or `confirm: "DELETE_ALL_LEGACY_LEDGER_KV"`); **`data.backfill`** required. Exposed in-app as **Delete Center → Remove all legacy ledger rows**. |
+| **`scripts/purge-legacy-ledger-kv.sql`** | Optional operator SQL (same end state as **`purge-legacy-all`**). |
 
-**Operator sequence:** (1) backup; (2) run section 1 `SELECT` queries in `scripts/purge-legacy-ledger-kv.sql`; (3) uncomment and run `DELETE` when signed off; (4) confirm `legacyLedgerEntries` is 0 via **`GET /ledger/count`** or repeat section 1.
+**Operator sequence:** (1) backup if desired; (2) deploy Edge; (3) sign in with **`data.backfill`** → **Imports → Delete Center** → confirm legacy count (dry run) → **Remove all legacy ledger rows**; or run raw SQL after backup.
 
 ---
 
 ## Remaining work for full legacy extinction
 
-Track in [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md):
-
-1. **Done (this repo):** Legacy **read** branches removed (driver-overview, earnings, fleet/drivers summaries, gap diagnostic, InDrive wallet fees, list **`source`** — all **`ledger_event:*`** only). **`generateTripLedgerEntries` / transaction→legacy ledger** are no-ops; **`legacyLedgerWritesDisabled()`** is always on.
-2. **Operator — KV purge:** After backup, run **`scripts/purge-legacy-ledger-kv.sql`** (or equivalent) to delete remaining **`ledger:%`** rows; then optional removal of **`deleteLedgerEntriesForTripSource`** and count’s legacy column.
-3. **Docs:** Refresh inventory tables to match “canonical only” reads.
+1. **Done (this repo):** Canonical-only reads; legacy writes no-ops / **403**; **`deleteLedgerEntriesForTripSource`** and **`POST /ledger/purge-orphans`** removed; **`GET /ledger/count`** no legacy field; **`POST /ledger/purge-legacy-all`** added.
+2. **Operator (production):** Deploy Edge, then run **Delete Center → Remove all legacy ledger rows** once, or equivalent SQL — irreversible for **`ledger:%`** keys.
+3. **Docs:** [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md) updated for the above.
 
 ---
 

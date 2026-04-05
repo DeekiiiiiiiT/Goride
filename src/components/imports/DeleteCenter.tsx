@@ -652,14 +652,21 @@ export function DeleteCenter() {
   const [diagLoading, setDiagLoading] = useState(false);
   const [diagError, setDiagError] = useState<string | null>(null);
   const [purging, setPurging] = useState(false);
-  const [purgeResult, setPurgeResult] = useState<{ orphansFound: number; deletedCount: number } | null>(null);
+  const [purgeResult, setPurgeResult] = useState<{ legacyKeysFound: number; deletedCount: number } | null>(null);
 
   const fetchDiagCounts = useCallback(async () => {
     setDiagLoading(true);
     setDiagError(null);
     try {
       const result = await api.getLedgerCount();
-      setDiagCounts(result);
+      let legacyLedgerEntries: number | undefined;
+      try {
+        const dry = await api.purgeAllLegacyLedger({ dryRun: true });
+        legacyLedgerEntries = dry.legacyKeysFound ?? 0;
+      } catch {
+        legacyLedgerEntries = undefined;
+      }
+      setDiagCounts({ ...result, legacyLedgerEntries });
     } catch (err: any) {
       setDiagError(err.message || 'Failed to fetch counts');
     } finally {
@@ -667,18 +674,17 @@ export function DeleteCenter() {
     }
   }, []);
 
-  const handlePurgeOrphans = useCallback(async () => {
+  const handlePurgeLegacyLedger = useCallback(async () => {
     setPurging(true);
     setPurgeResult(null);
     try {
-      const result = await api.purgeOrphanedLedgers();
-      setPurgeResult({ orphansFound: result.orphansFound, deletedCount: result.deletedCount });
-      toast.success(`Purged ${result.deletedCount.toLocaleString()} orphaned ledger entries`);
-      // Refresh diagnostic counts
+      const result = await api.purgeAllLegacyLedger({ confirm: 'DELETE_ALL_LEGACY_LEDGER_KV' });
+      setPurgeResult({ legacyKeysFound: result.legacyKeysFound, deletedCount: result.deletedCount });
+      toast.success(`Removed ${result.deletedCount.toLocaleString()} legacy ledger rows`);
       fetchDiagCounts();
     } catch (err: any) {
       toast.error(`Purge failed: ${err.message}`);
-      console.error('[PurgeOrphans] Frontend error:', err);
+      console.error('[PurgeLegacyLedger] Frontend error:', err);
     } finally {
       setPurging(false);
     }
@@ -929,11 +935,8 @@ export function DeleteCenter() {
 
   const activeDeleteGroupMeta = deleteGroup ? deleteGroups.find(g => g.id === deleteGroup) : null;
 
-  // Orphan warning uses **legacy** `ledger:%` count only (canonical `ledger_event:*` must not drive this heuristic).
   const legacyRowCount = diagCounts?.legacyLedgerEntries ?? 0;
-  const hasOrphanedLedgers = diagCounts
-    ? legacyRowCount > (diagCounts.trips * 5 + diagCounts.transactions * 2 + 10)
-    : false;
+  const hasLegacyLedgerRows = legacyRowCount > 0;
 
   const groupMatchesDeleteSearch = (groupId: string) => {
     if (!searchQuery.trim()) return true;
@@ -1409,8 +1412,8 @@ export function DeleteCenter() {
                 <p className="text-xs text-slate-500 mt-0.5">Trip Records</p>
                 <p className="text-[10px] text-slate-400 font-mono">trip:*</p>
               </div>
-              <div className={`text-center ${hasOrphanedLedgers ? 'ring-2 ring-amber-400 rounded-lg bg-amber-50 p-2 -m-2' : ''}`}>
-                <p className={`text-2xl font-bold ${hasOrphanedLedgers ? 'text-amber-700' : 'text-slate-900'}`}>{diagCounts.ledgerEntries.toLocaleString()}</p>
+              <div className={`text-center ${hasLegacyLedgerRows ? 'ring-2 ring-amber-400 rounded-lg bg-amber-50 p-2 -m-2' : ''}`}>
+                <p className={`text-2xl font-bold ${hasLegacyLedgerRows ? 'text-amber-700' : 'text-slate-900'}`}>{diagCounts.ledgerEntries.toLocaleString()}</p>
                 <p className="text-xs text-slate-500 mt-0.5">Ledger events (canonical)</p>
                 <p className="text-[10px] text-slate-400 font-mono">ledger_event:*</p>
                 {diagCounts.legacyLedgerEntries != null && diagCounts.legacyLedgerEntries > 0 && (
@@ -1419,8 +1422,8 @@ export function DeleteCenter() {
                 {diagCounts.legacyLedgerEntries === 0 && (
                   <p className="text-[10px] text-slate-400 mt-1">No legacy <span className="font-mono">ledger:*</span> keys (or already purged).</p>
                 )}
-                {hasOrphanedLedgers && (
-                  <p className="text-[10px] text-amber-600 font-medium mt-1">Legacy <span className="font-mono">ledger:*</span> count high vs trips — try Purge Orphaned Ledgers, or bulk KV delete per repo script after backup.</p>
+                {hasLegacyLedgerRows && (
+                  <p className="text-[10px] text-amber-600 font-medium mt-1">Remove these below (irreversible). Money uses <span className="font-mono">ledger_event:*</span> only.</p>
                 )}
               </div>
               <div className="text-center">
@@ -1535,39 +1538,39 @@ export function DeleteCenter() {
                   </div>
                 </div>
 
-                {/* Ledger (orphan check) */}
-                <div className={`rounded-md border p-2.5 ${hasOrphanedLedgers ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+                {/* Ledger — legacy KV cleanup */}
+                <div className={`rounded-md border p-2.5 ${hasLegacyLedgerRows ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
                   <div className="flex items-center gap-2 mb-1.5">
-                    <div className={`h-5 w-5 rounded flex items-center justify-center ${hasOrphanedLedgers ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}><FileText className="h-3 w-3" /></div>
+                    <div className={`h-5 w-5 rounded flex items-center justify-center ${hasLegacyLedgerRows ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}><FileText className="h-3 w-3" /></div>
                     <span className="text-xs font-semibold text-slate-800">Ledger (Financial)</span>
-                    {hasOrphanedLedgers && (
-                      <Badge variant="outline" className="text-[9px] h-4 px-1 border-amber-400 text-amber-700">Orphaned</Badge>
+                    {hasLegacyLedgerRows && (
+                      <Badge variant="outline" className="text-[9px] h-4 px-1 border-amber-400 text-amber-700">Legacy KV</Badge>
                     )}
                   </div>
                   <div className="space-y-0.5 text-[11px] text-slate-600">
                     <div className="flex justify-between"><span>Canonical events</span><span className="font-mono font-medium text-slate-900">{diagCounts.ledgerEntries.toLocaleString()}</span></div>
                     {diagCounts.legacyLedgerEntries != null && diagCounts.legacyLedgerEntries > 0 && (
-                      <div className="flex justify-between"><span>Legacy ledger</span><span className="font-mono font-medium text-slate-700">{diagCounts.legacyLedgerEntries.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>Legacy <span className="font-mono">ledger:*</span></span><span className="font-mono font-medium text-slate-700">{diagCounts.legacyLedgerEntries.toLocaleString()}</span></div>
                     )}
                   </div>
-                  {hasOrphanedLedgers && (
+                  {hasLegacyLedgerRows && (
                     <div className="mt-2 space-y-1.5">
                       {purgeResult ? (
                         <div className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
                           <CheckCircle2 className="h-3 w-3" />
-                          Purged {purgeResult.deletedCount.toLocaleString()} of {purgeResult.orphansFound.toLocaleString()} orphans
+                          Removed {purgeResult.deletedCount.toLocaleString()} legacy row{purgeResult.deletedCount === 1 ? '' : 's'}
                         </div>
                       ) : (
                         <Button
                           variant="outline" size="sm"
                           className="w-full h-7 text-[10px] font-semibold text-amber-700 border-amber-300 hover:bg-amber-100 hover:border-amber-400"
                           disabled={purging}
-                          onClick={handlePurgeOrphans}
+                          onClick={handlePurgeLegacyLedger}
                         >
                           {purging ? (
-                            <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Purging…</>
+                            <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Removing…</>
                           ) : (
-                            <><Trash2 className="h-3 w-3 mr-1" /> Purge Orphaned Ledgers</>
+                            <><Trash2 className="h-3 w-3 mr-1" /> Remove all legacy ledger rows</>
                           )}
                         </Button>
                       )}

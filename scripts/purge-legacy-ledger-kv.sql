@@ -12,8 +12,7 @@
 -- 1) VERIFY — run these first; keep the output with your change ticket.
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- Count legacy rows (should match GET /ledger/count → legacyLedgerEntries for same org scope;
---   raw SQL here is global unless you add org filters).
+-- Count legacy rows (raw SQL is global unless you add org filters).
 SELECT count(*) AS legacy_ledger_rows
 FROM kv_store_37f42386
 WHERE key LIKE 'ledger:%';
@@ -45,5 +44,4 @@ WHERE key LIKE 'ledger_event:%';
 -- 3) AFTER PURGE — optional code/doc cleanup (repo)
 -- ═══════════════════════════════════════════════════════════════════════════
 -- See docs/LEDGER_LEGACY_INVENTORY.md → "Checklist after full KV purge".
--- GET /ledger/count may still return legacyLedgerEntries: 0; you can then simplify
--- the server and Delete Center UI if desired.
+-- Prefer in-app: POST /ledger/purge-legacy-all (Delete Center) after deploying Edge.

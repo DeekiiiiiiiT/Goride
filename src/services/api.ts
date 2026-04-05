@@ -2246,8 +2246,6 @@ export const api = {
 
   async getLedgerCount(): Promise<{
     ledgerEntries: number;
-    /** Legacy `ledger:%` row count (diagnostics / cleanup). */
-    legacyLedgerEntries?: number;
     trips: number;
     transactions: number;
   }> {
@@ -2259,26 +2257,25 @@ export const api = {
     return response.json();
   },
 
-  async purgeOrphanedLedgers(): Promise<{
+  /** One-time: delete all legacy `ledger:%` KV rows. Requires `data.backfill` and session auth. */
+  async purgeAllLegacyLedger(opts: { dryRun?: boolean; confirm?: string }): Promise<{
     success: boolean;
-    scannedLedgerEntries: number;
-    validTrips: number;
-    orphansFound: number;
+    dryRun: boolean;
+    legacyKeysFound: number;
     deletedCount: number;
   }> {
-    const response = await fetchWithRetry(
-      `${API_ENDPOINTS.financial}/ledger/purge-orphans`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
-      }
-    );
+    const headers = await getHeaders('application/json');
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/ledger/purge-legacy-all`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        dryRun: !!opts.dryRun,
+        ...(opts.confirm ? { confirm: opts.confirm } : {}),
+      }),
+    });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to purge orphaned ledgers');
+      throw new Error((err as { error?: string }).error || 'Failed to purge legacy ledger');
     }
     return response.json();
   },

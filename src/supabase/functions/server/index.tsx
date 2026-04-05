@@ -237,27 +237,6 @@ function invalidateDriverCache() {
     _driverCache = [];
 }
 
-/** Remove existing trip-sourced ledger rows so POST /trips can regenerate after edits (fare / net / fees). */
-async function deleteLedgerEntriesForTripSource(tripId: string): Promise<number> {
-  if (!tripId) return 0;
-  try {
-    const { data: existingEntries } = await supabase
-      .from("kv_store_37f42386")
-      .select("key")
-      .like("key", "ledger:%")
-      .eq("value->>sourceId", tripId)
-      .eq("value->>sourceType", "trip");
-    if (existingEntries && existingEntries.length > 0) {
-      const delKeys = existingEntries.map((e: any) => e.key);
-      await kv.mdel(delKeys);
-      return delKeys.length;
-    }
-  } catch (e) {
-    console.warn(`[Ledger] deleteLedgerEntriesForTripSource failed for ${tripId}:`, e);
-  }
-  return 0;
-}
-
 /** Canonical trip status for KV so ledger rules and GET filters agree (avoids completed vs Completed gaps). */
 function normalizeTripStatusForStorage(status: unknown): string {
   const s = String(status ?? "").trim().toLowerCase();
@@ -1928,15 +1907,8 @@ app.post("/make-server-37f42386/trips", async (c) => {
     // Store using mset
     await kv.mset(keys, processedTrips.map((t: any) => stampWriteOrg(t)));
     
-    // ── Write-Time Ledger: Replace trip-sourced ledger rows so edits to fare / net / fees apply ──
+    // ── Write-Time Ledger (legacy `ledger:%` retired — generators return no rows) ──
     try {
-        for (const trip of processedTrips) {
-            try {
-                await deleteLedgerEntriesForTripSource(trip.id);
-            } catch (delErr) {
-                console.warn(`[Ledger] deleteLedgerEntriesForTripSource failed for trip ${trip?.id}:`, delErr);
-            }
-        }
         const allLedgerEntries: any[] = [];
         for (const trip of processedTrips) {
             let tripEntries: any[] = [];
@@ -2105,12 +2077,6 @@ app.delete("/make-server-37f42386/trips", requireAuth(), requirePermission('tran
 app.delete("/make-server-37f42386/trips/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
   const id = c.req.param("id");
   try {
-    // Remove trip-sourced ledger rows so delete + re-import does not leave stale ledger (batch delete already does this).
-    try {
-      await deleteLedgerEntriesForTripSource(id);
-    } catch (ledgerDelErr) {
-      console.warn(`[Trip delete] deleteLedgerEntriesForTripSource failed for ${id}:`, ledgerDelErr);
-    }
     await kv.del(`trip:${id}`);
     
     // Invalidate stats cache since data has changed
@@ -3101,7 +3067,7 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
 });
 
 // ─── GET /ledger/count — Diagnostic counts ──────────────────────────
-// `ledgerEntries` = canonical `ledger_event:*` (SSOT). `legacyLedgerEntries` = `ledger:%` (rollback / cleanup).
+// `ledgerEntries` = canonical `ledger_event:*` (SSOT). Legacy `ledger:%` rows are removed via POST /ledger/purge-legacy-all.
 app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
   try {
     const orgId = getOrgId(c);
@@ -3109,10 +3075,6 @@ app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
       .from("kv_store_37f42386")
       .select("*", { count: "exact", head: true })
       .like("key", "ledger_event:%");
-    let legacyLedgerQ = supabase
-      .from("kv_store_37f42386")
-      .select("*", { count: "exact", head: true })
-      .like("key", "ledger:%");
     let tripQ = supabase
       .from("kv_store_37f42386")
       .select("*", { count: "exact", head: true })
@@ -3123,16 +3085,14 @@ app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
       .like("key", "transaction:%");
     if (orgId) {
       canonicalLedgerQ = canonicalLedgerQ.eq("value->>organizationId", orgId);
-      legacyLedgerQ = legacyLedgerQ.eq("value->>organizationId", orgId);
       tripQ = tripQ.eq("value->>organizationId", orgId);
       txQ = txQ.eq("value->>organizationId", orgId);
     }
-    const [{ count: canonicalLedgerCount }, { count: legacyLedgerCount }, { count: tripCount }, { count: txCount }] =
-      await Promise.all([canonicalLedgerQ, legacyLedgerQ, tripQ, txQ]);
+    const [{ count: canonicalLedgerCount }, { count: tripCount }, { count: txCount }] =
+      await Promise.all([canonicalLedgerQ, tripQ, txQ]);
 
     return c.json({
       ledgerEntries: canonicalLedgerCount || 0,
-      legacyLedgerEntries: legacyLedgerCount || 0,
       trips: tripCount || 0,
       transactions: txCount || 0,
     });
@@ -3142,94 +3102,74 @@ app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
   }
 });
 
-// ─── POST /ledger/purge-orphans — Delete orphaned ledger entries ─────
-// Orphan = ledger entry with sourceType 'trip' whose sourceId doesn't
-// match any existing trip:* key. Uses paginated fetch to handle >1000 rows.
-app.post("/make-server-37f42386/ledger/purge-orphans", requireAuth(), requirePermission('data.backfill'), async (c) => {
+// ─── POST /ledger/purge-legacy-all — Delete all `ledger:%` KV rows (one-time cleanup) ─────
+app.post("/make-server-37f42386/ledger/purge-legacy-all", requireAuth(), requirePermission("data.backfill"), async (c) => {
   try {
-    console.log("[PurgeOrphans] Starting orphaned ledger cleanup...");
-
-    // 1. Fetch ALL trip:* keys (paginated) to build a set of valid trip IDs
-    const validTripIds = new Set<string>();
-    let tripOffset = 0;
-    const PAGE = 1000;
-    while (true) {
-      const { data: tripPage, error: tripErr } = await supabase
-        .from("kv_store_37f42386")
-        .select("key")
-        .like("key", "trip:%")
-        .range(tripOffset, tripOffset + PAGE - 1);
-      if (tripErr) throw tripErr;
-      if (!tripPage || tripPage.length === 0) break;
-      for (const row of tripPage) {
-        validTripIds.add(row.key.replace("trip:", ""));
-      }
-      if (tripPage.length < PAGE) break;
-      tripOffset += PAGE;
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun === true;
+    if (!dryRun && body?.confirm !== "DELETE_ALL_LEGACY_LEDGER_KV") {
+      return c.json(
+        {
+          error:
+            'Send { "dryRun": true } to count keys only, or { "confirm": "DELETE_ALL_LEGACY_LEDGER_KV" } to delete all legacy ledger:% rows.',
+        },
+        400,
+      );
     }
-    console.log(`[PurgeOrphans] Found ${validTripIds.size} valid trip IDs`);
 
-    // 2. Fetch ALL ledger:* entries (paginated) and identify orphans
-    const orphanKeys: string[] = [];
-    let ledgerOffset = 0;
-    let totalLedger = 0;
-    while (true) {
-      const { data: ledgerPage, error: ledgerErr } = await supabase
-        .from("kv_store_37f42386")
-        .select("key, value")
-        .like("key", "ledger:%")
-        .range(ledgerOffset, ledgerOffset + PAGE - 1);
-      if (ledgerErr) throw ledgerErr;
-      if (!ledgerPage || ledgerPage.length === 0) break;
-      totalLedger += ledgerPage.length;
+    const PAGE = 1000;
+    const BATCH = 500;
+    let legacyKeysFound = 0;
+    let deletedCount = 0;
 
-      for (const row of ledgerPage) {
-        const val = row.value;
-        if (!val) {
-          orphanKeys.push(row.key);
-          continue;
-        }
-        // Orphan if sourceType is 'trip' and sourceId doesn't match any existing trip
-        if (val.sourceType === 'trip') {
-          if (!val.sourceId || !validTripIds.has(val.sourceId)) {
-            orphanKeys.push(row.key);
+    if (dryRun) {
+      let offset = 0;
+      while (true) {
+        const { data: page, error } = await supabase
+          .from("kv_store_37f42386")
+          .select("key")
+          .like("key", "ledger:%")
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        if (!page?.length) break;
+        legacyKeysFound += page.length;
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+    } else {
+      while (true) {
+        const { data: page, error } = await supabase
+          .from("kv_store_37f42386")
+          .select("key")
+          .like("key", "ledger:%")
+          .range(0, PAGE - 1);
+        if (error) throw error;
+        if (!page?.length) break;
+
+        legacyKeysFound += page.length;
+        const keys = page.map((r: { key: string }) => r.key);
+        for (let i = 0; i < keys.length; i += BATCH) {
+          const batch = keys.slice(i, i + BATCH);
+          const { error: delErr } = await supabase.from("kv_store_37f42386").delete().in("key", batch);
+          if (delErr) {
+            console.error("[PurgeLegacyAll] batch delete error:", delErr);
+          } else {
+            deletedCount += batch.length;
           }
         }
-        // Ledger entries with sourceType 'transaction' are NOT orphans here
-      }
-
-      if (ledgerPage.length < PAGE) break;
-      ledgerOffset += PAGE;
-    }
-    console.log(`[PurgeOrphans] Scanned ${totalLedger} ledger entries, found ${orphanKeys.length} orphans`);
-
-    // 3. Delete orphans in batches of 500
-    let deletedCount = 0;
-    const BATCH = 500;
-    for (let i = 0; i < orphanKeys.length; i += BATCH) {
-      const batch = orphanKeys.slice(i, i + BATCH);
-      const { error: delErr } = await supabase
-        .from("kv_store_37f42386")
-        .delete()
-        .in("key", batch);
-      if (delErr) {
-        console.error(`[PurgeOrphans] Batch delete error at offset ${i}:`, delErr);
-      } else {
-        deletedCount += batch.length;
       }
     }
 
-    console.log(`[PurgeOrphans] Deleted ${deletedCount} orphaned ledger entries`);
+    console.log(`[PurgeLegacyAll] dryRun=${dryRun} legacyKeysFound=${legacyKeysFound} deletedCount=${deletedCount}`);
     return c.json({
       success: true,
-      scannedLedgerEntries: totalLedger,
-      validTrips: validTripIds.size,
-      orphansFound: orphanKeys.length,
-      deletedCount,
+      dryRun,
+      legacyKeysFound,
+      deletedCount: dryRun ? 0 : deletedCount,
     });
   } catch (e: any) {
-    console.error(`[PurgeOrphans] Error: ${e.message}`);
-    return c.json({ error: `Orphan purge failed: ${e.message}` }, 500);
+    console.error(`[PurgeLegacyAll] Error: ${e.message}`);
+    return c.json({ error: e.message || String(e) }, 500);
   }
 });
 
@@ -5001,11 +4941,6 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePer
             stats.completedWithAmount += 1;
 
             try {
-                // Same as POST /trips: remove stale trip-sourced rows so dedup never no-ops with
-                // "fare exists" when rows are partial/wrong; then regenerate the full set.
-                const removed = await deleteLedgerEntriesForTripSource(trip.id);
-                if (removed > 0) stats.forceDeleted += removed;
-
                 // Normalize driverId to canonical Roam UUID before generating ledger entries.
                 const baseTrip = trip.driverId === driverId ? trip : { ...trip, driverId };
                 const tripForLedger = { ...baseTrip, _skipLedgerDedup: true };
@@ -5145,9 +5080,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
                     continue;
                 }
                 try {
-                    const removed = await deleteLedgerEntriesForTripSource(trip.id);
-                    if (removed > 0) stats.forceDeleted += removed;
-
                     const tripForLedger = { ...trip, _skipLedgerDedup: true };
                     let entries: any[] = [];
                     try {
@@ -8707,13 +8639,6 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
         // This mirrors the POST /trips ledger generation to ensure fleet/sync
         // imports (Uber Mega-JSON path) also populate the ledger.
         try {
-            for (const trip of uniqueTrips) {
-                try {
-                    await deleteLedgerEntriesForTripSource(trip.id);
-                } catch (delErr) {
-                    console.warn(`[FleetSync Ledger] deleteLedgerEntriesForTripSource failed for trip ${trip?.id}:`, delErr);
-                }
-            }
             const allLedgerEntries: any[] = [];
             for (const trip of uniqueTrips) {
                 let tripEntries: any[] = [];
