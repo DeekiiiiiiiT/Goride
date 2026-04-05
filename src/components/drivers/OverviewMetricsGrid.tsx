@@ -583,25 +583,31 @@ export function OverviewMetricsGrid({
                     const ul = uberLedger;
                     const csv = uberPaymentCsvRollup;
                     const ledgerOk = resolvedFinancials.source === 'ledger' && !!ul;
-                    const priorAdj = ledgerOk ? Number(ul.priorPeriodAdjustments) || 0 : 0;
-                    const stmtTotal = ledgerOk ? Number(ul.statementTotalEarnings) : NaN;
+                    const priorAdj = ledgerOk ? Number(ul!.priorPeriodAdjustments) || 0 : 0;
+                    const stmtTotal = ledgerOk ? Number(ul!.statementTotalEarnings) : NaN;
                     /** Tips line may include prior-period tip; if statement total already matches fare+promo+tips+prior as separate lines, do not subtract. */
                     const sumAsSeparateLines =
-                      ul.fareComponents + ul.promotions + ul.tips + priorAdj;
+                      (ul?.fareComponents ?? 0) +
+                      (ul?.promotions ?? 0) +
+                      (ul?.tips ?? 0) +
+                      priorAdj;
                     const matchesStmtAsSeparate =
                       Number.isFinite(stmtTotal) &&
                       Math.abs(sumAsSeparateLines - stmtTotal) < 0.05;
                     const periodTips =
                       ledgerOk &&
                       priorAdj > 0.005 &&
-                      ul.tips > priorAdj + 0.005 &&
+                      (ul?.tips ?? 0) > priorAdj + 0.005 &&
                       !matchesStmtAsSeparate
-                        ? Math.max(0, ul.tips - priorAdj)
-                        : ul.tips;
+                        ? Math.max(0, (ul?.tips ?? 0) - priorAdj)
+                        : ul?.tips ?? 0;
                     const totalEarningsRow = ledgerOk
                       ? Number.isFinite(stmtTotal) && Math.abs(stmtTotal) > 0.005
                         ? stmtTotal
-                        : ul.fareComponents + ul.tips + ul.promotions + priorAdj
+                        : (ul!.fareComponents ?? 0) +
+                          (ul!.tips ?? 0) +
+                          (ul!.promotions ?? 0) +
+                          priorAdj
                       : csv?.totalEarnings ?? null;
                     const refundsMag = ledgerOk
                       ? ul.refundExpense
