@@ -1,11 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Columns3, RotateCcw } from 'lucide-react';
 
+export type TripColumnGroup =
+  | 'core'
+  | 'financial'
+  | 'meta'
+  | 'indrive'
+  | 'uber'
+  | 'roam';
+
 export interface ColumnDef {
   key: string;
   label: string;
   defaultVisible: boolean;
-  group: 'core' | 'financial' | 'meta';
+  group: TripColumnGroup;
 }
 
 interface TripLedgerColumnToggleProps {
@@ -15,10 +23,15 @@ interface TripLedgerColumnToggleProps {
   onResetDefaults: () => void;
 }
 
-const GROUP_LABELS: Record<string, string> = {
+const TRIP_GROUP_ORDER: TripColumnGroup[] = ['core', 'financial', 'meta', 'indrive', 'uber', 'roam'];
+
+const GROUP_LABELS: Record<TripColumnGroup, string> = {
   core: 'Core Fields',
   financial: 'Financial',
   meta: 'Metadata',
+  indrive: 'InDrive',
+  uber: 'Uber',
+  roam: 'Roam',
 };
 
 export function TripLedgerColumnToggle({
@@ -105,7 +118,7 @@ export function TripLedgerColumnToggle({
 
           {/* Column groups */}
           <div className="max-h-80 overflow-y-auto py-1">
-            {(['core', 'financial', 'meta'] as const).map(group => {
+            {TRIP_GROUP_ORDER.map(group => {
               const cols = grouped[group];
               if (!cols || cols.length === 0) return null;
               return (

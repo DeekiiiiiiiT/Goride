@@ -24,6 +24,11 @@ import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { BusinessType } from '../../types/data';
 import { BUSINESS_TYPES } from '../../utils/businessTypes';
+import {
+  bucketTripLedgerSettingsColumns,
+  TRIP_SETTINGS_SECTION_ORDER,
+  TRIP_SETTINGS_SECTION_LABELS,
+} from './trip-ledger/TripLedgerTable';
 
 interface LedgerColumnSettingsProps {
   onBack: () => void;
@@ -429,90 +434,193 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
 
                     {isExpanded && (
                       <div className="px-4 pb-4 bg-slate-50">
-                        <div className="space-y-2">
-                          {ledgerColumns.map(col => (
-                            <div
-                              key={col.key}
-                              className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
-                            >
-                              <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
-                              <div className="flex-1 min-w-0 space-y-1">
+                        {ledger.id === 'trip' ? (
+                          <>
+                            <div className="space-y-5">
+                              {(() => {
+                                const tripBuckets = bucketTripLedgerSettingsColumns(ledgerColumns);
+                                return TRIP_SETTINGS_SECTION_ORDER.map(sectionId => {
+                                  const sectionCols = tripBuckets.get(sectionId)!;
+                                  if (sectionCols.length === 0) return null;
+                                  return (
+                                    <div key={sectionId} className="space-y-2">
+                                      <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/90 pb-1.5">
+                                        {TRIP_SETTINGS_SECTION_LABELS[sectionId]}
+                                      </div>
+                                      {sectionCols.map(col => (
+                                        <div
+                                          key={col.key}
+                                          className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
+                                        >
+                                          <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                                          <div className="flex-1 min-w-0 space-y-1">
+                                            <input
+                                              type="text"
+                                              value={col.label}
+                                              onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
+                                              className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
+                                              aria-label={`Label for column ${col.key}`}
+                                            />
+                                            <span
+                                              className="block text-[11px] font-mono text-slate-400 truncate"
+                                              title="Internal key used by the app for this column"
+                                            >
+                                              key: {col.key}
+                                            </span>
+                                          </div>
+                                          {col.custom && (
+                                            <button
+                                              onClick={() => removeCustomColumn(ledger.id, col.key)}
+                                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          )}
+                                          <button
+                                            onClick={() => toggleColumnVisibility(ledger.id, col.key)}
+                                            className={`
+                                              p-1.5 rounded-lg transition-colors
+                                              ${col.visible
+                                                ? 'bg-green-100 text-green-600'
+                                                : 'bg-slate-100 text-slate-400'
+                                              }
+                                            `}
+                                          >
+                                            {col.visible ? (
+                                              <Check className="w-4 h-4" />
+                                            ) : (
+                                              <X className="w-4 h-4" />
+                                            )}
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
+                            {addingToLedger === ledger.id ? (
+                              <div className="flex items-center gap-2 p-2 mt-3 bg-white rounded-lg border-2 border-amber-300">
                                 <input
                                   type="text"
-                                  value={col.label}
-                                  onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
-                                  className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
-                                  aria-label={`Label for column ${col.key}`}
+                                  value={newColumnName}
+                                  onChange={e => setNewColumnName(e.target.value)}
+                                  placeholder="Column name"
+                                  className="flex-1 text-sm border-0 focus:ring-0 p-0"
+                                  autoFocus
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') addCustomColumn(ledger.id);
+                                    if (e.key === 'Escape') setAddingToLedger(null);
+                                  }}
                                 />
-                                <span className="block text-[11px] font-mono text-slate-400 truncate" title="Internal key used by the app for this column">
-                                  key: {col.key}
-                                </span>
-                              </div>
-                              {col.custom && (
                                 <button
-                                  onClick={() => removeCustomColumn(ledger.id, col.key)}
-                                  className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                  onClick={() => addCustomColumn(ledger.id)}
+                                  className="p-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600"
                                 >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => toggleColumnVisibility(ledger.id, col.key)}
-                                className={`
-                                  p-1.5 rounded-lg transition-colors
-                                  ${col.visible
-                                    ? 'bg-green-100 text-green-600'
-                                    : 'bg-slate-100 text-slate-400'
-                                  }
-                                `}
-                              >
-                                {col.visible ? (
                                   <Check className="w-4 h-4" />
-                                ) : (
+                                </button>
+                                <button
+                                  onClick={() => setAddingToLedger(null)}
+                                  className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300"
+                                >
                                   <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setAddingToLedger(ledger.id)}
+                                className="w-full flex items-center justify-center gap-2 p-2 mt-3 text-sm text-slate-500 border-2 border-dashed border-slate-200 rounded-lg hover:border-amber-300 hover:text-amber-600 transition-colors"
+                              >
+                                <Plus className="w-4 h-4" />
+                                Add Custom Column
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <div className="space-y-2">
+                            {ledgerColumns.map(col => (
+                              <div
+                                key={col.key}
+                                className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
+                              >
+                                <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <input
+                                    type="text"
+                                    value={col.label}
+                                    onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
+                                    className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
+                                    aria-label={`Label for column ${col.key}`}
+                                  />
+                                  <span className="block text-[11px] font-mono text-slate-400 truncate" title="Internal key used by the app for this column">
+                                    key: {col.key}
+                                  </span>
+                                </div>
+                                {col.custom && (
+                                  <button
+                                    onClick={() => removeCustomColumn(ledger.id, col.key)}
+                                    className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
                                 )}
-                              </button>
-                            </div>
-                          ))}
+                                <button
+                                  onClick={() => toggleColumnVisibility(ledger.id, col.key)}
+                                  className={`
+                                    p-1.5 rounded-lg transition-colors
+                                    ${col.visible
+                                      ? 'bg-green-100 text-green-600'
+                                      : 'bg-slate-100 text-slate-400'
+                                    }
+                                  `}
+                                >
+                                  {col.visible ? (
+                                    <Check className="w-4 h-4" />
+                                  ) : (
+                                    <X className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </div>
+                            ))}
 
-                          {/* Add Custom Column */}
-                          {addingToLedger === ledger.id ? (
-                            <div className="flex items-center gap-2 p-2 bg-white rounded-lg border-2 border-amber-300">
-                              <input
-                                type="text"
-                                value={newColumnName}
-                                onChange={e => setNewColumnName(e.target.value)}
-                                placeholder="Column name"
-                                className="flex-1 text-sm border-0 focus:ring-0 p-0"
-                                autoFocus
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') addCustomColumn(ledger.id);
-                                  if (e.key === 'Escape') setAddingToLedger(null);
-                                }}
-                              />
+                            {addingToLedger === ledger.id ? (
+                              <div className="flex items-center gap-2 p-2 bg-white rounded-lg border-2 border-amber-300">
+                                <input
+                                  type="text"
+                                  value={newColumnName}
+                                  onChange={e => setNewColumnName(e.target.value)}
+                                  placeholder="Column name"
+                                  className="flex-1 text-sm border-0 focus:ring-0 p-0"
+                                  autoFocus
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') addCustomColumn(ledger.id);
+                                    if (e.key === 'Escape') setAddingToLedger(null);
+                                  }}
+                                />
+                                <button
+                                  onClick={() => addCustomColumn(ledger.id)}
+                                  className="p-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setAddingToLedger(null)}
+                                  className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
                               <button
-                                onClick={() => addCustomColumn(ledger.id)}
-                                className="p-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+                                onClick={() => setAddingToLedger(ledger.id)}
+                                className="w-full flex items-center justify-center gap-2 p-2 text-sm text-slate-500 border-2 border-dashed border-slate-200 rounded-lg hover:border-amber-300 hover:text-amber-600 transition-colors"
                               >
-                                <Check className="w-4 h-4" />
+                                <Plus className="w-4 h-4" />
+                                Add Custom Column
                               </button>
-                              <button
-                                onClick={() => setAddingToLedger(null)}
-                                className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setAddingToLedger(ledger.id)}
-                              className="w-full flex items-center justify-center gap-2 p-2 text-sm text-slate-500 border-2 border-dashed border-slate-200 rounded-lg hover:border-amber-300 hover:text-amber-600 transition-colors"
-                            >
-                              <Plus className="w-4 h-4" />
-                              Add Custom Column
-                            </button>
-                          )}
-                        </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

@@ -291,7 +291,7 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
     align: 'right', sortable: true,
   },
   {
-    key: 'serviceFee', label: 'Service Fee', defaultVisible: false, group: 'financial',
+    key: 'serviceFee', label: 'Service Fee', defaultVisible: false, group: 'indrive',
     render: (t) => t.indriveServiceFee ? formatCurrency(t.indriveServiceFee) : '—',
     align: 'right', sortable: true,
   },
@@ -381,17 +381,17 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
     align: 'right', sortable: true,
   },
   {
-    key: 'indriveServiceFeePercent', label: 'InDrive Fee %', defaultVisible: false, group: 'financial',
+    key: 'indriveServiceFeePercent', label: 'InDrive Fee %', defaultVisible: false, group: 'indrive',
     render: (t) => formatPercent(t.indriveServiceFeePercent),
     align: 'right', sortable: true,
   },
   {
-    key: 'indriveNetIncome', label: 'InDrive Net Income', defaultVisible: false, group: 'financial',
+    key: 'indriveNetIncome', label: 'InDrive Net Income', defaultVisible: false, group: 'indrive',
     render: (t) => formatCurrency(t.indriveNetIncome),
     align: 'right', sortable: true,
   },
   {
-    key: 'indriveBalanceDeduction', label: 'Balance Deduction', defaultVisible: false, group: 'financial',
+    key: 'indriveBalanceDeduction', label: 'Balance Deduction', defaultVisible: false, group: 'indrive',
     render: (t) => formatCurrency(t.indriveBalanceDeduction),
     align: 'right', sortable: true,
   },
@@ -448,6 +448,47 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
     minWidth: '180px', sortable: true,
   },
 ];
+
+/** Super Admin Ledger Settings: UI sections (grouped headers). Technical groups core|financial|meta map to Common. */
+export type TripLedgerSettingsSectionId = 'common' | 'indrive' | 'uber' | 'roam' | 'custom';
+
+export const TRIP_SETTINGS_SECTION_ORDER: TripLedgerSettingsSectionId[] = [
+  'common',
+  'indrive',
+  'uber',
+  'roam',
+  'custom',
+];
+
+export const TRIP_SETTINGS_SECTION_LABELS: Record<TripLedgerSettingsSectionId, string> = {
+  common: 'Common',
+  indrive: 'InDrive',
+  uber: 'Uber',
+  roam: 'Roam',
+  custom: 'Custom',
+};
+
+export function getTripLedgerSettingsSection(col: { key: string; custom?: boolean }): TripLedgerSettingsSectionId {
+  if (col.custom) return 'custom';
+  const g = ALL_COLUMNS.find(c => c.key === col.key)?.group;
+  if (!g) return 'custom';
+  if (g === 'core' || g === 'financial' || g === 'meta') return 'common';
+  if (g === 'indrive') return 'indrive';
+  if (g === 'uber') return 'uber';
+  if (g === 'roam') return 'roam';
+  return 'common';
+}
+
+export function bucketTripLedgerSettingsColumns<T extends { key: string; custom?: boolean }>(
+  columns: T[],
+): Map<TripLedgerSettingsSectionId, T[]> {
+  const buckets = new Map<TripLedgerSettingsSectionId, T[]>();
+  for (const id of TRIP_SETTINGS_SECTION_ORDER) buckets.set(id, []);
+  for (const col of columns) {
+    buckets.get(getTripLedgerSettingsSection(col))!.push(col);
+  }
+  return buckets;
+}
 
 export const DEFAULT_VISIBLE_KEYS = ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key);
 
