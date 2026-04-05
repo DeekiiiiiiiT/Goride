@@ -44,8 +44,7 @@ import {
   LayoutGrid,
   TrendingUp,
   Award,
-  Wrench,
-  Database
+  Wrench
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -100,7 +99,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'claimable-loss', 'toll-analytics'].includes(currentPage);
   const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage);
   const isDriverOpsOpen = ['drivers', 'performance', 'tier-config', 'driver-ledger'].includes(currentPage);
-  const isDatabaseOpen = ['db-main-ledger', 'db-trip-ledger', 'db-fuel-ledger', 'db-toll-ledger'].includes(currentPage);
 
   return (
     <Sidebar className="border-r border-slate-200 dark:border-slate-800">
@@ -404,7 +402,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
           )}
         </SidebarMenu>
         
-        {(canView('user-management') || canView('settings') || canView('ledger-backfill') || canView('db-main-ledger')) && (
+        {(canView('user-management') || canView('settings') || canView('ledger-backfill')) && (
         <div className="mt-8 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
           System
         </div>
@@ -433,51 +431,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             active={currentPage === 'ledger-backfill'} 
             onClick={() => onNavigate?.('ledger-backfill')}
           />
-          )}
-          {canView('db-main-ledger') && (
-          <Collapsible defaultOpen={isDatabaseOpen} className="group/collapsible">
-            <SidebarMenuItem>
-              <CollapsibleTrigger asChild>
-                <SidebarMenuButton tooltip="Database Management">
-                  <Database className="h-4 w-4" />
-                  <span>Database Management</span>
-                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                </SidebarMenuButton>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarMenuSub>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'db-main-ledger'} onClick={() => onNavigate?.('db-main-ledger')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Main Ledger</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'db-trip-ledger'} onClick={() => onNavigate?.('db-trip-ledger')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Trip Ledger</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'db-fuel-ledger'} onClick={() => onNavigate?.('db-fuel-ledger')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Fuel Ledger</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'db-toll-ledger'} onClick={() => onNavigate?.('db-toll-ledger')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Toll Ledger</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
-              </CollapsibleContent>
-            </SidebarMenuItem>
-          </Collapsible>
           )}
         </SidebarMenu>
       </SidebarContent>

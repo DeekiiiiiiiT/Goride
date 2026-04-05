@@ -25,10 +25,6 @@ import { FuelManagement } from './pages/FuelManagement';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
 import { LedgerBackfillPanel } from './components/admin/LedgerBackfillPanel';
-import { DatabaseLedgerPage } from './components/database/DatabaseLedgerPage';
-import { TripLedgerPage } from './components/database/TripLedgerPage';
-import { FuelLedgerPage } from './components/database/FuelLedgerPage';
-import { TollLedgerPage } from './components/database/TollLedgerPage';
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 
 // Driver Portal Components
@@ -422,26 +418,6 @@ function AppContent() {
         {currentPage === 'ledger-backfill' && (
           <PermissionGate permission="nav.ledger_backfill" onNavigate={setCurrentPage}>
             <LedgerBackfillPanel />
-          </PermissionGate>
-        )}
-        {currentPage === 'db-main-ledger' && (
-          <PermissionGate permission="nav.database_management" onNavigate={setCurrentPage}>
-            <DatabaseLedgerPage ledger="main" />
-          </PermissionGate>
-        )}
-        {currentPage === 'db-trip-ledger' && (
-          <PermissionGate permission="nav.database_management" onNavigate={setCurrentPage}>
-            <TripLedgerPage />
-          </PermissionGate>
-        )}
-        {currentPage === 'db-fuel-ledger' && (
-          <PermissionGate permission="nav.database_management" onNavigate={setCurrentPage}>
-            <FuelLedgerPage />
-          </PermissionGate>
-        )}
-        {currentPage === 'db-toll-ledger' && (
-          <PermissionGate permission="nav.database_management" onNavigate={setCurrentPage}>
-            <TollLedgerPage />
           </PermissionGate>
         )}
       </ErrorBoundary>

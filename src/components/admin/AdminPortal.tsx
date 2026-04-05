@@ -10,6 +10,10 @@ import { ActivityLog } from './ActivityLog';
 import { TollDatabaseView } from '../toll/TollDatabaseView';
 import { TollInfoPage } from '../toll/TollInfoPage';
 import { PlatformSettings } from './PlatformSettings';
+import { DatabaseLedgerPage } from '../database/DatabaseLedgerPage';
+import { TripLedgerPage } from '../database/TripLedgerPage';
+import { FuelLedgerPage } from '../database/FuelLedgerPage';
+import { TollLedgerPage } from '../database/TollLedgerPage';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
 import { fuelService } from '../../services/fuelService';
@@ -115,6 +119,26 @@ export function AdminPortal() {
       )}
       {currentPage.startsWith('settings-') && (
         <PlatformSettings activeTab={currentPage.replace('settings-', '')} />
+      )}
+      {currentPage === 'db-main-ledger' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
+          <DatabaseLedgerPage ledger="main" />
+        </div>
+      )}
+      {currentPage === 'db-trip-ledger' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
+          <TripLedgerPage />
+        </div>
+      )}
+      {currentPage === 'db-fuel-ledger' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
+          <FuelLedgerPage />
+        </div>
+      )}
+      {currentPage === 'db-toll-ledger' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
+          <TollLedgerPage />
+        </div>
       )}
     </AdminLayout>
   );
