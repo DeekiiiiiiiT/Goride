@@ -142,6 +142,29 @@ function getSortValue(trip: Trip, key: string): string | number | null {
     case 'serviceCategory': return trip.serviceCategory || '';
     case 'batchSource': return trip.batchId || '';
     case 'efficiencyScore': return trip.efficiencyScore ?? null;
+    case 'requestTime': return trip.requestTime || '';
+    case 'dropoffTime': return trip.dropoffTime || '';
+    case 'serviceType': return (trip.serviceType || trip.productType || '').toUpperCase();
+    case 'grossEarnings': return trip.grossEarnings ?? null;
+    case 'netPayout': return trip.netPayout ?? null;
+    case 'pickupArea': return trip.pickupArea || '';
+    case 'dropoffArea': return trip.dropoffArea || '';
+    case 'baseFare': return trip.fareBreakdown?.baseFare ?? null;
+    case 'waitTime': return trip.fareBreakdown?.waitTime ?? null;
+    case 'airportFees': return trip.fareBreakdown?.airportFees ?? null;
+    case 'timeAtStop': return trip.fareBreakdown?.timeAtStop ?? null;
+    case 'taxes': return trip.fareBreakdown?.taxes ?? null;
+    case 'indriveServiceFeePercent': return trip.indriveServiceFeePercent ?? null;
+    case 'indriveNetIncome': return trip.indriveNetIncome ?? null;
+    case 'indriveBalanceDeduction': return trip.indriveBalanceDeduction ?? null;
+    case 'speed': return trip.speed ?? null;
+    case 'earningsPerKm': return trip.earningsPerKm ?? null;
+    case 'earningsPerMin': return trip.earningsPerMin ?? null;
+    case 'tripRating': return trip.tripRating ?? null;
+    case 'dayOfWeek': return trip.dayOfWeek || '';
+    case 'anchorPeriod': return trip.anchorPeriodId || '';
+    case 'routeId': return trip.routeId || '';
+    case 'notes': return trip.notes || '';
     default: return null;
   }
 }
@@ -303,6 +326,127 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
     render: (t) => t.efficiencyScore != null ? `${Math.round(t.efficiencyScore)}/100` : '—',
     align: 'right', sortable: true,
   },
+
+  // ── Extended timing & service ──
+  {
+    key: 'requestTime', label: 'Request Time', defaultVisible: false, group: 'meta',
+    render: (t) => formatDate(t.requestTime),
+    minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'dropoffTime', label: 'Dropoff Time', defaultVisible: false, group: 'meta',
+    render: (t) => formatDate(t.dropoffTime),
+    minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'serviceType', label: 'Service Type', defaultVisible: false, group: 'meta',
+    render: (t) => t.serviceType || t.productType || '—',
+    minWidth: '120px', sortable: true,
+  },
+
+  // ── Extra financials ──
+  {
+    key: 'grossEarnings', label: 'Gross Earnings', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.grossEarnings),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'netPayout', label: 'Net Payout', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.netPayout),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'baseFare', label: 'Base Fare', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.baseFare),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'waitTime', label: 'Wait Time Fee', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.waitTime),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'airportFees', label: 'Airport Fees', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.airportFees),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'timeAtStop', label: 'Time at Stop', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.timeAtStop),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'taxes', label: 'Taxes', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.taxes),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'indriveServiceFeePercent', label: 'InDrive Fee %', defaultVisible: false, group: 'financial',
+    render: (t) => formatPercent(t.indriveServiceFeePercent),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'indriveNetIncome', label: 'InDrive Net Income', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.indriveNetIncome),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'indriveBalanceDeduction', label: 'Balance Deduction', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.indriveBalanceDeduction),
+    align: 'right', sortable: true,
+  },
+
+  // ── Geography & analytics ──
+  {
+    key: 'pickupArea', label: 'Pickup Area', defaultVisible: false, group: 'meta',
+    render: (t) => t.pickupArea || '—',
+    minWidth: '140px', sortable: true,
+  },
+  {
+    key: 'dropoffArea', label: 'Dropoff Area', defaultVisible: false, group: 'meta',
+    render: (t) => t.dropoffArea || '—',
+    minWidth: '140px', sortable: true,
+  },
+  {
+    key: 'speed', label: 'Speed', defaultVisible: false, group: 'meta',
+    render: (t) => t.speed != null ? `${t.speed.toFixed(1)} km/h` : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'earningsPerKm', label: 'Earnings/km', defaultVisible: false, group: 'meta',
+    render: (t) => formatCurrency(t.earningsPerKm),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'earningsPerMin', label: 'Earnings/min', defaultVisible: false, group: 'meta',
+    render: (t) => formatCurrency(t.earningsPerMin),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'tripRating', label: 'Trip Rating', defaultVisible: false, group: 'meta',
+    render: (t) => t.tripRating != null ? `${t.tripRating}/5` : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'dayOfWeek', label: 'Day of Week', defaultVisible: false, group: 'meta',
+    render: (t) => t.dayOfWeek || '—',
+    sortable: true,
+  },
+  {
+    key: 'anchorPeriod', label: 'Anchor Period', defaultVisible: false, group: 'meta',
+    render: (t) => (t.anchorPeriodId ? truncateId(t.anchorPeriodId) : '—'),
+    minWidth: '100px', sortable: true,
+  },
+  {
+    key: 'routeId', label: 'Route ID', defaultVisible: false, group: 'meta',
+    render: (t) => t.routeId || '—',
+    minWidth: '140px', sortable: true,
+  },
+  {
+    key: 'notes', label: 'Notes', defaultVisible: false, group: 'meta',
+    render: (t) => t.notes || '—',
+    minWidth: '180px', sortable: true,
+  },
 ];
 
 export const DEFAULT_VISIBLE_KEYS = ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key);
@@ -417,12 +561,13 @@ const DETAIL_FIELD_EXTRACTORS: Record<string, { label: string; getValue: (t: Tri
   notes: { label: 'Notes', getValue: (t) => t.notes },
 };
 
-/** Default detail fields shown when no column config is provided */
+/** Default detail fields shown when no column config is provided (and base set when Super Admin config exists — table visibility does not strip these). */
 const DEFAULT_DETAIL_KEYS = [
   'date', 'requestTime', 'dropoffTime', 'platform', 'status', 'serviceType', 'serviceCategory', 'driver', 'vehicle',
   'pickup', 'dropoff', 'pickupArea', 'dropoffArea', 'distance', 'duration',
   'amount', 'grossEarnings', 'netIncome', 'paymentMethod', 'cashCollected', 'netPayout', 'tolls',
   'baseFare', 'tips', 'waitTime', 'surge', 'airportFees', 'timeAtStop', 'taxes',
+  'serviceFee', 'indriveServiceFeePercent', 'indriveNetIncome', 'indriveBalanceDeduction',
   'speed', 'earningsPerKm', 'earningsPerMin', 'efficiencyScore', 'tripRating', 'dayOfWeek',
   'batchSource', 'anchorPeriod', 'routeId', 'notes',
 ];
@@ -434,15 +579,21 @@ interface TripDetailPanelProps {
 }
 
 function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) {
-  // Determine which fields to show based on column config
-  const fieldsToShow = columnConfig
-    ? columnConfig.filter(c => c.visible).map(c => c.key)
-    : DEFAULT_DETAIL_KEYS;
+  /** Expanded row always lists the full extractor set; column config only overrides labels (and appends custom keys). Table column visibility stays independent. */
+  const fieldsToShow = useMemo(() => {
+    if (!columnConfig?.length) return DEFAULT_DETAIL_KEYS;
+    const customKeys = columnConfig.filter(c => c.custom).map(c => c.key);
+    const seen = new Set<string>(DEFAULT_DETAIL_KEYS);
+    const out = [...DEFAULT_DETAIL_KEYS];
+    for (const k of customKeys) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(k);
+      }
+    }
+    return out;
+  }, [columnConfig]);
 
-  // Include InDrive-specific fields if trip has InDrive data
-  const hasIndriveData = trip.indriveServiceFee != null;
-  const indriveKeys = ['serviceFee', 'indriveServiceFeePercent', 'indriveNetIncome', 'indriveBalanceDeduction'];
-  
   // Include cancellation fields if trip is cancelled
   const isCancelled = trip.status === 'Cancelled';
   
@@ -478,16 +629,7 @@ function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) 
               const displayLabel = cfgLabel || extractor.label;
               return <DetailField key={key} label={displayLabel} value={value} />;
             })}
-            
-            {/* Always show InDrive fields if trip has InDrive data */}
-            {hasIndriveData && !columnConfig && indriveKeys.map(key => {
-              const extractor = DETAIL_FIELD_EXTRACTORS[key];
-              if (!extractor) return null;
-              const value = extractor.getValue(trip);
-              if (value === undefined || value === null) return null;
-              return <DetailField key={key} label={extractor.label} value={value} />;
-            })}
-            
+
             {/* Always show cancellation fields if cancelled */}
             {isCancelled && (
               <>

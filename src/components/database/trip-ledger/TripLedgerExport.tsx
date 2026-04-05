@@ -50,6 +50,29 @@ function getRawValue(trip: Trip, key: string): string {
     case 'serviceCategory': return trip.serviceCategory || '';
     case 'batchSource': return trip.batchId || '';
     case 'efficiencyScore': return trip.efficiencyScore != null ? String(trip.efficiencyScore) : '';
+    case 'requestTime': return trip.requestTime || '';
+    case 'dropoffTime': return trip.dropoffTime || '';
+    case 'serviceType': return trip.serviceType || trip.productType || '';
+    case 'grossEarnings': return trip.grossEarnings != null ? String(trip.grossEarnings) : '';
+    case 'netPayout': return trip.netPayout != null ? String(trip.netPayout) : '';
+    case 'pickupArea': return trip.pickupArea || '';
+    case 'dropoffArea': return trip.dropoffArea || '';
+    case 'baseFare': return trip.fareBreakdown?.baseFare != null ? String(trip.fareBreakdown.baseFare) : '';
+    case 'waitTime': return trip.fareBreakdown?.waitTime != null ? String(trip.fareBreakdown.waitTime) : '';
+    case 'airportFees': return trip.fareBreakdown?.airportFees != null ? String(trip.fareBreakdown.airportFees) : '';
+    case 'timeAtStop': return trip.fareBreakdown?.timeAtStop != null ? String(trip.fareBreakdown.timeAtStop) : '';
+    case 'taxes': return trip.fareBreakdown?.taxes != null ? String(trip.fareBreakdown.taxes) : '';
+    case 'indriveServiceFeePercent': return trip.indriveServiceFeePercent != null ? String(trip.indriveServiceFeePercent) : '';
+    case 'indriveNetIncome': return trip.indriveNetIncome != null ? String(trip.indriveNetIncome) : '';
+    case 'indriveBalanceDeduction': return trip.indriveBalanceDeduction != null ? String(trip.indriveBalanceDeduction) : '';
+    case 'speed': return trip.speed != null ? String(trip.speed) : '';
+    case 'earningsPerKm': return trip.earningsPerKm != null ? String(trip.earningsPerKm) : '';
+    case 'earningsPerMin': return trip.earningsPerMin != null ? String(trip.earningsPerMin) : '';
+    case 'tripRating': return trip.tripRating != null ? String(trip.tripRating) : '';
+    case 'dayOfWeek': return trip.dayOfWeek || '';
+    case 'anchorPeriod': return trip.anchorPeriodId || '';
+    case 'routeId': return trip.routeId || '';
+    case 'notes': return trip.notes || '';
     default: return '';
   }
 }
