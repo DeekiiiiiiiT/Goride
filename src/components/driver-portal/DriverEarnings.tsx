@@ -27,7 +27,6 @@ import { startOfDay, endOfDay, format, subDays, differenceInDays } from "date-fn
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { api } from '../../services/api';
-import { isLedgerMoneyReadModelEnabled } from '../../utils/featureFlags';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 import { usePlatformConfig } from '../auth/PlatformConfigContext';
 import { WeeklySettlementView } from '../drivers/WeeklySettlementView';
@@ -168,7 +167,6 @@ export function DriverEarnings() {
             driverId: dId,
             startDate: '2020-01-01',
             endDate: today,
-            source: isLedgerMoneyReadModelEnabled() ? 'canonical' : undefined,
           });
           if (ledgerResult) {
             setLedgerOverview(ledgerResult);

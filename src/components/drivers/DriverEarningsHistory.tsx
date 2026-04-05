@@ -10,8 +10,6 @@ import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { ScrollArea } from "../ui/scroll-area";
 import { api } from "../../services/api";
-import { isLedgerEarningsReadModelEnabled } from "../../utils/featureFlags";
-
 interface DriverEarningsHistoryProps {
   driverId: string;
   quotaConfig?: QuotaConfig;   // For Quota % column (Phase 5)
@@ -81,20 +79,15 @@ export function DriverEarningsHistory({ driverId, quotaConfig }: DriverEarningsH
   const [serverDataLoaded, setServerDataLoaded] = useState(false);
   const [serverDataLoading, setServerDataLoading] = useState(false);
   const [dataSource, setDataSource] = useState<'loading' | 'ledger' | 'error'>('loading');
-  const [earningsReadModel, setEarningsReadModel] = useState<'legacy' | 'canonical' | null>(null);
-
   useEffect(() => {
     let cancelled = false;
     setServerDataLoaded(false);
     setServerDataLoading(true);
     setDataSource('loading');
-    setEarningsReadModel(null);
 
-    const readModel = isLedgerEarningsReadModelEnabled() ? 'canonical' : 'legacy';
-    api.getLedgerEarningsHistory({ driverId, periodType, readModel })
+    api.getLedgerEarningsHistory({ driverId, periodType })
       .then((result) => {
         if (cancelled) return;
-        setEarningsReadModel(result.readModel === 'canonical' ? 'canonical' : 'legacy');
         if (result.success && result.data && result.data.length > 0) {
           // Convert server date strings → Date objects to match PeriodRow interface
           const converted: PeriodRow[] = result.data.map((row: any) => ({
@@ -275,7 +268,7 @@ export function DriverEarningsHistory({ driverId, quotaConfig }: DriverEarningsH
           {dataSource === 'ledger' && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border-emerald-200 font-normal">
               <Database className="h-3 w-3 mr-1" />
-              {earningsReadModel === 'canonical' ? 'Ledger · canonical' : 'Ledger · legacy'}
+              Ledger
             </Badge>
           )}
           {dataSource === 'error' && (

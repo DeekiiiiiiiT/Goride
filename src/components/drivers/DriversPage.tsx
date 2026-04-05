@@ -81,8 +81,6 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Link2 } from 'lucide-react';
-import { isLedgerMoneyReadModelEnabled } from '../../utils/featureFlags';
-
 // Interface for our View Model
 interface DriverProfile {
   id: string;
@@ -197,13 +195,11 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     refetchOnMount: false,
   });
 
-  const ledgerDriversReadModel = isLedgerMoneyReadModelEnabled() ? 'canonical' : 'legacy';
-
   // Phase 7.1: React Query for ledger summary
   const { data: ledgerData, isLoading: ledgerLoading, isError: ledgerErrorQuery } = useQuery({
-    queryKey: ['ledgerDriversSummary', ledgerDriversReadModel],
+    queryKey: ['ledgerDriversSummary'],
     queryFn: async () => {
-      const result = await api.getLedgerDriversSummary(undefined, { readModel: ledgerDriversReadModel });
+      const result = await api.getLedgerDriversSummary();
       if (result.success && result.data) {
         console.log(`[DriversPage] Ledger summary loaded: ${result.meta.totalDrivers} drivers, ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
         return result.data;

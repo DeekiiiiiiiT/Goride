@@ -2562,7 +2562,7 @@ export const api = {
     periodType?: 'daily' | 'weekly' | 'monthly';
     startDate?: string;
     endDate?: string;
-    /** `canonical` = `ledger_event:*`; `legacy` = `ledger:%` (default). */
+    /** Omit = server default (`ledger_event:*`). Set `legacy` only for emergency API rollback. */
     readModel?: 'legacy' | 'canonical';
     /** Server logs `[LedgerEarningsShadow]` lines (legacy path only). */
     shadowCompare?: boolean;

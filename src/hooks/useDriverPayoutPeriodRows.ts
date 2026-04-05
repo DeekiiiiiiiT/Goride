@@ -5,8 +5,6 @@ import { api } from '../services/api';
 import { tierService } from '../services/tierService';
 import { computeWeeklyCashSettlement, CashWeekData } from '../utils/cashSettlementCalc';
 import { buildLedgerPayoutPeriodRows } from '../utils/buildLedgerPayoutPeriodRows';
-import { isLedgerEarningsReadModelEnabled } from '../utils/featureFlags';
-
 export type PeriodType = 'daily' | 'weekly' | 'monthly';
 
 export function useDriverPayoutPeriodRows(opts: {
@@ -79,9 +77,8 @@ export function useDriverPayoutPeriodRows(opts: {
     setLedgerLoaded(false);
     setLedgerError(false);
 
-    const readModel = isLedgerEarningsReadModelEnabled() ? 'canonical' : 'legacy';
     api
-      .getLedgerEarningsHistory({ driverId, periodType, readModel })
+      .getLedgerEarningsHistory({ driverId, periodType })
       .then((result) => {
         if (cancelled) return;
         if (result.success && result.data) {

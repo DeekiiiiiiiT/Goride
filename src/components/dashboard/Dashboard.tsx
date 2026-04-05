@@ -50,8 +50,6 @@ import { AlertsConfigView } from './AlertsConfigView';
 import { CheckInReviewModal } from './CheckInReviewModal';
 import { useAdminCheckIn } from '../../hooks/useAdminCheckIn';
 import { toast } from "sonner@2.0.3";
-import { isLedgerMoneyReadModelEnabled } from '../../utils/featureFlags';
-
 export function Dashboard() {
   const queryClient = useQueryClient();
   const { v } = useVocab();
@@ -159,11 +157,10 @@ export function Dashboard() {
   });
 
   // Phase 4: Fetch ledger-sourced fleet summary (runs in Wave 3, non-blocking)
-  const ledgerFleetReadModel = isLedgerMoneyReadModelEnabled() ? 'canonical' : 'legacy';
   const { data: fleetSummary = null } = useQuery({
-    queryKey: ['ledger', 'fleet-summary', ledgerFleetReadModel],
+    queryKey: ['ledger', 'fleet-summary'],
     queryFn: async () => {
-      const result = await api.getLedgerFleetSummary({ days: 7, readModel: ledgerFleetReadModel });
+      const result = await api.getLedgerFleetSummary({ days: 7 });
       if (result.success) {
         console.log(`[Dashboard] Ledger fleet summary loaded: ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
         return result.data;

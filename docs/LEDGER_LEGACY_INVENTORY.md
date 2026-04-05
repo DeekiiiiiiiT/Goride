@@ -10,8 +10,8 @@ Register of every consumer of **`ledger:%`** keys for the canonical migration. *
 
 | Area | State |
 |------|--------|
-| **Earnings history** | **`GET /ledger/driver-earnings-history?readModel=canonical`** uses **`ledger_event:*`**. Client: `isLedgerEarningsReadModelEnabled()` → `readModel` param. **`shadowCompare=1`** for logs. |
-| **Fleet + drivers summaries** | **`readModel=canonical`** uses **`ledger_event:*`**. Client (Dashboard, Drivers page): `isLedgerMoneyReadModelEnabled()` → `readModel`. |
+| **Earnings history** | **`GET /ledger/driver-earnings-history`** defaults to **`ledger_event:*`**. App omits **`readModel`**. **`shadowCompare=1`** for Edge logs. |
+| **Fleet + drivers summaries** | **`readModel=canonical`** uses **`ledger_event:*`**. Dashboard / Drivers page omit **`readModel`** (canonical default). |
 | **Driver overview** | **`GET /ledger/driver-overview?source=canonical`** uses canonical aggregation. |
 | **List / count / summary** | **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** → **`ledger_event:*`**. Pass **`source=legacy`** for rollback. Count returns **`ledgerEntries`** (canonical) + **`legacyLedgerEntries`** (`ledger:%`). |
 | **Trip ↔ ledger gap diagnostic** | **`GET /ledger/diagnostic-trip-ledger-gap`** — **`source=canonical`** (default) uses **`ledger_event:*`** fare rows; **`legacy`** = **`ledger:%`** only; **`both`** returns **`canonical`** + **`legacy`** sections. |
@@ -67,10 +67,10 @@ All are **no-ops or 403** when **`LEGACY_LEDGER_WRITES=false`** (except **`DELET
 
 | Method | Endpoint | Notes |
 |--------|----------|-------|
-| `getLedger` | GET `/ledger` | Legacy list |
-| `getLedgerCount` | GET `/ledger/count` | Legacy |
+| `getLedger` | GET `/ledger` | Default **`source=canonical`**; optional **`source=legacy`** |
+| `getLedgerCount` | GET `/ledger/count` | Canonical + legacy counts in response |
 | `purgeLedgerOrphans` | POST `/ledger/purge-orphans` | Legacy keys |
-| `getLedgerSummary` | GET `/ledger/summary` | Legacy |
+| `getLedgerSummary` | GET `/ledger/summary` | Default **`source=canonical`** |
 | `getLedgerDriverOverview` | GET `/ledger/driver-overview` | `source=canonical` supported |
 | `getLedgerTripLedgerGapDiagnostic` | GET `/ledger/diagnostic-trip-ledger-gap` | Optional `source` (`canonical` \| `legacy` \| `both`) |
 | `getLedgerEarningsHistory` | GET `/ledger/driver-earnings-history` | `readModel`, `shadowCompare` — see `solution.md` |

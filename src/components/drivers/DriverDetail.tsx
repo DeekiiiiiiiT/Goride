@@ -149,7 +149,6 @@ import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
 import { FuelWalletView } from './FuelWalletView';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
-import { isLedgerMoneyReadModelEnabled } from '../../utils/featureFlags';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
@@ -1210,7 +1209,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           startDate,
           endDate,
           platforms,
-          source: isLedgerMoneyReadModelEnabled() ? undefined : 'ledger',
         });
         if (!cancelled) {
           setLedgerOverview(result);
@@ -2539,7 +2537,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           startDate,
           endDate,
           platforms,
-          source: isLedgerMoneyReadModelEnabled() ? undefined : 'ledger',
         });
         setLedgerOverview(refreshed);
       }

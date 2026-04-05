@@ -8,7 +8,7 @@
 
 - Legacy reads/writes: [`supabase/functions/server/index.tsx`](./supabase/functions/server/index.tsx) (`generateTripLedgerEntries`, `GET /ledger/*`, repair/backfill routes) and [`services/api.ts`](./services/api.ts).
 - Canonical aggregation: [`utils/ledgerMoneyAggregate.ts`](./utils/ledgerMoneyAggregate.ts), `aggregateCanonicalEventsToLedgerDriverOverview` (server: [`ledger_money_aggregate.ts`](./supabase/functions/server/ledger_money_aggregate.ts)). Fleet/drivers period aggregation uses shared **`aggregateFleetSummaryFromLedgerLikeEntries`** plus canonical paginated fetches on the server.
-- Client flags: [`utils/featureFlags.ts`](./utils/featureFlags.ts) — **`isLedgerMoneyReadModelEnabled()`** (driver overview + **fleet-summary + drivers-summary** API `readModel`), **`isLedgerEarningsReadModelEnabled()`** (earnings history / payout rows).
+- **Client (Phase 8):** No feature flags — money views call ledger APIs without `readModel` / `source` (server defaults to **`ledger_event:*`**). Emergency rollback only via **explicit** query params on the API (`readModel=legacy`, `source=ledger`).
 - UI: [`DriverDetail.tsx`](./components/drivers/DriverDetail.tsx), [`DriverEarningsHistory.tsx`](./components/drivers/DriverEarningsHistory.tsx), [`Dashboard.tsx`](./components/dashboard/Dashboard.tsx) (fleet summary), [`DriversPage.tsx`](./components/drivers/DriversPage.tsx) (drivers summary).
 
 ```mermaid
@@ -43,7 +43,7 @@ flowchart LR
 1. **Database backup:** Full Supabase (or host) backup of the project that holds KV / `kv_store_*`; store offline with date stamp.
 2. **Logical exports:** Data Center / Trip Ledger / toll exports — CSVs for trips, tolls, transactions for a wide date range.
 3. **Freeze window (optional):** Short window where bulk deletes / re-imports are avoided during shadow and cutover.
-4. **Rollback principle:** Keep `localStorage` / `VITE_*` toggles documented as emergency switches until Phase 8.
+4. **Rollback principle:** Prefer **API** query params (`readModel=legacy`, `source=legacy` / `source=ledger`) for read rollback; client toggles were removed in Phase 8.
 5. **Exit criteria:** Backups verified restorable or exports verified complete; stakeholders acknowledge freeze rules.
 
 ---
@@ -83,9 +83,8 @@ flowchart LR
 **Implementation (in repo):**
 
 - **`GET /ledger/driver-earnings-history?readModel=canonical`** — buckets from **`ledger_event:*`** (multi-driver ID resolution), same period math as legacy.
-- **API default when param omitted:** **`readModel=legacy`** (explicit opt-in for direct callers).
-- **Client:** [`isLedgerEarningsReadModelEnabled()`](./utils/featureFlags.ts) — when true, API gets **`readModel=canonical`**. **Production default is canonical** unless `VITE_LEDGER_EARNINGS_READ_MODEL=false` or `localStorage` **`roam_ledger_earnings_read_model`** = **`0`**. Development defaults to canonical unless that key is **`0`**.
-- [`DriverEarningsHistory`](./components/drivers/DriverEarningsHistory.tsx), [`useDriverPayoutPeriodRows`](./hooks/useDriverPayoutPeriodRows.ts), [`SettlementSummaryView`](./components/drivers/SettlementSummaryView.tsx) use this flag.
+- **API default when param omitted:** **`readModel=canonical`**.
+- [`DriverEarningsHistory`](./components/drivers/DriverEarningsHistory.tsx), [`useDriverPayoutPeriodRows`](./hooks/useDriverPayoutPeriodRows.ts), [`SettlementSummaryView`](./components/drivers/SettlementSummaryView.tsx) call the API without **`readModel`** (canonical default).
 
 ---
 
@@ -97,11 +96,10 @@ flowchart LR
 
 - **`GET /ledger/fleet-summary?readModel=canonical`** — loads **`ledger_event:*`** in the date window, then **`aggregateFleetSummaryFromLedgerLikeEntries`** (same shape as legacy aggregation).
 - **`GET /ledger/drivers-summary?readModel=canonical`** — all **`fare_earning`** rows from **`ledger_event:*`**, same per-driver lifetime / month / today buckets as legacy.
-- **API default when param omitted:** **`readModel=legacy`**.
-- **Client:** [`Dashboard.tsx`](./components/dashboard/Dashboard.tsx) and [`DriversPage.tsx`](./components/drivers/DriversPage.tsx) pass **`readModel`** from **`isLedgerMoneyReadModelEnabled()`** (aligned with canonical **driver-overview** money). React Query keys include the read model.
-- **`driver-overview`:** still supports **`source=canonical`** vs legacy via existing flag on [`DriverDetail`](./components/drivers/DriverDetail.tsx) / API.
+- **API default when param omitted:** **`readModel=canonical`**.
+- **Client:** [`Dashboard.tsx`](./components/dashboard/Dashboard.tsx) and [`DriversPage.tsx`](./components/drivers/DriversPage.tsx) omit **`readModel`** (canonical default). **`driver-overview`:** [`DriverDetail`](./components/drivers/DriverDetail.tsx) omits **`source`** (canonical default).
 
-**Not done (full “legacy extinction”):** [`GET /ledger`](./supabase/functions/server/index.tsx), **`/ledger/count`**, **`/ledger/summary`**, and some diagnostics still read **`ledger:%`** only — see **Remaining work** below.
+**Not done (full “legacy extinction”):** legacy **`ledger:%`** rows, write paths, and admin tooling — see **Remaining work** below.
 
 ---
 
@@ -139,7 +137,7 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 **Goal:** Drop **`localStorage` / `VITE_*`** toggles and legacy branches once rollback is no longer required.
 
-**Status:** **Deferred** until canonical coverage is proven and Phase 7 decisions are made.
+**Status (client, in repo):** **`featureFlags.ts`** removed; fleet/drivers/earnings/driver-overview calls use server canonical defaults. **Server** still implements **`readModel=legacy`** / **`source=ledger`** for API-level rollback.
 
 ---
 
@@ -154,10 +152,7 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 | Switch | Effect |
 |--------|--------|
-| **`roam_ledger_money_read_model`** = **`0`** | Force **legacy** driver overview + fleet/drivers summary reads (`isLedgerMoneyReadModelEnabled`). |
-| **`VITE_LEDGER_MONEY_READ_MODEL=false`** | Production can force legacy money path (build-time). |
-| **`roam_ledger_earnings_read_model`** = **`0`** | Force **legacy** earnings history / payout API reads. |
-| **`VITE_LEDGER_EARNINGS_READ_MODEL=false`** | Production can force legacy earnings (build-time). |
+| **`readModel=legacy`** / **`source=ledger`** on the **API** (direct / custom clients) | Roll back money **reads** to **`ledger:%`** without app changes. |
 | **`shadowCompare=1`** on earnings history | Logs **`[LedgerEarningsShadow]`** in Edge (use with **`readModel`** as needed). |
 | **`LEGACY_LEDGER_WRITES=false`** | Blocks **all** listed legacy **write** paths (not only trip generator). |
 
@@ -171,7 +166,7 @@ Track in [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md)
 2. **API defaults:** **`readModel`** on fleet/drivers/earnings history and **`source`** on driver-overview default to **canonical** when the param is omitted; pass **`readModel=legacy`** or **`source=ledger`** for rollback.
 3. **Trip delete / batch delete:** **`deleteLedgerEntriesForTripSource`** and related cleanup still target **`ledger:%`** until legacy data is gone or policy changes.
 4. **Data:** Backfill historical **`ledger:%`** into **`ledger_event:*`**, or formal **cutoff date** + exports.
-5. **Phase 8:** Remove dual UI, flags, and dead code paths after sign-off.
+5. **Phase 8 (remaining):** Remove dead **server** legacy branches and write paths after **`LEGACY_LEDGER_WRITES=false`** is permanent and data policy is clear.
 
 ---
 
