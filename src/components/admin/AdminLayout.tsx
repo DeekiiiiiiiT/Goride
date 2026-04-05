@@ -33,7 +33,7 @@ import { resolveRole } from '../../utils/permissions';
 
 // Phase 11: Define which admin pages each platform role can access
 const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
-  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-main-ledger', 'db-trip-ledger', 'db-fuel-ledger', 'db-toll-ledger'],
+  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
   platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info'],
   platform_analyst: ['dashboard'],
 };
@@ -79,13 +79,8 @@ const SETTINGS_CHILDREN = [
   { id: 'settings-danger', label: 'Danger Zone', icon: AlertTriangle },
 ];
 
-/** KV ledger explorers — platform owner only (see PLATFORM_ROLE_PAGES). */
-const DATABASE_MANAGEMENT_CHILDREN = [
-  { id: 'db-main-ledger', label: 'Main Ledger', icon: HardDrive },
-  { id: 'db-trip-ledger', label: 'Trip Ledger', icon: Table2 },
-  { id: 'db-fuel-ledger', label: 'Fuel Ledger', icon: Fuel },
-  { id: 'db-toll-ledger', label: 'Toll Ledger', icon: Tags },
-];
+/** Database Management — platform owner only (see PLATFORM_ROLE_PAGES). Now a single entry with drill-down pages. */
+const DATABASE_MANAGEMENT_ITEM = { id: 'db-management', label: 'Database Management', icon: Database };
 
 export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutProps) {
   const { user, role, signOut } = useAuth();
@@ -101,7 +96,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleFuelChildren = FUEL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleTollChildren = TOLL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleSettingsChildren = SETTINGS_CHILDREN.filter(c => canViewPage(c.id));
-  const visibleDbChildren = DATABASE_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
+  const canViewDbManagement = canViewPage('db-management');
 
   const isUserMgmtChild = visibleUserMgmtChildren.some(c => c.id === currentPage);
   const [userMgmtOpen, setUserMgmtOpen] = useState(isUserMgmtChild);
@@ -111,8 +106,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [tollOpen, setTollOpen] = useState(isTollChild);
   const isSettingsChild = visibleSettingsChildren.some(c => c.id === currentPage);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsChild);
-  const isDbChild = visibleDbChildren.some(c => c.id === currentPage);
-  const [dbOpen, setDbOpen] = useState(isDbChild);
+  const isDbPage = currentPage === 'db-management' || currentPage === 'db-settings' || currentPage.startsWith('db-biz-') || currentPage.startsWith('db-customer-');
 
   // Keep section open when navigating to a child
   React.useEffect(() => {
@@ -127,9 +121,6 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
     }
     if (visibleSettingsChildren.some(c => c.id === currentPage)) {
       setSettingsOpen(true);
-    }
-    if (visibleDbChildren.some(c => c.id === currentPage)) {
-      setDbOpen(true);
     }
   }, [currentPage]);
 
@@ -410,14 +401,13 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           </div>
           )}
 
-          {/* Database Management — below Platform Settings; platform owner only */}
-          {visibleDbChildren.length > 0 && (
-          <div>
+          {/* Database Management — single nav item with drill-down; platform owner only */}
+          {canViewDbManagement && (
             <button
-              onClick={() => setDbOpen(!dbOpen)}
+              onClick={() => handleNav('db-management')}
               className={`
                 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${isDbChild
+                ${isDbPage
                   ? 'bg-amber-500/15 text-amber-300'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
                 }
@@ -425,37 +415,8 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             >
               <Database className="w-4.5 h-4.5 shrink-0" />
               <span className="truncate">Database Management</span>
-              {dbOpen
-                ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
-                : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />
-              }
+              {isDbPage && <ChevronRight className="w-3.5 h-3.5 ml-auto text-amber-400/60" />}
             </button>
-            {dbOpen && (
-              <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
-                {visibleDbChildren.map(child => {
-                  const ChildIcon = child.icon;
-                  const active = currentPage === child.id;
-                  return (
-                    <button
-                      key={child.id}
-                      onClick={() => handleNav(child.id)}
-                      className={`
-                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                        ${active
-                          ? 'bg-amber-500/10 text-amber-300'
-                          : 'text-slate-500 hover:text-white hover:bg-slate-800'
-                        }
-                      `}
-                    >
-                      <ChildIcon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">{child.label}</span>
-                      {active && <ChevronRight className="w-3 h-3 ml-auto text-amber-400/60" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
           )}
         </nav>
 
@@ -503,7 +464,10 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               || FUEL_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)?.label
               || TOLL_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)?.label
               || (SETTINGS_CHILDREN.find(c => c.id === currentPage) ? `Platform Settings — ${SETTINGS_CHILDREN.find(c => c.id === currentPage)!.label}` : null)
-              || (DATABASE_MANAGEMENT_CHILDREN.find(c => c.id === currentPage) ? `Database Management — ${DATABASE_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)!.label}` : null)
+              || (currentPage === 'db-management' ? 'Database Management' : null)
+              || (currentPage === 'db-settings' ? 'Database Management — Settings' : null)
+              || (currentPage.startsWith('db-biz-') ? 'Database Management' : null)
+              || (currentPage.startsWith('db-customer-') ? 'Database Management — Customer Ledgers' : null)
               || NAV_ITEMS.find(i => i.id === currentPage)?.label
               || 'Dashboard'}
           </h2>

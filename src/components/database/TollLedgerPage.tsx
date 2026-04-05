@@ -82,7 +82,11 @@ function compareValues(
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export function TollLedgerPage() {
+interface TollLedgerPageProps {
+  organizationId?: string;
+}
+
+export function TollLedgerPage({ organizationId }: TollLedgerPageProps = {}) {
   const [allEntries, setAllEntries] = useState<TollLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +104,7 @@ export function TollLedgerPage() {
     setLoading(true);
     setError(null);
     try {
-      const raw = await api.getTollTransactionsExport();
+      const raw = await api.getTollTransactionsExport(organizationId);
       if (id !== fetchIdRef.current) return;
       const entries = Array.isArray(raw)
         ? raw.map(normalizeTollLedgerEntry)
@@ -113,7 +117,7 @@ export function TollLedgerPage() {
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     fetchEntries();

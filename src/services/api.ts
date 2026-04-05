@@ -42,6 +42,7 @@ export interface TripFilterParams {
     minDistance?: string;
     hasTip?: string;
     hasSurge?: string;
+    organizationId?: string; // Super Admin: scope to specific customer org
 }
 
 export interface PaginatedTripResponse {
@@ -1778,8 +1779,11 @@ export const api = {
   },
 
   /** Fetch ALL toll transactions (flattened) for CSV export — no pagination. */
-  async getTollTransactionsExport(): Promise<any[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/export`, {
+  async getTollTransactionsExport(organizationId?: string): Promise<any[]> {
+    const url = organizationId 
+      ? `${API_ENDPOINTS.financial}/toll-reconciliation/export?organizationId=${organizationId}`
+      : `${API_ENDPOINTS.financial}/toll-reconciliation/export`;
+    const response = await fetchWithRetry(url, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) {
@@ -2080,8 +2084,11 @@ export const api = {
     return response.json();
   },
 
-  async getAllFuelEntries() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+  async getAllFuelEntries(organizationId?: string) {
+    const url = organizationId
+      ? `${API_ENDPOINTS.fuel}/fuel-entries?organizationId=${organizationId}`
+      : `${API_ENDPOINTS.fuel}/fuel-entries`;
+    const response = await fetchWithRetry(url, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");

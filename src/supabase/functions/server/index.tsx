@@ -12892,6 +12892,140 @@ app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Ledger Column Configuration (Super Admin Portal)
+// ---------------------------------------------------------------------------
+// Per-business-type configuration for which ledgers are enabled and column settings.
+// Stored as `ledger_config:{businessType}` in KV.
+// ---------------------------------------------------------------------------
+
+const VALID_BUSINESS_TYPES = ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'];
+const VALID_LEDGER_TYPES = ['main', 'trip', 'fuel', 'toll'];
+
+// GET /admin/ledger-config/:businessType — Get ledger config for a business type
+app.get("/make-server-37f42386/admin/ledger-config/:businessType", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const businessType = c.req.param("businessType");
+    if (!VALID_BUSINESS_TYPES.includes(businessType)) {
+      return c.json({ error: `Invalid business type: ${businessType}` }, 400);
+    }
+
+    const config = await kv.get(`ledger_config:${businessType}`);
+    if (!config) {
+      // Return default config if none exists
+      return c.json({
+        businessType,
+        enabledLedgers: ['trip', 'fuel', 'toll'],
+        columns: {
+          main: [
+            { key: 'date', label: 'Date', visible: true },
+            { key: 'type', label: 'Type', visible: true },
+            { key: 'amount', label: 'Amount', visible: true },
+            { key: 'description', label: 'Description', visible: true },
+            { key: 'reference', label: 'Reference', visible: true },
+          ],
+          trip: [
+            { key: 'date', label: 'Date', visible: true },
+            { key: 'time', label: 'Time', visible: true },
+            { key: 'platform', label: 'Platform', visible: true },
+            { key: 'driver', label: 'Driver', visible: true },
+            { key: 'pickup', label: 'Pickup', visible: true },
+            { key: 'dropoff', label: 'Dropoff', visible: true },
+            { key: 'distance', label: 'Distance', visible: true },
+            { key: 'duration', label: 'Duration', visible: true },
+            { key: 'fare', label: 'Fare', visible: true },
+            { key: 'tip', label: 'Tip', visible: true },
+            { key: 'total', label: 'Total', visible: true },
+            { key: 'status', label: 'Status', visible: true },
+          ],
+          fuel: [
+            { key: 'date', label: 'Date', visible: true },
+            { key: 'time', label: 'Time', visible: true },
+            { key: 'station', label: 'Station', visible: true },
+            { key: 'driver', label: 'Driver', visible: true },
+            { key: 'vehicle', label: 'Vehicle', visible: true },
+            { key: 'gallons', label: 'Gallons', visible: true },
+            { key: 'pricePerGallon', label: 'Price/Gallon', visible: true },
+            { key: 'totalCost', label: 'Total Cost', visible: true },
+            { key: 'odometer', label: 'Odometer', visible: true },
+          ],
+          toll: [
+            { key: 'date', label: 'Date', visible: true },
+            { key: 'time', label: 'Time', visible: true },
+            { key: 'plaza', label: 'Plaza', visible: true },
+            { key: 'driver', label: 'Driver', visible: true },
+            { key: 'vehicle', label: 'Vehicle', visible: true },
+            { key: 'amount', label: 'Amount', visible: true },
+            { key: 'paymentMethod', label: 'Payment Method', visible: true },
+          ],
+        },
+      });
+    }
+
+    return c.json(config);
+  } catch (e: any) {
+    console.log(`admin/ledger-config GET error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// PUT /admin/ledger-config/:businessType — Save ledger config for a business type
+app.put("/make-server-37f42386/admin/ledger-config/:businessType", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const businessType = c.req.param("businessType");
+    if (!VALID_BUSINESS_TYPES.includes(businessType)) {
+      return c.json({ error: `Invalid business type: ${businessType}` }, 400);
+    }
+
+    const body = await c.req.json();
+
+    // Validate enabledLedgers
+    if (body.enabledLedgers && !Array.isArray(body.enabledLedgers)) {
+      return c.json({ error: 'enabledLedgers must be an array' }, 400);
+    }
+    const enabledLedgers = (body.enabledLedgers || []).filter((l: string) => VALID_LEDGER_TYPES.includes(l));
+
+    // Validate columns
+    const columns = body.columns || {};
+    for (const ledgerType of VALID_LEDGER_TYPES) {
+      if (columns[ledgerType] && !Array.isArray(columns[ledgerType])) {
+        return c.json({ error: `columns.${ledgerType} must be an array` }, 400);
+      }
+    }
+
+    const config = {
+      businessType,
+      enabledLedgers,
+      columns,
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.userId,
+    };
+
+    await kv.set(`ledger_config:${businessType}`, config);
+
+    // Audit log
+    logAdminAction({
+      actorId: auth.userId,
+      actorName: auth.name,
+      action: "update_ledger_config",
+      targetId: businessType,
+      targetEmail: "N/A",
+      details: `Updated ledger config for ${businessType}: enabled ledgers = ${enabledLedgers.join(', ')}`,
+    }).catch((e: any) => console.log(`Audit log failed for ledger-config: ${e.message}`));
+
+    return c.json({ success: true, data: config });
+  } catch (e: any) {
+    console.log(`admin/ledger-config PUT error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Bulk Delete — Preview
 // ---------------------------------------------------------------------------
 // Generic endpoint: fetch items by KV key prefix with optional filters,

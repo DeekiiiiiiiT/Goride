@@ -38,7 +38,11 @@ function filtersToApiParams(f: TripLedgerFilters): Partial<TripFilterParams> {
   return params;
 }
 
-export function TripLedgerPage() {
+interface TripLedgerPageProps {
+  organizationId?: string;
+}
+
+export function TripLedgerPage({ organizationId }: TripLedgerPageProps = {}) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -60,6 +64,7 @@ export function TripLedgerPage() {
         limit: ps,
         offset: p * ps,
         ...filtersToApiParams(f),
+        ...(organizationId ? { organizationId } : {}),
       };
       const result = await api.getTripsFiltered(apiParams);
       // Discard if a newer request has been fired
@@ -73,11 +78,11 @@ export function TripLedgerPage() {
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     fetchTrips(page, pageSize, filters);
-  }, [page, pageSize, filters, fetchTrips]);
+  }, [page, pageSize, filters, fetchTrips, organizationId]);
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);

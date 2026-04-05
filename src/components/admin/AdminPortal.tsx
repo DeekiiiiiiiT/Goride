@@ -10,10 +10,11 @@ import { ActivityLog } from './ActivityLog';
 import { TollDatabaseView } from '../toll/TollDatabaseView';
 import { TollInfoPage } from '../toll/TollInfoPage';
 import { PlatformSettings } from './PlatformSettings';
-import { DatabaseLedgerPage } from '../database/DatabaseLedgerPage';
-import { TripLedgerPage } from '../database/TripLedgerPage';
-import { FuelLedgerPage } from '../database/FuelLedgerPage';
-import { TollLedgerPage } from '../database/TollLedgerPage';
+import { DatabaseManagement } from '../database/DatabaseManagement';
+import { BusinessTypeCustomers } from '../database/BusinessTypeCustomers';
+import { CustomerLedgerView } from '../database/CustomerLedgerView';
+import { LedgerColumnSettings } from '../database/LedgerColumnSettings';
+import { BusinessType } from '../../types/data';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
 import { fuelService } from '../../services/fuelService';
@@ -31,6 +32,23 @@ export function AdminPortal() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [fuelLogs, setFuelLogs] = useState<FuelEntry[]>([]);
   const [fuelLoading, setFuelLoading] = useState(false);
+  const [navData, setNavData] = useState<any>(null);
+  const [navHistory, setNavHistory] = useState<string[]>([]);
+
+  const handleNavigate = (page: string, data?: any) => {
+    setNavHistory(prev => [...prev, currentPage]);
+    setNavData(data || null);
+    setCurrentPage(page);
+  };
+
+  const handleBack = () => {
+    const prev = navHistory[navHistory.length - 1];
+    if (prev) {
+      setNavHistory(h => h.slice(0, -1));
+      setCurrentPage(prev);
+      setNavData(null);
+    }
+  };
 
   const accessToken = session?.access_token;
 
@@ -120,25 +138,25 @@ export function AdminPortal() {
       {currentPage.startsWith('settings-') && (
         <PlatformSettings activeTab={currentPage.replace('settings-', '')} />
       )}
-      {currentPage === 'db-main-ledger' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
-          <DatabaseLedgerPage ledger="main" />
-        </div>
+      {currentPage === 'db-management' && (
+        <DatabaseManagement onNavigate={handleNavigate} />
       )}
-      {currentPage === 'db-trip-ledger' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
-          <TripLedgerPage />
-        </div>
+      {currentPage === 'db-settings' && (
+        <LedgerColumnSettings onBack={handleBack} />
       )}
-      {currentPage === 'db-fuel-ledger' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
-          <FuelLedgerPage />
-        </div>
+      {currentPage.startsWith('db-biz-') && (
+        <BusinessTypeCustomers
+          businessType={currentPage.replace('db-biz-', '') as BusinessType}
+          onNavigate={handleNavigate}
+          onBack={handleBack}
+        />
       )}
-      {currentPage === 'db-toll-ledger' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
-          <TollLedgerPage />
-        </div>
+      {currentPage.startsWith('db-customer-') && (
+        <CustomerLedgerView
+          customerId={currentPage.replace('db-customer-', '')}
+          customerData={navData?.customer}
+          onBack={handleBack}
+        />
       )}
     </AdminLayout>
   );

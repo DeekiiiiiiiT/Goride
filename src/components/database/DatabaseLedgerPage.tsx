@@ -3,6 +3,7 @@ import { Database, FileText, Fuel, Receipt, BookOpen } from 'lucide-react';
 
 interface DatabaseLedgerPageProps {
   ledger: 'main' | 'trip' | 'fuel' | 'toll';
+  organizationId?: string;
 }
 
 const ledgerConfig = {
@@ -63,7 +64,7 @@ const colorClasses: Record<string, { bg: string; border: string; iconBg: string;
   },
 };
 
-export function DatabaseLedgerPage({ ledger }: DatabaseLedgerPageProps) {
+export function DatabaseLedgerPage({ ledger, organizationId }: DatabaseLedgerPageProps) {
   const config = ledgerConfig[ledger];
   const colors = colorClasses[config.color];
   const Icon = config.icon;

@@ -122,7 +122,11 @@ function compareValues(
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export function FuelLedgerPage() {
+interface FuelLedgerPageProps {
+  organizationId?: string;
+}
+
+export function FuelLedgerPage({ organizationId }: FuelLedgerPageProps = {}) {
   const [allEntries, setAllEntries] = useState<FuelEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +144,7 @@ export function FuelLedgerPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getAllFuelEntries();
+      const data = await api.getAllFuelEntries(organizationId);
       if (id !== fetchIdRef.current) return;
       setAllEntries(Array.isArray(data) ? data : []);
     } catch (err: any) {
@@ -150,7 +154,7 @@ export function FuelLedgerPage() {
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     fetchEntries();
