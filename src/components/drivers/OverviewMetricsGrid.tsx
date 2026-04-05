@@ -64,22 +64,6 @@ function fmtMoney(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** True when API `period.uber` has no statement money (often a date-window mismatch vs trips). */
-function isUberStatementEffectivelyEmpty(ul: unknown): boolean {
-  if (!ul || typeof ul !== 'object') return true;
-  const o = ul as Record<string, unknown>;
-  const a = (k: string) => Math.abs(Number(o[k]) || 0);
-  return (
-    a('fareComponents') < 0.01 &&
-    a('tips') < 0.01 &&
-    a('promotions') < 0.01 &&
-    a('statementTotalEarnings') < 0.01 &&
-    a('priorPeriodAdjustments') < 0.01 &&
-    a('refundExpense') < 0.01 &&
-    a('netEarnings') < 0.01
-  );
-}
-
 function BreakdownMoneyRow({
   label,
   value,
@@ -599,57 +583,44 @@ export function OverviewMetricsGrid({
                     const ul = uberLedger;
                     const csv = uberPaymentCsvRollup;
                     const ledgerOk = resolvedFinancials.source === 'ledger' && !!ul;
-                    const uberEmpty = ledgerOk && isUberStatementEffectivelyEmpty(ul);
-                    const hasTripMoney = (u?.earnings || 0) > 0.005;
-                    const hasCsvMoney = csv != null && Math.abs(csv.totalEarnings || 0) > 0.005;
-                    /** Full payments_driver-style collapsibles only when posted `period.uber` has real statement lines. */
-                    const useStatementBreakdown = ledgerOk && !uberEmpty;
-                    /** Trip/import layout: non-ledger source, or ledger with empty statement but trips or CSV to show. */
-                    const showImportStyleUber =
-                      resolvedFinancials.source !== 'ledger' ||
-                      !ul ||
-                      (uberEmpty && (hasTripMoney || hasCsvMoney));
-                    const priorAdj = useStatementBreakdown ? Number(ul!.priorPeriodAdjustments) || 0 : 0;
-                    const stmtTotal = useStatementBreakdown ? Number(ul!.statementTotalEarnings) : NaN;
+                    const priorAdj = ledgerOk ? Number(ul.priorPeriodAdjustments) || 0 : 0;
+                    const stmtTotal = ledgerOk ? Number(ul.statementTotalEarnings) : NaN;
                     /** Tips line may include prior-period tip; if statement total already matches fare+promo+tips+prior as separate lines, do not subtract. */
                     const sumAsSeparateLines =
-                      useStatementBreakdown && ul
-                        ? ul.fareComponents + ul.promotions + ul.tips + priorAdj
-                        : 0;
+                      ul.fareComponents + ul.promotions + ul.tips + priorAdj;
                     const matchesStmtAsSeparate =
-                      useStatementBreakdown &&
                       Number.isFinite(stmtTotal) &&
                       Math.abs(sumAsSeparateLines - stmtTotal) < 0.05;
                     const periodTips =
-                      useStatementBreakdown &&
+                      ledgerOk &&
                       priorAdj > 0.005 &&
-                      ul!.tips > priorAdj + 0.005 &&
+                      ul.tips > priorAdj + 0.005 &&
                       !matchesStmtAsSeparate
-                        ? Math.max(0, ul!.tips - priorAdj)
-                        : ul?.tips ?? 0;
-                    const totalEarningsRow = useStatementBreakdown
+                        ? Math.max(0, ul.tips - priorAdj)
+                        : ul.tips;
+                    const totalEarningsRow = ledgerOk
                       ? Number.isFinite(stmtTotal) && Math.abs(stmtTotal) > 0.005
                         ? stmtTotal
-                        : ul!.fareComponents + ul!.tips + ul!.promotions + priorAdj
-                      : csv?.totalEarnings ?? (hasTripMoney ? u!.earnings : null);
-                    const refundsMag = useStatementBreakdown
-                      ? ul!.refundExpense
+                        : ul.fareComponents + ul.tips + ul.promotions + priorAdj
+                      : csv?.totalEarnings ?? null;
+                    const refundsMag = ledgerOk
+                      ? ul.refundExpense
                       : Number(csv?.refundsAndExpenses) || 0;
                     const statementMismatch =
-                      useStatementBreakdown &&
+                      ledgerOk &&
                       csv != null &&
                       Math.abs(
-                        ul!.fareComponents + ul!.tips + ul!.promotions + priorAdj - csv.totalEarnings,
+                        ul.fareComponents + ul.tips + ul.promotions + priorAdj - csv.totalEarnings,
                       ) > 0.05;
                     const tollSupportAmt = Number(resolvedFinancials.disputeRefunds) || 0;
                     const tollsSub =
                       (u?.tolls || 0) > 0.005
                         ? u!.tolls
                         : Math.max(0, refundsMag - tollSupportAmt);
-                    const periodTotalEarnings = useStatementBreakdown
-                      ? ul!.fareComponents + ul!.promotions + periodTips
+                    const periodTotalEarnings = ledgerOk
+                      ? ul.fareComponents + ul.promotions + periodTips
                       : 0;
-                    const uberGrandTotal = useStatementBreakdown
+                    const uberGrandTotal = ledgerOk
                       ? periodTotalEarnings + refundsMag + priorAdj
                       : 0;
                     const payoutCash =
@@ -657,9 +628,7 @@ export function OverviewMetricsGrid({
                         ? u!.cashCollected
                         : Number(csv?.cashCollected) || 0;
                     const bankMag = Math.abs(Number(resolvedFinancials.bankTransferred) || 0);
-                    const showPayoutBank = useStatementBreakdown && bankMag > 0.005;
-                    const statementFallbackNote =
-                      ledgerOk && uberEmpty && (hasTripMoney || hasCsvMoney);
+                    const showPayoutBank = ledgerOk && bankMag > 0.005;
 
                     return (
                       <section className="space-y-3">
@@ -676,15 +645,13 @@ export function OverviewMetricsGrid({
                           </p>
                         </div>
                         <div className="space-y-0 divide-y divide-slate-100 rounded-lg border border-slate-100 bg-slate-50/60 p-3 dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900/40">
-                          {useStatementBreakdown &&
-                            totalEarningsRow != null &&
-                            Math.abs(Number(totalEarningsRow) || 0) > 0.005 && (
-                              <div className="pb-2">
-                                <BreakdownMoneyRow label="Total earnings" value={totalEarningsRow} bold />
-                              </div>
-                            )}
+                          {totalEarningsRow != null && (
+                            <div className="pb-2">
+                              <BreakdownMoneyRow label="Total earnings" value={totalEarningsRow} bold />
+                            </div>
+                          )}
 
-                          {useStatementBreakdown ? (
+                          {ledgerOk ? (
                             <>
                               <PeriodBreakdownCollapsible
                                 title="Period Total Earnings"
@@ -692,11 +659,11 @@ export function OverviewMetricsGrid({
                               >
                                 <PeriodBreakdownSubLine
                                   label="Net fare (fare components)"
-                                  value={ul!.fareComponents}
+                                  value={ul.fareComponents}
                                 />
                                 <PeriodBreakdownSubLine
                                   label="Total earnings : Promotions"
-                                  value={ul!.promotions}
+                                  value={ul.promotions}
                                   valueClassName="text-indigo-700 dark:text-indigo-400"
                                 />
                                 <PeriodBreakdownSubLine
@@ -758,14 +725,8 @@ export function OverviewMetricsGrid({
                                 </>
                               )}
                             </>
-                          ) : showImportStyleUber ? (
+                          ) : (
                             <div className="space-y-2 pt-1">
-                              {statementFallbackNote && (
-                                <p className="rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-[10px] leading-snug text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                                  Posted statement lines are empty for this range (often a date-window mismatch).
-                                  Showing trips or import totals below.
-                                </p>
-                              )}
                               {csv && (
                                 <>
                                   <BreakdownMoneyRow label="Total earnings (import)" value={csv.totalEarnings} />
@@ -778,26 +739,7 @@ export function OverviewMetricsGrid({
                                   )}
                                 </>
                               )}
-                              {!csv && hasTripMoney && (
-                                <BreakdownMoneyRow
-                                  label="Trip earnings (trips in selected range)"
-                                  value={u!.earnings}
-                                  bold
-                                />
-                              )}
-                              {(u?.tolls || 0) > 0.005 && (
-                                <BreakdownMoneyRow label="Tolls (trips)" value={u!.tolls} />
-                              )}
-                              {(u?.cashCollected || 0) > 0.005 && !csv?.cashCollected && (
-                                <BreakdownMoneyRow label="Cash collected (trips)" value={u!.cashCollected} />
-                              )}
-                              {bankMag > 0.005 && (
-                                <BreakdownMoneyRow
-                                  label="Transferred to Bank (ledger)"
-                                  value={bankMag}
-                                />
-                              )}
-                              {csv && !statementFallbackNote && (
+                              {csv && (
                                 <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-400">
                                   Open the ledger-backed view for the same date range to see Period Total,
                                   refunds split, prior-period adjustment, and payout rows in the collapsible
@@ -805,10 +747,6 @@ export function OverviewMetricsGrid({
                                 </p>
                               )}
                             </div>
-                          ) : (
-                            <p className="pt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                              No Uber statement breakdown or trip totals for this range.
-                            </p>
                           )}
 
                           {statementMismatch && (
