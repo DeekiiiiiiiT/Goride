@@ -28,6 +28,7 @@ import {
   resolveLedgerApiSourceParam,
   resolveTripLedgerGapSourceParam,
 } from "../../../utils/ledgerKvSource.ts";
+import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriveWalletMetrics.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -4827,26 +4828,21 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
 
 // ─── GET /ledger/driver-indrive-wallet — Period loads, fees, lifetime loads (Phase 2) ──
 // Query: driverId, startDate, endDate (YYYY-MM-DD). Same multi-ID driver resolution as driver-overview.
-// periodFees: sum of ledger platform_fee for InDrive in range; if 0, sum (gross−net) on fare_earning for InDrive.
-// periodLoads / lifetimeLoads: sum positive amounts on transaction:* with category "InDrive Wallet Credit".
-//
-// Phase 7 — estimatedBalance (optional fourth field):
-//   estimatedBalance = lifetimeLoads − lifetimeInDriveFees
-//   where lifetimeInDriveFees uses the SAME dual rule as periodFees but over ALL ledger rows (no date filter):
-//     primary: sum |netAmount| on eventType platform_fee, platform InDrive;
-//     else: sum (grossAmount − netAmount) on fare_earning, platform InDrive.
-//   lifetimeLoads is fleet-reported top-ups only (positive "InDrive Wallet Credit" transactions), not InDrive’s app balance.
-//   This is a fleet accounting estimate, not InDrive’s official wallet balance.
+// `source=canonical` (default) | `legacy` | `both` — fee side from `ledger_event:*` vs `ledger:%`.
+// Loads always from transaction:* (InDrive Wallet Credit).
+// Phase 7 estimatedBalance = lifetimeLoads − lifetimeInDriveFees (fleet estimate only).
 // Phase 8: read access aligned with financial transaction visibility (transactions.view).
 app.get(
   "/make-server-37f42386/ledger/driver-indrive-wallet",
   requireAuth(),
   requirePermission("transactions.view"),
   async (c) => {
+  const t0 = Date.now();
   try {
     const driverId = c.req.query("driverId");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
+    const feeSource = resolveTripLedgerGapSourceParam(c.req.query("source"));
     const LOAD_CATEGORY = "InDrive Wallet Credit";
 
     if (!driverId || !startDate || !endDate) {
@@ -4887,49 +4883,20 @@ app.get(
       return all;
     };
 
-    const ledgerBaseQuery = () => {
-      let q = supabase.from("kv_store_37f42386").select("value").like("key", "ledger:%");
+    const ledgerBaseQuery = (keyLike: "ledger:%" | "ledger_event:%") => () => {
+      let q = supabase.from("kv_store_37f42386").select("value").like("key", keyLike);
       if (orgId) q = q.eq("value->>organizationId", orgId);
       if (driverIdOrFilter) q = q.or(driverIdOrFilter);
       else q = q.eq("value->>driverId", driverId);
       return q;
     };
 
-    const ledgerRowDate = (raw: string | undefined) => (raw ? String(raw).split("T")[0] : "");
-
-    // One scan of all ledger rows for this driver: period fee metrics + lifetime fee metrics (Phase 7).
-    const allLedgerRows = await paginatedFetch(() => ledgerBaseQuery());
-
-    let platformFeeInDrive = 0;
-    let fareGapInDrive = 0;
-    let lifetimePlatformFeeInDrive = 0;
-    let lifetimeFareGapInDrive = 0;
-
-    for (const row of allLedgerRows) {
-      const e = row.value;
-      if (!e) continue;
-      const plat = (e.platform === "GoRide" ? "Roam" : e.platform) || "Other";
-      const net = Number(e.netAmount) || 0;
-      const gross = Number(e.grossAmount) || 0;
-      const et = e.eventType;
-      const d = ledgerRowDate(e.date);
-      const inPeriod = d >= startDate && d <= endDate;
-
-      if (et === "platform_fee" && plat === "InDrive") {
-        const absNet = Math.abs(net);
-        lifetimePlatformFeeInDrive += absNet;
-        if (inPeriod) platformFeeInDrive += absNet;
-      }
-      if (et === "fare_earning" && plat === "InDrive") {
-        const gap = gross - net;
-        lifetimeFareGapInDrive += gap;
-        if (inPeriod) fareGapInDrive += gap;
-      }
-    }
-
-    const periodFees = platformFeeInDrive > 0 ? platformFeeInDrive : fareGapInDrive;
-    const lifetimeInDriveFees =
-      lifetimePlatformFeeInDrive > 0 ? lifetimePlatformFeeInDrive : lifetimeFareGapInDrive;
+    const fetchLedgerEntryValues = async (keyLike: "ledger:%" | "ledger_event:%") => {
+      const rows = await paginatedFetch(() => ledgerBaseQuery(keyLike)());
+      let vals = rows.map((r: any) => r.value).filter(Boolean);
+      if (keyLike === "ledger_event:%") vals = filterByOrg(vals, c);
+      return vals;
+    };
 
     const txBaseQuery = () => {
       let q = supabase
@@ -4959,20 +4926,65 @@ app.get(
       if (d >= startDate && d <= endDate) periodLoads += amt;
     }
 
-    const estimatedBalance = Number((lifetimeLoads - lifetimeInDriveFees).toFixed(2));
+    periodLoads = Number(periodLoads.toFixed(2));
+    lifetimeLoads = Number(lifetimeLoads.toFixed(2));
 
-    const data = {
-      periodLoads: Number(periodLoads.toFixed(2)),
-      periodFees: Number(periodFees.toFixed(2)),
-      lifetimeLoads: Number(lifetimeLoads.toFixed(2)),
-      estimatedBalance,
+    const buildWalletData = (periodFees: number, lifetimeInDriveFees: number) => {
+      const estimatedBalance = Number((lifetimeLoads - lifetimeInDriveFees).toFixed(2));
+      return {
+        periodLoads,
+        periodFees,
+        lifetimeLoads,
+        estimatedBalance,
+      };
     };
 
+    if (feeSource === "both") {
+      const canonVals = await fetchLedgerEntryValues("ledger_event:%");
+      const legVals = await fetchLedgerEntryValues("ledger:%");
+      const canonFees = computeIndriveWalletFeesFromLedgerEntries(canonVals, startDate, endDate);
+      const legFees = computeIndriveWalletFeesFromLedgerEntries(legVals, startDate, endDate);
+      const dataCanon = buildWalletData(canonFees.periodFees, canonFees.lifetimeInDriveFees);
+      const dataLeg = buildWalletData(legFees.periodFees, legFees.lifetimeInDriveFees);
+      console.log(
+        `[IndriveWallet] BOTH driverId=${driverId} range=${startDate}..${endDate} canonRows=${canonVals.length} legRows=${legVals.length} txRows=${loadTxRows.length} ${Date.now() - t0}ms`,
+      );
+      return c.json({
+        success: true,
+        meta: { source: "both", durationMs: Date.now() - t0 },
+        data: {
+          periodLoads,
+          lifetimeLoads,
+          canonical: {
+            periodFees: dataCanon.periodFees,
+            estimatedBalance: dataCanon.estimatedBalance,
+          },
+          legacy: {
+            periodFees: dataLeg.periodFees,
+            estimatedBalance: dataLeg.estimatedBalance,
+          },
+        },
+      });
+    }
+
+    const keyLike = feeSource === "canonical" ? "ledger_event:%" : "ledger:%";
+    const ledgerVals = await fetchLedgerEntryValues(keyLike);
+    const { periodFees, lifetimeInDriveFees } = computeIndriveWalletFeesFromLedgerEntries(
+      ledgerVals,
+      startDate,
+      endDate,
+    );
+    const data = buildWalletData(periodFees, lifetimeInDriveFees);
+
     console.log(
-      `[IndriveWallet] driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerRows=${allLedgerRows.length} loadTxRows=${loadTxRows.length}`
+      `[IndriveWallet] source=${feeSource} driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerVals=${ledgerVals.length} loadTxRows=${loadTxRows.length} ${Date.now() - t0}ms`,
     );
 
-    return c.json({ success: true, data });
+    return c.json({
+      success: true,
+      meta: { source: feeSource, durationMs: Date.now() - t0 },
+      data,
+    });
   } catch (e: any) {
     console.error("[IndriveWallet] Error:", e);
     return c.json({ error: `InDrive wallet summary failed: ${e.message}` }, 500);

@@ -2389,11 +2389,14 @@ export const api = {
     driverId: string;
     startDate: string;
     endDate: string;
+    /** Default canonical (`ledger_event:*` fees). `legacy` = `ledger:%`. `both` returns nested JSON; API flattens to canonical numbers for the typed return. */
+    source?: 'canonical' | 'legacy' | 'both';
   }): Promise<IndriveWalletSummary> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
+    if (params.source) qp.set('source', params.source);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-indrive-wallet?${qp.toString()}`,
       { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
@@ -2404,7 +2407,26 @@ export const api = {
     }
     const json = await response.json();
     if (!json?.data) throw new Error('InDrive wallet summary: empty response');
-    return json.data;
+    const d = json.data as IndriveWalletSummary & {
+      canonical?: { periodFees: number; estimatedBalance: number };
+      legacy?: { periodFees: number; estimatedBalance: number };
+    };
+    if (
+      d &&
+      typeof d === 'object' &&
+      'canonical' in d &&
+      'legacy' in d &&
+      d.canonical &&
+      d.legacy
+    ) {
+      return {
+        periodLoads: d.periodLoads,
+        lifetimeLoads: d.lifetimeLoads,
+        periodFees: d.canonical.periodFees,
+        estimatedBalance: d.canonical.estimatedBalance,
+      };
+    }
+    return d as IndriveWalletSummary;
   },
 
   async createLedgerEntry(entry: Partial<LedgerEntry>): Promise<{ success: boolean; data?: LedgerEntry; skipped?: boolean; message?: string }> {

@@ -690,17 +690,15 @@ export interface LedgerDriverOverview {
 
 /**
  * GET `/ledger/driver-indrive-wallet` (Phase 2 + Phase 7). All amounts same currency as fleet (e.g. JMD).
+ * Default fee source: **`ledger_event:*`** (`source=canonical`); `source=legacy` uses `ledger:%`; `source=both` returns nested canonical+legacy (API may flatten to canonical for typed clients).
  *
- * **`periodFees` (canonical, Phase 2):** Within `[startDate, endDate]`, sum **absolute** fee impact
- * for InDrive:
- * 1. Primary: sum `|netAmount|` (or signed outflow magnitude) on ledger rows with `eventType === 'platform_fee'`,
- *    `platform === 'InDrive'` (after `GoRide` → `Roam` normalization does not apply to InDrive).
- * 2. If that sum is **0**, use sum of `(grossAmount - netAmount)` on `fare_earning` rows for InDrive in range
+ * **`periodFees`:** Within `[startDate, endDate]`, sum **absolute** fee impact for InDrive:
+ * 1. Primary: sum `|netAmount|` on rows with `eventType === 'platform_fee'`, `platform === 'InDrive'`.
+ * 2. If that sum is **0**, use sum of `(grossAmount - netAmount)` on `fare_earning` for InDrive in range
  *    (matches “Implied on fare” / `fareGrossMinusNetByPlatform.InDrive` in driver-overview).
- * This single rule must match the InDrive fee story shown in the Period earnings breakdown overlay.
  *
  * **`estimatedBalance` (Phase 7):** `lifetimeLoads - lifetimeInDriveFees` where `lifetimeInDriveFees` applies the
- * same two-step rule over **all** ledger rows (no date filter). Not InDrive’s official balance.
+ * same two-step rule over **all** fee rows (no date filter). Not InDrive’s official balance.
  */
 export interface IndriveWalletSummary {
   periodLoads: number;

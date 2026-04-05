@@ -15,6 +15,7 @@ Register of every consumer of **`ledger:%`** keys for the canonical migration. *
 | **Driver overview** | **`GET /ledger/driver-overview?source=canonical`** uses canonical aggregation. |
 | **List / count / summary** | **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** → **`ledger_event:*`**. Pass **`source=legacy`** for rollback. Count returns **`ledgerEntries`** (canonical) + **`legacyLedgerEntries`** (`ledger:%`). |
 | **Trip ↔ ledger gap diagnostic** | **`GET /ledger/diagnostic-trip-ledger-gap`** — **`source=canonical`** (default) uses **`ledger_event:*`** fare rows; **`legacy`** = **`ledger:%`** only; **`both`** returns **`canonical`** + **`legacy`** sections. |
+| **InDrive wallet** | **`GET /ledger/driver-indrive-wallet`** — fee math from **`ledger_event:*`** by default (`source=canonical`); loads still **`transaction:*`**; **`both`** compares fee totals vs legacy. |
 | **Write kill-switch** | Edge env **`LEGACY_LEDGER_WRITES=false`** blocks **all** new legacy row writes listed under [Writes](#writes-ledger) (trip generator, Uber fallback, transaction→ledger, POST/PATCH/batch, backfill live, repair, `ensure-from-trip-ids`). Dry-run repair/backfill still allowed where implemented. **`DELETE /ledger/:id`** remains for cleanup. |
 
 ---
@@ -31,7 +32,7 @@ Register of every consumer of **`ledger:%`** keys for the canonical migration. *
 | GET `/ledger/drivers-summary` | `index.tsx` | **`readModel=canonical`** → **`ledger_event:*`** fare rows; default legacy | Drivers page financials |
 | GET `/ledger/fleet-summary` | `index.tsx` | **`readModel=canonical`** → period slice of **`ledger_event:*`**; default legacy | Dashboard fleet metrics |
 | GET `/ledger/diagnostic-trip-ledger-gap` | `index.tsx` | **`source=canonical`** / **`both`** / **`legacy`** — see status summary | Compares trips to canonical and/or legacy fare rows |
-| GET `/ledger/driver-indrive-wallet` | `index.tsx` | May mix / legacy-oriented | Verify before relying for cutover |
+| GET `/ledger/driver-indrive-wallet` | `index.tsx` | **`source=canonical`** / **`both`** / **`legacy`** — see status summary | Loads from transactions unchanged |
 | Dedup / integrity inside `generateTripLedgerEntries` | `index.tsx` | Reads **`ledger:%`** for trip-sourced dedup | N/A if generator skipped (`LEGACY_LEDGER_WRITES=false`) |
 | `deleteLedgerEntriesForTripSource` | `index.tsx` | **Delete** trip-linked **`ledger:%`** rows | Stale rows if trips change while legacy rows remain |
 | Batch delete import | `index.tsx` | **Delete** includes **`ledger:%`** keys | Orphans / cleanup behavior tied to legacy keys |
@@ -75,6 +76,7 @@ All are **no-ops or 403** when **`LEGACY_LEDGER_WRITES=false`** (except **`DELET
 | `getLedgerEarningsHistory` | GET `/ledger/driver-earnings-history` | `readModel`, `shadowCompare` — see `solution.md` |
 | `getLedgerDriversSummary` | GET `/ledger/drivers-summary` | Optional `readModel` (`legacy` \| `canonical`) |
 | `getLedgerFleetSummary` | GET `/ledger/fleet-summary` | Optional `readModel` (`legacy` \| `canonical`) |
+| `getDriverIndriveWallet` | GET `/ledger/driver-indrive-wallet` | Optional `source` (`canonical` \| `legacy` \| `both`); **`both`** flattened to canonical in typed return |
 | `repairDriverLedger` | POST `/ledger/repair-driver` | Blocked when `LEGACY_LEDGER_WRITES=false` |
 | `runLedgerBackfill` | POST `/ledger/backfill` | Live write blocked when `LEGACY_LEDGER_WRITES=false` |
 | `ensureLedgerFromTripIds` | POST `.../ledger/ensure-from-trip-ids` | Blocked when `LEGACY_LEDGER_WRITES=false` |

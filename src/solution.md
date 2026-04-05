@@ -167,12 +167,11 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 Track in [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md):
 
-1. **Done (this repo):** **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** (`ledger_event:*`); **`source=legacy`** rollback; count returns **`legacyLedgerEntries`** for diagnostics.
-2. **Read paths still legacy-oriented:** **`/ledger/driver-indrive-wallet`** — migrate or document. **`/ledger/diagnostic-trip-ledger-gap`** supports **`source=canonical`** / **`both`** / **`legacy`** (done).
-3. **API defaults elsewhere:** **`readModel`** on fleet/drivers/earnings history still **legacy** if param omitted — optional flip to canonical-default per endpoint after sign-off.
-4. **Trip delete / batch delete:** **`deleteLedgerEntriesForTripSource`** and related cleanup still target **`ledger:%`** until legacy data is gone or policy changes.
-5. **Data:** Backfill historical **`ledger:%`** into **`ledger_event:*`**, or formal **cutoff date** + exports.
-6. **Phase 8:** Remove dual UI, flags, and dead code paths after sign-off.
+1. **Done (this repo):** **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** (`ledger_event:*`); **`/ledger/diagnostic-trip-ledger-gap`** and **`/ledger/driver-indrive-wallet`** — **`source=canonical`** / **`both`** / **`legacy`**; count returns **`legacyLedgerEntries`** for diagnostics.
+2. **API defaults elsewhere:** **`readModel`** on fleet/drivers/earnings history still **legacy** if param omitted — optional flip to canonical-default per endpoint after sign-off.
+3. **Trip delete / batch delete:** **`deleteLedgerEntriesForTripSource`** and related cleanup still target **`ledger:%`** until legacy data is gone or policy changes.
+4. **Data:** Backfill historical **`ledger:%`** into **`ledger_event:*`**, or formal **cutoff date** + exports.
+5. **Phase 8:** Remove dual UI, flags, and dead code paths after sign-off.
 
 ---
 
