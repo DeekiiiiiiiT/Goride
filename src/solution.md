@@ -165,13 +165,14 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 ## Remaining work for full legacy extinction
 
-These are **not** replaced by the Phase 4–6 work above; track in inventory / backlog:
+Track in [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md):
 
-1. **Read paths still on `ledger:%` only:** e.g. **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`**, **`/ledger/diagnostic-trip-ledger-gap`**, **`/ledger/driver-indrive-wallet`** — migrate to canonical, dual read + flag, or document as legacy-archive-only.
-2. **API defaults:** Optional future step — default **`readModel=canonical`** / **`source=canonical`** on the server when safe, keeping **`legacy` only** for emergency override.
-3. **Trip delete / batch delete:** **`deleteLedgerEntriesForTripSource`** and related cleanup still target **`ledger:%`** until legacy data is gone or policy changes.
-4. **Data:** Backfill historical **`ledger:%`** into **`ledger_event:*`**, or formal **cutoff date** + exports.
-5. **Phase 8:** Remove dual UI, flags, and dead code paths after sign-off.
+1. **Done (this repo):** **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** (`ledger_event:*`); **`source=legacy`** rollback; count returns **`legacyLedgerEntries`** for diagnostics.
+2. **Read paths still legacy-oriented:** **`/ledger/diagnostic-trip-ledger-gap`**, **`/ledger/driver-indrive-wallet`** — migrate or document.
+3. **API defaults elsewhere:** **`readModel`** on fleet/drivers/earnings history still **legacy** if param omitted — optional flip to canonical-default per endpoint after sign-off.
+4. **Trip delete / batch delete:** **`deleteLedgerEntriesForTripSource`** and related cleanup still target **`ledger:%`** until legacy data is gone or policy changes.
+5. **Data:** Backfill historical **`ledger:%`** into **`ledger_event:*`**, or formal **cutoff date** + exports.
+6. **Phase 8:** Remove dual UI, flags, and dead code paths after sign-off.
 
 ---
 

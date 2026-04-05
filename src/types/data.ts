@@ -597,6 +597,8 @@ export interface LedgerFilterParams {
   offset?: number;
   sortBy?: 'date' | 'amount' | 'createdAt';
   sortDir?: 'asc' | 'desc';
+  /** `canonical` (default) = `ledger_event:*`; `legacy` = `ledger:%` rollback. */
+  source?: 'canonical' | 'legacy';
 }
 
 export interface PaginatedLedgerResponse {
@@ -605,6 +607,7 @@ export interface PaginatedLedgerResponse {
   page: number;
   limit: number;
   hasMore: boolean;
+  meta?: { source?: 'canonical' | 'legacy' };
 }
 
 export interface LedgerDriverOverview {

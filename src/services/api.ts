@@ -2231,6 +2231,7 @@ export const api = {
     if (params.offset) qp.set('offset', String(params.offset));
     if (params.sortBy) qp.set('sortBy', params.sortBy);
     if (params.sortDir) qp.set('sortDir', params.sortDir);
+    if (params.source) qp.set('source', params.source);
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger?${qp.toString()}`,
@@ -2243,7 +2244,13 @@ export const api = {
     return response.json();
   },
 
-  async getLedgerCount(): Promise<{ ledgerEntries: number; trips: number; transactions: number }> {
+  async getLedgerCount(): Promise<{
+    ledgerEntries: number;
+    /** Legacy `ledger:%` row count (diagnostics / cleanup). */
+    legacyLedgerEntries?: number;
+    trips: number;
+    transactions: number;
+  }> {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/count`,
       { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
@@ -2312,6 +2319,7 @@ export const api = {
     if (params.eventType) qp.set('eventType', params.eventType);
     if (params.direction) qp.set('direction', params.direction);
     if (params.platform) qp.set('platform', params.platform);
+    if (params.source) qp.set('source', params.source);
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/summary?${qp.toString()}`,

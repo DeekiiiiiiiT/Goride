@@ -23,6 +23,7 @@ import {
   aggregateCanonicalEventsToLedgerDriverOverview,
   canonicalEventInSelectedWindow,
 } from "./ledger_money_aggregate.ts";
+import { ledgerKeyLikePrefix, resolveLedgerApiSourceParam } from "../../../utils/ledgerKvSource.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -3323,8 +3324,12 @@ const VALID_LEDGER_EVENT_TYPES = new Set([
 const VALID_LEDGER_DIRECTIONS = new Set(['inflow', 'outflow']);
 
 // ─── GET /ledger — Query with filters + pagination ──────────────────
+// Default `source=canonical` → `ledger_event:*`. `source=legacy` → `ledger:%` (rollback).
 app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
   try {
+    const ledgerSource = resolveLedgerApiSourceParam(c.req.query("source"));
+    const keyLike = ledgerKeyLikePrefix(ledgerSource);
+
     const driverId = c.req.query("driverId");
     const driverIdsParam = c.req.query("driverIds");
     const vehicleId = c.req.query("vehicleId");
@@ -3354,7 +3359,7 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
     let query = supabase
       .from("kv_store_37f42386")
       .select("value", { count: "exact" })
-      .like("key", "ledger:%");
+      .like("key", keyLike);
 
     if (driverId) {
       query = query.eq("value->>driverId", driverId);
@@ -3430,6 +3435,7 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
         page: Math.floor(offset / limit) + 1,
         limit,
         hasMore: (offset + limit) < filteredTotal,
+        meta: { source: ledgerSource },
       });
     }
 
@@ -3451,6 +3457,7 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
       page: Math.floor(offset / limit) + 1,
       limit,
       hasMore: (offset + limit) < total,
+      meta: { source: ledgerSource },
     });
   } catch (e: any) {
     console.log(`[Ledger GET] Error: ${e.message}`);
@@ -3459,10 +3466,15 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
 });
 
 // ─── GET /ledger/count — Diagnostic counts ──────────────────────────
+// `ledgerEntries` = canonical `ledger_event:*` (SSOT). `legacyLedgerEntries` = `ledger:%` (rollback / cleanup).
 app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
   try {
     const orgId = getOrgId(c);
-    let ledgerQ = supabase
+    let canonicalLedgerQ = supabase
+      .from("kv_store_37f42386")
+      .select("*", { count: "exact", head: true })
+      .like("key", "ledger_event:%");
+    let legacyLedgerQ = supabase
       .from("kv_store_37f42386")
       .select("*", { count: "exact", head: true })
       .like("key", "ledger:%");
@@ -3475,16 +3487,17 @@ app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
       .select("*", { count: "exact", head: true })
       .like("key", "transaction:%");
     if (orgId) {
-      ledgerQ = ledgerQ.eq("value->>organizationId", orgId);
+      canonicalLedgerQ = canonicalLedgerQ.eq("value->>organizationId", orgId);
+      legacyLedgerQ = legacyLedgerQ.eq("value->>organizationId", orgId);
       tripQ = tripQ.eq("value->>organizationId", orgId);
       txQ = txQ.eq("value->>organizationId", orgId);
     }
-    const { count: ledgerCount } = await ledgerQ;
-    const { count: tripCount } = await tripQ;
-    const { count: txCount } = await txQ;
+    const [{ count: canonicalLedgerCount }, { count: legacyLedgerCount }, { count: tripCount }, { count: txCount }] =
+      await Promise.all([canonicalLedgerQ, legacyLedgerQ, tripQ, txQ]);
 
     return c.json({
-      ledgerEntries: ledgerCount || 0,
+      ledgerEntries: canonicalLedgerCount || 0,
+      legacyLedgerEntries: legacyLedgerCount || 0,
       trips: tripCount || 0,
       transactions: txCount || 0,
     });
@@ -3747,8 +3760,12 @@ app.post(
 );
 
 // ─── GET /ledger/summary — Aggregate totals for a filter set ────────
+// Default `source=canonical` → `ledger_event:*`. `source=legacy` → `ledger:%`.
 app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
   try {
+    const ledgerSource = resolveLedgerApiSourceParam(c.req.query("source"));
+    const keyLike = ledgerKeyLikePrefix(ledgerSource);
+
     const driverId = c.req.query("driverId");
     const driverIdsParam = c.req.query("driverIds");
     const startDate = c.req.query("startDate");
@@ -3760,7 +3777,7 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
     let query = supabase
       .from("kv_store_37f42386")
       .select("value")
-      .like("key", "ledger:%");
+      .like("key", keyLike);
     const orgId = getOrgId(c);
     if (orgId) query = query.eq("value->>organizationId", orgId);
 
@@ -3791,7 +3808,10 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
     const { data, error } = await query.limit(10000);
     if (error) throw error;
 
-    const entries = (data || []).map((d: any) => d.value).filter(Boolean);
+    let entries = (data || []).map((d: any) => d.value).filter(Boolean);
+    if (ledgerSource === "canonical") {
+      entries = filterByOrg(entries, c);
+    }
 
     let totalInflow = 0;
     let totalOutflow = 0;
@@ -3839,6 +3859,7 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
         byEventType,
         byPlatform,
       },
+      meta: { source: ledgerSource },
     });
   } catch (e: any) {
     console.log(`[Ledger Summary] Error: ${e.message}`);

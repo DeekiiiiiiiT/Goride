@@ -643,7 +643,12 @@ export function DeleteCenter() {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   // ─── Database Diagnostic counts (orphan detection) ────────────────────
-  const [diagCounts, setDiagCounts] = useState<{ trips: number; ledgerEntries: number; transactions: number } | null>(null);
+  const [diagCounts, setDiagCounts] = useState<{
+    trips: number;
+    ledgerEntries: number;
+    legacyLedgerEntries?: number;
+    transactions: number;
+  } | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
   const [diagError, setDiagError] = useState<string | null>(null);
   const [purging, setPurging] = useState(false);
@@ -924,10 +929,12 @@ export function DeleteCenter() {
 
   const activeDeleteGroupMeta = deleteGroup ? deleteGroups.find(g => g.id === deleteGroup) : null;
 
-  // Orphan heuristic: ledger entries vastly exceed what trips + transactions could explain
-  // Each trip can produce up to ~4 ledger entries; each transaction ~1 entry
+  // Orphan heuristic applies to **legacy** `ledger:%` rows (purge targets legacy trip-sourced orphans).
+  const legacyLedgerForOrphanHeuristic = diagCounts
+    ? (diagCounts.legacyLedgerEntries ?? diagCounts.ledgerEntries)
+    : 0;
   const hasOrphanedLedgers = diagCounts
-    ? diagCounts.ledgerEntries > (diagCounts.trips * 5 + diagCounts.transactions * 2 + 10)
+    ? legacyLedgerForOrphanHeuristic > (diagCounts.trips * 5 + diagCounts.transactions * 2 + 10)
     : false;
 
   const groupMatchesDeleteSearch = (groupId: string) => {
@@ -1406,10 +1413,13 @@ export function DeleteCenter() {
               </div>
               <div className={`text-center ${hasOrphanedLedgers ? 'ring-2 ring-amber-400 rounded-lg bg-amber-50 p-2 -m-2' : ''}`}>
                 <p className={`text-2xl font-bold ${hasOrphanedLedgers ? 'text-amber-700' : 'text-slate-900'}`}>{diagCounts.ledgerEntries.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-0.5">Ledger Entries</p>
-                <p className="text-[10px] text-slate-400 font-mono">ledger:*</p>
+                <p className="text-xs text-slate-500 mt-0.5">Ledger events (canonical)</p>
+                <p className="text-[10px] text-slate-400 font-mono">ledger_event:*</p>
+                {diagCounts.legacyLedgerEntries != null && diagCounts.legacyLedgerEntries > 0 && (
+                  <p className="text-[10px] text-slate-500 mt-1">Legacy rows: {diagCounts.legacyLedgerEntries.toLocaleString()} <span className="font-mono text-slate-400">ledger:*</span></p>
+                )}
                 {hasOrphanedLedgers && (
-                  <p className="text-[10px] text-amber-600 font-medium mt-1">Likely orphaned entries</p>
+                  <p className="text-[10px] text-amber-600 font-medium mt-1">Legacy count high vs trips — review orphan purge</p>
                 )}
               </div>
               <div className="text-center">
@@ -1534,7 +1544,10 @@ export function DeleteCenter() {
                     )}
                   </div>
                   <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Ledger Entries</span><span className="font-mono font-medium text-slate-900">{diagCounts.ledgerEntries.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span>Canonical events</span><span className="font-mono font-medium text-slate-900">{diagCounts.ledgerEntries.toLocaleString()}</span></div>
+                    {diagCounts.legacyLedgerEntries != null && diagCounts.legacyLedgerEntries > 0 && (
+                      <div className="flex justify-between"><span>Legacy ledger</span><span className="font-mono font-medium text-slate-700">{diagCounts.legacyLedgerEntries.toLocaleString()}</span></div>
+                    )}
                   </div>
                   {hasOrphanedLedgers && (
                     <div className="mt-2 space-y-1.5">

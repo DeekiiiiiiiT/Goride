@@ -13,7 +13,8 @@ Register of every consumer of **`ledger:%`** keys for the canonical migration. *
 | **Earnings history** | **`GET /ledger/driver-earnings-history?readModel=canonical`** uses **`ledger_event:*`**. Client: `isLedgerEarningsReadModelEnabled()` → `readModel` param. **`shadowCompare=1`** for logs. |
 | **Fleet + drivers summaries** | **`readModel=canonical`** uses **`ledger_event:*`**. Client (Dashboard, Drivers page): `isLedgerMoneyReadModelEnabled()` → `readModel`. |
 | **Driver overview** | **`GET /ledger/driver-overview?source=canonical`** uses canonical aggregation. |
-| **Legacy-only reads** | **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`**, some diagnostics — still **`ledger:%` only** until migrated or archived. |
+| **List / count / summary** | **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** → **`ledger_event:*`**. Pass **`source=legacy`** for rollback. Count returns **`ledgerEntries`** (canonical) + **`legacyLedgerEntries`** (`ledger:%`). |
+| **Legacy-only reads** | Some diagnostics (e.g. trip/ledger gap) — still oriented to **`ledger:%`** until migrated. |
 | **Write kill-switch** | Edge env **`LEGACY_LEDGER_WRITES=false`** blocks **all** new legacy row writes listed under [Writes](#writes-ledger) (trip generator, Uber fallback, transaction→ledger, POST/PATCH/batch, backfill live, repair, `ensure-from-trip-ids`). Dry-run repair/backfill still allowed where implemented. **`DELETE /ledger/:id`** remains for cleanup. |
 
 ---
@@ -22,9 +23,9 @@ Register of every consumer of **`ledger:%`** keys for the canonical migration. *
 
 | Consumer | Location (server) | Canonical / notes | If legacy reads removed without replacement |
 |----------|-------------------|-------------------|---------------------------------------------|
-| GET `/ledger` (list + filters) | `index.tsx` | **Legacy only** — Trip Ledger / admin lists | Empty or wrong until migrated to `ledger_event:*` or projector |
-| GET `/ledger/count` | `index.tsx` | **Legacy only** | Diagnostics wrong |
-| GET `/ledger/summary` | `index.tsx` | **Legacy only** | Summary wrong |
+| GET `/ledger` (list + filters) | `index.tsx` | Default **`source=canonical`** → **`ledger_event:*`**; **`source=legacy`** → **`ledger:%`** | Trip Ledger UI uses canonical by default |
+| GET `/ledger/count` | `index.tsx` | **`ledgerEntries`** = canonical count; **`legacyLedgerEntries`** = legacy count | Both returned for diagnostics |
+| GET `/ledger/summary` | `index.tsx` | Same **`source`** switch; canonical summary uses **`filterByOrg`** after fetch | Aligns with list |
 | GET `/ledger/driver-overview` | `index.tsx` | **`source=canonical`** → **`ledger_event:*`**; else legacy | Non-canonical branch wrong if removed early |
 | GET `/ledger/driver-earnings-history` | `index.tsx` | **`readModel=canonical`** → **`ledger_event:*`**; default **`readModel=legacy`** if param omitted | Earnings table wrong if default flipped before data ready |
 | GET `/ledger/drivers-summary` | `index.tsx` | **`readModel=canonical`** → **`ledger_event:*`** fare rows; default legacy | Drivers page financials |
