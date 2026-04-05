@@ -3709,6 +3709,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             <DriverEarningsHistory
               driverId={driverId}
               quotaConfig={quotaConfig || undefined}
+              trips={allTrips}
+              transactions={transactions}
             />
          </TabsContent>
 

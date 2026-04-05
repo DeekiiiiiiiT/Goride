@@ -5466,23 +5466,32 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
     const allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);
     console.log(`[Ledger EarningsHistory] Canonical ledger_event rows for driver(s): ${allEntries.length}`);
 
-    if (allEntries.length === 0) {
-      return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
-    }
-
     // ── Step 2: Determine date range ──
+    // When `startDate`+`endDate` are sent (same span as trips/transactions), bucket **that** full range
+    // so weeks align with Expenses / Settlement. Otherwise min..max from ledger_event dates only (sparse).
     const allDatesEH = allEntries
       .map((e: any) => e.date)
       .filter(Boolean)
       .map((d: string) => new Date(d + "T00:00:00").getTime())
       .filter((t: number) => !isNaN(t));
 
-    if (allDatesEH.length === 0) {
+    const scopedByActivityRange = !!(startDateParam && endDateParam);
+    let minDateMs: number;
+    let maxDateMs: number;
+    if (scopedByActivityRange) {
+      minDateMs = new Date(startDateParam! + "T00:00:00").getTime();
+      maxDateMs = new Date(endDateParam! + "T23:59:59").getTime();
+      if (minDateMs > maxDateMs) {
+        const x = minDateMs;
+        minDateMs = maxDateMs;
+        maxDateMs = x;
+      }
+    } else if (allDatesEH.length > 0) {
+      minDateMs = Math.min(...allDatesEH);
+      maxDateMs = Math.min(Math.max(...allDatesEH), Date.now());
+    } else {
       return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
     }
-
-    const minDateMs = startDateParam ? new Date(startDateParam + "T00:00:00").getTime() : Math.min(...allDatesEH);
-    const maxDateMs = endDateParam ? new Date(endDateParam + "T23:59:59").getTime() : Math.min(Math.max(...allDatesEH), Date.now());
 
     // ── Step 3: Generate period buckets ──
     const msPerDay = 86400000;
@@ -5675,21 +5684,23 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       };
     });
 
-    // Include any period with canonical ledger rows (tips/statement/adjustments without fare_earning
-    // were incorrectly hidden; trip-only filter matched legacy rows, not full canonical mix.)
-    const activeRows = rowsEH
-      .filter((r: any) => {
-        if (r.tripCount > 0 || r.transactionCount > 0) return true;
-        if ((r.ledgerEventCount || 0) > 0) return true;
-        if (Math.abs(r.grossRevenue || 0) > 1e-6) return true;
-        if (Math.abs(r.tips || 0) > 1e-6) return true;
-        if (Math.abs(r.payouts || 0) > 1e-6) return true;
-        if (Math.abs(r.tolls || 0) > 1e-6) return true;
-        if (Math.abs(r.platformFees || 0) > 1e-6) return true;
-        if (Math.abs(r.expenses || 0) > 1e-6) return true;
-        return false;
-      })
-      .reverse();
+    // Activity-scoped range: show every period in range (zeros) — matches other Financials tabs.
+    // Auto range (ledger-only dates): hide empty periods to keep the table small.
+    const activeRows = scopedByActivityRange
+      ? rowsEH.slice().reverse()
+      : rowsEH
+          .filter((r: any) => {
+            if (r.tripCount > 0 || r.transactionCount > 0) return true;
+            if ((r.ledgerEventCount || 0) > 0) return true;
+            if (Math.abs(r.grossRevenue || 0) > 1e-6) return true;
+            if (Math.abs(r.tips || 0) > 1e-6) return true;
+            if (Math.abs(r.payouts || 0) > 1e-6) return true;
+            if (Math.abs(r.tolls || 0) > 1e-6) return true;
+            if (Math.abs(r.platformFees || 0) > 1e-6) return true;
+            if (Math.abs(r.expenses || 0) > 1e-6) return true;
+            return false;
+          })
+          .reverse();
 
     const durationMs = Date.now() - startMs;
     const totalGross = activeRows.reduce((s: number, r: any) => s + r.grossRevenue, 0);

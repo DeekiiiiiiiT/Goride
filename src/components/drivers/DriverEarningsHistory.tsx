@@ -4,7 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Download, Target, CalendarDays, X, Database, AlertTriangle } from "lucide-react";
-import { TierConfig, QuotaConfig } from "../../types/data";
+import { TierConfig, QuotaConfig, Trip, FinancialTransaction } from "../../types/data";
+import { deriveDriverFinancialDateRange } from "../../utils/driverFinancialDateRange";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
@@ -13,6 +14,9 @@ import { api } from "../../services/api";
 interface DriverEarningsHistoryProps {
   driverId: string;
   quotaConfig?: QuotaConfig;   // For Quota % column (Phase 5)
+  /** When set, API week range matches Expenses/Settlement (trips + transactions), not only ledger_event dates. */
+  trips?: Trip[];
+  transactions?: FinancialTransaction[];
 }
 
 export type PeriodType = 'daily' | 'weekly' | 'monthly';
@@ -66,7 +70,7 @@ function getQuotaBadgeStyle(percent: number): string {
   return 'bg-rose-50 text-rose-700 border-rose-200';
 }
 
-export function DriverEarningsHistory({ driverId, quotaConfig }: DriverEarningsHistoryProps) {
+export function DriverEarningsHistory({ driverId, quotaConfig, trips, transactions }: DriverEarningsHistoryProps) {
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
   const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
   const [dateFrom, setDateFrom] = useState<string>('');
@@ -79,13 +83,32 @@ export function DriverEarningsHistory({ driverId, quotaConfig }: DriverEarningsH
   const [serverDataLoaded, setServerDataLoaded] = useState(false);
   const [serverDataLoading, setServerDataLoading] = useState(false);
   const [dataSource, setDataSource] = useState<'loading' | 'ledger' | 'error'>('loading');
+
+  /** Stable key so parent re-renders with new trip array identity do not refetch unnecessarily. */
+  const activityRangeKey = useMemo(() => {
+    const r = deriveDriverFinancialDateRange(trips, transactions);
+    return r ? `${r.startDate}|${r.endDate}` : "";
+  }, [trips, transactions]);
+
   useEffect(() => {
     let cancelled = false;
     setServerDataLoaded(false);
     setServerDataLoading(true);
     setDataSource('loading');
 
-    api.getLedgerEarningsHistory({ driverId, periodType })
+    const params: {
+      driverId: string;
+      periodType: PeriodType;
+      startDate?: string;
+      endDate?: string;
+    } = { driverId, periodType };
+    if (activityRangeKey) {
+      const [startDate, endDate] = activityRangeKey.split("|");
+      params.startDate = startDate;
+      params.endDate = endDate;
+    }
+
+    api.getLedgerEarningsHistory(params)
       .then((result) => {
         if (cancelled) return;
         if (result.success && result.data && result.data.length > 0) {
@@ -134,7 +157,7 @@ export function DriverEarningsHistory({ driverId, quotaConfig }: DriverEarningsH
       });
 
     return () => { cancelled = true; };
-  }, [driverId, periodType]);
+  }, [driverId, periodType, activityRangeKey]);
 
   // Reset visible rows when switching period type
   const handlePeriodChange = (pt: PeriodType) => {
