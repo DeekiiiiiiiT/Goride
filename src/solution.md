@@ -175,6 +175,11 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 **CLI (rough health):** `npm run verify:legacy-ledger` prints canonical / trip / transaction **counts** (not per-driver). Use the app for driver-level verification.
 
+### Date picker: why Roam/InDrive “just work” but Uber can look wrong on a tight range
+
+- **Roam / InDrive (and trip-based parts of the UI):** Period totals use **`trip.date`** with a normal **start–end interval** (`DriverDetail` `metrics` loop). Pick a single day → only trips that day count. No CSV statement semantics.
+- **Uber (ledger / canonical):** Driver overview and breakdown use **`ledger_event:*`** filtered by **`canonicalEventInSelectedWindow`** (`ledgerMoneyAggregate.ts`). Event **`date`** may be a **statement posting day**, **period end**, or **outside** a tight range even when trips fell inside it; **statement** rows can also **dedupe** per-trip fare lines when a payments CSV statement is present. So the **same calendar day** can show Roam/InDrive from trips and miss Uber until the range includes the event **`date`** or full statement week (e.g. folder **Mar 23–Mar 30** vs picking **Mar 23–29** only).
+
 ---
 
 ## Remaining work for full legacy extinction

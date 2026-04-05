@@ -1398,6 +1398,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           ? trip.indriveNetIncome
           : trip.amount;
 
+        // Period totals for Roam/InDrive/Uber (trip side): strict trip.date in [start,end]. This is why a 1-day
+        // filter works predictably for trip-native platforms. Ledger-led Uber totals (ledgerOverview) use
+        // canonicalEventInSelectedWindow on ledger_event — different date semantics; see ledgerMoneyAggregate.ts.
         if (isWithinInterval(startOfDay(tripDateObj), { start, end })) {
             periodEarnings += effectiveEarnings;
             
@@ -2164,6 +2167,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     }
     const missingFromLedger: string[] = [];
     for (const p of tripPlatformsWithData) {
+      // Uber period money follows `trip.date` (same behavior as Roam/InDrive), not canonical ledger windows.
+      if (p === 'Uber') continue;
       if (!ledgerPlatforms.has(p)) {
         missingFromLedger.push(p);
       }
@@ -2179,9 +2184,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       for (const [platform, stats] of Object.entries(metrics.platformStats)) {
         platformStats[platform] = { ...stats };
       }
-      // Override financial fields from ledger
+      // Override financial fields from ledger (except Uber — use trip rows for period, same calendar logic as Roam/InDrive).
       for (const [rawPlat, stats] of Object.entries(ledgerOverview.platformStats)) {
         const platform = normalizePlatform(rawPlat);
+        if (platform === 'Uber') continue;
         if (!platformStats[platform]) {
           platformStats[platform] = { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 };
         }
@@ -2213,12 +2219,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         delete metrics.platformStats['Dispute Recoveries'];
       }
 
-      // Replace ledger Uber cash with CSV statement total (Excel SUM of Cash Collected) when available.
-      let periodCashCollected = ledgerOverview.period.cashCollected;
+      // Replace trip Uber cash with CSV statement total (Excel SUM of Cash Collected) when available.
       const uberCsvCash = metrics.uberCsvCashCollectedMagnitude;
       if (uberCsvCash != null) {
-        const ledgerUber = Number(ledgerOverview.platformStats?.Uber?.cashCollected ?? 0);
-        periodCashCollected = periodCashCollected - ledgerUber + uberCsvCash;
         if (platformStats.Uber) {
           platformStats.Uber.cashCollected = uberCsvCash;
         } else if (metrics.platformStats?.Uber) {
@@ -2244,10 +2247,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         return t;
       })();
 
-      const displayPeriodEarnings = isLedgerComplete
-        ? ledgerOverview.period.earnings
-        : sumMergedEarnings;
-      const displayCashCollected = isLedgerComplete ? periodCashCollected : sumMergedCash;
+      // Headline = sum of per-platform rows we show (trip-date Uber + ledger others), not raw ledger period.earnings.
+      const displayPeriodEarnings = sumMergedEarnings;
+      const displayCashCollected = sumMergedCash;
       const prevEarningsNum = Number(ledgerOverview.prevPeriod.earnings) || 0;
       const trendPercentMerged =
         prevEarningsNum > 0

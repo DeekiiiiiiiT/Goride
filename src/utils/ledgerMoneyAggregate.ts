@@ -428,6 +428,10 @@ export function addDaysYmd(ymd: string, days: number): string {
  * Driver overview date filter: include rows whose `date` falls in [startDate, endDate], OR
  * (for statement / payout lines) whose `periodStart`..`periodEnd` overlaps that range.
  *
+ * **Contrast with Roam/InDrive in the UI:** those platforms’ period cards often sum **`trip.date`** in-range
+ * (simple interval). Uber money here is **ledger_event**-based, not raw trip rows — so a 1-day picker can
+ * include Roam/InDrive trips for that day while Uber canonical rows need this window + statement rules.
+ *
  * Import canonical events set `date` to `periodStart` for Uber statement/payout lines (`buildCanonicalImportEvents`),
  * so a UI range like Mar 23–29 matches on `date`; overlap on `periodStart`/`periodEnd` still applies when present.
  *
