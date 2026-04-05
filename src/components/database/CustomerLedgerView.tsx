@@ -22,9 +22,17 @@ interface CustomerLedgerViewProps {
 
 type LedgerTab = 'main' | 'trip' | 'fuel' | 'toll';
 
+export interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  custom?: boolean;
+}
+
 interface LedgerConfig {
   businessType: BusinessType;
   enabledLedgers: LedgerTab[];
+  columns?: Record<LedgerTab, ColumnConfig[]>;
 }
 
 const LEDGER_TABS: { id: LedgerTab; label: string; icon: React.ElementType }[] = [
@@ -119,13 +127,22 @@ export function CustomerLedgerView({ customerId, customerData, onBack }: Custome
               <DatabaseLedgerPage ledger="main" organizationId={customerId} />
             )}
             {activeTab === 'trip' && (
-              <TripLedgerPage organizationId={customerId} />
+              <TripLedgerPage 
+                organizationId={customerId} 
+                columnConfig={ledgerConfig?.columns?.trip}
+              />
             )}
             {activeTab === 'fuel' && (
-              <FuelLedgerPage organizationId={customerId} />
+              <FuelLedgerPage 
+                organizationId={customerId}
+                columnConfig={ledgerConfig?.columns?.fuel}
+              />
             )}
             {activeTab === 'toll' && (
-              <TollLedgerPage organizationId={customerId} />
+              <TollLedgerPage 
+                organizationId={customerId}
+                columnConfig={ledgerConfig?.columns?.toll}
+              />
             )}
           </div>
         </>

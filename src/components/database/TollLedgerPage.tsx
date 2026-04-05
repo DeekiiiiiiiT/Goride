@@ -82,11 +82,19 @@ function compareValues(
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-interface TollLedgerPageProps {
-  organizationId?: string;
+export interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  custom?: boolean;
 }
 
-export function TollLedgerPage({ organizationId }: TollLedgerPageProps = {}) {
+interface TollLedgerPageProps {
+  organizationId?: string;
+  columnConfig?: ColumnConfig[];
+}
+
+export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageProps = {}) {
   const [allEntries, setAllEntries] = useState<TollLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

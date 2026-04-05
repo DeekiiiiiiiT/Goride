@@ -38,19 +38,33 @@ function filtersToApiParams(f: TripLedgerFilters): Partial<TripFilterParams> {
   return params;
 }
 
-interface TripLedgerPageProps {
-  organizationId?: string;
+export interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  custom?: boolean;
 }
 
-export function TripLedgerPage({ organizationId }: TripLedgerPageProps = {}) {
+interface TripLedgerPageProps {
+  organizationId?: string;
+  columnConfig?: ColumnConfig[];
+}
+
+export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageProps = {}) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(loadVisibleColumns);
   const [filters, setFilters] = useState<TripLedgerFilters>({ ...EMPTY_FILTERS });
+
+  // Use server config if provided (Super Admin view), otherwise use localStorage (fleet view)
+  const [localVisibleColumns, setLocalVisibleColumns] = useState<string[]>(loadVisibleColumns);
+  
+  const visibleColumns = columnConfig
+    ? columnConfig.filter(c => c.visible).map(c => c.key)
+    : localVisibleColumns;
 
   // Track the latest fetch request to avoid stale responses
   const fetchIdRef = useRef(0);
@@ -103,9 +117,10 @@ export function TripLedgerPage({ organizationId }: TripLedgerPageProps = {}) {
     setPage(0);
   };
 
-  // ── Column toggle handlers ──────────────────────────────────────────────
+  // ── Column toggle handlers (only for local/fleet view, not Super Admin) ──
   const handleColumnToggle = (key: string) => {
-    setVisibleColumns(prev => {
+    if (columnConfig) return; // Server config takes precedence
+    setLocalVisibleColumns(prev => {
       const next = prev.includes(key)
         ? prev.filter(k => k !== key)
         : [...prev, key];
@@ -116,9 +131,13 @@ export function TripLedgerPage({ organizationId }: TripLedgerPageProps = {}) {
   };
 
   const handleResetColumns = () => {
-    setVisibleColumns([...DEFAULT_VISIBLE_KEYS]);
+    if (columnConfig) return; // Server config takes precedence
+    setLocalVisibleColumns([...DEFAULT_VISIBLE_KEYS]);
     saveVisibleColumns([...DEFAULT_VISIBLE_KEYS]);
   };
+  
+  // When in Super Admin view, hide the column toggle button
+  const showColumnToggle = !columnConfig;
 
   return (
     <div className="space-y-5">
@@ -144,12 +163,14 @@ export function TripLedgerPage({ organizationId }: TripLedgerPageProps = {}) {
             visibleColumns={visibleColumns}
             total={total}
           />
-          <TripLedgerColumnToggle
-            columns={ALL_COLUMNS}
-            visibleColumns={visibleColumns}
-            onToggle={handleColumnToggle}
-            onResetDefaults={handleResetColumns}
-          />
+          {showColumnToggle && (
+            <TripLedgerColumnToggle
+              columns={ALL_COLUMNS}
+              visibleColumns={visibleColumns}
+              onToggle={handleColumnToggle}
+              onResetDefaults={handleResetColumns}
+            />
+          )}
           <button
             onClick={handleRetry}
             disabled={loading}
@@ -202,6 +223,7 @@ export function TripLedgerPage({ organizationId }: TripLedgerPageProps = {}) {
         pageSize={pageSize}
         loading={loading}
         visibleColumns={visibleColumns}
+        columnConfig={columnConfig}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
       />

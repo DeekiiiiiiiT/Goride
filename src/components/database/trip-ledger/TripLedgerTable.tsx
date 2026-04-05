@@ -296,10 +296,99 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
   );
 }
 
-function TripDetailPanel({ trip, colSpan }: { trip: Trip; colSpan: number }) {
-  const net = getNetIncome(trip);
-  const fb = trip.fareBreakdown;
+/**
+ * Maps column keys to their value extractors for the detail panel.
+ * This allows the detail panel to be data-driven by the column config.
+ */
+const DETAIL_FIELD_EXTRACTORS: Record<string, { label: string; getValue: (t: Trip) => React.ReactNode }> = {
+  // Core fields
+  id: { label: 'ID', getValue: (t) => <span className="font-mono text-xs">{t.id}</span> },
+  date: { label: 'Date & Time', getValue: (t) => formatDate(t.date) },
+  requestTime: { label: 'Request Time', getValue: (t) => formatDate(t.requestTime) },
+  dropoffTime: { label: 'Dropoff Time', getValue: (t) => formatDate(t.dropoffTime) },
+  platform: { label: 'Platform', getValue: (t) => t.platform },
+  status: { label: 'Status', getValue: (t) => t.status },
+  serviceType: { label: 'Service Type', getValue: (t) => t.serviceType || t.productType },
+  serviceCategory: { label: 'Service Category', getValue: (t) => t.serviceCategory === 'courier' ? 'Courier' : t.serviceCategory === 'ride' ? 'Ride' : t.serviceCategory },
+  driver: { label: 'Driver', getValue: (t) => t.driverName?.trim() ? t.driverName.trim().toUpperCase() : t.driverName || t.driverId },
+  vehicle: { label: 'Vehicle', getValue: (t) => t.vehicleId },
+  
+  // Geography
+  pickup: { label: 'Pickup', getValue: (t) => t.pickupLocation },
+  dropoff: { label: 'Dropoff', getValue: (t) => t.dropoffLocation },
+  pickupArea: { label: 'Pickup Area', getValue: (t) => t.pickupArea },
+  dropoffArea: { label: 'Dropoff Area', getValue: (t) => t.dropoffArea },
+  distance: { label: 'Distance', getValue: (t) => formatDistance(t.distance) },
+  duration: { label: 'Duration', getValue: (t) => formatDuration(t.duration) },
+  
+  // Financial
+  amount: { label: 'Amount', getValue: (t) => formatCurrency(t.amount) },
+  grossEarnings: { label: 'Gross Earnings', getValue: (t) => formatCurrency(t.grossEarnings) },
+  netIncome: { label: 'Net to Driver', getValue: (t) => formatCurrency(getNetIncome(t)) },
+  paymentMethod: { label: 'Payment Method', getValue: (t) => t.paymentMethod },
+  cashCollected: { label: 'Cash Collected', getValue: (t) => formatCurrency(t.cashCollected) },
+  netPayout: { label: 'Net Payout', getValue: (t) => formatCurrency(t.netPayout) },
+  tolls: { label: 'Toll Charges', getValue: (t) => formatCurrency(t.tollCharges) },
+  
+  // Fare breakdown
+  baseFare: { label: 'Base Fare', getValue: (t) => formatCurrency(t.fareBreakdown?.baseFare) },
+  tips: { label: 'Tips', getValue: (t) => formatCurrency(t.fareBreakdown?.tips) },
+  waitTime: { label: 'Wait Time Fee', getValue: (t) => formatCurrency(t.fareBreakdown?.waitTime) },
+  surge: { label: 'Surge', getValue: (t) => formatCurrency(t.fareBreakdown?.surge) },
+  airportFees: { label: 'Airport Fees', getValue: (t) => formatCurrency(t.fareBreakdown?.airportFees) },
+  timeAtStop: { label: 'Time at Stop', getValue: (t) => formatCurrency(t.fareBreakdown?.timeAtStop) },
+  taxes: { label: 'Taxes', getValue: (t) => formatCurrency(t.fareBreakdown?.taxes) },
+  
+  // InDrive-specific
+  serviceFee: { label: 'InDrive Service Fee', getValue: (t) => formatCurrency(t.indriveServiceFee) },
+  indriveServiceFeePercent: { label: 'InDrive Fee %', getValue: (t) => formatPercent(t.indriveServiceFeePercent) },
+  indriveNetIncome: { label: 'InDrive Net Income', getValue: (t) => formatCurrency(t.indriveNetIncome) },
+  indriveBalanceDeduction: { label: 'Balance Deduction', getValue: (t) => formatCurrency(t.indriveBalanceDeduction) },
+  
+  // Analytics
+  speed: { label: 'Speed', getValue: (t) => t.speed != null ? `${t.speed.toFixed(1)} km/h` : undefined },
+  earningsPerKm: { label: 'Earnings/km', getValue: (t) => t.earningsPerKm != null ? formatCurrency(t.earningsPerKm) : undefined },
+  earningsPerMin: { label: 'Earnings/min', getValue: (t) => t.earningsPerMin != null ? formatCurrency(t.earningsPerMin) : undefined },
+  efficiencyScore: { label: 'Efficiency Score', getValue: (t) => t.efficiencyScore != null ? `${Math.round(t.efficiencyScore)}/100` : undefined },
+  tripRating: { label: 'Trip Rating', getValue: (t) => t.tripRating != null ? `${t.tripRating}/5` : undefined },
+  dayOfWeek: { label: 'Day of Week', getValue: (t) => t.dayOfWeek },
+  
+  // Metadata
+  batchSource: { label: 'Batch ID', getValue: (t) => t.batchId ? <span className="font-mono text-xs">{t.batchId}</span> : undefined },
+  anchorPeriod: { label: 'Anchor Period', getValue: (t) => t.anchorPeriodId ? <span className="font-mono text-xs">{t.anchorPeriodId}</span> : undefined },
+  routeId: { label: 'Route ID', getValue: (t) => t.routeId },
+  notes: { label: 'Notes', getValue: (t) => t.notes },
+};
 
+/** Default detail fields shown when no column config is provided */
+const DEFAULT_DETAIL_KEYS = [
+  'date', 'requestTime', 'dropoffTime', 'platform', 'status', 'serviceType', 'serviceCategory', 'driver', 'vehicle',
+  'pickup', 'dropoff', 'pickupArea', 'dropoffArea', 'distance', 'duration',
+  'amount', 'grossEarnings', 'netIncome', 'paymentMethod', 'cashCollected', 'netPayout', 'tolls',
+  'baseFare', 'tips', 'waitTime', 'surge', 'airportFees', 'timeAtStop', 'taxes',
+  'speed', 'earningsPerKm', 'earningsPerMin', 'efficiencyScore', 'tripRating', 'dayOfWeek',
+  'batchSource', 'anchorPeriod', 'routeId', 'notes',
+];
+
+interface TripDetailPanelProps {
+  trip: Trip;
+  colSpan: number;
+  columnConfig?: ColumnConfig[];
+}
+
+function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) {
+  // Determine which fields to show based on column config
+  const fieldsToShow = columnConfig
+    ? columnConfig.filter(c => c.visible).map(c => c.key)
+    : DEFAULT_DETAIL_KEYS;
+
+  // Include InDrive-specific fields if trip has InDrive data
+  const hasIndriveData = trip.indriveServiceFee != null;
+  const indriveKeys = ['serviceFee', 'indriveServiceFeePercent', 'indriveNetIncome', 'indriveBalanceDeduction'];
+  
+  // Include cancellation fields if trip is cancelled
+  const isCancelled = trip.status === 'Cancelled';
+  
   return (
     <tr>
       <td colSpan={colSpan} className="p-0">
@@ -311,94 +400,47 @@ function TripDetailPanel({ trip, colSpan }: { trip: Trip; colSpan: number }) {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-3">
-            {/* ── Core ── */}
-            <DetailField label="Date & Time" value={formatDate(trip.date)} />
-            <DetailField label="Request Time" value={formatDate(trip.requestTime)} />
-            <DetailField label="Dropoff Time" value={formatDate(trip.dropoffTime)} />
-            <DetailField label="Platform" value={trip.platform} />
-            <DetailField label="Status" value={trip.status} />
-            <DetailField label="Service Type" value={trip.serviceType || trip.productType} />
-            <DetailField label="Service Category" value={trip.serviceCategory === 'courier' ? 'Courier' : trip.serviceCategory === 'ride' ? 'Ride' : trip.serviceCategory} />
-            <DetailField
-              label="Driver"
-              value={trip.driverName?.trim() ? trip.driverName.trim().toUpperCase() : trip.driverName || trip.driverId}
-            />
-            <DetailField label="Vehicle" value={trip.vehicleId} />
-
-            {/* ── Geography ── */}
-            <DetailField label="Pickup" value={trip.pickupLocation} />
-            <DetailField label="Dropoff" value={trip.dropoffLocation} />
-            <DetailField label="Pickup Area" value={trip.pickupArea} />
-            <DetailField label="Dropoff Area" value={trip.dropoffArea} />
-            <DetailField label="Distance" value={formatDistance(trip.distance)} />
-            <DetailField label="Duration" value={formatDuration(trip.duration)} />
-
-            {/* ── Financial ── */}
-            <DetailField label="Amount" value={formatCurrency(trip.amount)} />
-            <DetailField label="Gross Earnings" value={formatCurrency(trip.grossEarnings)} />
-            <DetailField label="Net to Driver" value={formatCurrency(net)} />
-            <DetailField label="Payment Method" value={trip.paymentMethod} />
-            <DetailField label="Cash Collected" value={formatCurrency(trip.cashCollected)} />
-            <DetailField label="Net Payout" value={formatCurrency(trip.netPayout)} />
-            <DetailField label="Toll Charges" value={formatCurrency(trip.tollCharges)} />
-
-            {/* ── Fare Breakdown ── */}
-            {fb && (
-              <>
-                <DetailField label="Base Fare" value={formatCurrency(fb.baseFare)} />
-                <DetailField label="Tips" value={formatCurrency(fb.tips)} />
-                <DetailField label="Wait Time Fee" value={formatCurrency(fb.waitTime)} />
-                <DetailField label="Surge" value={formatCurrency(fb.surge)} />
-                <DetailField label="Airport Fees" value={formatCurrency(fb.airportFees)} />
-                <DetailField label="Time at Stop" value={formatCurrency(fb.timeAtStop)} />
-                <DetailField label="Taxes" value={formatCurrency(fb.taxes)} />
-              </>
-            )}
-            {trip.uberPriorPeriodAdjustment != null &&
-              Math.abs(trip.uberPriorPeriodAdjustment) > 0.0001 && (
-                <DetailField
-                  label="Adj. previous periods"
-                  value={formatCurrency(trip.uberPriorPeriodAdjustment)}
-                />
-              )}
-
-            {/* ── InDrive-specific ── */}
-            {trip.indriveServiceFee != null && (
-              <>
-                <DetailField label="InDrive Service Fee" value={formatCurrency(trip.indriveServiceFee)} />
-                <DetailField label="InDrive Fee %" value={formatPercent(trip.indriveServiceFeePercent)} />
-                <DetailField label="InDrive Net Income" value={formatCurrency(trip.indriveNetIncome)} />
-                <DetailField label="Balance Deduction" value={formatCurrency(trip.indriveBalanceDeduction)} />
-              </>
-            )}
-
-            {/* ── Analytics ── */}
-            <DetailField label="Speed" value={trip.speed != null ? `${trip.speed.toFixed(1)} km/h` : undefined} />
-            <DetailField label="Earnings/km" value={trip.earningsPerKm != null ? formatCurrency(trip.earningsPerKm) : undefined} />
-            <DetailField label="Earnings/min" value={trip.earningsPerMin != null ? formatCurrency(trip.earningsPerMin) : undefined} />
-            <DetailField label="Efficiency Score" value={trip.efficiencyScore != null ? `${Math.round(trip.efficiencyScore)}/100` : undefined} />
-            <DetailField label="Trip Rating" value={trip.tripRating != null ? `${trip.tripRating}/5` : undefined} />
-            <DetailField label="Day of Week" value={trip.dayOfWeek} />
-
-            {/* ── Metadata ── */}
-            <DetailField label="Batch ID" value={trip.batchId ? <span className="font-mono text-xs">{trip.batchId}</span> : undefined} />
-            <DetailField label="Anchor Period" value={trip.anchorPeriodId ? <span className="font-mono text-xs">{trip.anchorPeriodId}</span> : undefined} />
-            <DetailField label="Route ID" value={trip.routeId} />
-
-            {/* ── Cancellation ── */}
-            {trip.status === 'Cancelled' && (
+            {fieldsToShow.map(key => {
+              const extractor = DETAIL_FIELD_EXTRACTORS[key];
+              if (!extractor) {
+                // Handle custom columns - show raw value from trip
+                const customValue = (trip as any)[key];
+                if (customValue === undefined || customValue === null) return null;
+                const configCol = columnConfig?.find(c => c.key === key);
+                return (
+                  <DetailField 
+                    key={key} 
+                    label={configCol?.label || key} 
+                    value={String(customValue)} 
+                  />
+                );
+              }
+              const value = extractor.getValue(trip);
+              if (value === undefined || value === null || value === '') return null;
+              return <DetailField key={key} label={extractor.label} value={value} />;
+            })}
+            
+            {/* Always show InDrive fields if trip has InDrive data */}
+            {hasIndriveData && !columnConfig && indriveKeys.map(key => {
+              const extractor = DETAIL_FIELD_EXTRACTORS[key];
+              if (!extractor) return null;
+              const value = extractor.getValue(trip);
+              if (value === undefined || value === null) return null;
+              return <DetailField key={key} label={extractor.label} value={value} />;
+            })}
+            
+            {/* Always show cancellation fields if cancelled */}
+            {isCancelled && (
               <>
                 <DetailField label="Cancelled By" value={trip.cancelledBy} />
                 <DetailField label="Cancellation Reason" value={trip.cancellationReason} />
                 <DetailField label="Estimated Loss" value={formatCurrency(trip.estimatedLoss)} />
               </>
             )}
-
-            {/* Notes */}
-            {trip.notes && (
-              <div className="col-span-2">
-                <DetailField label="Notes" value={trip.notes} />
-              </div>
+            
+            {/* Uber prior period adjustment */}
+            {trip.uberPriorPeriodAdjustment != null && Math.abs(trip.uberPriorPeriodAdjustment) > 0.0001 && (
+              <DetailField label="Adj. previous periods" value={formatCurrency(trip.uberPriorPeriodAdjustment)} />
             )}
           </div>
         </div>
@@ -415,11 +457,12 @@ interface DataRowProps {
   activeCols: RenderColumnDef[];
   loading: boolean;
   isExpanded: boolean;
+  columnConfig?: ColumnConfig[];
   onToggleExpand: (id: string) => void;
   onCopyId: (id: string) => void;
 }
 
-const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, isExpanded, onToggleExpand, onCopyId }: DataRowProps) {
+const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, isExpanded, columnConfig, onToggleExpand, onCopyId }: DataRowProps) {
   return (
     <>
       <tr
@@ -470,7 +513,7 @@ const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, is
           );
         })}
       </tr>
-      {isExpanded && <TripDetailPanel trip={trip} colSpan={activeCols.length} />}
+      {isExpanded && <TripDetailPanel trip={trip} colSpan={activeCols.length} columnConfig={columnConfig} />}
     </>
   );
 });
@@ -483,6 +526,15 @@ function SortIcon({ dir }: { dir: SortDir }) {
   return <ChevronsUpDown className="h-3 w-3 opacity-0 group-hover/th:opacity-40 transition-opacity" />;
 }
 
+// ── Column Config type (matches LedgerColumnSettings) ───────────────────────
+
+export interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  custom?: boolean;
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 
 interface TripLedgerTableProps {
@@ -492,6 +544,7 @@ interface TripLedgerTableProps {
   pageSize: number;
   loading: boolean;
   visibleColumns: string[];
+  columnConfig?: ColumnConfig[];
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
 }
@@ -503,6 +556,7 @@ export function TripLedgerTable({
   pageSize,
   loading,
   visibleColumns,
+  columnConfig,
   onPageChange,
   onPageSizeChange,
 }: TripLedgerTableProps) {
@@ -620,6 +674,7 @@ export function TripLedgerTable({
                 activeCols={activeCols}
                 loading={loading}
                 isExpanded={expandedId === trip.id}
+                columnConfig={columnConfig}
                 onToggleExpand={handleToggleExpand}
                 onCopyId={handleCopyId}
               />

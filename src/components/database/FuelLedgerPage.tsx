@@ -122,11 +122,19 @@ function compareValues(
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-interface FuelLedgerPageProps {
-  organizationId?: string;
+export interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  custom?: boolean;
 }
 
-export function FuelLedgerPage({ organizationId }: FuelLedgerPageProps = {}) {
+interface FuelLedgerPageProps {
+  organizationId?: string;
+  columnConfig?: ColumnConfig[];
+}
+
+export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageProps = {}) {
   const [allEntries, setAllEntries] = useState<FuelEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

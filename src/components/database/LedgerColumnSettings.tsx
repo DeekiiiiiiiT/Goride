@@ -59,6 +59,12 @@ const LEDGER_INFO: { id: LedgerType; label: string; icon: React.ElementType }[] 
   { id: 'toll', label: 'Toll Ledger', icon: Tags },
 ];
 
+/**
+ * DEFAULT_COLUMNS must match the actual column keys used in each ledger table.
+ * Trip Ledger: keys from TripLedgerTable ALL_COLUMNS
+ * Fuel Ledger: keys from FuelLedgerTable ALL_COLUMNS  
+ * Toll Ledger: keys from TollLedgerTable ALL_COLUMNS
+ */
 const DEFAULT_COLUMNS: Record<LedgerType, ColumnConfig[]> = {
   main: [
     { key: 'date', label: 'Date', visible: true },
@@ -68,38 +74,58 @@ const DEFAULT_COLUMNS: Record<LedgerType, ColumnConfig[]> = {
     { key: 'reference', label: 'Reference', visible: true },
   ],
   trip: [
-    { key: 'date', label: 'Date', visible: true },
-    { key: 'time', label: 'Time', visible: true },
-    { key: 'platform', label: 'Platform', visible: true },
+    // Core columns (default visible)
+    { key: 'id', label: 'ID', visible: true },
+    { key: 'date', label: 'Date/Time', visible: true },
     { key: 'driver', label: 'Driver', visible: true },
-    { key: 'pickup', label: 'Pickup', visible: true },
-    { key: 'dropoff', label: 'Dropoff', visible: true },
+    { key: 'vehicle', label: 'Vehicle', visible: true },
+    { key: 'platform', label: 'Platform', visible: true },
+    { key: 'status', label: 'Status', visible: true },
     { key: 'distance', label: 'Distance', visible: true },
     { key: 'duration', label: 'Duration', visible: true },
-    { key: 'fare', label: 'Fare', visible: true },
-    { key: 'tip', label: 'Tip', visible: true },
-    { key: 'total', label: 'Total', visible: true },
-    { key: 'status', label: 'Status', visible: true },
+    // Financial columns
+    { key: 'amount', label: 'Amount', visible: true },
+    { key: 'netIncome', label: 'Net Income', visible: true },
+    { key: 'paymentMethod', label: 'Payment', visible: true },
+    { key: 'cashCollected', label: 'Cash Collected', visible: true },
+    { key: 'tips', label: 'Tips', visible: false },
+    { key: 'surge', label: 'Surge', visible: false },
+    { key: 'tolls', label: 'Tolls', visible: false },
+    { key: 'serviceFee', label: 'Service Fee', visible: false },
+    // Metadata columns
+    { key: 'pickup', label: 'Pickup', visible: false },
+    { key: 'dropoff', label: 'Dropoff', visible: false },
+    { key: 'serviceCategory', label: 'Service Category', visible: false },
+    { key: 'batchSource', label: 'Batch Source', visible: false },
+    { key: 'efficiencyScore', label: 'Efficiency', visible: false },
   ],
   fuel: [
+    { key: 'id', label: 'ID', visible: true },
     { key: 'date', label: 'Date', visible: true },
-    { key: 'time', label: 'Time', visible: true },
-    { key: 'station', label: 'Station', visible: true },
-    { key: 'driver', label: 'Driver', visible: true },
-    { key: 'vehicle', label: 'Vehicle', visible: true },
-    { key: 'gallons', label: 'Gallons', visible: true },
-    { key: 'pricePerGallon', label: 'Price/Gallon', visible: true },
-    { key: 'totalCost', label: 'Total Cost', visible: true },
+    { key: 'vehicleId', label: 'Vehicle', visible: true },
+    { key: 'driverId', label: 'Driver', visible: true },
+    { key: 'amount', label: 'Amount', visible: true },
+    { key: 'liters', label: 'Liters', visible: true },
+    { key: 'pricePerLiter', label: 'Price/Liter', visible: true },
     { key: 'odometer', label: 'Odometer', visible: true },
+    { key: 'location', label: 'Location', visible: true },
+    { key: 'paymentSource', label: 'Payment Source', visible: true },
+    { key: 'entryMode', label: 'Entry Mode', visible: false },
+    { key: 'type', label: 'Type', visible: false },
+    { key: 'auditStatus', label: 'Audit Status', visible: false },
   ],
   toll: [
+    { key: 'id', label: 'ID', visible: true },
     { key: 'date', label: 'Date', visible: true },
-    { key: 'time', label: 'Time', visible: true },
+    { key: 'vehiclePlate', label: 'Vehicle', visible: true },
+    { key: 'driverName', label: 'Driver', visible: true },
     { key: 'plaza', label: 'Plaza', visible: true },
-    { key: 'driver', label: 'Driver', visible: true },
-    { key: 'vehicle', label: 'Vehicle', visible: true },
     { key: 'amount', label: 'Amount', visible: true },
-    { key: 'paymentMethod', label: 'Payment Method', visible: true },
+    { key: 'type', label: 'Type', visible: true },
+    { key: 'reconciliationStatus', label: 'Reconciliation', visible: true },
+    { key: 'status', label: 'Status', visible: false },
+    { key: 'paymentMethod', label: 'Payment Method', visible: false },
+    { key: 'matchedTripId', label: 'Matched Trip', visible: false },
   ],
 };
 
