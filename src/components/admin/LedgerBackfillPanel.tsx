@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { api } from '../../services/api';
-import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download, Info } from 'lucide-react';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
@@ -82,14 +82,12 @@ export function LedgerBackfillPanel() {
   const [result, setResult] = useState<BackfillResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
-  const [confirmReal, setConfirmReal] = useState(false);
 
   // ── Repair Driver IDs state ──
   const [repairDriverId, setRepairDriverId] = useState('');
   const [repairLoading, setRepairLoading] = useState(false);
   const [repairResult, setRepairResult] = useState<RepairResult | null>(null);
   const [repairError, setRepairError] = useState<string | null>(null);
-  const [confirmRepair, setConfirmRepair] = useState(false);
   const [showRepairSamples, setShowRepairSamples] = useState(false);
   const [showRepairErrors, setShowRepairErrors] = useState(false);
   const [showUnresolvable, setShowUnresolvable] = useState(false);
@@ -110,7 +108,6 @@ export function LedgerBackfillPanel() {
   const [tollRepairLoading, setTollRepairLoading] = useState(false);
   const [tollRepairResult, setTollRepairResult] = useState<TollRepairDatesResponse | null>(null);
   const [tollRepairError, setTollRepairError] = useState<string | null>(null);
-  const [confirmTollRepair, setConfirmTollRepair] = useState(false);
   const [tollBackupLoading, setTollBackupLoading] = useState(false);
 
   const [stripDriverId, setStripDriverId] = useState('');
@@ -151,7 +148,6 @@ export function LedgerBackfillPanel() {
     setLoading(true);
     setResult(null);
     setError(null);
-    setConfirmReal(false);
 
     try {
       const params = new URLSearchParams();
@@ -212,7 +208,6 @@ export function LedgerBackfillPanel() {
     setTollRepairLoading(true);
     setTollRepairResult(null);
     setTollRepairError(null);
-    setConfirmTollRepair(false);
 
     try {
       const params = new URLSearchParams();
@@ -290,7 +285,6 @@ export function LedgerBackfillPanel() {
     setRepairLoading(true);
     setRepairResult(null);
     setRepairError(null);
-    setConfirmRepair(false);
 
     try {
       const params = new URLSearchParams();
@@ -328,7 +322,19 @@ export function LedgerBackfillPanel() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Ledger Backfill</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Create missing ledger entries from historical trips and transactions
+            Preview what a historical backfill would do (dry run). Live legacy <code className="text-[11px]">ledger:%</code> writes from this tool are retired.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/40 p-4 text-sm text-slate-600 dark:text-slate-300">
+        <Info className="h-5 w-5 flex-shrink-0 text-slate-500 dark:text-slate-400 mt-0.5" aria-hidden />
+        <div className="space-y-1.5">
+          <p className="font-medium text-slate-800 dark:text-slate-100">Legacy mass backfill and repair writes are off</p>
+          <p>
+            The server returns <span className="font-mono text-xs">403</span> for live runs that wrote legacy ledger rows. Use{' '}
+            <span className="font-medium">Preview (Dry Run)</span> below to inspect counts only. To add money history from imports, use the app’s{' '}
+            <span className="font-medium">Imports</span> flow (canonical <code className="text-[11px]">ledger_event:*</code> append).
           </p>
         </div>
       </div>
@@ -405,35 +411,15 @@ export function LedgerBackfillPanel() {
             Preview (Dry Run)
           </button>
 
-          {!confirmReal ? (
-            <button
-              onClick={() => setConfirmReal(true)}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-lg font-medium text-sm hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 transition-colors"
-            >
-              <Play className="h-4 w-4" />
-              Run Backfill (Real)
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">Are you sure?</span>
-              <button
-                onClick={() => runBackfill(false)}
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Yes, Run It
-              </button>
-              <button
-                onClick={() => setConfirmReal(false)}
-                disabled={loading}
-                className="px-4 py-2 text-slate-600 dark:text-slate-400 text-sm hover:text-slate-900 dark:hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            disabled
+            title="Live legacy ledger backfill is disabled server-side (403). Use Preview (Dry Run) or Imports for canonical events."
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-80"
+          >
+            <Play className="h-4 w-4" />
+            Run backfill (retired)
+          </button>
         </div>
       </div>
 
@@ -602,35 +588,15 @@ export function LedgerBackfillPanel() {
             Preview (Dry Run)
           </button>
 
-          {!confirmTollRepair ? (
-            <button
-              onClick={() => setConfirmTollRepair(true)}
-              disabled={tollRepairLoading || tollBackupLoading}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-lg font-medium text-sm hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 transition-colors"
-            >
-              <Play className="h-4 w-4" />
-              Run Repair (Real)
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">Are you sure?</span>
-              <button
-                onClick={() => runTollRepairDates(false)}
-                disabled={tollRepairLoading || tollBackupLoading}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
-                {tollRepairLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Yes, Repair
-              </button>
-              <button
-                onClick={() => setConfirmTollRepair(false)}
-                disabled={tollRepairLoading || tollBackupLoading}
-                className="px-4 py-2 text-slate-600 dark:text-slate-400 text-sm hover:text-slate-900 dark:hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            disabled
+            title="Live toll date repair via legacy route is disabled (403). Use Preview (Dry Run) only."
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-80"
+          >
+            <Play className="h-4 w-4" />
+            Run repair (retired)
+          </button>
         </div>
 
         {tollRepairError && (
@@ -998,36 +964,15 @@ export function LedgerBackfillPanel() {
               Preview (Dry Run)
             </button>
 
-            {/* Repair Real Run — requires confirmation */}
-            {!confirmRepair ? (
-              <button
-                onClick={() => setConfirmRepair(true)}
-                disabled={repairLoading}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-lg font-medium text-sm hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50 transition-colors"
-              >
-                <Wrench className="h-4 w-4" />
-                Run Repair (Real)
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">This will update ledger entries. Proceed?</span>
-                <button
-                  onClick={() => runRepair(false)}
-                  disabled={repairLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-                >
-                  {repairLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Yes, Repair
-                </button>
-                <button
-                  onClick={() => setConfirmRepair(false)}
-                  disabled={repairLoading}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-400 text-sm hover:text-slate-900 dark:hover:text-white transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              disabled
+              title="Live driver-id repair writes are disabled server-side (403). Use Preview (Dry Run) only."
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-80"
+            >
+              <Wrench className="h-4 w-4" />
+              Run repair (retired)
+            </button>
           </div>
         </div>
 

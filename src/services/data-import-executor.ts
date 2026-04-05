@@ -237,15 +237,6 @@ export const importExecutor = {
             onProgress(pct);
         }
 
-        // Match merged import: optional ensure-from-trip-ids (legacy writes retired; canonical append is separate).
-        if (prepared.length > 0) {
-            try {
-                await api.ensureLedgerFromTripIds(prepared.map((t) => t.id).filter(Boolean) as string[]);
-            } catch (e) {
-                console.warn('[processTripBatch] ensureLedgerFromTripIds failed (trips saved):', e);
-            }
-        }
-
         return { ...result, batchId, weeksCovered };
     },
 

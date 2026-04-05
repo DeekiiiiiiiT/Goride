@@ -47,7 +47,6 @@ import {
   TrendingDown,
   BarChart3,
   AlertTriangle,
-  Database,
   CalendarDays,
   FileText,
   Clock,
@@ -200,10 +199,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
   const [sourceData, setSourceData] = useState<any>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
 
-  // Backfill state
-  const [backfillRunning, setBackfillRunning] = useState(false);
-  const [backfillResult, setBackfillResult] = useState<{ ledgerCreated: number; tripsProcessed: number; txProcessed: number } | null>(null);
-  const [backfillDismissed, setBackfillDismissed] = useState(false);
+  const [sparseLedgerBannerDismissed, setSparseLedgerBannerDismissed] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   // Debounced search
@@ -297,42 +293,15 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     return () => { cancelled = true; };
   }, [filterKey, refreshCounter]);
 
-  // ─── Backfill handler ─────────────────────────────────────────────
-
-  const handleBackfill = useCallback(async () => {
-    setBackfillRunning(true);
-    setBackfillResult(null);
-    toast.info('Backfilling historical data into the ledger... This may take a minute.');
-    try {
-      const result = await api.runLedgerBackfill();
-      const stats = result.stats;
-      setBackfillResult({
-        ledgerCreated: stats.ledgerCreated,
-        tripsProcessed: stats.tripsProcessed,
-        txProcessed: stats.txProcessed,
-      });
-      toast.success(`Backfill complete! Created ${stats.ledgerCreated} ledger entries from ${stats.tripsProcessed} trips and ${stats.txProcessed} transactions.`);
-      // Force data refresh
-      setRefreshCounter(c => c + 1);
-    } catch (err: any) {
-      console.error('[LedgerView] Backfill failed:', err);
-      toast.error(`Backfill failed: ${err.message}`);
-    } finally {
-      setBackfillRunning(false);
-    }
-  }, []);
-
-  // Detect if backfill is needed (very few entries with no date filter = historical data missing)
-  const showBackfillBanner = useMemo(() => {
-    if (backfillDismissed || backfillRunning) return false;
-    if (backfillResult && backfillResult.ledgerCreated > 0) return false;
+  /** Few visible rows: often filters, date range, or genuinely sparse canonical history (use Imports — legacy mass backfill is retired). */
+  const showSparseLedgerBanner = useMemo(() => {
+    if (sparseLedgerBannerDismissed) return false;
     if (loading || summaryLoading) return false;
-    // Show banner when "All Time" has 5 or fewer entries — historical data likely missing
     if (!filters.startDate && !filters.endDate && !filters.eventType && !filters.direction && !filters.platform && !driverId && !vehicleId) {
       return total <= 5;
     }
     return false;
-  }, [backfillDismissed, backfillRunning, backfillResult, loading, summaryLoading, filters.startDate, filters.endDate, filters.eventType, filters.direction, filters.platform, total, driverId, vehicleId]);
+  }, [sparseLedgerBannerDismissed, loading, summaryLoading, filters.startDate, filters.endDate, filters.eventType, filters.direction, filters.platform, total, driverId, vehicleId]);
 
   // ─── Filter handlers ──────────────────────────────────────────────
 
@@ -671,77 +640,31 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
         </Card>
       </div>
 
-      {/* ── Backfill Banner ──────────────────────────────────────── */}
-      {showBackfillBanner && (
-        <Card className="border-amber-300 bg-amber-50 shadow-sm">
+      {/* ── Sparse ledger hint (no legacy backfill CTA) ───────────── */}
+      {showSparseLedgerBanner && (
+        <Card className="border-slate-200 bg-slate-50/80 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 mt-0.5">
-                <Database className="h-5 w-5 text-amber-700" />
+              <div className="p-2 rounded-lg bg-white border border-slate-200 mt-0.5">
+                <Info className="h-5 w-5 text-slate-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-semibold text-amber-900">Historical Data Not Yet Imported</h4>
-                <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                  The ledger only contains {total} {total === 1 ? 'entry' : 'entries'}. Your existing trips and transactions need to be
-                  backfilled into the new ledger system. This is a one-time operation that converts your historical data
-                  into standardized ledger entries, enabling accurate date filtering and financial reporting.
-                </p>
-                <p className="text-xs text-amber-600 mt-1.5 italic">
-                  This process is safe and non-destructive — it reads your existing data and creates new ledger records alongside it.
-                  It uses built-in deduplication, so running it multiple times is harmless.
+                <h4 className="text-sm font-semibold text-slate-900">Only a few ledger rows match</h4>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  With &quot;All time&quot; and no extra filters, this list shows {total} {total === 1 ? 'entry' : 'entries'}. Narrow filters
+                  or a short date range can hide most events — try clearing filters or widening the range. To load historical money events from
+                  files, use <span className="font-medium">Imports</span> (canonical append). Legacy mass backfill from this screen is retired.
                 </p>
                 <div className="flex items-center gap-2 mt-3">
-                  <Button
-                    size="sm"
-                    onClick={handleBackfill}
-                    disabled={backfillRunning}
-                    className="bg-amber-700 hover:bg-amber-800 text-white text-xs h-8 px-4"
-                  >
-                    {backfillRunning ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                        Backfilling...
-                      </>
-                    ) : (
-                      <>
-                        <Database className="h-3.5 w-3.5 mr-1.5" />
-                        Import Historical Data
-                      </>
-                    )}
-                  </Button>
                   <button
-                    onClick={() => setBackfillDismissed(true)}
-                    className="text-xs text-amber-600 hover:text-amber-800 underline"
+                    type="button"
+                    onClick={() => setSparseLedgerBannerDismissed(true)}
+                    className="text-xs text-slate-600 hover:text-slate-900 underline"
                   >
                     Dismiss
                   </button>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Backfill Result Banner ───────────────────────────────── */}
-      {backfillResult && (
-        <Card className="border-emerald-300 bg-emerald-50 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-emerald-800">Backfill Complete</p>
-                <p className="text-xs text-emerald-700 mt-0.5">
-                  Created <span className="font-bold">{backfillResult.ledgerCreated.toLocaleString()}</span> ledger entries
-                  from {backfillResult.tripsProcessed.toLocaleString()} trips and {backfillResult.txProcessed.toLocaleString()} transactions.
-                  All date filters and summary cards are now fully operational.
-                </p>
-              </div>
-              <button
-                onClick={() => setBackfillResult(null)}
-                className="text-emerald-500 hover:text-emerald-700"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
           </CardContent>
         </Card>
