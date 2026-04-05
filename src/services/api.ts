@@ -2365,8 +2365,7 @@ export const api = {
     driverId: string;
     startDate: string;
     endDate: string;
-    /** `canonical` (default) = `ledger_event:*`; `legacy` = `ledger:%`; `both` = side-by-side. */
-    source?: 'canonical' | 'legacy' | 'both';
+    source?: 'canonical';
   }): Promise<any> {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || publicAnonKey;
@@ -2390,8 +2389,7 @@ export const api = {
     driverId: string;
     startDate: string;
     endDate: string;
-    /** Default canonical (`ledger_event:*` fees). `legacy` = `ledger:%`. `both` returns nested JSON; API flattens to canonical numbers for the typed return. */
-    source?: 'canonical' | 'legacy' | 'both';
+    source?: 'canonical';
   }): Promise<IndriveWalletSummary> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
@@ -2408,26 +2406,7 @@ export const api = {
     }
     const json = await response.json();
     if (!json?.data) throw new Error('InDrive wallet summary: empty response');
-    const d = json.data as IndriveWalletSummary & {
-      canonical?: { periodFees: number; estimatedBalance: number };
-      legacy?: { periodFees: number; estimatedBalance: number };
-    };
-    if (
-      d &&
-      typeof d === 'object' &&
-      'canonical' in d &&
-      'legacy' in d &&
-      d.canonical &&
-      d.legacy
-    ) {
-      return {
-        periodLoads: d.periodLoads,
-        lifetimeLoads: d.lifetimeLoads,
-        periodFees: d.canonical.periodFees,
-        estimatedBalance: d.canonical.estimatedBalance,
-      };
-    }
-    return d as IndriveWalletSummary;
+    return json.data as IndriveWalletSummary;
   },
 
   async createLedgerEntry(entry: Partial<LedgerEntry>): Promise<{ success: boolean; data?: LedgerEntry; skipped?: boolean; message?: string }> {
@@ -2562,10 +2541,8 @@ export const api = {
     periodType?: 'daily' | 'weekly' | 'monthly';
     startDate?: string;
     endDate?: string;
-    /** Omit = server default (`ledger_event:*`). Set `legacy` only for emergency API rollback. */
+    /** Omit = canonical `ledger_event:*` only (legacy removed). */
     readModel?: 'legacy' | 'canonical';
-    /** Server logs `[LedgerEarningsShadow]` lines (legacy path only). */
-    shadowCompare?: boolean;
   }): Promise<{ success: boolean; data: any[]; durationMs: number; readModel?: string }> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
@@ -2573,7 +2550,6 @@ export const api = {
     if (params.startDate) qp.set('startDate', params.startDate);
     if (params.endDate) qp.set('endDate', params.endDate);
     if (params.readModel) qp.set('readModel', params.readModel);
-    if (params.shadowCompare) qp.set('shadowCompare', '1');
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-earnings-history?${qp.toString()}`,

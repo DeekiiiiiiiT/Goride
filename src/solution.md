@@ -72,7 +72,7 @@ flowchart LR
 
 **Goal:** Reduce trip roll vs statement and missing events — **data/process**, not only code.
 
-**Steps:** Re-run imports, use diagnostics (`GET /ledger/diagnostic-trip-ledger-gap`, in-app tools), re-sample shadow after fixes. If repair still needed and **`LEGACY_LEDGER_WRITES=true`**, repair endpoints can recreate legacy rows until cutover.
+**Steps:** Re-run imports, use diagnostics (`GET /ledger/diagnostic-trip-ledger-gap`, in-app tools). Legacy repair writes are retired — use canonical append / import paths.
 
 ---
 
@@ -107,9 +107,9 @@ flowchart LR
 
 **Goal:** No new rows in **`ledger:%`** once env is flipped; money events use **`ledger_event:*`** (append API, imports, etc.).
 
-**Server env:** **`LEGACY_LEDGER_WRITES`** — unset or anything other than **`false`** = legacy writes allowed. **`false`** = legacy writes blocked.
+**Server env (legacy):** **`LEGACY_LEDGER_WRITES`** is no longer read — code always treats legacy writes as disabled.
 
-**Implementation (in repo):** Helper **`legacyLedgerWritesDisabled()`** when **`LEGACY_LEDGER_WRITES=false`**:
+**Implementation (in repo):** Helper **`legacyLedgerWritesDisabled()`** always **`true`**:
 
 - **`generateTripLedgerEntries`** — returns `[]` (no trip-sourced fare rows).
 - **`buildUberFareEarningFallbackEntriesIfEligible`** — returns `[]` (no Uber fallback rows).
@@ -121,7 +121,7 @@ flowchart LR
 
 Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:%`** when the flag is off. **`DELETE /ledger/:id`** remains for admin cleanup of old rows.
 
-**Stop point:** Set **`LEGACY_LEDGER_WRITES=false`** in Edge secrets only after operational sign-off.
+**Stop point:** Legacy writes are off in code; deploy Edge so clients receive the updated bundle.
 
 ---
 
@@ -152,9 +152,9 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 | Switch | Effect |
 |--------|--------|
-| **`readModel=legacy`** / **`source=ledger`** on the **API** (direct / custom clients) | Roll back money **reads** to **`ledger:%`** without app changes. |
-| **`shadowCompare=1`** on earnings history | Logs **`[LedgerEarningsShadow]`** in Edge (use with **`readModel`** as needed). |
-| **`LEGACY_LEDGER_WRITES=false`** | Blocks **all** listed legacy **write** paths (not only trip generator). |
+| **`GET /ledger/count`** | Still returns **`legacyLedgerEntries`** (count of **`ledger:%`** keys) until you run the KV purge. |
+| Legacy **write** routes (`POST /ledger`, repair, backfill, etc.) | **403** — trip/txn generators return empty; use **canonical append** APIs for money events. |
+| **`scripts/purge-legacy-ledger-kv.sql`** | Operator SQL template to **`DELETE`** **`ledger:%`** rows after backup (step 7). |
 
 ---
 
@@ -162,14 +162,12 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 
 Track in [`docs/LEDGER_LEGACY_INVENTORY.md`](../docs/LEDGER_LEGACY_INVENTORY.md):
 
-1. **Done (this repo):** **`GET /ledger`**, **`/ledger/count`**, **`/ledger/summary`** — default **`source=canonical`** (`ledger_event:*`); **`/ledger/diagnostic-trip-ledger-gap`** and **`/ledger/driver-indrive-wallet`** — **`source=canonical`** / **`both`** / **`legacy`**; count returns **`legacyLedgerEntries`** for diagnostics.
-2. **API defaults:** **`readModel`** on fleet/drivers/earnings history and **`source`** on driver-overview default to **canonical** when the param is omitted; pass **`readModel=legacy`** or **`source=ledger`** for rollback.
-3. **Trip delete / batch delete:** **`deleteLedgerEntriesForTripSource`** and related cleanup still target **`ledger:%`** until legacy data is gone or policy changes.
-4. **Data:** Backfill historical **`ledger:%`** into **`ledger_event:*`**, or formal **cutoff date** + exports.
-5. **Phase 8 (remaining):** Remove dead **server** legacy branches and write paths after **`LEGACY_LEDGER_WRITES=false`** is permanent and data policy is clear.
+1. **Done (this repo):** Legacy **read** branches removed (driver-overview, earnings, fleet/drivers summaries, gap diagnostic, InDrive wallet fees, list **`source`** — all **`ledger_event:*`** only). **`generateTripLedgerEntries` / transaction→legacy ledger** are no-ops; **`legacyLedgerWritesDisabled()`** is always on.
+2. **Operator — KV purge:** After backup, run **`scripts/purge-legacy-ledger-kv.sql`** (or equivalent) to delete remaining **`ledger:%`** rows; then optional removal of **`deleteLedgerEntriesForTripSource`** and count’s legacy column.
+3. **Docs:** Refresh inventory tables to match “canonical only” reads.
 
 ---
 
 ## Execution protocol
 
-Large or irreversible changes (bulk purge, default API flips, production **`LEGACY_LEDGER_WRITES=false`**) should stay behind explicit approval and monitoring.
+Large or irreversible changes (bulk **`ledger:%`** purge, production KV deletes) should stay behind explicit approval and monitoring.

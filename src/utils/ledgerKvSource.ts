@@ -10,13 +10,9 @@ export function ledgerKeyLikePrefix(source: LedgerKvSource): string {
 
 /**
  * Resolves `?source=` for GET /ledger, /ledger/count, /ledger/summary.
- * Default **canonical** (`ledger_event:*`). Use `legacy` for emergency rollback.
+ * Legacy `ledger:%` list reads are retired — always **canonical**.
  */
-export function resolveLedgerApiSourceParam(raw: string | undefined | null): LedgerKvSource {
-  const s = String(raw ?? '')
-    .toLowerCase()
-    .trim();
-  if (s === 'legacy' || s === 'ledger' || s === 'ledger_legacy') return 'legacy';
+export function resolveLedgerApiSourceParam(_raw: string | undefined | null): LedgerKvSource {
   return 'canonical';
 }
 
@@ -27,11 +23,6 @@ export type TripLedgerGapSourceMode = 'canonical' | 'legacy' | 'both';
  * Default **canonical** (`ledger_event:*` fare_earning). **`legacy`** = `ledger:%`.
  * **`both`** runs two comparisons (canonical + legacy) in one response.
  */
-export function resolveTripLedgerGapSourceParam(raw: string | undefined | null): TripLedgerGapSourceMode {
-  const s = String(raw ?? '')
-    .toLowerCase()
-    .trim();
-  if (s === 'legacy' || s === 'ledger' || s === 'ledger_legacy') return 'legacy';
-  if (s === 'both' || s === 'compare' || s === 'all') return 'both';
+export function resolveTripLedgerGapSourceParam(_raw: string | undefined | null): TripLedgerGapSourceMode {
   return 'canonical';
 }

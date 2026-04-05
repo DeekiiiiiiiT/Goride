@@ -1,0 +1,5 @@
+-- Step 7 (operator): one-time purge of legacy trip-sourced KV rows under ledger:% after backup + sign-off.
+-- Verify table/column names match your Supabase project (see Edge: kv_store_37f42386, column `key`).
+-- Prefer dry-run: SELECT count(*) FROM kv_store_37f42386 WHERE key LIKE 'ledger:%';
+-- Then: DELETE FROM kv_store_37f42386 WHERE key LIKE 'ledger:%';
+-- Run in SQL editor or migration; not invoked by the app.

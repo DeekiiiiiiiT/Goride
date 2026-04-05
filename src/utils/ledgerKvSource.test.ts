@@ -19,23 +19,18 @@ describe('ledgerKvSource', () => {
     expect(resolveLedgerApiSourceParam('CANONICAL')).toBe('canonical');
   });
 
-  it('maps legacy aliases', () => {
-    expect(resolveLedgerApiSourceParam('legacy')).toBe('legacy');
-    expect(resolveLedgerApiSourceParam('ledger')).toBe('legacy');
-    expect(resolveLedgerApiSourceParam('ledger_legacy')).toBe('legacy');
+  it('ignores legacy aliases (always canonical)', () => {
+    expect(resolveLedgerApiSourceParam('legacy')).toBe('canonical');
+    expect(resolveLedgerApiSourceParam('ledger')).toBe('canonical');
+    expect(resolveLedgerApiSourceParam('ledger_legacy')).toBe('canonical');
   });
 });
 
 describe('resolveTripLedgerGapSourceParam', () => {
-  it('defaults to canonical', () => {
+  it('always canonical', () => {
     expect(resolveTripLedgerGapSourceParam(undefined)).toBe('canonical');
     expect(resolveTripLedgerGapSourceParam('')).toBe('canonical');
-  });
-
-  it('resolves legacy and both', () => {
-    expect(resolveTripLedgerGapSourceParam('legacy')).toBe('legacy');
-    expect(resolveTripLedgerGapSourceParam('both')).toBe('both');
-    expect(resolveTripLedgerGapSourceParam('compare')).toBe('both');
-    expect(resolveTripLedgerGapSourceParam('all')).toBe('both');
+    expect(resolveTripLedgerGapSourceParam('legacy')).toBe('canonical');
+    expect(resolveTripLedgerGapSourceParam('both')).toBe('canonical');
   });
 });

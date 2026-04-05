@@ -23,11 +23,7 @@ import {
   aggregateCanonicalEventsToLedgerDriverOverview,
   canonicalEventInSelectedWindow,
 } from "./ledger_money_aggregate.ts";
-import {
-  ledgerKeyLikePrefix,
-  resolveLedgerApiSourceParam,
-  resolveTripLedgerGapSourceParam,
-} from "../../../utils/ledgerKvSource.ts";
+import { ledgerKeyLikePrefix, resolveLedgerApiSourceParam } from "../../../utils/ledgerKvSource.ts";
 import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriveWalletMetrics.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
@@ -307,389 +303,23 @@ function tripHasMoneyForLedgerProjection(trip: any): boolean {
   return hasTripAmount || uberGrossForLedger > 0;
 }
 
-/** Phase 6: `LEGACY_LEDGER_WRITES=false` disables all new `ledger:%` row writes (canonical SSOT only). */
+/** Legacy `ledger:%` trip-sourced writes are retired — canonical `ledger_event:*` only. */
 function legacyLedgerWritesDisabled(): boolean {
-  return Deno.env.get("LEGACY_LEDGER_WRITES") === "false";
+  return true;
 }
 
-// ─── Trip → Ledger Entry Generator ────────────────────────────────────
-async function generateTripLedgerEntries(trip: any): Promise<any[]> {
-    const entries: any[] = [];
-    /** Phase 6 migration: set `LEGACY_LEDGER_WRITES=false` to stop new `ledger:%` fare rows (canonical-only writes). */
-    if (legacyLedgerWritesDisabled()) {
-      console.log("[Ledger] LEGACY_LEDGER_WRITES=false — skipping generateTripLedgerEntries");
-      return entries;
-    }
-
-    // Only create ledger entries for completed trips with meaningful money (aligned with driver-overview).
-    const isUber = isUberPlatform(trip.platform);
-    const hasUberSsot = isUber && (trip.uberFareComponents != null || trip.uberTips != null);
-    const uberFareComponents = hasUberSsot ? coerceAmount(trip.uberFareComponents) : 0;
-    const uberTips = hasUberSsot ? coerceAmount(trip.uberTips) : 0;
-    const uberGrossForLedger = uberFareComponents + uberTips;
-    const uberPriorPeriodAdjustment = isUber ? coerceAmount(trip.uberPriorPeriodAdjustment) : 0;
-
-    const amountSafe = coerceAmount(trip.amount);
-    if (!tripHasMoneyForLedgerProjection(trip)) {
-        return entries;
-    }
-
-    // Dedup: skip only when a fare_earning row already exists for this trip.
-    // Any other trip-sourced rows alone (e.g. tip/promotion without fare) are incomplete — remove them and regenerate.
-    // Note: import/repair flows may set `_skipLedgerDedup` to force regeneration after deletion.
-    if (!trip?._skipLedgerDedup) {
-        try {
-            const { data: existing } = await supabase
-                .from("kv_store_37f42386")
-                .select("key, value")
-                .like("key", "ledger:%")
-                .eq("value->>sourceId", trip.id)
-                .eq("value->>sourceType", "trip");
-
-            if (existing && existing.length > 0) {
-                const hasFareEarning = existing.some(
-                    (e: any) => String(e?.value?.eventType) === "fare_earning"
-                );
-                if (hasFareEarning) {
-                    return entries;
-                }
-                const delKeys = existing.map((e: any) => e.key).filter(Boolean);
-                if (delKeys.length > 0) {
-                    console.warn(
-                        `[Ledger] Incomplete trip-sourced ledger (no fare_earning) for trip ${trip.id}; removing ${delKeys.length} stale row(s) before regenerate`
-                    );
-                    await kv.mdel(delKeys);
-                }
-            }
-        } catch (dedupErr) {
-            console.warn('[Ledger] Dedup check failed, proceeding with creation:', dedupErr);
-        }
-    }
-
-    // Resolve driver ID to canonical Roam UUID
-    const resolved = await resolveCanonicalDriverId(trip.driverId || '');
-
-    const normalizedDate = (() => {
-        const raw = trip?.date;
-        if (typeof raw === 'string' && raw.trim()) {
-            const d = new Date(raw);
-            if (Number.isFinite(d.getTime())) return d.toISOString().split('T')[0];
-        }
-        if (raw instanceof Date && Number.isFinite(raw.getTime())) {
-            return raw.toISOString().split('T')[0];
-        }
-        return new Date().toISOString().split('T')[0];
-    })();
-
-    const normalizedTime = (() => {
-        const raw = trip?.requestTime;
-        if (raw === null || raw === undefined || raw === '') return undefined;
-        const d = new Date(raw);
-        if (!Number.isFinite(d.getTime())) return undefined;
-        return d.toISOString().split('T')[1]?.substring(0, 8);
-    })();
-
-    const baseEntry = {
-        date: normalizedDate,
-        time: normalizedTime,
-        createdAt: new Date().toISOString(),
-        driverId: resolved.canonicalId,
-        driverName: trip.driverName || resolved.driverName,
-        vehicleId: trip.vehicleId || undefined,
-        platform: isUber ? "Uber" : (trip.platform || "Unknown"),
-        sourceType: 'trip' as const,
-        sourceId: trip.id,
-        batchId: trip.batchId || undefined,
-        currency: 'JMD',
-        isReconciled: false,
-    };
-
-    // Phase 1 Cash Fix: Use Math.abs() so negative Uber cash values are still recognized
-    const isCash = Math.abs(trip.cashCollected || 0) > 0 || trip.paymentMethod === 'Cash';
-    // [Phase 2 DIAGNOSTIC] Log cash-related fields to verify stored trip data
-    console.log(`[Ledger:CashDiag] tripId=${trip.id} platform=${trip.platform} cashCollected=${trip.cashCollected} paymentMethod=${trip.paymentMethod} isCash=${isCash} amount=${trip.amount}`);
-    // Effective earnings (used as netAmount for fare_earning).
-    // InDrive: after InDrive's fee (indriveNetIncome).
-    // Uber Phase 3: netAmount for fare_earning becomes SSOT fare components (fare-only, excluding tips)
-    // so that fare_earning + tip equals Uber's gross.
-    const effectiveEarnings = (trip.platform === 'InDrive' && trip.indriveNetIncome != null)
-        ? trip.indriveNetIncome
-        : amountSafe;
-    const fareNetForEntry = isUber && hasUberSsot ? uberFareComponents : effectiveEarnings;
-    const fareGrossForEntry = isUber && hasUberSsot ? uberFareComponents : amountSafe;
-    const pickupShort = String(trip.pickupLocation || 'Unknown').substring(0, 30);
-    const dropoffShort = String(trip.dropoffLocation || 'Unknown').substring(0, 30);
-
-    // Entry 1: Fare Earning
-    entries.push({
-        ...baseEntry,
-        id: crypto.randomUUID(),
-        eventType: 'fare_earning',
-        category: 'Fare Earnings',
-        description: `${trip.platform || 'Trip'}${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
-        grossAmount: fareGrossForEntry,
-        netAmount: fareNetForEntry,
-        paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
-        direction: 'inflow',
-        metadata: {
-            distance: trip.distance,
-            duration: trip.duration,
-            serviceType: trip.serviceType || trip.productType,
-            fareBreakdown: trip.fareBreakdown || null,
-            cashCollected: isCash ? Math.abs(trip.cashCollected || 0) : undefined,
-        },
-    });
-
-    // Entry 2: Tip (if tips > 0)
-    const tips = isUber && hasUberSsot ? uberTips : (trip.fareBreakdown?.tips || 0);
-    if (tips > 0) {
-        entries.push({
-            ...baseEntry,
-            id: crypto.randomUUID(),
-            eventType: 'tip',
-            category: 'Tips',
-            description: `Tip for ${trip.platform || 'trip'}: ${pickupShort} -> ${dropoffShort}`,
-            grossAmount: tips,
-            netAmount: tips,
-            paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
-            direction: 'inflow',
-        });
-    }
-
-    // Entry 2a: Prior-period fare adjustments (`trip fare adjust order` in payments_transaction CSV)
-    if (isUber && Math.abs(uberPriorPeriodAdjustment) > 0.0001) {
-        const pp = uberPriorPeriodAdjustment;
-        const isCredit = pp >= 0;
-        entries.push({
-            ...baseEntry,
-            id: crypto.randomUUID(),
-            eventType: 'prior_period_adjustment',
-            category: 'Prior Period Adjustment',
-            description: `Uber adjustments from previous periods: ${pickupShort} -> ${dropoffShort}`,
-            grossAmount: Math.abs(pp),
-            netAmount: pp,
-            paymentMethod: 'Digital Wallet',
-            direction: isCredit ? 'inflow' : 'outflow',
-        });
-    }
-
-    // Entry 2b: Promotions (Uber statement-level component allocated to this trip)
-    const promotions = isUber ? (Number(trip.uberPromotionsAmount) || 0) : 0;
-    if (promotions > 0.0001) {
-        entries.push({
-            ...baseEntry,
-            id: crypto.randomUUID(),
-            eventType: 'promotion',
-            category: 'Promotions',
-            description: `Uber promotion for ${pickupShort} -> ${dropoffShort}`,
-            grossAmount: promotions,
-            netAmount: promotions,
-            paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
-            direction: 'inflow',
-        });
-    }
-
-    // Entry 2c: Refunds & expenses (Uber statement-level component allocated to this trip)
-    const refundExpense = isUber ? (Number(trip.uberRefundExpenseAmount) || 0) : 0;
-    if (refundExpense > 0.0001) {
-        entries.push({
-            ...baseEntry,
-            id: crypto.randomUUID(),
-            eventType: 'refund_expense',
-            category: 'Refunds & Expenses',
-            description: `Uber refunds/expenses for ${pickupShort} -> ${dropoffShort}`,
-            grossAmount: refundExpense,
-            netAmount: -refundExpense,
-            paymentMethod: 'Digital Wallet',
-            direction: 'outflow',
-        });
-    }
-
-    // Entry 3: Platform Fee — explicit indriveServiceFee, or inferred (fare − net) for InDrive
-    let platformFee = Number(trip.indriveServiceFee) || 0;
-    if (trip.platform === 'InDrive' && trip.indriveNetIncome != null && amountSafe > 0) {
-        const inferred = amountSafe - Number(trip.indriveNetIncome);
-        if (platformFee <= 0.0001 && inferred > 0.0001) {
-            platformFee = inferred;
-        }
-    }
-    if (platformFee > 0.0001) {
-        entries.push({
-            ...baseEntry,
-            id: crypto.randomUUID(),
-            eventType: 'platform_fee',
-            category: 'Platform Fees',
-            description: `${trip.platform || 'Platform'} service fee`,
-            grossAmount: platformFee,
-            netAmount: -platformFee,
-            paymentMethod: 'Digital Wallet',
-            direction: 'outflow',
-        });
-    }
-
-    // Entry 4: Toll charges (if present)
-    const tollCharges = trip.tollCharges || 0;
-    if (tollCharges > 0) {
-        entries.push({
-            ...baseEntry,
-            id: crypto.randomUUID(),
-            eventType: 'toll_charge',
-            category: 'Tolls',
-            description: `Toll charge for ${pickupShort} -> ${dropoffShort}`,
-            grossAmount: tollCharges,
-            netAmount: -tollCharges,
-            paymentMethod: 'Digital Wallet',
-            direction: 'outflow',
-        });
-    }
-
-    return entries;
+// ─── Trip → Ledger (retired) — was `ledger:%` fare rows; returns nothing. ────────────────────────
+async function generateTripLedgerEntries(_trip: any): Promise<any[]> {
+  return [];
 }
 
-/**
- * Last-resort fare_earning when `generateTripLedgerEntries` throws or returns [].
- * Ensures CSV import never leaves eligible Uber trips with zero trip-sourced ledger rows.
- */
-async function buildUberFareEarningFallbackEntriesIfEligible(trip: any): Promise<any[]> {
-    if (legacyLedgerWritesDisabled()) return [];
-    const isUber = isUberPlatform(trip?.platform);
-    if (!isUber || !tripHasMoneyForLedgerProjection(trip)) return [];
-    const amountNum = coerceAmount(trip?.amount);
-    const uberFare = coerceAmount(trip?.uberFareComponents);
-    const uberTips = coerceAmount(trip?.uberTips);
-    const uberPrior = coerceAmount(trip?.uberPriorPeriodAdjustment);
-    const uberGross = uberFare + uberTips + uberPrior;
-
-    const resolved = await resolveCanonicalDriverId(trip.driverId || '');
-    const dateObj = new Date(trip?.date);
-    const date = Number.isFinite(dateObj.getTime())
-        ? dateObj.toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
-    const requestObj = new Date(trip?.requestTime);
-    const time = Number.isFinite(requestObj.getTime())
-        ? requestObj.toISOString().split('T')[1]?.substring(0, 8)
-        : undefined;
-    const fareVal =
-        uberFare > 0 ? uberFare : amountNum > 0 ? amountNum : uberGross;
-    const pickupShort = String(trip?.pickupLocation || 'Unknown').substring(0, 30);
-    const dropoffShort = String(trip?.dropoffLocation || 'Unknown').substring(0, 30);
-    const isCash = Math.abs(Number(trip?.cashCollected) || 0) > 0 || trip?.paymentMethod === 'Cash';
-
-    console.warn(`[Ledger] Fallback fare_earning emitted for Uber trip ${trip?.id}`);
-    return [
-        {
-            id: crypto.randomUUID(),
-            date,
-            time,
-            createdAt: new Date().toISOString(),
-            driverId: resolved.canonicalId,
-            driverName: trip?.driverName || resolved.driverName,
-            vehicleId: trip?.vehicleId || undefined,
-            platform: 'Uber',
-            sourceType: 'trip' as const,
-            sourceId: trip?.id,
-            batchId: trip?.batchId || undefined,
-            currency: 'JMD',
-            isReconciled: false,
-            eventType: 'fare_earning',
-            category: 'Fare Earnings',
-            description: `Uber${isCash ? ' (Cash)' : ''}: ${pickupShort} -> ${dropoffShort}`,
-            grossAmount: fareVal,
-            netAmount: fareVal,
-            paymentMethod: isCash ? 'Cash' : 'Digital Wallet',
-            direction: 'inflow',
-            metadata: {
-                distance: trip?.distance,
-                duration: trip?.duration,
-                serviceType: trip?.serviceType || trip?.productType,
-                fareBreakdown: trip?.fareBreakdown || null,
-                cashCollected: isCash ? Math.abs(Number(trip?.cashCollected) || 0) : undefined,
-                ledgerFallback: true,
-            },
-        },
-    ];
+async function buildUberFareEarningFallbackEntriesIfEligible(_trip: any): Promise<any[]> {
+  return [];
 }
 
-// ─── Transaction → Ledger Entry Generator ─────────────────────────────
-async function generateTransactionLedgerEntry(transaction: any): Promise<any | null> {
-    // Skip if no meaningful amount
-    if (!transaction.amount && transaction.amount !== 0) return null;
-    // Skip wallet credit entries that are system-generated mirrors
-    if (transaction.metadata?.isWalletCredit && transaction.metadata?.autoGenerated) return null;
-    if (legacyLedgerWritesDisabled()) return null;
-
-    // Deduplication check
-    try {
-        const { data: existing } = await supabase
-            .from("kv_store_37f42386")
-            .select("key")
-            .like("key", "ledger:%")
-            .eq("value->>sourceId", transaction.id)
-            .eq("value->>sourceType", "transaction")
-            .limit(1);
-
-        if (existing && existing.length > 0) return null; // Already exists
-    } catch (dedupErr) {
-        console.warn('[Ledger] Dedup check failed for transaction, proceeding:', dedupErr);
-    }
-
-    // Resolve driver ID
-    const resolved = await resolveCanonicalDriverId(transaction.driverId || '');
-
-    // Determine event type from transaction category
-    let eventType: string = 'other';
-    const cat = (transaction.category || '').toLowerCase();
-    if (cat.includes('fuel') && cat.includes('reimbursement')) eventType = 'fuel_reimbursement';
-    else if (cat.includes('fuel')) eventType = 'fuel_expense';
-    else if (cat.includes('toll')) eventType = 'toll_charge';
-    else if (cat.includes('maintenance')) eventType = 'maintenance';
-    else if (cat.includes('insurance')) eventType = 'insurance';
-    else if (cat.includes('payout')) eventType = 'driver_payout';
-    else if (cat.includes('fare') || cat.includes('earning')) eventType = 'fare_earning';
-    else if (cat.includes('tip')) eventType = 'tip';
-    else if (cat.includes('wallet') && cat.includes('credit')) eventType = 'wallet_credit';
-    else if (cat.includes('wallet')) eventType = 'wallet_debit';
-
-    // Determine direction
-    const amount = Number(transaction.amount) || 0;
-    const isOutflow = amount < 0 || ['Expense', 'Payout'].includes(transaction.type);
-    const direction = isOutflow ? 'outflow' : 'inflow';
-
-    return {
-        id: crypto.randomUUID(),
-        date: transaction.date?.split('T')[0] || new Date().toISOString().split('T')[0],
-        time: transaction.time || undefined,
-        createdAt: new Date().toISOString(),
-        driverId: resolved.canonicalId,
-        driverName: transaction.driverName || resolved.driverName,
-        vehicleId: transaction.vehicleId || undefined,
-        vehiclePlate: transaction.vehiclePlate || undefined,
-        platform: transaction.platform || undefined,
-        eventType,
-        category: transaction.category || 'Other',
-        description: transaction.description || `${transaction.category || 'Transaction'} - ${transaction.vendor || ''}`.trim(),
-        grossAmount: Math.abs(amount),
-        netAmount: isOutflow ? -Math.abs(amount) : Math.abs(amount),
-        currency: 'JMD',
-        paymentMethod: transaction.paymentMethod || undefined,
-        direction,
-        isReconciled: transaction.isReconciled || false,
-        sourceType: 'transaction' as const,
-        sourceId: transaction.id,
-        batchId: transaction.batchId || undefined,
-        batchName: transaction.batchName || undefined,
-        metadata: {
-            originalCategory: transaction.category,
-            originalType: transaction.type,
-            vendor: transaction.vendor,
-            quantity: transaction.quantity,
-            unitPrice: transaction.unitPrice,
-            odometer: transaction.odometer,
-            ...(transaction.category === "InDrive Wallet Credit"
-                ? { indriveWalletLoad: true, walletProvider: "InDrive" as const }
-                : {}),
-        },
-    };
+// ─── Transaction → legacy `ledger:%` (retired) ─────────────────────────────
+async function generateTransactionLedgerEntry(_transaction: any): Promise<any | null> {
+  return null;
 }
 
 // Enable logger - DISABLED to prevent OOM on large payloads
@@ -3884,8 +3514,6 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       return c.json({ error: "Missing required params: driverId, startDate, endDate" }, 400);
     }
 
-    const sourceRaw = (c.req.query("source") || "canonical").toLowerCase();
-    if (sourceRaw === "canonical" || sourceRaw === "canonical_events") {
       console.log(
         `[Ledger DriverOverview:canonical] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"}`,
       );
@@ -3997,543 +3625,7 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         console.log(`[Ledger DriverOverview:canonical] Error: ${canonErr.message}`);
         return c.json({ error: `Canonical driver overview failed: ${canonErr.message}` }, 500);
       }
-    }
 
-    console.log(`[Ledger DriverOverview] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"}`);
-
-    // ── Resolve ALL known IDs for this driver (Roam UUID, Uber UUID, InDrive UUID) ──
-    // This mirrors the trip search endpoint's broad OR approach so that ledger entries
-    // created with a platform-specific UUID (e.g. Uber CSV import where resolution failed)
-    // are still found by the overview query.
-    const allDriverIds: string[] = [driverId];
-    try {
-        const driverRecord = await kv.get(`driver:${driverId}`);
-        if (driverRecord) {
-            if (driverRecord.uberDriverId) allDriverIds.push(driverRecord.uberDriverId);
-            if (driverRecord.inDriveDriverId) allDriverIds.push(driverRecord.inDriveDriverId);
-        }
-    } catch (lookupErr) {
-        console.warn(`[Ledger DriverOverview] Could not look up driver record for ${driverId}:`, lookupErr);
-    }
-
-    const driverIdOrFilter = allDriverIds.length === 1
-        ? null  // single ID — use .eq() for efficiency
-        : allDriverIds.map(id => `value->>driverId.eq.${id}`).join(',');
-
-    console.log(`[Ledger DriverOverview] Searching with ${allDriverIds.length} driver IDs: [${allDriverIds.join(', ')}]`);
-
-    // Helper: build a base query filtered by driverId(s) (and optional platforms)
-    const baseQuery = () => {
-      let q = supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "ledger:%");
-
-      // Org filter applied in-memory via filterByOrg() after fetch (same rule as GET /trips):
-      // include rows with no organizationId (anon CSV import) OR matching org. Strict SQL
-      // .eq(organizationId, org) alone hid those rows → "Uber: N trips / 0 ledger".
-
-      // Apply driver ID filter — single exact match or multi-ID OR
-      if (driverIdOrFilter) {
-        q = q.or(driverIdOrFilter);
-      } else {
-        q = q.eq("value->>driverId", driverId);
-      }
-
-      if (platformsParam) {
-        // Alias: "Roam" was formerly "GoRide" — expand to include both
-        let plats = platformsParam.split(",").map((s: string) => s.trim()).filter(Boolean);
-        if (plats.includes('Roam') && !plats.includes('GoRide')) plats.push('GoRide');
-        if (plats.length === 1) {
-          q = q.eq("value->>platform", plats[0]);
-        } else if (plats.length > 1) {
-          q = q.or(plats.map((p: string) => `value->>platform.eq.${p}`).join(","));
-        }
-      }
-      return q;
-    };
-
-    // Pagination helper — fetches all rows in 1,000-row pages to bypass PostgREST cap
-    const PAGE = 1000;
-    const MAX_ROWS = 50000;
-    const paginatedFetch = async (buildQuery: () => any): Promise<any[]> => {
-      let all: any[] = [];
-      let offset = 0;
-      while (offset < MAX_ROWS) {
-        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        const page = data || [];
-        all = all.concat(page);
-        if (page.length < PAGE) break;
-        offset += PAGE;
-      }
-      return all;
-    };
-
-    // ── 1. Period data ───────────────────────────────────────────────
-    const periodData = await paginatedFetch(() =>
-      baseQuery()
-        .gte("value->>date", startDate)
-        .lte("value->>date", endDate)
-    );
-
-    let periodEntries = periodData.map((d: any) => d.value).filter(Boolean);
-    periodEntries = filterByOrg(periodEntries, c);
-    console.log(`[Ledger DriverOverview] Period entries fetched (after org scope): ${periodEntries.length}`);
-
-    // Accumulate period metrics in a single pass
-    let pEarnings = 0;
-    let pCash = 0;
-    let pTolls = 0;
-    let pTips = 0;
-    let pBaseFare = 0;
-    let pPlatformFees = 0;
-    // Uber SSOT component totals (ledger-derived)
-    let pUberFareComponents = 0;
-    let pUberTips = 0;
-    let pUberPriorPeriodAdjustments = 0;
-    let pUberPromotions = 0;
-    let pUberRefundExpense = 0;
-    const pPlatformFeesByPlatform: Record<string, number> = {};
-    const pFareGrossMinusNetByPlatform: Record<string, number> = {};
-    let pTripCount = 0;
-    let pCancelledCount = 0;
-
-    const pPlatformStats: Record<string, { earnings: number; tripCount: number; cashCollected: number; tolls: number }> = {};
-    const dailyMap: Record<string, { total: number; byPlatform: Record<string, number> }> = {};
-
-    for (const e of periodEntries) {
-      const net = Number(e.netAmount) || 0;
-      const gross = Number(e.grossAmount) || 0;
-      const plat = (e.platform === 'GoRide' ? 'Roam' : e.platform) || "Other";
-      const et = e.eventType;
-
-      if (et === "fare_earning") {
-        pEarnings += net;
-        pBaseFare += gross;
-        pTripCount += 1;
-        pFareGrossMinusNetByPlatform[plat] = (pFareGrossMinusNetByPlatform[plat] || 0) + (gross - net);
-        if (e.paymentMethod === "Cash") pCash += (e.metadata?.cashCollected ? Number(e.metadata.cashCollected) : Math.abs(net));
-
-        if (plat === "Uber") {
-          // For Uber, fare_earning lines store fareComponents (excluding tips)
-          pUberFareComponents += gross;
-        }
-
-        // Platform stats
-        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-        pPlatformStats[plat].earnings += net;
-        pPlatformStats[plat].tripCount += 1;
-        if (e.paymentMethod === "Cash") pPlatformStats[plat].cashCollected += (e.metadata?.cashCollected ? Number(e.metadata.cashCollected) : Math.abs(net));
-
-        // Daily chart
-        const day = e.date;
-        if (day) {
-          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
-          dailyMap[day].total += net;
-          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
-        }
-      } else if (et === "tip") {
-        pTips += net;
-        // Add tips to platform earnings and daily chart too
-        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-        pPlatformStats[plat].earnings += net;
-        const day = e.date;
-        if (day) {
-          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
-          dailyMap[day].total += net;
-          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
-        }
-
-        if (plat === "Uber") {
-          pUberTips += net;
-        }
-      } else if (et === "prior_period_adjustment") {
-        pEarnings += net;
-        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-        pPlatformStats[plat].earnings += net;
-        const day = e.date;
-        if (day) {
-          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
-          dailyMap[day].total += net;
-          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
-        }
-        if (plat === "Uber") {
-          pUberPriorPeriodAdjustments += net;
-        }
-      } else if (et === "promotion") {
-        // Promotions are statement-level components (allocated across Uber trips).
-        // They affect net earnings but are not separate "trips" for counting.
-        pEarnings += net;
-        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-        pPlatformStats[plat].earnings += net;
-        const day = e.date;
-        if (day) {
-          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
-          dailyMap[day].total += net;
-          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
-        }
-
-        if (plat === "Uber") {
-          pUberPromotions += net;
-        }
-      } else if (et === "refund_expense") {
-        // Refunds & expenses reduce net earnings (netAmount is negative).
-        pEarnings += net;
-        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-        pPlatformStats[plat].earnings += net;
-        const day = e.date;
-        if (day) {
-          if (!dailyMap[day]) dailyMap[day] = { total: 0, byPlatform: {} };
-          dailyMap[day].total += net;
-          dailyMap[day].byPlatform[plat] = (dailyMap[day].byPlatform[plat] || 0) + net;
-        }
-
-        if (plat === "Uber") {
-          pUberRefundExpense += Math.abs(net);
-        }
-      } else if (et === "toll_charge") {
-        pTolls += Math.abs(net);
-        if (!pPlatformStats[plat]) pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-        pPlatformStats[plat].tolls += Math.abs(net);
-      } else if (et === "platform_fee") {
-        const feeAmt = Math.abs(net);
-        pPlatformFees += feeAmt;
-        pPlatformFeesByPlatform[plat] = (pPlatformFeesByPlatform[plat] || 0) + feeAmt;
-      } else if (et === "cancelled_trip_loss") {
-        pCancelledCount += 1;
-      }
-    }
-
-    // Convert dailyMap to sorted array
-    const dailyEarnings = Object.entries(dailyMap)
-      .map(([date, val]) => ({ date, total: Number(val.total.toFixed(2)), byPlatform: val.byPlatform }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    // ── 2. Previous period (for trend arrow) ─────────────────────────
-    const startD = new Date(startDate + "T00:00:00Z");
-    const endD = new Date(endDate + "T23:59:59Z");
-    const daysDiff = Math.round((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const prevEndD = new Date(startD);
-    prevEndD.setUTCDate(prevEndD.getUTCDate() - 1);
-    const prevStartD = new Date(prevEndD);
-    prevStartD.setUTCDate(prevStartD.getUTCDate() - daysDiff + 1);
-    const prevStart = prevStartD.toISOString().slice(0, 10);
-    const prevEnd = prevEndD.toISOString().slice(0, 10);
-
-    let prevData: any[] = [];
-    try {
-      prevData = await paginatedFetch(() =>
-        baseQuery()
-          .gte("value->>date", prevStart)
-          .lte("value->>date", prevEnd)
-          .in("value->>eventType", ["fare_earning", "tip", "prior_period_adjustment"])
-      );
-    } catch (prevErr: any) {
-      console.log(`[Ledger DriverOverview] Prev period query warning: ${prevErr.message}`);
-    }
-
-    let prevEarnings = 0;
-    let prevVals = prevData.map((d: any) => d.value).filter(Boolean);
-    prevVals = filterByOrg(prevVals, c);
-    for (const v of prevVals) {
-      prevEarnings += Number(v.netAmount) || 0;
-    }
-
-    // ── 3. Lifetime totals (no date filter) ──────────────────────────
-    let lifetimeData: any[] = [];
-    try {
-      lifetimeData = await paginatedFetch(() => {
-        let q = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "ledger:%")
-          .in("value->>eventType", ["fare_earning", "tip", "prior_period_adjustment", "toll_charge", "promotion", "refund_expense"]);
-        // Org: filterByOrg in-memory after fetch (see period block).
-        // Use same multi-ID OR filter as baseQuery
-        if (driverIdOrFilter) {
-          q = q.or(driverIdOrFilter);
-        } else {
-          q = q.eq("value->>driverId", driverId);
-        }
-        return q;
-      });
-    } catch (lifeErr: any) {
-      console.log(`[Ledger DriverOverview] Lifetime query warning: ${lifeErr.message}`);
-    }
-
-    let lifetimeValues = lifetimeData.map((d: any) => d.value).filter(Boolean);
-    lifetimeValues = filterByOrg(lifetimeValues, c);
-
-    let ltEarnings = 0;
-    let ltTripCount = 0;
-    let ltCash = 0;
-    let ltTolls = 0;
-    // Uber SSOT component totals (ledger-derived)
-    let ltUberFareComponents = 0;
-    let ltUberTips = 0;
-    let ltUberPriorPeriodAdjustments = 0;
-    let ltUberPromotions = 0;
-    let ltUberRefundExpense = 0;
-    const ltPlatformStats: Record<string, { earnings: number; tripCount: number; cashCollected: number; tolls: number }> = {};
-
-    {
-      for (const v of lifetimeValues) {
-        if (!v) continue;
-        const net = Number(v.netAmount) || 0;
-        const gross = Number(v.grossAmount) || 0;
-        const platform = v.platform || 'Unknown';
-        if (!ltPlatformStats[platform]) {
-          ltPlatformStats[platform] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-        }
-        if (v.eventType === "fare_earning") {
-          ltEarnings += net;
-          ltTripCount += 1;
-          ltPlatformStats[platform].earnings += net;
-          ltPlatformStats[platform].tripCount += 1;
-          if (v.paymentMethod === "Cash") {
-            const cashAmt = v.metadata?.cashCollected ? Number(v.metadata.cashCollected) : Math.abs(net);
-            ltCash += cashAmt;
-            ltPlatformStats[platform].cashCollected += cashAmt;
-          }
-
-          if (platform === "Uber") {
-            ltUberFareComponents += gross;
-          }
-        } else if (v.eventType === "tip") {
-          ltEarnings += net;
-          ltPlatformStats[platform].earnings += net;
-
-          if (platform === "Uber") {
-            ltUberTips += net;
-          }
-        } else if (v.eventType === "prior_period_adjustment") {
-          ltEarnings += net;
-          ltPlatformStats[platform].earnings += net;
-
-          if (platform === "Uber") {
-            ltUberPriorPeriodAdjustments += net;
-          }
-        } else if (v.eventType === "promotion") {
-          ltEarnings += net;
-          ltPlatformStats[platform].earnings += net;
-
-          if (platform === "Uber") {
-            ltUberPromotions += net;
-          }
-        } else if (v.eventType === "refund_expense") {
-          ltEarnings += net;
-          ltPlatformStats[platform].earnings += net;
-
-          if (platform === "Uber") {
-            ltUberRefundExpense += Math.abs(net);
-          }
-        } else if (v.eventType === "toll_charge") {
-          ltTolls += Math.abs(net);
-          ltPlatformStats[platform].tolls += Math.abs(net);
-        }
-      }
-    }
-
-    // ── 3b. Lifetime trip *records* (trip:* rows) — same notion as Trip Ledger "Total Trips"
-    let ltTripRecordCount: number | undefined = undefined;
-    try {
-      const tripRowPages = await paginatedFetch(() => {
-        let q = supabase.from("kv_store_37f42386").select("value").like("key", "trip:%");
-        if (driverIdOrFilter) q = q.or(driverIdOrFilter);
-        else q = q.eq("value->>driverId", driverId);
-        return q;
-      });
-      let tripVals = tripRowPages.map((d: any) => d.value).filter(Boolean);
-      tripVals = filterByOrg(tripVals, c);
-      ltTripRecordCount = tripVals.length;
-    } catch (trcErr: any) {
-      console.log(`[Ledger DriverOverview] Lifetime trip record count warning: ${trcErr.message}`);
-    }
-
-    // ── 4. Completeness check: compare trip:* count vs ledger fare_earning count (Phase 6) ──
-    let completeness: any = { totalTrips: 0, ledgerTrips: pTripCount, isComplete: true, missingCount: 0, byPlatform: {} };
-    try {
-      const tripData = await paginatedFetch(() => {
-        let q = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "trip:%")
-          .or(
-            "value->>status.eq.Completed,value->>status.eq.completed,value->>status.eq.COMPLETED"
-          )
-          .gte("value->>date", startDate)
-          .lte("value->>date", endDate);
-        // Use same multi-ID OR filter for trip completeness check
-        if (driverIdOrFilter) {
-          q = q.or(driverIdOrFilter);
-        } else {
-          q = q.eq("value->>driverId", driverId);
-        }
-        return q;
-      });
-      const tripPlatformCounts: Record<string, number> = {};
-      let totalCompletedTrips = 0;
-      for (const d of tripData) {
-        const v = d.value;
-        if (!v) continue;
-        // Phase 5 (Uber SSOT integrity): some Uber trips may have `amount=0` but still have
-        // SSOT fare/tip components (parsed from payments_transaction.csv). Use those for
-        // completeness counting and repair readiness.
-        if (!isCompletedTripStatus(v.status)) continue;
-        const isUber = isUberPlatform(v.platform);
-        const uberGrossForLedger = isUber
-          ? coerceAmount(v.uberFareComponents) +
-            coerceAmount(v.uberTips) +
-            coerceAmount(v.uberPriorPeriodAdjustment)
-          : 0;
-        const amt = coerceAmount(v.amount);
-        const hasTripAmount = amt > 0;
-        const hasMoney = isUber ? (hasTripAmount || uberGrossForLedger > 0) : hasTripAmount;
-        if (!hasMoney) continue;
-
-        totalCompletedTrips += 1;
-        const plat = isUber ? 'Uber' : (v.platform === 'GoRide' ? 'Roam' : v.platform) || 'Other';
-        tripPlatformCounts[plat] = (tripPlatformCounts[plat] || 0) + 1;
-      }
-      // Compare per-platform: trips vs ledger fare_earnings
-      const byPlatform: Record<string, { trips: number; ledger: number }> = {};
-      const allPlats = new Set([...Object.keys(tripPlatformCounts), ...Object.keys(pPlatformStats)]);
-      for (const p of allPlats) {
-        byPlatform[p] = {
-          trips: tripPlatformCounts[p] || 0,
-          ledger: pPlatformStats[p]?.tripCount || 0,
-        };
-      }
-      const missingCount = Math.max(0, totalCompletedTrips - pTripCount);
-      completeness = {
-        totalTrips: totalCompletedTrips,
-        ledgerTrips: pTripCount,
-        isComplete: missingCount === 0,
-        missingCount,
-        byPlatform,
-      };
-      if (!completeness.isComplete) {
-        console.log(`[Ledger DriverOverview] INTEGRITY WARNING: ${totalCompletedTrips} completed trips but only ${pTripCount} ledger entries. Missing: ${missingCount}. By platform: ${JSON.stringify(byPlatform)}`);
-      }
-    } catch (compErr: any) {
-      console.log(`[Ledger DriverOverview] Completeness check warning: ${compErr.message}`);
-    }
-
-    // ── Assemble response ────────────────────────────────────────────
-    // Phase 8: Query dispute refund totals for this driver
-    let pDisputeRefunds = 0;
-    let ltDisputeRefunds = 0;
-    try {
-      const allDisputeRefunds = await paginatedFetch(() =>
-        supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "dispute-refund:%")
-      );
-      for (const d of allDisputeRefunds) {
-        const v = d.value;
-        if (!v || typeof v !== "object" || !v.id || !v.supportCaseId) continue;
-        if (v.status !== "matched" && v.status !== "auto_resolved") continue;
-        if (!allDriverIds.includes(v.driverId)) continue;
-        const amt = Math.abs(Number(v.amount) || 0);
-        ltDisputeRefunds += amt;
-        const refDate = v.date ? v.date.slice(0, 10) : null;
-        if (refDate && refDate >= startDate && refDate <= endDate) {
-          pDisputeRefunds += amt;
-        }
-      }
-      if (pDisputeRefunds > 0 || ltDisputeRefunds > 0) {
-        console.log(`[Ledger DriverOverview] Dispute refunds — period: $${pDisputeRefunds.toFixed(2)}, lifetime: $${ltDisputeRefunds.toFixed(2)}`);
-      }
-    } catch (drErr: any) {
-      console.log(`[Ledger DriverOverview] Dispute refund query warning: ${drErr.message}`);
-    }
-
-    const result = {
-      period: {
-        earnings: Number(pEarnings.toFixed(2)),
-        cashCollected: Number(pCash.toFixed(2)),
-        tolls: Number(pTolls.toFixed(2)),
-        tips: Number(pTips.toFixed(2)),
-        baseFare: Number(pBaseFare.toFixed(2)),
-        uber: {
-          fareComponents: Number(pUberFareComponents.toFixed(2)),
-          tips: Number(pUberTips.toFixed(2)),
-          priorPeriodAdjustments: Number(pUberPriorPeriodAdjustments.toFixed(2)),
-          promotions: Number(pUberPromotions.toFixed(2)),
-          refundExpense: Number(pUberRefundExpense.toFixed(2)),
-          netEarnings: Number(
-            (
-              pUberFareComponents +
-              pUberTips +
-              pUberPriorPeriodAdjustments +
-              pUberPromotions -
-              pUberRefundExpense
-            ).toFixed(2)
-          ),
-        },
-        platformFees: Number(pPlatformFees.toFixed(2)),
-        platformFeesByPlatform: Object.fromEntries(
-          Object.entries(pPlatformFeesByPlatform).map(([k, v]) => [k, Number(v.toFixed(2))])
-        ),
-        fareGrossMinusNetByPlatform: Object.fromEntries(
-          Object.entries(pFareGrossMinusNetByPlatform).map(([k, v]) => [k, Number(v.toFixed(2))])
-        ),
-        tripCount: pTripCount,
-        cancelledCount: pCancelledCount,
-        disputeRefunds: Number(pDisputeRefunds.toFixed(2)),
-      },
-      prevPeriod: {
-        earnings: Number(prevEarnings.toFixed(2)),
-      },
-      lifetime: {
-        earnings: Number(ltEarnings.toFixed(2)),
-        tripCount: ltTripCount,
-        tripRecordCount: ltTripRecordCount,
-        cashCollected: Number(ltCash.toFixed(2)),
-        tolls: Number(ltTolls.toFixed(2)),
-        uber: {
-          fareComponents: Number(ltUberFareComponents.toFixed(2)),
-          tips: Number(ltUberTips.toFixed(2)),
-          priorPeriodAdjustments: Number(ltUberPriorPeriodAdjustments.toFixed(2)),
-          promotions: Number(ltUberPromotions.toFixed(2)),
-          refundExpense: Number(ltUberRefundExpense.toFixed(2)),
-          netEarnings: Number(
-            (
-              ltUberFareComponents +
-              ltUberTips +
-              ltUberPriorPeriodAdjustments +
-              ltUberPromotions -
-              ltUberRefundExpense
-            ).toFixed(2)
-          ),
-        },
-        disputeRefunds: Number(ltDisputeRefunds.toFixed(2)),
-        platformStats: Object.fromEntries(
-          Object.entries(ltPlatformStats).map(([k, v]) => [k, {
-            earnings: Number(v.earnings.toFixed(2)),
-            tripCount: v.tripCount,
-            cashCollected: Number(v.cashCollected.toFixed(2)),
-            tolls: Number(v.tolls.toFixed(2)),
-          }])
-        ),
-      },
-      platformStats: Object.fromEntries(
-        Object.entries(pPlatformStats).map(([k, v]) => [k, {
-          earnings: Number(v.earnings.toFixed(2)),
-          tripCount: v.tripCount,
-          cashCollected: Number(v.cashCollected.toFixed(2)),
-          tolls: Number(v.tolls.toFixed(2)),
-        }])
-      ),
-      dailyEarnings,
-      completeness,
-    };
-
-    console.log(`[Ledger DriverOverview] OK — period: ${pTripCount} fare rows, $${result.period.earnings} | lifetime ledger fares: ${ltTripCount}, trip records: ${ltTripRecordCount ?? 'n/a'}, $${result.lifetime.earnings} | integrity: ${completeness.isComplete ? 'OK' : `GAPS (${completeness.missingCount} missing)`}`);
-
-    return c.json({ success: true, data: result });
   } catch (e: any) {
     console.log(`[Ledger DriverOverview] Error: ${e.message}`);
     return c.json({ error: `Ledger driver overview failed: ${e.message}` }, 500);
@@ -4653,8 +3745,6 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
     if (!driverId || !startDate || !endDate) {
       return c.json({ error: "Missing driverId, startDate, or endDate" }, 400);
     }
-
-    const gapSource = resolveTripLedgerGapSourceParam(c.req.query("source"));
 
     const readerOrgId = getOrgId(c);
 
@@ -4781,7 +3871,7 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
       endDate,
       readerOrgId: readerOrgId ?? null,
       resolvedDriverIds: allDriverIds,
-      gapSource,
+      gapSource: "canonical" as const,
     };
 
     const hintsCommon = [
@@ -4789,28 +3879,11 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
       "legacyPlaceholderRoamDefaultOrg → trips/ledger stamped with roam-default-org; filterByOrg treats that like unscoped for fleet UUID users.",
       "droppedByFilterByOrg with sampleWrongOrgFareRows (non-legacy org) → foreign-org rows excluded from this fleet.",
       "tripsHiddenOnlyByOrgFilter → raw row had sourceId but filterByOrg removed it (org mismatch).",
-      "Default source=canonical compares trips to ledger_event:* fare_earning. Use source=legacy for old ledger:% only; source=both for side-by-side.",
+      "Compared to ledger_event:* fare_earning only (legacy ledger:% retired).",
     ];
 
-    if (gapSource === "both") {
-      const fareCanon = await fetchFareEarningRows("ledger_event:%");
-      const fareLeg = await fetchFareEarningRows("ledger:%");
-      const canon = buildTripLedgerFareGapSection(eligible, fareCanon, readerOrgId, c, "ledger_event");
-      const leg = buildTripLedgerFareGapSection(eligible, fareLeg, readerOrgId, c, "ledger");
-      return c.json({
-        success: true,
-        meta: { ...sharedMeta, durationMs: Date.now() - t0 },
-        tripsEligibleCompletedWithMoney,
-        canonical: { ledgerFareEarning: canon.ledgerFareEarning, gap: canon.gap },
-        legacy: { ledgerFareEarning: leg.ledgerFareEarning, gap: leg.gap },
-        hints: hintsCommon,
-      });
-    }
-
-    const keyLike = gapSource === "canonical" ? "ledger_event:%" : "ledger:%";
-    const fareLabel = gapSource === "canonical" ? "ledger_event" : "ledger";
-    const fareRaw = await fetchFareEarningRows(keyLike);
-    const section = buildTripLedgerFareGapSection(eligible, fareRaw, readerOrgId, c, fareLabel);
+    const fareRaw = await fetchFareEarningRows("ledger_event:%");
+    const section = buildTripLedgerFareGapSection(eligible, fareRaw, readerOrgId, c, "ledger_event");
 
     return c.json({
       success: true,
@@ -4842,7 +3915,6 @@ app.get(
     const driverId = c.req.query("driverId");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
-    const feeSource = resolveTripLedgerGapSourceParam(c.req.query("source"));
     const LOAD_CATEGORY = "InDrive Wallet Credit";
 
     if (!driverId || !startDate || !endDate) {
@@ -4939,36 +4011,7 @@ app.get(
       };
     };
 
-    if (feeSource === "both") {
-      const canonVals = await fetchLedgerEntryValues("ledger_event:%");
-      const legVals = await fetchLedgerEntryValues("ledger:%");
-      const canonFees = computeIndriveWalletFeesFromLedgerEntries(canonVals, startDate, endDate);
-      const legFees = computeIndriveWalletFeesFromLedgerEntries(legVals, startDate, endDate);
-      const dataCanon = buildWalletData(canonFees.periodFees, canonFees.lifetimeInDriveFees);
-      const dataLeg = buildWalletData(legFees.periodFees, legFees.lifetimeInDriveFees);
-      console.log(
-        `[IndriveWallet] BOTH driverId=${driverId} range=${startDate}..${endDate} canonRows=${canonVals.length} legRows=${legVals.length} txRows=${loadTxRows.length} ${Date.now() - t0}ms`,
-      );
-      return c.json({
-        success: true,
-        meta: { source: "both", durationMs: Date.now() - t0 },
-        data: {
-          periodLoads,
-          lifetimeLoads,
-          canonical: {
-            periodFees: dataCanon.periodFees,
-            estimatedBalance: dataCanon.estimatedBalance,
-          },
-          legacy: {
-            periodFees: dataLeg.periodFees,
-            estimatedBalance: dataLeg.estimatedBalance,
-          },
-        },
-      });
-    }
-
-    const keyLike = feeSource === "canonical" ? "ledger_event:%" : "ledger:%";
-    const ledgerVals = await fetchLedgerEntryValues(keyLike);
+    const ledgerVals = await fetchLedgerEntryValues("ledger_event:%");
     const { periodFees, lifetimeInDriveFees } = computeIndriveWalletFeesFromLedgerEntries(
       ledgerVals,
       startDate,
@@ -4977,12 +4020,12 @@ app.get(
     const data = buildWalletData(periodFees, lifetimeInDriveFees);
 
     console.log(
-      `[IndriveWallet] source=${feeSource} driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerVals=${ledgerVals.length} loadTxRows=${loadTxRows.length} ${Date.now() - t0}ms`,
+      `[IndriveWallet] source=canonical driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerVals=${ledgerVals.length} loadTxRows=${loadTxRows.length} ${Date.now() - t0}ms`,
     );
 
     return c.json({
       success: true,
-      meta: { source: feeSource, durationMs: Date.now() - t0 },
+      meta: { source: "canonical", durationMs: Date.now() - t0 },
       data,
     });
   } catch (e: any) {
@@ -6313,18 +5356,6 @@ async function fetchAllLedgerEventValuesForDrivers(driverIds: string[], c: any):
   return filterByOrg(all, c);
 }
 
-/** Sum `fare_earning` grossAmount in [startMs, endMs] for shadow compare. */
-function sumCanonicalFareGrossInWindow(events: any[], startMs: number, endMs: number): number {
-  let s = 0;
-  for (const e of events) {
-    const t = e?.date ? new Date(String(e.date).slice(0, 10) + "T12:00:00").getTime() : NaN;
-    if (isNaN(t) || t < startMs || t > endMs) continue;
-    if (String(e.eventType) !== "fare_earning") continue;
-    s += Number(e.grossAmount) || 0;
-  }
-  return s;
-}
-
 /** Paginate all org-scoped `fare_earning` rows from `ledger_event:*`. */
 async function fetchCanonicalFareEarningAll(c: any): Promise<any[]> {
   const PAGE = 1000;
@@ -6493,8 +5524,7 @@ function aggregateFleetSummaryFromLedgerLikeEntries(entries: any[]): {
 // but from ledger entries instead of raw trips.
 // Query params: driverId (required), periodType (daily|weekly|monthly, default: weekly),
 //               startDate (optional), endDate (optional)
-//               readModel=legacy|canonical — canonical uses ledger_event:* (Phase 4 migration); default canonical.
-//               shadowCompare=1 — logs [LedgerEarningsShadow] legacy vs canonical fare gross per bucket (no UI change).
+//               ledger_event:* only (legacy readModel removed).
 app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), async (c) => {
   try {
     const startMs = Date.now();
@@ -6502,58 +5532,20 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
     const periodType = (c.req.query("periodType") || "weekly") as "daily" | "weekly" | "monthly";
     const startDateParam = c.req.query("startDate") || null;
     const endDateParam = c.req.query("endDate") || null;
-    const readModel = (c.req.query("readModel") || "canonical").toLowerCase();
-    const useCanonical = readModel === "canonical";
-    const shadowCompare = c.req.query("shadowCompare") === "1";
 
     if (!driverId) {
       return c.json({ error: "Missing required param: driverId" }, 400);
     }
 
     console.log(
-      `[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} readModel=${useCanonical ? "canonical" : "legacy"} shadowCompare=${shadowCompare}`,
+      `[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} readModel=canonical`,
     );
-
-    // ── Paginated fetch helper ──
-    const PAGE = 1000;
-    const MAX_ROWS = 50000;
-    const paginatedFetchEH = async (buildQuery: () => any): Promise<any[]> => {
-      let all: any[] = [];
-      let offset = 0;
-      while (offset < MAX_ROWS) {
-        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        const page = data || [];
-        all = all.concat(page);
-        if (page.length < PAGE) break;
-        offset += PAGE;
-      }
-      return all;
-    };
 
     const driverIdsResolved = await resolveDriverIdsForEarningsHistory(driverId);
 
-    // ── Step 1: Fetch ALL ledger or canonical events for this driver (multi-ID) ──
-    let allEntries: any[];
-    if (useCanonical) {
-      allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);
-      console.log(`[Ledger EarningsHistory] Canonical ledger_event rows for driver(s): ${allEntries.length}`);
-    } else {
-      const rawData = await paginatedFetchEH(() => {
-        let q = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "ledger:%");
-        if (driverIdsResolved.length === 1) {
-          q = q.eq("value->>driverId", driverIdsResolved[0]);
-        } else {
-          q = q.or(driverIdsResolved.map((id) => `value->>driverId.eq.${id}`).join(","));
-        }
-        return q;
-      });
-      allEntries = rawData.map((d: any) => d.value).filter(Boolean);
-      console.log(`[Ledger EarningsHistory] Total legacy ledger entries for driver(s): ${allEntries.length}`);
-    }
+    // ── Step 1: Fetch canonical ledger_event rows for this driver (multi-ID) ──
+    const allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);
+    console.log(`[Ledger EarningsHistory] Canonical ledger_event rows for driver(s): ${allEntries.length}`);
 
     if (allEntries.length === 0) {
       return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
@@ -6762,28 +5754,11 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       .filter((r: any) => r.tripCount > 0 || r.transactionCount > 0)
       .reverse();
 
-    if (shadowCompare && !useCanonical && activeRows.length > 0) {
-      try {
-        const canonEvents = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);
-        for (const row of activeRows) {
-          const bStart = new Date(row.periodStart + "T00:00:00").getTime();
-          const bEnd = new Date(row.periodEnd + "T23:59:59.999").getTime();
-          const cg = sumCanonicalFareGrossInWindow(canonEvents, bStart, bEnd);
-          const delta = row.grossRevenue - cg;
-          console.log(
-            `[LedgerEarningsShadow] driverId=${driverId} period=${row.periodStart}..${row.periodEnd} legacyGross=${Number(row.grossRevenue).toFixed(2)} canonicalFareGross=${cg.toFixed(2)} delta=${delta.toFixed(2)}`,
-          );
-        }
-      } catch (se: any) {
-        console.warn(`[LedgerEarningsShadow] failed: ${se?.message || se}`);
-      }
-    }
-
     const durationMs = Date.now() - startMs;
     const totalGross = activeRows.reduce((s: number, r: any) => s + r.grossRevenue, 0);
     console.log(`[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} — returned ${activeRows.length} rows, total gross $${totalGross.toFixed(2)}, ${durationMs}ms`);
 
-    return c.json({ success: true, data: activeRows, durationMs, readModel: useCanonical ? "canonical" : "legacy" });
+    return c.json({ success: true, data: activeRows, durationMs, readModel: "canonical" });
   } catch (e: any) {
     console.error("[Ledger EarningsHistory] Error:", e);
     return c.json({ error: e.message }, 500);
@@ -14177,8 +13152,6 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
 app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth(), async (c) => {
   const t0 = Date.now();
   try {
-    const readModel = (c.req.query("readModel") || "canonical").toLowerCase();
-    const useCanonical = readModel === "canonical";
     // Date param (for "today" bucket) — defaults to server's current date
     const dateParam = c.req.query("date");
     const today = dateParam || new Date().toISOString().split("T")[0];
@@ -14189,37 +13162,11 @@ app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth(), async (c)
     const monthEnd = monthEndDate.toISOString().split("T")[0];
 
     console.log(
-      `[Ledger DriversSummary] Starting — readModel=${useCanonical ? "canonical" : "legacy"} today=${today}, month=${monthStart}..${monthEnd}`,
+      `[Ledger DriversSummary] Starting — readModel=canonical today=${today}, month=${monthStart}..${monthEnd}`,
     );
 
-    let entryValues: any[] = [];
-
-    if (useCanonical) {
-      entryValues = await fetchCanonicalFareEarningAll(c);
-      console.log(`[Ledger DriversSummary] Canonical fare_earning rows: ${entryValues.length} (${Date.now() - t0}ms)`);
-    } else {
-      const PAGE = 1000;
-      const MAX_ROWS = 100000;
-      let allRows: any[] = [];
-      let offset = 0;
-      while (offset < MAX_ROWS) {
-        let q = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "ledger:%")
-          .eq("value->>eventType", "fare_earning");
-        const orgId = getOrgId(c);
-        if (orgId) q = q.eq("value->>organizationId", orgId);
-        const { data, error } = await q.range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        const page = data || [];
-        allRows = allRows.concat(page);
-        if (page.length < PAGE) break;
-        offset += PAGE;
-      }
-      entryValues = allRows.map((row: any) => row.value).filter(Boolean);
-      console.log(`[Ledger DriversSummary] Legacy fare_earning rows: ${entryValues.length} (${Date.now() - t0}ms)`);
-    }
+    const entryValues = await fetchCanonicalFareEarningAll(c);
+    console.log(`[Ledger DriversSummary] Canonical fare_earning rows: ${entryValues.length} (${Date.now() - t0}ms)`);
 
     // ── Aggregate by driver ────────────────────────────────────────
     const driverMap = new Map<string, {
@@ -14311,7 +13258,7 @@ app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth(), async (c)
         skippedNoDriver,
         skippedBadDate,
         durationMs,
-        readModel: useCanonical ? "canonical" : "legacy",
+        readModel: "canonical",
       },
     });
   } catch (e: any) {
@@ -14330,8 +13277,6 @@ app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth(), async (c)
 app.get("/make-server-37f42386/ledger/fleet-summary", requireAuth(), async (c) => {
   const t0 = Date.now();
   try {
-    const readModel = (c.req.query("readModel") || "canonical").toLowerCase();
-    const useCanonical = readModel === "canonical";
     // ── Parse query params ─────────────────────────────────────────
     const daysParam = c.req.query("days");
     const startDateParam = c.req.query("startDate");
@@ -14352,45 +13297,12 @@ app.get("/make-server-37f42386/ledger/fleet-summary", requireAuth(), async (c) =
       periodStart = startDate.toISOString().split("T")[0];
     }
 
-    console.log(`[Ledger FleetSummary] Starting — readModel=${useCanonical ? "canonical" : "legacy"} period=${periodStart}..${periodEnd}`);
+    console.log(`[Ledger FleetSummary] Starting — readModel=canonical period=${periodStart}..${periodEnd}`);
 
-    // ── Paginated fetch helper ─────────────────────────────────────
-    const PAGE = 1000;
-    const MAX_ROWS = 100000;
-    const paginatedFetchFS = async (buildQuery: () => any): Promise<any[]> => {
-      let all: any[] = [];
-      let offset = 0;
-      while (offset < MAX_ROWS) {
-        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        const page = data || [];
-        all = all.concat(page);
-        if (page.length < PAGE) break;
-        offset += PAGE;
-      }
-      return all;
-    };
-
-    let entries: any[];
-    if (useCanonical) {
-      entries = await fetchCanonicalLedgerEventsInPeriod(c, periodStart, periodEnd);
-    } else {
-      const orgId = getOrgId(c);
-      const rawData = await paginatedFetchFS(() => {
-        let q = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "ledger:%")
-          .gte("value->>date", periodStart)
-          .lte("value->>date", periodEnd);
-        if (orgId) q = q.eq("value->>organizationId", orgId);
-        return q;
-      });
-      entries = rawData.map((r: any) => r.value).filter(Boolean);
-    }
+    const entries = await fetchCanonicalLedgerEventsInPeriod(c, periodStart, periodEnd);
 
     console.log(
-      `[Ledger FleetSummary] Fetched ${entries.length} entries (${useCanonical ? "ledger_event" : "ledger"}) for period ${periodStart}..${periodEnd} in ${Date.now() - t0}ms`,
+      `[Ledger FleetSummary] Fetched ${entries.length} entries (ledger_event) for period ${periodStart}..${periodEnd} in ${Date.now() - t0}ms`,
     );
 
     const agg = aggregateFleetSummaryFromLedgerLikeEntries(entries);
@@ -14417,7 +13329,7 @@ app.get("/make-server-37f42386/ledger/fleet-summary", requireAuth(), async (c) =
         periodEnd,
         totalEntriesProcessed: entries.length,
         durationMs,
-        readModel: useCanonical ? "canonical" : "legacy",
+        readModel: "canonical",
       },
     });
   } catch (e: any) {
