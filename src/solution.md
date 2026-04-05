@@ -154,7 +154,9 @@ Trip and fleet sync still **persist trips**; they simply stop writing **`ledger:
 |--------|--------|
 | **`GET /ledger/count`** | Still returns **`legacyLedgerEntries`** (count of **`ledger:%`** keys) until you run the KV purge. |
 | Legacy **write** routes (`POST /ledger`, repair, backfill, etc.) | **403** — trip/txn generators return empty; use **canonical append** APIs for money events. |
-| **`scripts/purge-legacy-ledger-kv.sql`** | Operator SQL template to **`DELETE`** **`ledger:%`** rows after backup (step 7). |
+| **`scripts/purge-legacy-ledger-kv.sql`** | Operator SQL template: verify counts, then **`DELETE`** **`ledger:%`** rows after backup (commented until you uncomment). |
+
+**Operator sequence:** (1) backup; (2) run section 1 `SELECT` queries in `scripts/purge-legacy-ledger-kv.sql`; (3) uncomment and run `DELETE` when signed off; (4) confirm `legacyLedgerEntries` is 0 via **`GET /ledger/count`** or repeat section 1.
 
 ---
 

@@ -929,12 +929,10 @@ export function DeleteCenter() {
 
   const activeDeleteGroupMeta = deleteGroup ? deleteGroups.find(g => g.id === deleteGroup) : null;
 
-  // Orphan heuristic applies to **legacy** `ledger:%` rows (purge targets legacy trip-sourced orphans).
-  const legacyLedgerForOrphanHeuristic = diagCounts
-    ? (diagCounts.legacyLedgerEntries ?? diagCounts.ledgerEntries)
-    : 0;
+  // Orphan warning uses **legacy** `ledger:%` count only (canonical `ledger_event:*` must not drive this heuristic).
+  const legacyRowCount = diagCounts?.legacyLedgerEntries ?? 0;
   const hasOrphanedLedgers = diagCounts
-    ? legacyLedgerForOrphanHeuristic > (diagCounts.trips * 5 + diagCounts.transactions * 2 + 10)
+    ? legacyRowCount > (diagCounts.trips * 5 + diagCounts.transactions * 2 + 10)
     : false;
 
   const groupMatchesDeleteSearch = (groupId: string) => {
@@ -1418,8 +1416,11 @@ export function DeleteCenter() {
                 {diagCounts.legacyLedgerEntries != null && diagCounts.legacyLedgerEntries > 0 && (
                   <p className="text-[10px] text-slate-500 mt-1">Legacy rows: {diagCounts.legacyLedgerEntries.toLocaleString()} <span className="font-mono text-slate-400">ledger:*</span></p>
                 )}
+                {diagCounts.legacyLedgerEntries === 0 && (
+                  <p className="text-[10px] text-slate-400 mt-1">No legacy <span className="font-mono">ledger:*</span> keys (or already purged).</p>
+                )}
                 {hasOrphanedLedgers && (
-                  <p className="text-[10px] text-amber-600 font-medium mt-1">Legacy count high vs trips — review orphan purge</p>
+                  <p className="text-[10px] text-amber-600 font-medium mt-1">Legacy <span className="font-mono">ledger:*</span> count high vs trips — try Purge Orphaned Ledgers, or bulk KV delete per repo script after backup.</p>
                 )}
               </div>
               <div className="text-center">

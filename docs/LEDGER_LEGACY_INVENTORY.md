@@ -18,6 +18,8 @@
 | **Gap diagnostic** | **`GET /ledger/diagnostic-trip-ledger-gap`** — compares trips to **`ledger_event:*`** `fare_earning` rows only. |
 | **InDrive wallet** | **`GET /ledger/driver-indrive-wallet`** — fee math from **`ledger_event:*`** only; loads from **`transaction:*`** unchanged. |
 | **Legacy writes** | **`legacyLedgerWritesDisabled()`** is **always true** in code ( **`LEGACY_LEDGER_WRITES`** env is **not** read). Trip/txn generators are no-ops; POST/PATCH/batch backfill/repair/ensure return **403** as before. |
+| **Imports (client)** | Merged import no longer calls **`ensureLedgerFromTripIds`** (see **`ImportsPage`**, **`data-import-executor.ts`**) — canonical append only. |
+| **Admin backfill UI** | **`LedgerBackfillPanel`** — live legacy runs disabled in UI; dry-run preview retained. Trip **`LedgerView`** does not offer legacy mass backfill. |
 
 ---
 
@@ -95,6 +97,16 @@ These **still** reference **`ledger:%`** until you delete keys (e.g. [`scripts/p
 | File | Role |
 |------|------|
 | [`src/components/admin/LedgerBackfillPanel.tsx`](../src/components/admin/LedgerBackfillPanel.tsx) | Backfill UI — live writes blocked server-side; dry-run where supported. |
+| [`src/components/imports/DeleteCenter.tsx`](../src/components/imports/DeleteCenter.tsx) | Shows **`legacyLedgerEntries`** from **`GET /ledger/count`**; orphan heuristic uses **legacy count only** (not canonical events). |
+
+---
+
+## Operator: KV purge (full legacy row removal)
+
+1. **Backup** the KV / project (see `src/solution.md` Phase 0).
+2. **Verify** counts with **`GET /ledger/count`** (`legacyLedgerEntries`) and/or SQL in [`scripts/purge-legacy-ledger-kv.sql`](../scripts/purge-legacy-ledger-kv.sql).
+3. **Execute** the `DELETE` in that script (or batched equivalent) in a maintenance window.
+4. **Re-verify** `legacyLedgerEntries === 0`, then optionally simplify server + UI per checklist below.
 
 ---
 
