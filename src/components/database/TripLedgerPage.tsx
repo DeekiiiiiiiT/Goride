@@ -159,8 +159,8 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
         <div className="flex items-center gap-2">
           <TripLedgerExport
             trips={trips}
-            allColumns={ALL_COLUMNS}
             visibleColumns={visibleColumns}
+            columnConfig={columnConfig}
             total={total}
           />
           {showColumnToggle && (

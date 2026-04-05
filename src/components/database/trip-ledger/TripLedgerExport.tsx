@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import { Trip } from '../../../types/data';
 import { toast } from 'sonner@2.0.3';
-import type { RenderColumnDef } from './TripLedgerTable';
+import { mergeTripLedgerActiveColumns, type RenderColumnDef } from './TripLedgerTable';
 
 // ── CSV value helpers ───────────────────────────────────────────────────────
 
@@ -84,12 +84,13 @@ function generateFilename(): string {
 
 interface TripLedgerExportProps {
   trips: Trip[];
-  allColumns: RenderColumnDef[];
   visibleColumns: string[];
+  /** When set (Super Admin), CSV headers use saved labels and column order from config. */
+  columnConfig?: { key: string; label: string; visible: boolean }[];
   total: number;
 }
 
-export function TripLedgerExport({ trips, allColumns, visibleColumns, total }: TripLedgerExportProps) {
+export function TripLedgerExport({ trips, visibleColumns, columnConfig, total }: TripLedgerExportProps) {
   const [exporting, setExporting] = useState(false);
 
   const handleExport = () => {
@@ -100,7 +101,7 @@ export function TripLedgerExport({ trips, allColumns, visibleColumns, total }: T
 
     setExporting(true);
     try {
-      const activeCols = allColumns.filter(c => visibleColumns.includes(c.key));
+      const activeCols = mergeTripLedgerActiveColumns(visibleColumns, columnConfig);
       const csv = buildCsv(trips, activeCols);
       downloadCsv(csv, generateFilename());
       toast.success(`Exported ${trips.length} trips (${activeCols.length} columns)`);

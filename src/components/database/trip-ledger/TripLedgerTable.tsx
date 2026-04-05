@@ -271,6 +271,25 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
 
 export const DEFAULT_VISIBLE_KEYS = ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key);
 
+/** Super Admin ledger config: merge saved labels + column order with ALL_COLUMNS render/sort logic. */
+export function mergeTripLedgerActiveColumns(
+  visibleColumns: string[],
+  columnConfig?: { key: string; label: string; visible: boolean }[],
+): RenderColumnDef[] {
+  if (columnConfig != null && columnConfig.length > 0) {
+    const out: RenderColumnDef[] = [];
+    for (const c of columnConfig) {
+      if (!c.visible) continue;
+      const base = ALL_COLUMNS.find(ac => ac.key === c.key);
+      if (!base) continue;
+      const label = c.label?.trim() ? c.label.trim() : base.label;
+      out.push({ ...base, label });
+    }
+    return out;
+  }
+  return ALL_COLUMNS.filter(col => visibleColumns.includes(col.key));
+}
+
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
 function SkeletonRow({ colCount }: { colCount: number }) {
@@ -417,7 +436,9 @@ function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) 
               }
               const value = extractor.getValue(trip);
               if (value === undefined || value === null || value === '') return null;
-              return <DetailField key={key} label={extractor.label} value={value} />;
+              const cfgLabel = columnConfig?.find(cc => cc.key === key)?.label?.trim();
+              const displayLabel = cfgLabel || extractor.label;
+              return <DetailField key={key} label={displayLabel} value={value} />;
             })}
             
             {/* Always show InDrive fields if trip has InDrive data */}
@@ -568,10 +589,9 @@ export function TripLedgerTable({
   const rangeStart = total === 0 ? 0 : page * pageSize + 1;
   const rangeEnd = Math.min((page + 1) * pageSize, total);
 
-  // Filter columns to only visible ones, preserving order from ALL_COLUMNS
   const activeCols = useMemo(
-    () => ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)),
-    [visibleColumns]
+    () => mergeTripLedgerActiveColumns(visibleColumns, columnConfig),
+    [visibleColumns, columnConfig]
   );
 
   // Sort trips client-side

@@ -234,6 +234,16 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
     setHasChanges(true);
   };
 
+  const updateColumnLabel = (ledger: LedgerType, columnKey: string, label: string) => {
+    setColumns(prev => ({
+      ...prev,
+      [ledger]: prev[ledger].map(col =>
+        col.key === columnKey ? { ...col, label } : col
+      ),
+    }));
+    setHasChanges(true);
+  };
+
   const Icon = BUSINESS_TYPE_ICONS[selectedBusinessType];
 
   return (
@@ -342,7 +352,7 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
             <div className="p-4 border-b border-slate-200">
               <p className="text-sm font-medium text-slate-700">Column Configuration</p>
               <p className="text-xs text-slate-500 mt-1">
-                Toggle column visibility and add custom columns for each ledger
+                Edit the display name (label) for each column. The key is fixed — it tells the app which data to show. Toggle visibility or add custom columns.
               </p>
             </div>
 
@@ -376,8 +386,19 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
                               key={col.key}
                               className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
                             >
-                              <GripVertical className="w-4 h-4 text-slate-300" />
-                              <span className="flex-1 text-sm text-slate-700">{col.label}</span>
+                              <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <input
+                                  type="text"
+                                  value={col.label}
+                                  onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
+                                  className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
+                                  aria-label={`Label for column ${col.key}`}
+                                />
+                                <span className="block text-[11px] font-mono text-slate-400 truncate" title="Internal key used by the app for this column">
+                                  key: {col.key}
+                                </span>
+                              </div>
                               {col.custom && (
                                 <button
                                   onClick={() => removeCustomColumn(ledger.id, col.key)}
