@@ -146,8 +146,8 @@ export function FuelReimbursementTable({
         if (t.status !== 'Pending' || !isFuelReimbursement(t)) return false;
         // Exclude station-gate-held transactions — handled by Super Admin via Learnt Locations
         if (t.metadata?.stationGateHold) return false;
-        // Exclude items that belong in Log Review tab
-        if (t.metadata?.needsLogReview) return false;
+        // Exclude Log Review rows — unless admin manual + odometer (stale needsLogReview must still show on Pending)
+        if (t.metadata?.needsLogReview && !isAdminManualFuelWithProvidedOdometer(t)) return false;
         const method = t.metadata?.odometerMethod;
         const isFuelCat = t.category === 'Fuel' || t.category === 'Fuel Reimbursement';
         if (isFuelCat && isAdminManualFuelWithProvidedOdometer(t)) return true;
