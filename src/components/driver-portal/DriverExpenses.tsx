@@ -53,7 +53,18 @@ interface ExpenseLoggerProps {
   onBack?: () => void;
 }
 
-type ViewState = 'list' | 'category_select' | 'odometer_scan' | 'method_select' | 'entry_details' | 'toll_scan' | 'toll_review';
+type ViewState =
+  | 'list'
+  | 'category_select'
+  | 'odometer_scan'
+  | 'fuel_gps_retry'
+  | 'method_select'
+  | 'entry_details'
+  | 'toll_scan'
+  | 'toll_review';
+
+/** Manual "Retry GPS" taps allowed after the automatic post–odometer-scan attempt fails. */
+const MAX_MANUAL_FUEL_GPS_RETRIES = 2;
 
 import { useGeolocation } from '../../hooks/useGeolocation';
 
@@ -111,6 +122,11 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
 
+  const [fuelGpsManualRetriesLeft, setFuelGpsManualRetriesLeft] = useState(MAX_MANUAL_FUEL_GPS_RETRIES);
+  /** True after GPS capture was exhausted; shows copy on fuel details that admin will verify location. */
+  const [fuelProceedingWithoutGps, setFuelProceedingWithoutGps] = useState(false);
+  const [isRetryingFuelGps, setIsRetryingFuelGps] = useState(false);
+
   useEffect(() => {
     if (user) {
       fetchTransactions();
@@ -137,6 +153,9 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setVehicleClass('');
     setCollector('');
     setFuelEntry({});
+    setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+    setFuelProceedingWithoutGps(false);
+    setIsRetryingFuelGps(false);
   };
 
   const fetchTransactions = async () => {
@@ -512,6 +531,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const handleCategorySelect = async (cat: string) => {
     setCategory(cat);
     if (cat === 'Fuel') {
+      setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+      setFuelProceedingWithoutGps(false);
       setViewState('odometer_scan');
       if (driverRecord?.assignedVehicleId) {
         api.getVehicleTankStatus(driverRecord.assignedVehicleId)
@@ -526,32 +547,93 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   };
 
   const handleOdometerScanComplete = async (result: any) => {
-    // Phase 2: Start GPS acquisition immediately after scan
-    let locationData = undefined;
+    let locationData: FuelEntryState['locationMetadata'] = undefined;
     try {
-        const loc = await getLocation();
-        if (loc.lat && loc.lng) {
-            locationData = {
-                lat: loc.lat,
-                lng: loc.lng,
-                accuracy: loc.accuracy || 0,
-                timestamp: new Date().toISOString()
-            };
-            toast.success("Location locked for verification 📍");
-        }
+      const loc = await getLocation();
+      if (loc.lat != null && loc.lng != null) {
+        locationData = {
+          lat: loc.lat,
+          lng: loc.lng,
+          accuracy: loc.accuracy ?? 0,
+          timestamp: new Date().toISOString(),
+        };
+        toast.success("Location locked for verification 📍");
+      }
     } catch (e) {
-        console.error("GPS Acquisition failed", e);
+      console.error("GPS Acquisition failed", e);
     }
 
-    setFuelEntry(prev => ({
+    setFuelEntry((prev) => ({
       ...prev,
       odometerReading: result.reading,
       odometerProof: result.photo,
       odometerMethod: result.method,
       manualReason: result.manualReason,
-      locationMetadata: locationData
+      locationMetadata: locationData,
     }));
-    setViewState('method_select');
+
+    if (locationData) {
+      setFuelProceedingWithoutGps(false);
+      setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+      setViewState('method_select');
+    } else {
+      setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+      setFuelProceedingWithoutGps(false);
+      toast.message(
+        "We couldn't lock your location. Turn on Location, move to an open area if needed, then tap Retry.",
+        { duration: 5000 },
+      );
+      setViewState('fuel_gps_retry');
+    }
+  };
+
+  const applyManualFuelGpsRetryFailed = (nextLeft: number) => {
+    setFuelGpsManualRetriesLeft(nextLeft);
+    if (nextLeft <= 0) {
+      toast.info(
+        "Location couldn't be captured. Your fuel log will still be sent — your fleet will verify the station manually.",
+        { duration: 6000 },
+      );
+      setFuelProceedingWithoutGps(true);
+      setViewState('method_select');
+    } else {
+      toast.warning(
+        nextLeft === 1
+          ? "Still couldn't get your location. You have one more try."
+          : `Still couldn't get your location. ${nextLeft} tries left.`,
+        { duration: 4000 },
+      );
+    }
+  };
+
+  const handleRetryFuelGps = async () => {
+    if (isRetryingFuelGps) return;
+    setIsRetryingFuelGps(true);
+    try {
+      const loc = await getLocation();
+      if (loc.lat != null && loc.lng != null) {
+        setFuelEntry((prev) => ({
+          ...prev,
+          locationMetadata: {
+            lat: loc.lat,
+            lng: loc.lng,
+            accuracy: loc.accuracy ?? 0,
+            timestamp: new Date().toISOString(),
+          },
+        }));
+        setFuelProceedingWithoutGps(false);
+        setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+        toast.success("Location locked for verification 📍");
+        setViewState('method_select');
+        return;
+      }
+      applyManualFuelGpsRetryFailed(fuelGpsManualRetriesLeft - 1);
+    } catch (e) {
+      console.error("GPS retry failed", e);
+      applyManualFuelGpsRetryFailed(fuelGpsManualRetriesLeft - 1);
+    } finally {
+      setIsRetryingFuelGps(false);
+    }
   };
 
   const handleMethodSelect = (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => {
@@ -569,6 +651,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         }
         break;
       case 'odometer_scan': setViewState('category_select'); break;
+      case 'fuel_gps_retry': setViewState('odometer_scan'); break;
       case 'method_select': setViewState('odometer_scan'); break;
       case 'toll_scan': setViewState('category_select'); break;
       case 'toll_review': 
@@ -671,6 +754,17 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     );
   }
 
+  const fuelNoGpsManualVerifyNotice =
+    category === 'Fuel' && !fuelEntry.locationMetadata && fuelProceedingWithoutGps ? (
+      <div
+        className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
+        role="status"
+      >
+        <span className="font-medium">No GPS for this log.</span>{' '}
+        Your submission will go to your fleet for manual station verification (you may see &quot;Verifying location&quot; until they confirm).
+      </div>
+    ) : null;
+
   return (
     <div className="space-y-6 pb-40">
       <div className="flex items-center gap-3">
@@ -684,6 +778,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               <h2 className="text-xl font-bold">
                 {viewState === 'category_select' && "Log New Expense"}
                 {viewState === 'odometer_scan' && "Scan Odometer"}
+                {viewState === 'fuel_gps_retry' && "Lock location"}
                 {viewState === 'method_select' && "Payment Method"}
                 {viewState === 'entry_details' && (category === 'Fuel' ? "Fuel Details" : "Expense Details")}
                 {viewState === 'toll_scan' && "Scan Toll Receipt"}
@@ -700,7 +795,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               {category === 'Fuel' ? (
                 <>Step {
                   viewState === 'category_select' ? '1' :
-                  viewState === 'odometer_scan' ? '2' :
+                  viewState === 'odometer_scan' || viewState === 'fuel_gps_retry' ? '2' :
                   viewState === 'method_select' ? '3' : '4'
                 } of 4</>
               ) : category === 'Tolls' ? (
@@ -762,22 +857,65 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
             </div>
           )}
 
+          {viewState === 'fuel_gps_retry' && (
+            <div className="p-6 space-y-6">
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="h-14 w-14 rounded-full bg-slate-100 flex items-center justify-center">
+                  <MapPin className="h-7 w-7 text-slate-500" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Location not detected</h3>
+                  <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+                    We need your GPS to match this fill-up to a verified station. Check that Location is on for this browser or app, then try again.
+                  </p>
+                </div>
+                <p className="text-xs text-slate-400">
+                  {fuelGpsManualRetriesLeft} manual {fuelGpsManualRetriesLeft === 1 ? 'retry' : 'retries'} left — after that you can still submit; your fleet will verify the station.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => void handleRetryFuelGps()}
+                disabled={isRetryingFuelGps}
+              >
+                {isRetryingFuelGps ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Getting location…
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="mr-2 h-4 w-4" />
+                    Retry GPS
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
           {viewState === 'method_select' && (
             <PaymentMethodSelector onSelect={handleMethodSelect} />
           )}
 
           {viewState === 'entry_details' && (
             category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card' ? (
-                <GasCardSummary 
+                <div>
+                  {fuelNoGpsManualVerifyNotice && (
+                    <div className="px-6 pt-6 pb-0">{fuelNoGpsManualVerifyNotice}</div>
+                  )}
+                  <GasCardSummary 
                    odometer={fuelEntry.odometerReading || 0}
                    date={date}
                    time={time}
                    isSubmitting={isSubmitting}
                    onSubmit={handleSubmit}
                 />
+                </div>
             ) : (
             <form onSubmit={handleSubmit} className="p-6 space-y-6" id="expense-form" ref={formRef} noValidate>
               <div className="space-y-4">
+                {fuelNoGpsManualVerifyNotice}
                 {category !== 'Fuel' && (
                   <div className="space-y-2">
                     <Label>Merchant / Vendor</Label>
