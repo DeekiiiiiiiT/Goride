@@ -2224,6 +2224,47 @@ export const api = {
     }
   },
 
+  /**
+   * One-time maintenance: delete fuel settlement transactions that no longer have a matching
+   * finalized reconciliation snapshot (e.g. after deleting finalized reports before cascade-delete).
+   * Always call with dryRun: true first; execute requires confirm: "CLEANUP_ORPHAN_FUEL_SETTLEMENTS".
+   */
+  async cleanupOrphanedFuelSettlements(opts: {
+    dryRun: boolean;
+    confirm?: string;
+  }): Promise<{
+    success: boolean;
+    dryRun?: boolean;
+    finalizedReportWeeks?: number;
+    wouldDeleteTransactions?: number;
+    wouldResetFuelEntries?: number;
+    sampleTransactionIds?: string[];
+    sampleFuelEntryIds?: string[];
+    deletedTransactions?: number;
+    resetFuelEntries?: number;
+    error?: string;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/finalized-reports/cleanup-orphaned-settlements`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({
+          dryRun: opts.dryRun,
+          ...(opts.confirm ? { confirm: opts.confirm } : {}),
+        }),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((data as { error?: string }).error || 'Cleanup request failed');
+    }
+    return data;
+  },
+
   // ═══════════════════════════════════════════════════════════════════
   // LEDGER API
   // ═══════════════════════════════════════════════════════════════════

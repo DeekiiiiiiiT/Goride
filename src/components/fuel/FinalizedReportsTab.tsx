@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Download,
+  Eraser,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { api } from '../../services/api';
@@ -36,6 +37,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
+import { Input } from '../ui/input';
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -61,6 +63,9 @@ export function FinalizedReportsTab() {
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ weekStart: string; vehicleId: string; label: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [orphanRunOpen, setOrphanRunOpen] = useState(false);
+  const [orphanConfirm, setOrphanConfirm] = useState('');
 
   const loadReports = async () => {
     setLoading(true);
@@ -155,6 +160,46 @@ export function FinalizedReportsTab() {
     }
   };
 
+  const handleOrphanPreview = async () => {
+    setCleanupBusy(true);
+    try {
+      const r = await api.cleanupOrphanedFuelSettlements({ dryRun: true });
+      toast.message('Orphan settlement scan', {
+        description: `Would remove ${r.wouldDeleteTransactions ?? 0} wallet/settlement transactions and reset ${r.wouldResetFuelEntries ?? 0} fuel logs. Finalized snapshots on file: ${r.finalizedReportWeeks ?? 0}.`,
+      });
+    } catch (err: any) {
+      console.error('[FinalizedReportsTab] Orphan preview:', err);
+      toast.error(err.message || 'Preview failed');
+    } finally {
+      setCleanupBusy(false);
+    }
+  };
+
+  const handleOrphanExecute = async () => {
+    if (orphanConfirm !== 'CLEANUP_ORPHAN_FUEL_SETTLEMENTS') {
+      toast.error('Type the confirmation phrase exactly.');
+      return;
+    }
+    setCleanupBusy(true);
+    try {
+      const r = await api.cleanupOrphanedFuelSettlements({
+        dryRun: false,
+        confirm: 'CLEANUP_ORPHAN_FUEL_SETTLEMENTS',
+      });
+      toast.success(
+        `Removed ${r.deletedTransactions ?? 0} transactions; reset ${r.resetFuelEntries ?? 0} fuel logs. Refresh driver wallet to see updates.`
+      );
+      setOrphanRunOpen(false);
+      setOrphanConfirm('');
+      await loadReports();
+    } catch (err: any) {
+      console.error('[FinalizedReportsTab] Orphan cleanup:', err);
+      toast.error(err.message || 'Cleanup failed');
+    } finally {
+      setCleanupBusy(false);
+    }
+  };
+
   const handleExportWeek = async (group: WeekGroup) => {
     const data = group.reports.map((r: any) => ({
       WeekStart: r.weekStart?.split('T')[0] || '',
@@ -199,21 +244,6 @@ export function FinalizedReportsTab() {
     );
   }
 
-  // --- Empty State ---
-  if (weekGroups.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
-        <FileCheck className="h-12 w-12 opacity-40" />
-        <div className="text-center space-y-1">
-          <p className="text-base font-semibold text-slate-500">No finalized statements yet</p>
-          <p className="text-sm">
-            Finalize a week from the Standard Fleet Rule tab to see it here.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   // --- Main Render ---
   return (
     <div className="space-y-4">
@@ -227,7 +257,50 @@ export function FinalizedReportsTab() {
         </Button>
       </div>
 
-      {weekGroups.map((group) => {
+      <Card className="border-slate-200/80 bg-slate-50/40">
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Eraser className="h-4 w-4 text-slate-500" />
+            Orphaned fuel settlement cleanup
+          </CardTitle>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            If you removed finalized reconciliation before ledger rows were auto-removed, old fuel credits can remain in
+            the cash wallet. Preview finds wallet/settlement rows with no matching finalized snapshot; run deletes them
+            and resets linked fuel logs.
+          </p>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2 pb-4 px-4">
+          <Button variant="outline" size="sm" disabled={cleanupBusy} onClick={handleOrphanPreview}>
+            {cleanupBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Preview scan
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="text-amber-900 bg-amber-50 border-amber-200 hover:bg-amber-100"
+            disabled={cleanupBusy}
+            onClick={() => {
+              setOrphanConfirm('');
+              setOrphanRunOpen(true);
+            }}
+          >
+            Delete orphaned data…
+          </Button>
+        </CardContent>
+      </Card>
+
+      {weekGroups.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-slate-400">
+          <FileCheck className="h-12 w-12 opacity-40" />
+          <div className="text-center space-y-1">
+            <p className="text-base font-semibold text-slate-500">No finalized statements yet</p>
+            <p className="text-sm">
+              Finalize a week from the Standard Fleet Rule tab to see it here.
+            </p>
+          </div>
+        </div>
+      ) : (
+        weekGroups.map((group) => {
         const isExpanded = expandedWeek === group.key;
 
         return (
@@ -436,7 +509,8 @@ export function FinalizedReportsTab() {
             )}
           </Card>
         );
-      })}
+      })
+      )}
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
@@ -463,6 +537,44 @@ export function FinalizedReportsTab() {
               ) : (
                 'Remove'
               )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={orphanRunOpen} onOpenChange={(open) => !open && setOrphanRunOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete orphaned settlement data?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <span className="block">
+                Run <strong className="text-slate-700">Preview scan</strong> first. This permanently removes matching
+                transactions from the shared KV store (cash wallet / ledger) and resets affected fuel logs to Pending.
+              </span>
+              <span className="block text-xs font-mono text-slate-600">
+                Type: CLEANUP_ORPHAN_FUEL_SETTLEMENTS
+              </span>
+              <Input
+                value={orphanConfirm}
+                onChange={(e) => setOrphanConfirm(e.target.value)}
+                placeholder="Confirmation phrase"
+                className="font-mono text-sm"
+                autoComplete="off"
+              />
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cleanupBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleOrphanExecute();
+              }}
+              disabled={cleanupBusy}
+              className="bg-amber-700 hover:bg-amber-800"
+            >
+              {cleanupBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Delete orphaned rows
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

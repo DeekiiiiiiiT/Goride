@@ -89,6 +89,157 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
   }
 });
 
+/** Parse `WeeklyFuelReport` id format: `<vehicleId>_<YYYY-MM-DD>` (date is last segment). */
+function parseFuelReportId(reportId: string): { vehicleId: string; weekKey: string } | null {
+  const idx = reportId.lastIndexOf("_");
+  if (idx <= 0) return null;
+  const weekKey = reportId.slice(idx + 1);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) return null;
+  return { vehicleId: reportId.slice(0, idx), weekKey };
+}
+
+/**
+ * One-time / maintenance: remove Enterprise fuel settlement rows that no longer have a
+ * matching `finalized_report:*` snapshot (e.g. deleted before cascade-delete existed).
+ */
+app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = !!body.dryRun;
+    const confirm = typeof body.confirm === "string" ? body.confirm : "";
+    if (!dryRun && confirm !== "CLEANUP_ORPHAN_FUEL_SETTLEMENTS") {
+      return c.json(
+        {
+          error:
+            "Set dryRun:true to preview, or confirm:\"CLEANUP_ORPHAN_FUEL_SETTLEMENTS\" to delete.",
+        },
+        400
+      );
+    }
+
+    const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
+    const finalizedKeys = new Set<string>();
+    for (const s of snapshots) {
+      if (!s?.vehicleId || !s?.weekStart) continue;
+      finalizedKeys.add(`${String(s.weekStart).split("T")[0]}:${s.vehicleId}`);
+    }
+
+    const allTransactions = (await kv.getByPrefix("transaction:")) || [];
+    const txIdsToDelete = new Set<string>();
+
+    for (const tx of allTransactions) {
+      if (!tx?.id) continue;
+
+      let marked = false;
+      const rid = tx.metadata?.reportId;
+      if (rid) {
+        const parsed = parseFuelReportId(String(rid));
+        if (parsed) {
+          const key = `${parsed.weekKey}:${parsed.vehicleId}`;
+          if (!finalizedKeys.has(key) && tx.vehicleId === parsed.vehicleId) {
+            txIdsToDelete.add(tx.id);
+            marked = true;
+          }
+        }
+      }
+
+      if (
+        !marked &&
+        tx.metadata?.settlementType === "Enterprise_Fuel_Sync" &&
+        tx.vehicleId
+      ) {
+        const wp = tx.metadata?.workPeriodStart?.split("T")[0];
+        if (wp) {
+          const key = `${wp}:${tx.vehicleId}`;
+          if (!finalizedKeys.has(key)) txIdsToDelete.add(tx.id);
+        }
+      }
+    }
+
+    // Wallet credits keyed as fuel-credit-<sourceTxId>
+    for (const tx of allTransactions) {
+      if (!tx?.id) continue;
+      if (tx.category !== "Fuel Reimbursement Credit") continue;
+      const src = tx.metadata?.fuelCreditSourceId;
+      if (src && txIdsToDelete.has(String(src))) txIdsToDelete.add(tx.id);
+    }
+
+    // Fuel entries tied to orphan report ids
+    const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+    const entryIdsToReset: string[] = [];
+
+    for (const entry of allFuelEntries) {
+      if (!entry?.id || !entry.vehicleId) continue;
+      const fbr = entry.metadata?.finalizedByReport;
+      if (!fbr) continue;
+      const parsed = parseFuelReportId(String(fbr));
+      if (!parsed) continue;
+      if (parsed.vehicleId !== entry.vehicleId) continue;
+      const key = `${parsed.weekKey}:${parsed.vehicleId}`;
+      if (!finalizedKeys.has(key)) entryIdsToReset.push(entry.id);
+    }
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        finalizedReportWeeks: finalizedKeys.size,
+        wouldDeleteTransactions: txIdsToDelete.size,
+        wouldResetFuelEntries: entryIdsToReset.length,
+        sampleTransactionIds: [...txIdsToDelete].slice(0, 40),
+        sampleFuelEntryIds: entryIdsToReset.slice(0, 40),
+      });
+    }
+
+    for (const txId of txIdsToDelete) {
+      try {
+        await kv.del(`transaction:fuel-credit-${txId}`);
+      } catch {
+        /* ignore */
+      }
+      try {
+        await kv.del(`transaction:${txId}`);
+      } catch (delErr: any) {
+        console.log(`[OrphanCleanup] Failed to delete transaction ${txId}: ${delErr?.message}`);
+      }
+    }
+
+    let entriesReset = 0;
+    for (const entry of allFuelEntries) {
+      if (!entryIdsToReset.includes(entry.id)) continue;
+
+      const meta = { ...(entry.metadata || {}) };
+      delete meta.finalizedAt;
+      delete meta.finalizedByReport;
+      delete meta.splitApplied;
+
+      const updated: Record<string, unknown> = {
+        ...entry,
+        reconciliationStatus: "Pending",
+        metadata: meta,
+      };
+      delete (updated as { transactionId?: string }).transactionId;
+
+      await kv.set(`fuel_entry:${entry.id}`, updated);
+      entriesReset++;
+    }
+
+    console.log(
+      `[OrphanCleanup] Deleted ${txIdsToDelete.size} transactions; reset ${entriesReset} fuel entries`
+    );
+
+    return c.json({
+      success: true,
+      dryRun: false,
+      deletedTransactions: txIdsToDelete.size,
+      resetFuelEntries: entriesReset,
+    });
+  } catch (e: any) {
+    console.log(`[OrphanCleanup] error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => {
   try {
     // Must match POST key: `finalized_report:${report.weekStart.split('T')[0]}:${vehicleId}`
