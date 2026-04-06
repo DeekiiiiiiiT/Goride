@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Download,
   Eraser,
+  Info,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { api } from '../../services/api';
@@ -38,6 +39,7 @@ import {
   AlertDialogTitle,
 } from '../ui/alert-dialog';
 import { Input } from '../ui/input';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -66,6 +68,13 @@ export function FinalizedReportsTab() {
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const [orphanRunOpen, setOrphanRunOpen] = useState(false);
   const [orphanConfirm, setOrphanConfirm] = useState('');
+  const [orphanPreviewResult, setOrphanPreviewResult] = useState<{
+    finalizedReportWeeks: number;
+    wouldDeleteTransactions: number;
+    wouldResetFuelEntries: number;
+    sampleTransactionIds: string[];
+    sampleFuelEntryIds: string[];
+  } | null>(null);
 
   const loadReports = async () => {
     setLoading(true);
@@ -162,10 +171,20 @@ export function FinalizedReportsTab() {
 
   const handleOrphanPreview = async () => {
     setCleanupBusy(true);
+    setOrphanPreviewResult(null);
     try {
       const r = await api.cleanupOrphanedFuelSettlements({ dryRun: true });
-      toast.message('Orphan settlement scan', {
-        description: `Would remove ${r.wouldDeleteTransactions ?? 0} wallet/settlement transactions and reset ${r.wouldResetFuelEntries ?? 0} fuel logs. Finalized snapshots on file: ${r.finalizedReportWeeks ?? 0}.`,
+      setOrphanPreviewResult({
+        finalizedReportWeeks: r.finalizedReportWeeks ?? 0,
+        wouldDeleteTransactions: r.wouldDeleteTransactions ?? 0,
+        wouldResetFuelEntries: r.wouldResetFuelEntries ?? 0,
+        sampleTransactionIds: r.sampleTransactionIds ?? [],
+        sampleFuelEntryIds: r.sampleFuelEntryIds ?? [],
+      });
+      const summary = `Would remove ${r.wouldDeleteTransactions ?? 0} transactions and reset ${r.wouldResetFuelEntries ?? 0} fuel logs (snapshots on file: ${r.finalizedReportWeeks ?? 0}).`;
+      toast.success('Preview complete — see results below', {
+        description: summary,
+        duration: 14_000,
       });
     } catch (err: any) {
       console.error('[FinalizedReportsTab] Orphan preview:', err);
@@ -189,6 +208,7 @@ export function FinalizedReportsTab() {
       toast.success(
         `Removed ${r.deletedTransactions ?? 0} transactions; reset ${r.resetFuelEntries ?? 0} fuel logs. Refresh driver wallet to see updates.`
       );
+      setOrphanPreviewResult(null);
       setOrphanRunOpen(false);
       setOrphanConfirm('');
       await loadReports();
@@ -266,26 +286,69 @@ export function FinalizedReportsTab() {
           <p className="text-xs text-slate-500 leading-relaxed">
             If you removed finalized reconciliation before ledger rows were auto-removed, old fuel credits can remain in
             the cash wallet. Preview finds wallet/settlement rows with no matching finalized snapshot; run deletes them
-            and resets linked fuel logs.
+            and resets linked fuel logs. After running Preview, results stay on this page (not only in a corner toast).
           </p>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2 pb-4 px-4">
-          <Button variant="outline" size="sm" disabled={cleanupBusy} onClick={handleOrphanPreview}>
-            {cleanupBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Preview scan
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="text-amber-900 bg-amber-50 border-amber-200 hover:bg-amber-100"
-            disabled={cleanupBusy}
-            onClick={() => {
-              setOrphanConfirm('');
-              setOrphanRunOpen(true);
-            }}
-          >
-            Delete orphaned data…
-          </Button>
+        <CardContent className="flex flex-col gap-3 pb-4 px-4">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={cleanupBusy} onClick={handleOrphanPreview}>
+              {cleanupBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Preview scan
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-amber-900 bg-amber-50 border-amber-200 hover:bg-amber-100"
+              disabled={cleanupBusy}
+              onClick={() => {
+                setOrphanConfirm('');
+                setOrphanRunOpen(true);
+              }}
+            >
+              Delete orphaned data…
+            </Button>
+          </div>
+
+          {orphanPreviewResult && (
+            <Alert className="border-emerald-200/80 bg-emerald-50/50 text-slate-800">
+              <Info className="h-4 w-4 text-emerald-700" />
+              <AlertTitle>Preview results (dry run — nothing deleted yet)</AlertTitle>
+              <AlertDescription className="text-slate-700 space-y-2">
+                <ul className="list-disc pl-4 space-y-0.5 text-sm">
+                  <li>
+                    <strong>Finalized snapshots on file:</strong> {orphanPreviewResult.finalizedReportWeeks}
+                  </li>
+                  <li>
+                    <strong>Would delete</strong> {orphanPreviewResult.wouldDeleteTransactions} wallet / settlement
+                    transactions
+                  </li>
+                  <li>
+                    <strong>Would reset</strong> {orphanPreviewResult.wouldResetFuelEntries} fuel logs to Pending
+                  </li>
+                </ul>
+                {(orphanPreviewResult.sampleTransactionIds.length > 0 ||
+                  orphanPreviewResult.sampleFuelEntryIds.length > 0) && (
+                  <p className="text-xs text-slate-600 pt-1 font-mono break-all">
+                    {orphanPreviewResult.sampleTransactionIds.length > 0 && (
+                      <span className="block">
+                        Sample tx ids: {orphanPreviewResult.sampleTransactionIds.slice(0, 5).join(', ')}
+                        {orphanPreviewResult.sampleTransactionIds.length > 5 ? '…' : ''}
+                      </span>
+                    )}
+                    {orphanPreviewResult.sampleFuelEntryIds.length > 0 && (
+                      <span className="block mt-1">
+                        Sample fuel log ids: {orphanPreviewResult.sampleFuelEntryIds.slice(0, 5).join(', ')}
+                        {orphanPreviewResult.sampleFuelEntryIds.length > 5 ? '…' : ''}
+                      </span>
+                    )}
+                  </p>
+                )}
+                {orphanPreviewResult.wouldDeleteTransactions === 0 && orphanPreviewResult.wouldResetFuelEntries === 0 && (
+                  <p className="text-sm pt-1">Nothing matched the orphan rules — there is nothing to clean up.</p>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
