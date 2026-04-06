@@ -98,6 +98,19 @@ export function FuelReimbursementTable({
         return isStandardSource && isReimbursementType && isFuelCategory;
     };
 
+    /** All Pending fuel rows for Review Queue (includes station-gate-held and automated — not filtered out of Pending). */
+    const isPendingFuelQueueRow = (t: FinancialTransaction) => {
+        if (t.status !== 'Pending') return false;
+        const isFuelCategory = t.category === 'Fuel' || t.category === 'Fuel Reimbursement';
+        if (!isFuelCategory) return false;
+        return (
+            t.type === 'Reimbursement' ||
+            t.type === 'Fuel_Manual_Entry' ||
+            t.type === 'Manual_Entry' ||
+            (t.type === 'Expense' && (t.paymentMethod === 'Cash' || t.paymentMethod === 'RideShare Cash' || isFuelCategory))
+        );
+    };
+
     /** Matches server: admin manual fuel with odometer > 0 skips Log Review (Pending tab). */
     const isAdminManualFuelWithProvidedOdometer = (t: FinancialTransaction) => {
         const odo = Number(t.odometer);
@@ -108,6 +121,16 @@ export function FuelReimbursementTable({
         const src = m.source;
         if (src === 'Manual' || src === 'Bulk Manual' || src === 'Fuel Log' || src === 'Bulk Log') return true;
         if (t.type === 'Fuel_Manual_Entry' && (m.portal_type === 'Manual_Entry' || m.isManual === true)) return true;
+        return false;
+    };
+
+    /** Same rules as Log Review tab — for badges + Review action on Pending table. */
+    const isLogReviewEligible = (t: FinancialTransaction) => {
+        if (!isPendingFuelQueueRow(t)) return false;
+        if (isAdminManualFuelWithProvidedOdometer(t)) return false;
+        if (t.metadata?.needsLogReview) return true;
+        const method = t.metadata?.odometerMethod;
+        if ((t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && (!method || method !== 'ai_verified')) return true;
         return false;
     };
 
@@ -142,31 +165,9 @@ export function FuelReimbursementTable({
         return true;
     };
 
-    const pending = transactions.filter(t => {
-        if (t.status !== 'Pending' || !isFuelReimbursement(t)) return false;
-        // Exclude station-gate-held transactions — handled by Super Admin via Learnt Locations
-        if (t.metadata?.stationGateHold) return false;
-        // Exclude Log Review rows — unless admin manual + odometer (stale needsLogReview must still show on Pending)
-        if (t.metadata?.needsLogReview && !isAdminManualFuelWithProvidedOdometer(t)) return false;
-        const method = t.metadata?.odometerMethod;
-        const isFuelCat = t.category === 'Fuel' || t.category === 'Fuel Reimbursement';
-        if (isFuelCat && isAdminManualFuelWithProvidedOdometer(t)) return true;
-        if (isFuelCat && (!method || method !== 'ai_verified')) return false;
-        return true;
-    });
+    const pending = transactions.filter(t => isPendingFuelQueueRow(t));
 
-    const logReview = transactions.filter(t => {
-        // Must be Fuel + Pending
-        if (t.status !== 'Pending') return false;
-        if (!isFuelReimbursement(t)) return false;
-        if (isAdminManualFuelWithProvidedOdometer(t)) return false;
-        // Flagged for log review (new submissions will have this)
-        if (t.metadata?.needsLogReview) return true;
-        // Fallback for legacy: Fuel + Pending + non-AI odometer method
-        const method = t.metadata?.odometerMethod;
-        if ((t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && (!method || method !== 'ai_verified')) return true;
-        return false;
-    });
+    const logReview = transactions.filter(isLogReviewEligible);
 
     const history = transactions.filter(t => (t.status === 'Approved' || t.status === 'Rejected') && isFuelReimbursement(t) && isWithinRange(t));
 
@@ -250,9 +251,36 @@ export function FuelReimbursementTable({
             case 'manual_override': return 'Manual Override';
             case 'photo_review': return 'Photo Review';
             case 'manual_entry': return 'Manual Entry';
+            case 'Admin Photo Upload': return 'Admin Photo Upload';
+            case 'Direct Entry': return 'Direct Entry';
             default: return method || 'Unknown';
         }
     };
+
+    const metaFlagOn = (v: unknown) => v === true || v === 'true';
+
+    const renderPendingQueueBadges = (tx: FinancialTransaction) => (
+        <div className="flex flex-col gap-1.5 items-start">
+            {getStatusBadge(tx.status)}
+            <div className="flex flex-wrap gap-1">
+                {metaFlagOn(tx.metadata?.stationGateHold) && (
+                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-sky-50 text-sky-800 border-sky-200">
+                        Station hold
+                    </Badge>
+                )}
+                {metaFlagOn(tx.metadata?.automated) && (
+                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-slate-50 text-slate-600 border-slate-200">
+                        Automated
+                    </Badge>
+                )}
+                {isLogReviewEligible(tx) && (
+                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-amber-50 text-amber-800 border-amber-200">
+                        Odometer review
+                    </Badge>
+                )}
+            </div>
+        </div>
+    );
 
     // Phase 6: Helper to resolve station name for log review
     const resolveStationName = (tx: FinancialTransaction) => {
@@ -267,7 +295,7 @@ export function FuelReimbursementTable({
         return 'Unverified Station';
     };
 
-    const renderTable = (data: FinancialTransaction[], showActions = false) => {
+    const renderTable = (data: FinancialTransaction[], showActions = false, pendingQueueMode = false) => {
         // Helper: resolve a display-friendly description, falling back to vendor or linked log data
         const resolveDescription = (tx: FinancialTransaction) => {
             const desc = tx.description || '';
@@ -434,13 +462,27 @@ export function FuelReimbursementTable({
                                         )}
                                     </TableCell>
                                     <TableCell>
-                                        {getStatusBadge(tx.status)}
+                                        {pendingQueueMode && tx.status === 'Pending'
+                                            ? renderPendingQueueBadges(tx)
+                                            : getStatusBadge(tx.status)}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <div className="flex justify-end gap-2">
+                                        <div className="flex justify-end flex-wrap gap-2">
                                             <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }} title="View Details">
                                                 <Eye className="h-4 w-4" />
                                             </Button>
+
+                                            {pendingQueueMode && showActions && isLogReviewEligible(tx) && onApproveLogReview && (
+                                                <Button
+                                                    size="sm"
+                                                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                                                    onClick={() => openLogReview(tx)}
+                                                    title="Review odometer / log"
+                                                >
+                                                    <Eye className="h-4 w-4 mr-1" />
+                                                    Review
+                                                </Button>
+                                            )}
 
                                             {/* Edit Button - Enabled for History and Pending to allow metadata repair */}
                                             {onEdit && (
@@ -589,7 +631,7 @@ export function FuelReimbursementTable({
 
     return (
         <div className="space-y-6">
-            <Tabs defaultValue={logReview.length > 0 ? "log-review" : "pending"} className="w-full">
+            <Tabs defaultValue="pending" className="w-full">
                 <div className="flex items-center justify-between mb-4">
                     <TabsList>
                         <TabsTrigger value="log-review">
@@ -645,6 +687,7 @@ export function FuelReimbursementTable({
                         <div className="rounded-md border bg-white p-8 text-center text-slate-500">
                             <p className="text-sm">No fuel submissions awaiting odometer review.</p>
                             <p className="text-xs text-slate-400 mt-1">Items appear here when the AI scanner fails and the driver submits an odometer photo for admin review.</p>
+                            <p className="text-xs text-slate-400 mt-2">All pending fuel rows are listed on the <span className="font-medium text-slate-600">Pending</span> tab with labels; use this tab for a filtered odometer-review list.</p>
                         </div>
                     ) : (
                         renderLogReviewTable(logReview)
@@ -658,7 +701,7 @@ export function FuelReimbursementTable({
                             Synchronizing ledger and verifying manual entries...
                         </div>
                     )}
-                    {renderTable(pending, true)}
+                    {renderTable(pending, true, true)}
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-4">
