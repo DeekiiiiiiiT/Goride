@@ -19,6 +19,7 @@ import {
   Loader2,
   Save,
   AlertCircle,
+  ChevronRight,
 } from 'lucide-react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
@@ -28,6 +29,7 @@ import {
   bucketTripLedgerSettingsColumns,
   TRIP_SETTINGS_SECTION_ORDER,
   TRIP_SETTINGS_SECTION_LABELS,
+  type TripLedgerSettingsSectionId,
 } from './trip-ledger/TripLedgerTable';
 
 interface LedgerColumnSettingsProps {
@@ -192,6 +194,17 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
   const [newColumnName, setNewColumnName] = useState('');
   const [addingToLedger, setAddingToLedger] = useState<LedgerType | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  /** Trip ledger column groups: which sections are expanded (default none — all collapsed). */
+  const [tripSectionsOpen, setTripSectionsOpen] = useState<Set<TripLedgerSettingsSectionId>>(() => new Set());
+
+  const toggleTripSection = (sectionId: TripLedgerSettingsSectionId) => {
+    setTripSectionsOpen(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  };
 
   const { data: savedConfig, isLoading } = useQuery<LedgerConfig>({
     queryKey: ['ledgerConfig', selectedBusinessType],
@@ -223,6 +236,10 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
       setHasChanges(false);
     }
   }, [savedConfig]);
+
+  useEffect(() => {
+    setTripSectionsOpen(new Set());
+  }, [selectedBusinessType]);
 
   const saveMutation = useMutation({
     mutationFn: async (config: LedgerConfig) => {
@@ -436,64 +453,87 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
                       <div className="px-4 pb-4 bg-slate-50">
                         {ledger.id === 'trip' ? (
                           <>
-                            <div className="space-y-5">
+                            <div className="space-y-2">
                               {(() => {
                                 const tripBuckets = bucketTripLedgerSettingsColumns(ledgerColumns);
                                 return TRIP_SETTINGS_SECTION_ORDER.map(sectionId => {
                                   const sectionCols = tripBuckets.get(sectionId)!;
                                   if (sectionCols.length === 0) return null;
+                                  const isOpen = tripSectionsOpen.has(sectionId);
+                                  const label = TRIP_SETTINGS_SECTION_LABELS[sectionId];
                                   return (
-                                    <div key={sectionId} className="space-y-2">
-                                      <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/90 pb-1.5">
-                                        {TRIP_SETTINGS_SECTION_LABELS[sectionId]}
-                                      </div>
-                                      {sectionCols.map(col => (
-                                        <div
-                                          key={col.key}
-                                          className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
-                                        >
-                                          <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
-                                          <div className="flex-1 min-w-0 space-y-1">
-                                            <input
-                                              type="text"
-                                              value={col.label}
-                                              onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
-                                              className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
-                                              aria-label={`Label for column ${col.key}`}
-                                            />
-                                            <span
-                                              className="block text-[11px] font-mono text-slate-400 truncate"
-                                              title="Internal key used by the app for this column"
+                                    <div
+                                      key={sectionId}
+                                      className="rounded-lg border border-slate-200/90 bg-white overflow-hidden"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleTripSection(sectionId)}
+                                        aria-expanded={isOpen}
+                                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                                      >
+                                        <ChevronRight
+                                          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                                          aria-hidden
+                                        />
+                                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                          {label}
+                                        </span>
+                                        <span className="text-xs text-slate-400 tabular-nums">
+                                          {sectionCols.length} column{sectionCols.length === 1 ? '' : 's'}
+                                        </span>
+                                      </button>
+                                      {isOpen && (
+                                        <div className="space-y-2 border-t border-slate-100 px-2 pb-2 pt-2 bg-slate-50/80">
+                                          {sectionCols.map(col => (
+                                            <div
+                                              key={col.key}
+                                              className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
                                             >
-                                              key: {col.key}
-                                            </span>
-                                          </div>
-                                          {col.custom && (
-                                            <button
-                                              onClick={() => removeCustomColumn(ledger.id, col.key)}
-                                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                                            >
-                                              <Trash2 className="w-4 h-4" />
-                                            </button>
-                                          )}
-                                          <button
-                                            onClick={() => toggleColumnVisibility(ledger.id, col.key)}
-                                            className={`
-                                              p-1.5 rounded-lg transition-colors
-                                              ${col.visible
-                                                ? 'bg-green-100 text-green-600'
-                                                : 'bg-slate-100 text-slate-400'
-                                              }
-                                            `}
-                                          >
-                                            {col.visible ? (
-                                              <Check className="w-4 h-4" />
-                                            ) : (
-                                              <X className="w-4 h-4" />
-                                            )}
-                                          </button>
+                                              <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                                              <div className="flex-1 min-w-0 space-y-1">
+                                                <input
+                                                  type="text"
+                                                  value={col.label}
+                                                  onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
+                                                  className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
+                                                  aria-label={`Label for column ${col.key}`}
+                                                />
+                                                <span
+                                                  className="block text-[11px] font-mono text-slate-400 truncate"
+                                                  title="Internal key used by the app for this column"
+                                                >
+                                                  key: {col.key}
+                                                </span>
+                                              </div>
+                                              {col.custom && (
+                                                <button
+                                                  onClick={() => removeCustomColumn(ledger.id, col.key)}
+                                                  className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                                >
+                                                  <Trash2 className="w-4 h-4" />
+                                                </button>
+                                              )}
+                                              <button
+                                                onClick={() => toggleColumnVisibility(ledger.id, col.key)}
+                                                className={`
+                                                  p-1.5 rounded-lg transition-colors
+                                                  ${col.visible
+                                                    ? 'bg-green-100 text-green-600'
+                                                    : 'bg-slate-100 text-slate-400'
+                                                  }
+                                                `}
+                                              >
+                                                {col.visible ? (
+                                                  <Check className="w-4 h-4" />
+                                                ) : (
+                                                  <X className="w-4 h-4" />
+                                                )}
+                                              </button>
+                                            </div>
+                                          ))}
                                         </div>
-                                      ))}
+                                      )}
                                     </div>
                                   );
                                 });
