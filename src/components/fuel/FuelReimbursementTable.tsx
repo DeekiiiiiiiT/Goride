@@ -259,10 +259,22 @@ export function FuelReimbursementTable({
 
     const metaFlagOn = (v: unknown) => v === true || v === 'true';
 
-    const renderPendingQueueBadges = (tx: FinancialTransaction) => (
-        <div className="flex flex-col gap-1.5 items-start">
-            {getStatusBadge(tx.status)}
-            <div className="flex flex-wrap gap-1">
+    /** Odometer uploads are saved on metadata.odometerProofUrl (admin manual); also check legacy/top-level fields. */
+    const resolveOdometerProofUrl = (tx: FinancialTransaction): string | undefined => {
+        const m = tx.metadata as Record<string, unknown> | undefined;
+        const top = tx as FinancialTransaction & { odometerImageUrl?: string };
+        const raw =
+            tx.odometerProofUrl ||
+            (typeof m?.odometerProofUrl === 'string' ? m.odometerProofUrl : undefined) ||
+            (typeof m?.odometerImageUrl === 'string' ? m.odometerImageUrl : undefined) ||
+            top.odometerImageUrl;
+        const s = typeof raw === 'string' ? raw.trim() : '';
+        return s || undefined;
+    };
+
+    const renderPendingQueueBadges = (tx: FinancialTransaction) => {
+        const badges = (
+            <>
                 {metaFlagOn(tx.metadata?.stationGateHold) && (
                     <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-sky-50 text-sky-800 border-sky-200">
                         Station hold
@@ -278,9 +290,18 @@ export function FuelReimbursementTable({
                         Odometer review
                     </Badge>
                 )}
+            </>
+        );
+        const hasAny =
+            metaFlagOn(tx.metadata?.stationGateHold) ||
+            metaFlagOn(tx.metadata?.automated) ||
+            isLogReviewEligible(tx);
+        return (
+            <div className="flex flex-wrap gap-1 items-center min-h-[1.25rem]">
+                {hasAny ? badges : <span className="text-xs text-slate-300">—</span>}
             </div>
-        </div>
-    );
+        );
+    };
 
     // Phase 6: Helper to resolve station name for log review
     const resolveStationName = (tx: FinancialTransaction) => {
@@ -458,7 +479,15 @@ export function FuelReimbursementTable({
                                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-slate-400 italic">No receipt</span>
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-xs text-slate-400 italic">No receipt</span>
+                                                {pendingQueueMode && resolveOdometerProofUrl(tx) && (
+                                                    <span className="text-[10px] text-sky-700 flex items-center gap-0.5 font-medium">
+                                                        <Camera className="h-3 w-3 shrink-0" />
+                                                        Odometer photo (details)
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
                                     </TableCell>
                                     <TableCell>
@@ -711,7 +740,7 @@ export function FuelReimbursementTable({
 
             {/* Details Modal (existing Pending/History detail view) */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>
-                <DialogContent className="sm:max-w-[600px]">
+                <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Reimbursement Request</DialogTitle>
                         <DialogDescription>
@@ -719,7 +748,9 @@ export function FuelReimbursementTable({
                         </DialogDescription>
                     </DialogHeader>
 
-                    {selectedTx && (
+                    {selectedTx && (() => {
+                        const odometerPhotoUrl = resolveOdometerProofUrl(selectedTx);
+                        return (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
                             <div className="space-y-4">
                                 <div className="space-y-1">
@@ -823,27 +854,57 @@ export function FuelReimbursementTable({
                                 )}
                             </div>
 
-                            <div className="space-y-4">
-                                <Label className="text-slate-500 text-xs uppercase tracking-wider">Receipt Proof</Label>
-                                <div className="aspect-[3/4] w-full bg-slate-100 rounded-lg border border-slate-200 overflow-hidden relative">
-                                    {selectedTx.receiptUrl ? (
-                                        <a href={selectedTx.receiptUrl} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
-                                            <ImageWithFallback 
-                                                src={selectedTx.receiptUrl} 
-                                                alt="Receipt" 
-                                                className="h-full w-full object-contain bg-black/5" 
-                                            />
-                                        </a>
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                            <FileText className="h-12 w-12 mb-2 opacity-50" />
-                                            <span>No Receipt Uploaded</span>
-                                        </div>
-                                    )}
+                            <div className="space-y-5">
+                                <div className="space-y-2">
+                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Receipt proof</Label>
+                                    <div className="aspect-[3/4] max-h-[280px] w-full bg-slate-100 rounded-lg border border-slate-200 overflow-hidden relative">
+                                        {selectedTx.receiptUrl ? (
+                                            <a href={selectedTx.receiptUrl} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
+                                                <ImageWithFallback
+                                                    src={selectedTx.receiptUrl}
+                                                    alt="Receipt"
+                                                    className="h-full w-full object-contain bg-black/5"
+                                                />
+                                            </a>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-slate-400">
+                                                <FileText className="h-12 w-12 mb-2 opacity-50" />
+                                                <span className="text-sm">No receipt uploaded</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-slate-500 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                        <Camera className="h-3.5 w-3.5" />
+                                        Odometer photo
+                                    </Label>
+                                    <div className="aspect-[3/4] max-h-[280px] w-full bg-slate-100 rounded-lg border border-slate-200 overflow-hidden relative">
+                                        {odometerPhotoUrl ? (
+                                            <a
+                                                href={odometerPhotoUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="block h-full w-full"
+                                            >
+                                                <ImageWithFallback
+                                                    src={odometerPhotoUrl}
+                                                    alt="Odometer"
+                                                    className="h-full w-full object-contain bg-black/5"
+                                                />
+                                            </a>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-slate-400">
+                                                <Camera className="h-12 w-12 mb-2 opacity-50" />
+                                                <span className="text-sm">No odometer photo</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    )}
+                        );
+                    })()}
 
                     {/* Action Area */}
                     {action && (
