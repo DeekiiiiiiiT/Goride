@@ -418,15 +418,25 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   }, []);
 
   // Reimbursement Handlers
-  const handleApproveReimbursement = useCallback(async (id: string, notes?: string) => {
+  const handleApproveReimbursement = useCallback(async (
+      id: string,
+      notes?: string,
+      stationOpts?: { matchedStationId?: string; stationLocation?: string }
+  ) => {
       try {
-          const updated = await api.approveExpense(id, notes);
+          const updated = await api.approveExpense(id, notes, undefined, stationOpts);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
           
           // Phase 3: Automated Financial Settlement
           // If it was a fuel reimbursement, trigger the credit settlement
           if (updated.category === 'Fuel' || updated.category === 'Fuel Reimbursement') {
-              const scenariosData = await fuelService.getFuelScenarios();
+              await fuelService.getFuelScenarios();
+              try {
+                  const freshLogs = await fuelService.getFuelEntries();
+                  setLogs(freshLogs);
+              } catch {
+                  /* non-fatal */
+              }
               /* 
                  Phase 6: Legacy Auto-Settlement Disabled.
               */

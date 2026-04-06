@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     Table, 
     TableBody, 
@@ -10,13 +10,14 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { FinancialTransaction } from '../../types/data';
-import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, RefreshCw, Loader2, Camera, AlertTriangle } from "lucide-react";
+import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, RefreshCw, Loader2, Camera, AlertTriangle, MapPin } from "lucide-react";
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Textarea } from "../ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../ui/utils";
@@ -25,11 +26,23 @@ import { FuelEntry } from '../../types/fuel';
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
 import { usePermissions } from '../../hooks/usePermissions';
+import { fuelService } from '../../services/fuelService';
+import { StationProfile } from '../../types/station';
+
+/** Liters from stored quantity/fuelVolume, or amount ÷ price/L (same as manual log). */
+function computeResolvedFuelLiters(tx: FinancialTransaction): number | null {
+    const q = Number(tx.quantity) || Number(tx.metadata?.fuelVolume);
+    if (Number.isFinite(q) && q > 0) return q;
+    const amount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
+    const ppl = Number(tx.metadata?.pricePerLiter);
+    if (amount > 0 && ppl > 0) return Number((amount / ppl).toFixed(2));
+    return null;
+}
 
 interface FuelReimbursementTableProps {
     transactions: FinancialTransaction[];
     logs?: FuelEntry[];
-    onApprove: (id: string, notes?: string) => void;
+    onApprove: (id: string, notes?: string, stationOpts?: { matchedStationId?: string; stationLocation?: string }) => void;
     onReject: (id: string, reason?: string) => void;
     onRequestSubmit?: () => void;
     onEdit?: (transaction: FinancialTransaction) => void;
@@ -70,6 +83,97 @@ export function FuelReimbursementTable({
     const [adminNotes, setAdminNotes] = useState('');
     const [isLogReviewSubmitting, setIsLogReviewSubmitting] = useState(false);
     const [odometerError, setOdometerError] = useState('');
+
+    const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
+    const [stationsLoading, setStationsLoading] = useState(false);
+    const [approvalBrand, setApprovalBrand] = useState('');
+    const [approvalMatchedStationId, setApprovalMatchedStationId] = useState('');
+    const [approvalStationLocation, setApprovalStationLocation] = useState('');
+
+    useEffect(() => {
+        if (!isDetailsOpen) return;
+        let cancelled = false;
+        setStationsLoading(true);
+        fuelService
+            .getStations()
+            .then((all) => {
+                if (cancelled) return;
+                setVerifiedStations((all || []).filter((s: StationProfile) => s.status === 'verified'));
+            })
+            .catch(() => {
+                if (!cancelled) setVerifiedStations([]);
+            })
+            .finally(() => {
+                if (!cancelled) setStationsLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [isDetailsOpen]);
+
+    useEffect(() => {
+        if (!selectedTx || !isDetailsOpen) return;
+        const mid =
+            selectedTx.matchedStationId ||
+            selectedTx.metadata?.matchedStationId ||
+            (selectedTx.metadata?.suggestedStationId as string | undefined) ||
+            '';
+        if (mid && verifiedStations.length > 0) {
+            const st = verifiedStations.find((s) => s.id === mid);
+            if (st) {
+                setApprovalBrand(st.brand || '');
+                setApprovalMatchedStationId(st.id);
+                setApprovalStationLocation(
+                    st.address || (typeof selectedTx.metadata?.stationLocation === 'string' ? selectedTx.metadata.stationLocation : '') || ''
+                );
+                return;
+            }
+        }
+        setApprovalBrand('');
+        setApprovalMatchedStationId('');
+        setApprovalStationLocation('');
+    }, [selectedTx?.id, isDetailsOpen, verifiedStations]);
+
+    const brandOptions = useMemo(() => {
+        const set = new Set<string>();
+        verifiedStations.forEach((s) => {
+            if (s.brand) set.add(s.brand);
+        });
+        return Array.from(set).sort();
+    }, [verifiedStations]);
+
+    const getStationsForBrand = useCallback(
+        (brand: string): StationProfile[] => {
+            if (!brand) return [];
+            return verifiedStations.filter((s) => s.brand === brand).sort((a, b) => a.name.localeCompare(b.name));
+        },
+        [verifiedStations]
+    );
+
+    const handleApprovalBrandChange = (brand: string) => {
+        if (brand === '__other_brand__') {
+            setApprovalBrand('');
+            setApprovalMatchedStationId('');
+            setApprovalStationLocation('');
+            return;
+        }
+        setApprovalBrand(brand);
+        setApprovalMatchedStationId('');
+        setApprovalStationLocation('');
+    };
+
+    const handleApprovalVerifiedStationSelect = (stationId: string) => {
+        if (stationId === '__custom__') {
+            setApprovalMatchedStationId('');
+            setApprovalStationLocation('');
+            return;
+        }
+        const st = verifiedStations.find((s) => s.id === stationId);
+        if (st) {
+            setApprovalMatchedStationId(st.id);
+            setApprovalStationLocation(st.address || '');
+        }
+    };
 
     // Find the settlement transaction for a given source ID
     const findSettlementTx = (sourceId: string) => {
@@ -179,7 +283,10 @@ export function FuelReimbursementTable({
     const confirmAction = () => {
         if (!selectedTx || !action) return;
         if (action === 'approve') {
-            onApprove(selectedTx.id, notes);
+            onApprove(selectedTx.id, notes, {
+                matchedStationId: approvalMatchedStationId || undefined,
+                stationLocation: approvalStationLocation || undefined,
+            });
         } else {
             onReject(selectedTx.id, notes);
         }
@@ -369,7 +476,9 @@ export function FuelReimbursementTable({
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            data.map((tx) => (
+                            data.map((tx) => {
+                                const vol = computeResolvedFuelLiters(tx);
+                                return (
                                 <TableRow key={tx.id}>
                                     <TableCell className="font-medium">
                                         {formatDate(tx.date)}
@@ -461,12 +570,12 @@ export function FuelReimbursementTable({
                                             </div>
                                             {tx.odometer && <span className="text-xs text-slate-500">Odo: {tx.odometer} km</span>}
                                             <div className="flex gap-2">
-                                                {tx.quantity && <span className="text-xs text-slate-500">Vol: {tx.quantity} L</span>}
-                                                {(tx.metadata?.pricePerLiter || (tx.quantity && tx.amount)) && (
+                                                {vol != null && <span className="text-xs text-slate-500">Vol: {vol} L</span>}
+                                                {(tx.metadata?.pricePerLiter || (vol != null && tx.amount)) && (
                                                     <span className="text-xs text-slate-400">
                                                         @{tx.metadata?.pricePerLiter 
                                                             ? Number(tx.metadata.pricePerLiter).toFixed(3) 
-                                                            : (Math.abs(tx.amount) / tx.quantity!).toFixed(2)}/L
+                                                            : (vol != null ? (Math.abs(Number(tx.amount)) / vol).toFixed(2) : '-')}/L
                                                     </span>
                                                 )}
                                             </div>
@@ -554,7 +663,7 @@ export function FuelReimbursementTable({
                                         </div>
                                     </TableCell>
                                 </TableRow>
-                            ))
+                            );})
                         )}
                     </TableBody>
                 </Table>
@@ -584,6 +693,7 @@ export function FuelReimbursementTable({
                         {data.map((tx) => {
                             const method = tx.metadata?.odometerMethod;
                             const reason = tx.metadata?.logReviewReason || tx.metadata?.odometerManualReason || '';
+                            const resolvedVol = computeResolvedFuelLiters(tx);
                             return (
                                 <TableRow key={tx.id} className="hover:bg-amber-50/30">
                                     <TableCell className="font-medium">
@@ -608,7 +718,7 @@ export function FuelReimbursementTable({
                                         ${Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0).toFixed(2)}
                                     </TableCell>
                                     <TableCell>
-                                        {tx.quantity ? `${tx.quantity} L` : '-'}
+                                        {resolvedVol != null ? `${resolvedVol} L` : '-'}
                                     </TableCell>
                                     <TableCell>
                                         <span className="text-sm truncate max-w-[140px] block">{resolveStationName(tx)}</span>
@@ -740,7 +850,7 @@ export function FuelReimbursementTable({
 
             {/* Details Modal (existing Pending/History detail view) */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>
-                <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+                <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Reimbursement Request</DialogTitle>
                         <DialogDescription>
@@ -750,6 +860,12 @@ export function FuelReimbursementTable({
 
                     {selectedTx && (() => {
                         const odometerPhotoUrl = resolveOdometerProofUrl(selectedTx);
+                        const resolvedLiters = computeResolvedFuelLiters(selectedTx);
+                        const matchingStations = approvalBrand ? getStationsForBrand(approvalBrand) : [];
+                        const hasVerifiedStations = matchingStations.length > 0;
+                        const showFuelStationPicker =
+                            selectedTx.status === 'Pending' &&
+                            (selectedTx.category === 'Fuel' || selectedTx.category === 'Fuel Reimbursement');
                         return (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
                             <div className="space-y-4">
@@ -782,21 +898,134 @@ export function FuelReimbursementTable({
                                         <span className="text-slate-500">Odometer:</span>
                                         <span className="font-mono">{selectedTx.odometer ? `${selectedTx.odometer} km` : '-'}</span>
                                     </div>
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-500">Volume:</span>
-                                        <span className="font-mono">{selectedTx.quantity ? `${selectedTx.quantity} L` : '-'}</span>
+                                    <div className="flex justify-between text-sm items-start gap-2">
+                                        <span className="text-slate-500 shrink-0">Volume:</span>
+                                        <div className="text-right">
+                                            <span className="font-mono">{resolvedLiters != null ? `${resolvedLiters} L` : '-'}</span>
+                                            {resolvedLiters != null &&
+                                                !Number(selectedTx.quantity) &&
+                                                !Number(selectedTx.metadata?.fuelVolume) && (
+                                                    <p className="text-[10px] text-slate-400 mt-0.5">From amount ÷ rate</p>
+                                                )}
+                                        </div>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-500">Rate:</span>
                                         <span className="font-mono">
                                             {selectedTx.metadata?.pricePerLiter 
                                                 ? `$${Number(selectedTx.metadata.pricePerLiter).toFixed(3)}/L` 
-                                                : (selectedTx.quantity && selectedTx.amount 
-                                                    ? `$${(Math.abs(selectedTx.amount) / selectedTx.quantity).toFixed(2)}/L` 
+                                                : (resolvedLiters && resolvedLiters > 0 && selectedTx.amount 
+                                                    ? `$${(Math.abs(Number(selectedTx.amount)) / resolvedLiters).toFixed(3)}/L` 
                                                     : '-')}
                                         </span>
                                     </div>
                                 </div>
+
+                                {showFuelStationPicker && (
+                                    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
+                                        <div>
+                                            <Label className="text-slate-600 text-xs font-semibold">Station</Label>
+                                            <p className="text-[11px] text-slate-500 mt-0.5">
+                                                Optional — choose a verified site if GPS did not match. Same as manual log entry.
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-slate-500 text-[10px] uppercase tracking-wider">Brand</Label>
+                                                <Select value={approvalBrand} onValueChange={handleApprovalBrandChange}>
+                                                    <SelectTrigger className="h-9">
+                                                        <SelectValue placeholder="Select brand" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {brandOptions.map((b) => (
+                                                            <SelectItem key={b} value={b}>
+                                                                <span className="flex items-center gap-2">
+                                                                    {b}
+                                                                    {getStationsForBrand(b).length > 0 && (
+                                                                        <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0 rounded-full">
+                                                                            {getStationsForBrand(b).length} verified
+                                                                        </span>
+                                                                    )}
+                                                                </span>
+                                                            </SelectItem>
+                                                        ))}
+                                                        <SelectItem value="__other_brand__">
+                                                            <span className="text-slate-500 italic">Other / Unlisted</span>
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center gap-2">
+                                                    <Label className="text-slate-500 text-[10px] uppercase tracking-wider">Location</Label>
+                                                    {approvalMatchedStationId && (
+                                                        <span className="text-[9px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0 rounded-full flex items-center gap-0.5">
+                                                            <MapPin className="w-2.5 h-2.5" /> Verified
+                                                        </span>
+                                                    )}
+                                                    {stationsLoading && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                                                </div>
+                                                {hasVerifiedStations ? (
+                                                    <>
+                                                        <Select
+                                                            value={approvalMatchedStationId || ''}
+                                                            onValueChange={(val) => {
+                                                                if (val === '__custom__') {
+                                                                    setApprovalMatchedStationId('');
+                                                                    setApprovalStationLocation('');
+                                                                } else {
+                                                                    handleApprovalVerifiedStationSelect(val);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="h-9">
+                                                                <SelectValue placeholder="Select verified station" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {matchingStations.map((s) => (
+                                                                    <SelectItem key={s.id} value={s.id}>
+                                                                        <span className="flex flex-col text-left">
+                                                                            <span className="font-medium text-sm">{s.name}</span>
+                                                                            {s.address && (
+                                                                                <span className="text-[10px] text-slate-400 truncate max-w-[220px]">
+                                                                                    {s.address}
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                    </SelectItem>
+                                                                ))}
+                                                                <SelectItem value="__custom__">
+                                                                    <span className="text-slate-500 italic text-xs">Type address manually…</span>
+                                                                </SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {approvalMatchedStationId && approvalStationLocation && (
+                                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50/50 border border-emerald-100 rounded text-[10px] text-slate-600">
+                                                                <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                                                                <span className="truncate">{approvalStationLocation}</span>
+                                                            </div>
+                                                        )}
+                                                        {hasVerifiedStations && !approvalMatchedStationId && (
+                                                            <Input
+                                                                className="h-8 text-sm"
+                                                                value={approvalStationLocation}
+                                                                onChange={(e) => setApprovalStationLocation(e.target.value)}
+                                                                placeholder="Type address manually"
+                                                            />
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <Input
+                                                        value={approvalStationLocation}
+                                                        onChange={(e) => setApprovalStationLocation(e.target.value)}
+                                                        placeholder={approvalBrand ? 'Type address or location' : 'Select a brand first'}
+                                                        className="h-9"
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 {selectedTx.description && (
                                     <div className="space-y-1">
@@ -1040,7 +1269,10 @@ export function FuelReimbursementTable({
                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                                     <Label className="text-slate-400 text-[10px] uppercase tracking-wider block mb-1">Volume</Label>
                                     <span className="text-sm font-medium font-mono">
-                                        {logReviewTx.quantity ? `${logReviewTx.quantity} L` : '-'}
+                                        {(() => {
+                                            const v = computeResolvedFuelLiters(logReviewTx);
+                                            return v != null ? `${v} L` : '-';
+                                        })()}
                                     </span>
                                 </div>
                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">

@@ -1546,14 +1546,25 @@ export const api = {
     return { transaction: updatedTx, trip };
   },
 
-  async approveExpense(id: string, notes?: string, odometerReading?: number) {
+  async approveExpense(
+    id: string,
+    notes?: string,
+    odometerReading?: number,
+    stationOpts?: { matchedStationId?: string; stationLocation?: string }
+  ) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/expenses/approve`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify({ id, notes, odometerReading })
+        body: JSON.stringify({
+            id,
+            notes,
+            odometerReading,
+            ...(stationOpts?.matchedStationId ? { matchedStationId: stationOpts.matchedStationId } : {}),
+            ...(stationOpts?.stationLocation ? { stationLocation: stationOpts.stationLocation } : {}),
+        })
     });
     if (!response.ok) throw new Error("Failed to approve expense");
     const result = await response.json();

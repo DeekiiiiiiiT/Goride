@@ -5924,11 +5924,40 @@ app.post("/make-server-37f42386/scan-odometer", async (c) => {
 
 app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermission('fuel.approve'), async (c) => {
   try {
-    const { id, notes, odometerReading } = await c.req.json();
+    const body = await c.req.json();
+    const { id, notes, odometerReading, matchedStationId: adminMatchedStationId, stationLocation: adminStationLocation } = body;
     if (!id) return c.json({ error: "Transaction ID is required" }, 400);
 
     const tx = await kv.get(`transaction:${id}`);
     if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+    /** Admin Review Queue: optional verified station (same workflow as manual log entry). */
+    let adminResolvedStation: any = null;
+    const rawAdminStation = adminMatchedStationId != null ? String(adminMatchedStationId).trim() : "";
+    if (rawAdminStation) {
+        const st = await kv.get(`station:${rawAdminStation}`);
+        if (st && st.status === "verified") {
+            adminResolvedStation = st;
+            tx.matchedStationId = st.id;
+            tx.vendor = st.name;
+            tx.metadata = {
+                ...tx.metadata,
+                matchedStationId: st.id,
+                locationStatus: "verified",
+                verificationMethod: "admin_approval_station",
+                stationLocation:
+                    (typeof adminStationLocation === "string" && adminStationLocation.trim()) ||
+                    st.address ||
+                    tx.metadata?.stationLocation,
+                stationGateHold: false,
+                holdReason: undefined,
+                holdTimestamp: undefined,
+            };
+            console.log(`[ApproveHandler] Admin linked verified station "${st.name}" (${st.id}) for transaction ${id}`);
+        } else {
+            console.warn(`[ApproveHandler] Ignoring matchedStationId "${rawAdminStation}" — not found or not verified`);
+        }
+    }
 
     // If admin provides an odometer reading (Log Review flow), apply it
     if (odometerReading !== undefined && odometerReading !== null) {
@@ -5950,15 +5979,40 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
         logReviewCompleted: tx.metadata?.needsLogReview ? true : undefined,
         logReviewCompletedAt: tx.metadata?.needsLogReview ? new Date().toISOString() : undefined,
         adminOdometerReading: (odometerReading !== undefined && odometerReading !== null) ? Number(odometerReading) : undefined,
+        stationGateHold: false,
+        holdReason: undefined,
+        holdTimestamp: undefined,
     };
 
     // Auto-create Fuel Entry for approved Fuel Reimbursements
     if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
-        // Calculate price per liter if quantity is available
-        const quantity = Number(tx.quantity) || 0;
         const amount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
-        const pricePerLiter = Number(tx.metadata?.pricePerLiter) || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
-        
+        let quantity =
+            Number(tx.quantity) ||
+            Number(tx.metadata?.fuelVolume) ||
+            0;
+        if (!quantity || quantity <= 0) {
+            const ppl = Number(tx.metadata?.pricePerLiter);
+            if (amount > 0 && ppl > 0) {
+                quantity = Number((amount / ppl).toFixed(2));
+            }
+        }
+        const pricePerLiter =
+            Number(tx.metadata?.pricePerLiter) ||
+            (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
+
+        if (quantity > 0) {
+            tx.quantity = quantity;
+            tx.metadata = { ...tx.metadata, fuelVolume: quantity };
+        }
+
+        const resolvedVendor =
+            adminResolvedStation?.name ||
+            tx.vendor ||
+            tx.merchant ||
+            tx.description ||
+            "Reimbursement";
+
         const fuelEntry = {
             id: crypto.randomUUID(),
             date: (tx.date && tx.time) ? `${tx.date}T${tx.time}` : (tx.date || new Date().toISOString().split('T')[0]),
@@ -5967,8 +6021,8 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
             liters: quantity,
             pricePerLiter: pricePerLiter,
             odometer: Number(tx.odometer) || 0,
-            location: tx.vendor || tx.merchant || tx.description || 'Reimbursement',
-            vendor: tx.vendor || tx.merchant || tx.description || 'Reimbursement',
+            location: resolvedVendor,
+            vendor: resolvedVendor,
             stationAddress: tx.metadata?.stationLocation || tx.location || '',
             vehicleId: tx.vehicleId, // Must be present to link to vehicle stats
             driverId: tx.driverId,
