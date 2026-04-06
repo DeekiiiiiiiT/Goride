@@ -305,19 +305,22 @@ export function ManualTripForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{editingTrip ? 'Edit Trip' : initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>
-          <DialogDescription>
-            {editingTrip 
-              ? `Editing trip ${editingTrip.id?.slice(0, 12)}… — update any fields and save.`
-              : initialData 
-              ? 'Review and confirm the details of your recorded trip.' 
-              : 'Record a completed trip or log a cancelled trip for tracking.'}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[500px]">
+        <div className="shrink-0 border-b border-slate-200 px-6 pb-4 pt-6 dark:border-slate-700">
+          <DialogHeader>
+            <DialogTitle>{editingTrip ? 'Edit Trip' : initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>
+            <DialogDescription>
+              {editingTrip
+                ? `Editing trip ${editingTrip.id?.slice(0, 12)}… — update any fields and save.`
+                : initialData
+                  ? 'Review and confirm the details of your recorded trip.'
+                  : 'Record a completed trip or log a cancelled trip for tracking.'}
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]">
           
           {/* Admin: Driver Selector */}
           {isAdmin && (
@@ -917,14 +920,17 @@ export function ManualTripForm({
             </div>
           )}
 
-          {/* Map Visualization - Hidden for Live Trips */}
+          {/* Map: fixed max height + clip so Leaflet never spills past the dialog */}
           {!formData.isLiveRecorded && ((formData.route && formData.route.length > 0) || (pickupCoords && dropoffCoords)) && (
-            <div className="my-2 rounded-lg overflow-hidden border border-slate-200">
-              <LeafletMap 
-                route={formData.route || []} 
+            <div
+              className="relative isolate z-0 my-2 h-[min(200px,38dvh)] max-h-[240px] min-h-[140px] w-full shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-600 dark:bg-slate-900/40"
+              style={{ contain: 'layout paint' }}
+            >
+              <LeafletMap
+                route={formData.route || []}
                 startMarker={pickupCoords}
                 endMarker={dropoffCoords}
-                height="150px" 
+                height="100%"
               />
             </div>
           )}
@@ -957,29 +963,32 @@ export function ManualTripForm({
             />
           </div>
 
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              className="bg-indigo-600 hover:bg-indigo-700"
-              disabled={
-                loading ||
-                (isAdmin && !selectedDriverId) ||
-                (formData.tripStatus === 'Cancelled'
-                  ? !formData.cancelledBy
-                  : (
-                      !formData.amount || formData.amount <= 0 ||
-                      (formData.platform === 'InDrive' && !formData.isLiveRecorded && (!formData.indriveNetIncome || formData.indriveNetIncome > formData.amount))
-                    )
-                )
-              }
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {editingTrip ? 'Save Changes' : formData.tripStatus === 'Cancelled' ? 'Log Cancelled Trip' : 'Save Trip'}
-            </Button>
-          </DialogFooter>
+          </div>
+          <div className="relative z-10 shrink-0 border-t border-slate-200 bg-background px-6 py-4 dark:border-slate-700">
+            <DialogFooter className="gap-2 p-0 sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="bg-indigo-600 hover:bg-indigo-700"
+                disabled={
+                  loading ||
+                  (isAdmin && !selectedDriverId) ||
+                  (formData.tripStatus === 'Cancelled'
+                    ? !formData.cancelledBy
+                    : (
+                        !formData.amount || formData.amount <= 0 ||
+                        (formData.platform === 'InDrive' && !formData.isLiveRecorded && (!formData.indriveNetIncome || formData.indriveNetIncome > formData.amount))
+                      )
+                  )
+                }
+              >
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editingTrip ? 'Save Changes' : formData.tripStatus === 'Cancelled' ? 'Log Cancelled Trip' : 'Save Trip'}
+              </Button>
+            </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

@@ -68,6 +68,19 @@ export function LeafletMap({ height = "300px", route, currentLocation, startMark
     };
   }, [isMounted]);
 
+  // Keep map sized to its container (dialogs, viewport resize, flex layout)
+  useEffect(() => {
+    if (!isMounted || !mapContainerRef.current || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const el = mapContainerRef.current;
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(() => map.invalidateSize());
+    });
+    ro.observe(el);
+    requestAnimationFrame(() => map.invalidateSize());
+    return () => ro.disconnect();
+  }, [isMounted]);
+
   // Update Map Content
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -131,6 +144,7 @@ export function LeafletMap({ height = "300px", route, currentLocation, startMark
         if (startPos) map.setView(startPos, 15);
     }
 
+    requestAnimationFrame(() => map.invalidateSize());
   }, [route, currentLocation, startMarker, endMarker, isMounted]);
 
   if (!isMounted) {
@@ -144,8 +158,11 @@ export function LeafletMap({ height = "300px", route, currentLocation, startMark
   }
 
   return (
-    <div style={{ height, width: '100%', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid #e2e8f0', zIndex: 0 }}>
-      <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
+    <div
+      className="leaflet-map-root h-full min-h-0 w-full overflow-hidden rounded-lg"
+      style={{ height, zIndex: 0 }}
+    >
+      <div ref={mapContainerRef} className="h-full min-h-0 w-full" style={{ minHeight: 0 }} />
     </div>
   );
 }
