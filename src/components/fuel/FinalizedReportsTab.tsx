@@ -444,9 +444,9 @@ export function FinalizedReportsTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Finalized Report?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the frozen snapshot for{' '}
-              <strong>{deleteTarget?.label}</strong> from the Finalized tab. The original
-              settlement ledger entries are not affected.
+              This removes the finalized snapshot for{' '}
+              <strong>{deleteTarget?.label}</strong> and reverses linked settlement: wallet fuel
+              credits, fuel deductions, and related fuel log finalization for that week are undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

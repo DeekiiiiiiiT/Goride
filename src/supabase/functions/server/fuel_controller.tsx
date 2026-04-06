@@ -95,10 +95,96 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
     const weekStartRaw = decodeURIComponent(c.req.param("weekStart"));
     const vehicleId = decodeURIComponent(c.req.param("vehicleId"));
     const weekKey = weekStartRaw.split("T")[0];
-    const key = `finalized_report:${weekKey}:${vehicleId}`;
-    await kv.del(key);
-    console.log(`[FinalizedReports] Deleted ${key}`);
-    return c.json({ success: true });
+    const snapshotKey = `finalized_report:${weekKey}:${vehicleId}`;
+
+    // Read snapshot before delete — carries authoritative `id` (vehicleId_localDate) for ledger links
+    const snapshot = await kv.get(snapshotKey);
+    const reportIdCandidates = new Set<string>();
+    if (snapshot?.id) reportIdCandidates.add(String(snapshot.id));
+    reportIdCandidates.add(`${vehicleId}_${weekKey}`);
+
+    const allTransactions = (await kv.getByPrefix("transaction:")) || [];
+    const txIdsToDelete = new Set<string>();
+
+    for (const tx of allTransactions) {
+      if (!tx?.id || tx.vehicleId !== vehicleId) continue;
+
+      const rid = tx.metadata?.reportId;
+      if (rid && reportIdCandidates.has(String(rid))) {
+        txIdsToDelete.add(tx.id);
+        continue;
+      }
+
+      if (tx.metadata?.settlementType === "Enterprise_Fuel_Sync") {
+        const wp = tx.metadata?.workPeriodStart?.split("T")[0];
+        if (wp === weekKey) {
+          txIdsToDelete.add(tx.id);
+        }
+      }
+    }
+
+    // Remove paired Cash Wallet credits (fuel-credit-<sourceTxId>) before deleting source txs
+    for (const txId of txIdsToDelete) {
+      try {
+        await kv.del(`transaction:fuel-credit-${txId}`);
+      } catch {
+        /* ignore missing */
+      }
+      try {
+        await kv.del(`transaction:${txId}`);
+      } catch (delErr: any) {
+        console.log(`[FinalizedReports] Failed to delete transaction ${txId}: ${delErr?.message}`);
+      }
+    }
+
+    // Reset fuel logs finalized in this statement (Pending + strip finalize metadata)
+    const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+    let entriesReset = 0;
+    const rStart = snapshot?.weekStart?.split("T")[0];
+    const rEnd = snapshot?.weekEnd?.split("T")[0];
+
+    for (const entry of allFuelEntries) {
+      if (!entry?.id || entry.vehicleId !== vehicleId) continue;
+      const fbr = entry.metadata?.finalizedByReport;
+      if (!fbr || !reportIdCandidates.has(String(fbr))) continue;
+
+      if (rStart && rEnd && (entry.date < rStart || entry.date > rEnd)) continue;
+
+      const meta = { ...(entry.metadata || {}) };
+      delete meta.finalizedAt;
+      delete meta.finalizedByReport;
+      delete meta.splitApplied;
+
+      const clearedTx =
+        entry.transactionId && txIdsToDelete.has(entry.transactionId)
+          ? undefined
+          : entry.transactionId;
+
+      const updated: Record<string, unknown> = {
+        ...entry,
+        reconciliationStatus: "Pending",
+        metadata: meta,
+      };
+      if (clearedTx !== undefined) {
+        updated.transactionId = clearedTx;
+      } else {
+        delete (updated as { transactionId?: string }).transactionId;
+      }
+
+      await kv.set(`fuel_entry:${entry.id}`, updated);
+      entriesReset++;
+    }
+
+    await kv.del(snapshotKey);
+    console.log(
+      `[FinalizedReports] Deleted ${snapshotKey}; txs=${txIdsToDelete.size}; fuelEntriesReset=${entriesReset}`
+    );
+
+    return c.json({
+      success: true,
+      deletedTransactions: txIdsToDelete.size,
+      resetFuelEntries: entriesReset,
+    });
   } catch (e: any) {
     console.log(`[FinalizedReports] DELETE error: ${e.message}`);
     return c.json({ error: e.message }, 500);
