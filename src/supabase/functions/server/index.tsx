@@ -266,6 +266,29 @@ function coerceAmount(amount: unknown): number {
 }
 
 /**
+ * Admin-created fuel (SubmitExpenseModal, Fuel Log) with a positive odometer should appear
+ * on the Pending tab, not Log Review. Driver cash submissions use type Manual_Entry.
+ */
+function isAdminManualFuelWithProvidedOdometer(transaction: any): boolean {
+  const odo = Number(transaction?.odometer);
+  if (!Number.isFinite(odo) || odo <= 0) return false;
+  const m = transaction?.metadata || {};
+  const entrySrc = m.entrySource || transaction?.entrySource;
+  if (entrySrc === "admin-manual" || entrySrc === "bulk-import") return true;
+  const src = m.source;
+  if (src === "Manual" || src === "Bulk Manual" || src === "Fuel Log" || src === "Bulk Log") {
+    return true;
+  }
+  if (
+    transaction?.type === "Fuel_Manual_Entry" &&
+    (m.portal_type === "Manual_Entry" || m.isManual === true)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Same eligibility as GET /ledger/driver-overview completeness + repair-driver stats:
  * completed trip with amount &gt; 0, or Uber with positive sum of fare/tip/prior components.
  * Keeps trip:* vs ledger:* fare_earning counts aligned with the integrity banner.
@@ -2758,16 +2781,27 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
         // Station is verified — but only auto-approve + create fuel entry if AI-verified.
         // Manual/non-AI entries with a verified station pass the gate but stay Pending for admin.
         if (!isAiVerified) {
-            console.log(`[StationGate] Transaction ${transaction.id} passed station gate (verified) but odometerMethod="${transaction.metadata?.odometerMethod || 'none'}" — staying Pending for admin review.`);
-            // Server-side safety: ensure needsLogReview is set for non-AI odometer methods
-            transaction.metadata = {
-                ...transaction.metadata,
-                needsLogReview: true,
-                logReviewReason: transaction.metadata?.logReviewReason
-                    || (transaction.metadata?.odometerMethod === 'photo_review'
-                        ? 'AI scan failed — odometer photo pending admin review'
-                        : 'Manual odometer override — pending admin verification'),
-            };
+            const adminOdoSkipLogReview = isAdminManualFuelWithProvidedOdometer(transaction);
+            if (adminOdoSkipLogReview) {
+                const nextMeta = { ...transaction.metadata };
+                delete nextMeta.needsLogReview;
+                delete nextMeta.logReviewReason;
+                transaction.metadata = nextMeta;
+                console.log(
+                    `[StationGate] Transaction ${transaction.id} admin manual with odometer — Pending (skipping Log Review). odometerMethod="${transaction.metadata?.odometerMethod || "none"}"`,
+                );
+            } else {
+                console.log(`[StationGate] Transaction ${transaction.id} passed station gate (verified) but odometerMethod="${transaction.metadata?.odometerMethod || 'none'}" — staying Pending for admin review.`);
+                // Server-side safety: ensure needsLogReview is set for non-AI odometer methods
+                transaction.metadata = {
+                    ...transaction.metadata,
+                    needsLogReview: true,
+                    logReviewReason: transaction.metadata?.logReviewReason
+                        || (transaction.metadata?.odometerMethod === 'photo_review'
+                            ? 'AI scan failed — odometer photo pending admin review'
+                            : 'Manual odometer override — pending admin verification'),
+                };
+            }
             // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
             if (isTollCategoryServer(transaction.category)) {
                 await writeTollToLedger(transaction);

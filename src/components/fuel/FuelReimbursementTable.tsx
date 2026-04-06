@@ -93,10 +93,22 @@ export function FuelReimbursementTable({
     // as settlements are linked to and visible within the primary log entry.
     const isFuelReimbursement = (t: FinancialTransaction) => {
         const isStandardSource = !t.metadata?.automated || t.metadata?.source === 'Manual' || t.metadata?.source === 'Bulk Manual';
-        const isReimbursementType = (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || t.type === 'Manual_Entry' || (t.type === 'Expense' && (t.paymentMethod === 'Cash' || t.paymentMethod === 'RideShare Cash' || isFuelCategory)));
         const isFuelCategory = (t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
-        
+        const isReimbursementType = (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || t.type === 'Manual_Entry' || (t.type === 'Expense' && (t.paymentMethod === 'Cash' || t.paymentMethod === 'RideShare Cash' || isFuelCategory)));
         return isStandardSource && isReimbursementType && isFuelCategory;
+    };
+
+    /** Matches server: admin manual fuel with odometer > 0 skips Log Review (Pending tab). */
+    const isAdminManualFuelWithProvidedOdometer = (t: FinancialTransaction) => {
+        const odo = Number(t.odometer);
+        if (!Number.isFinite(odo) || odo <= 0) return false;
+        const m = t.metadata || {};
+        const entrySrc = m.entrySource ?? (t as FinancialTransaction & { entrySource?: string }).entrySource;
+        if (entrySrc === 'admin-manual' || entrySrc === 'bulk-import') return true;
+        const src = m.source;
+        if (src === 'Manual' || src === 'Bulk Manual' || src === 'Fuel Log' || src === 'Bulk Log') return true;
+        if (t.type === 'Fuel_Manual_Entry' && (m.portal_type === 'Manual_Entry' || m.isManual === true)) return true;
+        return false;
     };
 
     const isWithinRange = (t: FinancialTransaction) => {
@@ -137,7 +149,9 @@ export function FuelReimbursementTable({
         // Exclude items that belong in Log Review tab
         if (t.metadata?.needsLogReview) return false;
         const method = t.metadata?.odometerMethod;
-        if ((t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && (!method || method !== 'ai_verified')) return false;
+        const isFuelCat = t.category === 'Fuel' || t.category === 'Fuel Reimbursement';
+        if (isFuelCat && isAdminManualFuelWithProvidedOdometer(t)) return true;
+        if (isFuelCat && (!method || method !== 'ai_verified')) return false;
         return true;
     });
 
@@ -145,6 +159,7 @@ export function FuelReimbursementTable({
         // Must be Fuel + Pending
         if (t.status !== 'Pending') return false;
         if (!isFuelReimbursement(t)) return false;
+        if (isAdminManualFuelWithProvidedOdometer(t)) return false;
         // Flagged for log review (new submissions will have this)
         if (t.metadata?.needsLogReview) return true;
         // Fallback for legacy: Fuel + Pending + non-AI odometer method
