@@ -4858,6 +4858,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
               driverId={driverId}
               range={ledgerDateRangeStrings}
               ledgerRefreshKey={ledgerRefreshKey}
+              onWalletLedgerMutated={() => setLedgerRefreshKey((k) => k + 1)}
             />
          </TabsContent>
 

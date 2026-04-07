@@ -1,12 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { ArrowDownLeft, ArrowUpRight, Loader2, Wallet } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Loader2, Trash2, Wallet } from 'lucide-react';
+import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import type { IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
 import { useIndriveWallet } from '../../hooks/useIndriveWallet';
 import { usePermissions } from '../../hooks/usePermissions';
 import type { LedgerEntry } from '../../types/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
 import { cn } from '../ui/utils';
 
 function fmtMoney(n: number) {
@@ -77,6 +88,8 @@ export interface DriverIndriveWalletTabProps {
   range: IndriveWalletDateRange | null;
   /** Bumped from parent after ledger-affecting actions (e.g. log wallet load on Overview). */
   ledgerRefreshKey?: number;
+  /** Called after a top-up is deleted so overview cards refetch. */
+  onWalletLedgerMutated?: () => void;
 }
 
 type RowKind = 'top_up' | 'service_fee';
@@ -93,6 +106,8 @@ interface ActivityRow {
   timeLabel: string;
   sortKey: number;
   dayKey: string;
+  /** Underlying financial transaction id — only top-ups from `transaction:*` can be deleted */
+  transactionId?: string;
 }
 
 const FEE_EPS = 0.005;
@@ -116,6 +131,8 @@ function buildActivityRows(entries: LedgerEntry[]): ActivityRow[] {
 
     if (e.eventType === 'wallet_credit') {
       const signed = Math.abs(Number(e.netAmount) || Number(e.grossAmount) || 0);
+      const transactionId =
+        e.sourceType === 'transaction' && e.sourceId ? String(e.sourceId).trim() : undefined;
       rows.push({
         id: e.id,
         kind: 'top_up',
@@ -127,6 +144,7 @@ function buildActivityRows(entries: LedgerEntry[]): ActivityRow[] {
         timeLabel: formatTimeLabel(e),
         sortKey: entrySortTs(e),
         dayKey,
+        transactionId: transactionId || undefined,
       });
       continue;
     }
@@ -172,9 +190,15 @@ function buildActivityRows(entries: LedgerEntry[]): ActivityRow[] {
   return rows;
 }
 
-export function DriverIndriveWalletTab({ driverId, range, ledgerRefreshKey = 0 }: DriverIndriveWalletTabProps) {
+export function DriverIndriveWalletTab({
+  driverId,
+  range,
+  ledgerRefreshKey = 0,
+  onWalletLedgerMutated,
+}: DriverIndriveWalletTabProps) {
   const { can } = usePermissions();
   const canView = can('transactions.view');
+  const canDeleteTopUp = can('transactions.edit');
 
   const rangeReady = !!(driverId && range?.startDate && range?.endDate);
   const { data: walletData, loading: walletLoading, error: walletError, refetch: refetchWalletSummary } = useIndriveWallet(
@@ -185,6 +209,9 @@ export function DriverIndriveWalletTab({ driverId, range, ledgerRefreshKey = 0 }
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [topUpDeleteOpen, setTopUpDeleteOpen] = useState(false);
+  const [topUpPending, setTopUpPending] = useState<{ transactionId: string; amountLabel: string } | null>(null);
+  const [topUpDeleting, setTopUpDeleting] = useState(false);
 
   const loadLedger = useCallback(async () => {
     if (!driverId || !range?.startDate || !range?.endDate) {
@@ -232,6 +259,26 @@ export function DriverIndriveWalletTab({ driverId, range, ledgerRefreshKey = 0 }
     });
   }, [ledgerEntries]);
 
+  const confirmDeleteTopUp = useCallback(async () => {
+    if (!topUpPending?.transactionId) return;
+    setTopUpDeleting(true);
+    try {
+      await api.deleteTransaction(topUpPending.transactionId);
+      toast.success('Top up removed', {
+        description: 'The wallet load transaction and its ledger line were deleted.',
+      });
+      setTopUpDeleteOpen(false);
+      setTopUpPending(null);
+      await refetchWalletSummary();
+      await loadLedger();
+      onWalletLedgerMutated?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete top up');
+    } finally {
+      setTopUpDeleting(false);
+    }
+  }, [topUpPending, refetchWalletSummary, loadLedger, onWalletLedgerMutated]);
+
   if (!canView) {
     return (
       <Card className="border-slate-200/80 bg-white shadow-sm">
@@ -252,6 +299,41 @@ export function DriverIndriveWalletTab({ driverId, range, ledgerRefreshKey = 0 }
 
   return (
     <div className="space-y-6">
+      <AlertDialog
+        open={topUpDeleteOpen}
+        onOpenChange={(open) => {
+          setTopUpDeleteOpen(open);
+          if (!open) setTopUpPending(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this top up?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the fleet wallet load ({topUpPending?.amountLabel}) and updates InDrive wallet totals. This
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={topUpDeleting}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={topUpDeleting}
+              onClick={() => void confirmDeleteTopUp()}
+            >
+              {topUpDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete top up'
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">InDrive wallet</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -357,19 +439,40 @@ export function DriverIndriveWalletTab({ driverId, range, ledgerRefreshKey = 0 }
                                 {row.subtitle}
                               </p>
                             </div>
-                            <div className="text-right shrink-0">
-                              <p
-                                className={cn(
-                                  'text-sm font-semibold tabular-nums',
-                                  row.signedAmount >= 0
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-rose-600 dark:text-rose-400'
-                                )}
-                              >
-                                {row.signedAmount >= 0 ? '+' : '-'}${fmtMoney(row.amount)}{' '}
-                                <span className="text-[11px] font-normal text-slate-400">{row.currency}</span>
-                              </p>
-                              <p className="text-[11px] text-slate-400 mt-0.5 tabular-nums">{row.timeLabel}</p>
+                            <div className="flex items-start gap-1 shrink-0">
+                              <div className="text-right">
+                                <p
+                                  className={cn(
+                                    'text-sm font-semibold tabular-nums',
+                                    row.signedAmount >= 0
+                                      ? 'text-emerald-600 dark:text-emerald-400'
+                                      : 'text-rose-600 dark:text-rose-400'
+                                  )}
+                                >
+                                  {row.signedAmount >= 0 ? '+' : '-'}${fmtMoney(row.amount)}{' '}
+                                  <span className="text-[11px] font-normal text-slate-400">{row.currency}</span>
+                                </p>
+                                <p className="text-[11px] text-slate-400 mt-0.5 tabular-nums">{row.timeLabel}</p>
+                              </div>
+                              {row.kind === 'top_up' && row.transactionId && canDeleteTopUp && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
+                                  title="Delete top up"
+                                  aria-label="Delete top up"
+                                  onClick={() => {
+                                    setTopUpPending({
+                                      transactionId: row.transactionId!,
+                                      amountLabel: `$${fmtMoney(row.amount)} ${row.currency}`,
+                                    });
+                                    setTopUpDeleteOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>
