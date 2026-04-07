@@ -675,6 +675,12 @@ export function LedgerBackfillPanel() {
       <CanonicalBackfillSection />
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 1D: LEGACY LEDGER CLEANUP                                  */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+
+      <LegacyPurgeSection />
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* SECTION 2: DRIVER ID REPAIR                                       */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
 
@@ -1504,6 +1510,177 @@ function CanonicalBackfillSection() {
               {JSON.stringify(result, null, 2)}
             </pre>
           </details>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LEGACY LEDGER PURGE SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface PurgeResult {
+  success: boolean;
+  dryRun: boolean;
+  legacyKeysFound: number;
+  deletedCount: number;
+  error?: string;
+}
+
+function LegacyPurgeSection() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<PurgeResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const runPurge = async (dryRun: boolean) => {
+    setLoading(true);
+    setResult(null);
+    setError(null);
+
+    try {
+      const url = `${API_BASE}/ledger/purge-legacy-all`;
+      const body = dryRun 
+        ? { dryRun: true }
+        : { confirm: "DELETE_ALL_LEGACY_LEDGER_KV" };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: edgeFnHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Server returned ${res.status}`);
+      } else {
+        setResult(data);
+        if (!dryRun) setConfirmDelete(false);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400 mt-0.5" />
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Legacy Ledger Cleanup</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Delete old <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">ledger:%</code> rows 
+            that are no longer used. Your app now uses <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">ledger_event:*</code> (canonical).
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          <strong>Recommended:</strong> Run "Count Legacy Rows" first to see how many old rows exist, 
+          then "Delete All" to clean them up. This is optional but keeps your database clean.
+        </p>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-3 flex-wrap">
+        <button
+          onClick={() => runPurge(true)}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg font-medium text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+          Count Legacy Rows
+        </button>
+
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-700 rounded-lg font-medium text-sm hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors"
+          >
+            Delete All Legacy Rows
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-red-600 dark:text-red-400 font-medium">Are you sure?</span>
+            <button
+              onClick={() => runPurge(false)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium text-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+              Yes, Delete
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              disabled={loading}
+              className="px-4 py-2 text-slate-600 dark:text-slate-400 text-sm hover:text-slate-900 dark:hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-600 dark:text-slate-400" />
+          <span className="text-slate-700 dark:text-slate-300 font-medium">
+            {confirmDelete ? 'Deleting legacy rows...' : 'Counting legacy rows...'}
+          </span>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-medium mb-1">
+            <AlertTriangle className="h-4 w-4" />
+            Purge Failed
+          </div>
+          <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <div className={`rounded-lg p-4 ${
+          result.dryRun
+            ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+            : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+        }`}>
+          {result.dryRun ? (
+            <div className="flex items-center gap-3">
+              <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div>
+                <span className="font-semibold text-blue-700 dark:text-blue-300">
+                  Found {result.legacyKeysFound.toLocaleString()} legacy ledger:% rows
+                </span>
+                <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                  {result.legacyKeysFound > 0 
+                    ? 'Click "Delete All Legacy Rows" to remove them.'
+                    : 'No legacy rows to clean up — your database is already clean!'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div>
+                <span className="font-semibold text-green-700 dark:text-green-300">
+                  Deleted {result.deletedCount.toLocaleString()} legacy rows
+                </span>
+                <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                  Your database is now clean. Only canonical ledger_event:* rows remain.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
