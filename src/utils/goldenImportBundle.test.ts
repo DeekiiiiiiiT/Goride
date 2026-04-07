@@ -58,7 +58,12 @@ describe('Phase 8 golden import bundle', () => {
     expect(dr[0].source).toBe('platform_import');
   });
 
-  it('buildCanonicalImportEvents matches golden counts and refund sign (outflow refunds)', () => {
+  /**
+   * NOTE: Fare-related statement_line events (TOTAL_EARNINGS, NET_FARE, PROMOTIONS, TIPS, REFUNDS_EXPENSES)
+   * are NO LONGER emitted from buildCanonicalImportEvents. Fare data now comes from trip-level events.
+   * This test verifies the events that ARE still emitted: payouts, toll refunds, toll support adjustments.
+   */
+  it('buildCanonicalImportEvents matches golden counts (no fare statement lines)', () => {
     const batch = mergeAndProcessData(loadGoldenBundle(), []);
     const events = buildCanonicalImportEvents({
       batchId: GOLDEN_BATCH_ID,
@@ -81,14 +86,24 @@ describe('Phase 8 golden import bundle', () => {
     }
     expect(byType).toEqual(expected.eventTypes);
 
+    // REFUNDS_EXPENSES statement_line is NO LONGER emitted (fares come from trip events)
     const refundsStmt = events.find(
       (e) =>
         e.eventType === 'statement_line' &&
         (e.metadata as { lineCode?: string })?.lineCode === 'REFUNDS_EXPENSES',
     );
-    expect(refundsStmt?.direction).toBe('outflow');
-    expect(Number(refundsStmt?.netAmount)).toBeLessThan(0);
+    expect(refundsStmt).toBeUndefined();
 
+    // REFUNDS_TOLL statement_line IS still emitted
+    const tollRefundStmt = events.find(
+      (e) =>
+        e.eventType === 'statement_line' &&
+        (e.metadata as { lineCode?: string })?.lineCode === 'REFUNDS_TOLL',
+    );
+    expect(tollRefundStmt?.direction).toBe('inflow');
+    expect(tollRefundStmt?.netAmount).toBe(3);
+
+    // Toll support adjustment IS still emitted
     const tollSupport = events.filter((e) => e.eventType === 'toll_support_adjustment');
     expect(tollSupport).toHaveLength(1);
     expect(tollSupport[0].netAmount).toBe(7.5);

@@ -26,7 +26,17 @@ describe('pickPrimaryUberDriverId', () => {
 });
 
 describe('buildCanonicalImportEvents', () => {
-  it('emits statement lines, payouts, toll_support_adjustment, and org toll line with stable keys', () => {
+  /**
+   * NOTE: As of the "Uber Computed Statement Summary" update, buildCanonicalImportEvents
+   * NO LONGER emits fare-related statement_line events (TOTAL_EARNINGS, NET_FARE, PROMOTIONS, TIPS, etc.).
+   * Fare data now comes from trip-level fare_earning/tip/promotion events via buildCanonicalTripFareEventsFromTrip.
+   * 
+   * This test verifies the events that ARE still emitted:
+   * - payout_cash / payout_bank (org-level cash/bank totals)
+   * - REFUNDS_TOLL statement_line (org-level toll refunds)
+   * - toll_support_adjustment / dispute_refund (support case refunds)
+   */
+  it('emits payouts, toll_support_adjustment, and org toll line with stable keys (no fare statement lines)', () => {
     const batchId = 'batch-11111111-1111-1111-1111-111111111111';
     const driverId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
     const ssot: Record<string, UberSsotTotals> = {
@@ -82,30 +92,41 @@ describe('buildCanonicalImportEvents', () => {
     });
 
     const keys = events.map((e) => e.idempotencyKey);
-    expect(keys).toContain(`${batchId}|stmt|${driverId}|TOTAL_EARNINGS`);
-    expect(keys).toContain(`${batchId}|stmt|${driverId}|NET_FARE`);
-    expect(keys).toContain(`${batchId}|stmt|${driverId}|FARE_COMPONENTS`);
+    
+    // Fare-related statement lines are NO LONGER emitted (fares come from trip events now)
+    expect(keys).not.toContain(`${batchId}|stmt|${driverId}|TOTAL_EARNINGS`);
+    expect(keys).not.toContain(`${batchId}|stmt|${driverId}|NET_FARE`);
+    expect(keys).not.toContain(`${batchId}|stmt|${driverId}|FARE_COMPONENTS`);
+    expect(keys).not.toContain(`${batchId}|stmt|${driverId}|PROMOTIONS`);
+    expect(keys).not.toContain(`${batchId}|stmt|${driverId}|TIPS`);
+    expect(keys).not.toContain(`${batchId}|stmt|${driverId}|REFUNDS_EXPENSES`);
+    
+    // Payout events ARE still emitted
     expect(keys).toContain(`${batchId}|payout|CASH`);
     expect(keys).toContain(`${batchId}|payout|BANK`);
+    
+    // Toll support adjustment IS still emitted
     expect(keys).toContain(`${batchId}|toll_support|${dispute.id}`);
+    
+    // Org-level toll refund line IS still emitted
     expect(keys).toContain(`${batchId}|stmt|${driverId}|REFUNDS_TOLL`);
 
+    // Verify toll refund line details
     const tollLine = events.find(
       (e) => e.eventType === 'statement_line' && e.metadata?.lineCode === 'REFUNDS_TOLL',
     );
     expect(tollLine?.direction).toBe('inflow');
     expect(tollLine?.netAmount).toBe(4);
 
-    const refundsLine = events.find(
-      (e) => e.eventType === 'statement_line' && e.metadata?.lineCode === 'REFUNDS_EXPENSES',
-    );
-    expect(refundsLine?.direction).toBe('outflow');
-    expect(refundsLine?.netAmount).toBeLessThan(0);
-
+    // Verify toll support adjustment details
     const tollSupport = events.find((e) => e.eventType === 'toll_support_adjustment');
     expect(tollSupport?.idempotencyKey).toBe(`${batchId}|toll_support|${dispute.id}`);
 
+    // Verify common event properties
     expect(events[0].sourceType).toBe('import_batch');
     expect(events.every((e) => e.sourceId === batchId)).toBe(true);
+    
+    // Should have exactly 4 events: REFUNDS_TOLL statement_line, payout_cash, payout_bank, toll_support_adjustment
+    expect(events.length).toBe(4);
   });
 });

@@ -1,14 +1,14 @@
 {
-  "description": "Phase 8 golden bundle — expectations after merge → buildCanonicalImportEvents → aggregateCanonicalEventsToLedgerDriverOverview (single period window).",
-  "canonicalEventCount": 9,
+  "description": "Phase 8 golden bundle — expectations after merge → buildCanonicalImportEvents → aggregateCanonicalEventsToLedgerDriverOverview. NOTE: Fare-related statement_line events (TOTAL_EARNINGS, NET_FARE, PROMOTIONS, TIPS, REFUNDS_EXPENSES) are NO LONGER emitted from import; fares come from trip-level fare_earning/tip/promotion events. periodEarnings now only includes toll_support_adjustment/dispute_refund amounts.",
+  "canonicalEventCount": 4,
   "eventTypes": {
-    "statement_line": 6,
+    "statement_line": 1,
     "payout_cash": 1,
     "payout_bank": 1,
     "toll_support_adjustment": 1
   },
   "readModel": {
-    "periodEarnings": 100.5,
+    "periodEarnings": 7.5,
     "periodCashCollected": 25,
     "periodDisputeRefunds": 7.5,
     "readModelSource": "canonical_events"
