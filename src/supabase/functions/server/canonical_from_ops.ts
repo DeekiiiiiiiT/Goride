@@ -22,6 +22,34 @@ function coerceAmount(amount: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Align with client DriverDetail trip cash: explicit paymentMethod, then cash-heavy platforms.
+ * Ledger aggregation (`ledgerMoneyAggregate`) only counts cash when `paymentMethod === "Cash"`.
+ */
+function detectTripFarePaymentMethod(trip: Record<string, unknown>): "Cash" | "Card" | undefined {
+  const pmRaw = String(trip.paymentMethod ?? "").trim().toLowerCase();
+  if (pmRaw === "cash") return "Cash";
+  if (pmRaw === "card" || pmRaw.includes("digital") || pmRaw.includes("braintree")) return "Card";
+
+  const platformLc = String(trip.platform ?? "").trim().toLowerCase();
+  const cashHeavy = ["roam", "goride", "indrive", "private", "cash"].includes(platformLc);
+  const rawCash = Math.abs(coerceAmount(trip.cashCollected));
+  if (rawCash > 0) return "Cash";
+  if (cashHeavy) return "Cash";
+  return undefined;
+}
+
+/** Physical cash for ledger (metadata.cashCollected); prefer trip field, else passenger fare (gross). */
+function computeTripFareCashCollected(
+  trip: Record<string, unknown>,
+  fareGross: number,
+  netAmount: number,
+): number {
+  const explicit = Math.abs(coerceAmount(trip.cashCollected));
+  if (explicit > 0) return explicit;
+  return Math.abs(fareGross > 0 ? fareGross : netAmount);
+}
+
 /** Same money eligibility as tripHasMoneyForLedgerProjection in index.tsx */
 export function tripHasMoneyForLedgerProjection(trip: Record<string, unknown>): boolean {
   if (!isCompletedTripStatus(trip?.status)) return false;
@@ -79,6 +107,12 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
     }
   }
 
+  const paymentMethod = detectTripFarePaymentMethod(trip);
+  const metadata: Record<string, unknown> = { tripId: id };
+  if (paymentMethod === "Cash") {
+    metadata.cashCollected = computeTripFareCashCollected(trip, fareGross, netAmount);
+  }
+
   return [
     {
       idempotencyKey: `trip:${id}|fare_earning`,
@@ -95,7 +129,8 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
       platform,
       vehicleId: typeof trip.vehicleId === "string" && trip.vehicleId.trim() ? trip.vehicleId.trim() : undefined,
       description: `Trip fare (${platform})`,
-      metadata: { tripId: id },
+      ...(paymentMethod ? { paymentMethod } : {}),
+      metadata,
     },
   ];
 }

@@ -132,6 +132,53 @@ describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
     expect(data.platformStats.Uber.cashCollected).toBe(5000);
   });
 
+  it('uses Uber fare_earning when statement has only REFUNDS_EXPENSES (no fare lines)', () => {
+    const period = [
+      {
+        eventType: 'statement_line',
+        driverId: driver,
+        netAmount: 500,
+        direction: 'inflow',
+        date: '2026-03-25',
+        platform: 'Uber',
+        metadata: { lineCode: 'REFUNDS_EXPENSES' },
+      },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 1000,
+        grossAmount: 1100,
+        direction: 'inflow',
+        date: '2026-03-25',
+        platform: 'Uber',
+        paymentMethod: 'Digital Wallet',
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.uber.fareComponents).toBe(1000);
+    expect(data.period.earnings).toBe(500);
+    expect(data.platformStats.Uber.earnings).toBe(500);
+  });
+
+  it('counts Roam cash collected when fare_earning has paymentMethod Cash', () => {
+    const period = [
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 200,
+        grossAmount: 200,
+        direction: 'inflow',
+        date: '2026-03-25',
+        platform: 'Roam',
+        paymentMethod: 'Cash',
+        metadata: { tripId: 't1', cashCollected: 200 },
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.cashCollected).toBe(200);
+    expect(data.platformStats.Roam.cashCollected).toBe(200);
+  });
+
   it('includes toll_support_adjustment in earnings and disputeRefunds', () => {
     const period = [
       {

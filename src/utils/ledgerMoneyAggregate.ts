@@ -195,7 +195,8 @@ function mergeSnapshots(
       s.netFareStatement != null ||
       s.tipsStatement != null ||
       s.promotionsStatement != null ||
-      s.refundsAndExpenses != null
+      s.refundsAndExpenses != null ||
+      s.refundsToll != null
     ) {
       out.hasStatementLines = true;
     }
@@ -236,12 +237,20 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
     ),
   );
 
-  const uberHasStatement = stmt.hasStatementLines &&
-    (Math.abs(stmt.netFareStatement) > 1e-9 ||
-      Math.abs(stmt.totalEarnings) > 1e-9 ||
-      Math.abs(stmt.tipsStatement) > 1e-9 ||
-      Math.abs(stmt.promotionsStatement) > 1e-9 ||
-      stmt.refundsAndExpenses > 1e-9);
+  /** Use CSV/statement rows for Uber fare totals (and skip per-trip fare_earning for Uber). */
+  const stmtHasFareBearingTotals =
+    Math.abs(stmt.netFareStatement) > 1e-9 ||
+    Math.abs(stmt.totalEarnings) > 1e-9 ||
+    Math.abs(stmt.tipsStatement) > 1e-9 ||
+    Math.abs(stmt.promotionsStatement) > 1e-9;
+
+  const uberUseStatementForFare = stmt.hasStatementLines && stmtHasFareBearingTotals;
+
+  /**
+   * Legacy bug: REFUNDS_EXPENSES alone set `uberHasStatement` and zeroed fare while still skipping
+   * Uber `fare_earning` rows. Only suppress trip fares when statement actually carries fare lines.
+   */
+  const uberHasStatement = uberUseStatementForFare;
 
   const a: Accum = {
     pEarnings: 0,
@@ -266,7 +275,13 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
     dailyMap: {},
   };
 
-  if (uberHasStatement) {
+  const ensurePlat = (plat: string) => {
+    if (!a.pPlatformStats[plat]) {
+      a.pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
+    }
+  };
+
+  if (uberUseStatementForFare) {
     a.pUberFareComponents = stmt.netFareStatement;
     a.pUberTips = stmt.tipsStatement;
     a.pUberPromo = stmt.promotionsStatement;
@@ -274,13 +289,13 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
     a.pStatementTotalEarnings = stmt.totalEarnings;
     a.pTips += stmt.tipsStatement;
     a.pEarnings += stmt.netFareStatement + stmt.tipsStatement + stmt.promotionsStatement - stmt.refundsAndExpenses;
+  } else if (stmt.refundsAndExpenses > 1e-9) {
+    /** Statement refunds without fare lines: still subtract from period (fare from trip rows). */
+    a.pUberRefund += stmt.refundsAndExpenses;
+    a.pEarnings -= stmt.refundsAndExpenses;
+    ensurePlat("Uber");
+    a.pPlatformStats["Uber"].earnings -= stmt.refundsAndExpenses;
   }
-
-  const ensurePlat = (plat: string) => {
-    if (!a.pPlatformStats[plat]) {
-      a.pPlatformStats[plat] = { earnings: 0, tripCount: 0, cashCollected: 0, tolls: 0 };
-    }
-  };
 
   const addDaily = (day: string | undefined, plat: string, amt: number) => {
     if (!day) return;
@@ -289,7 +304,7 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
     a.dailyMap[day].byPlatform[plat] = (a.dailyMap[day].byPlatform[plat] || 0) + amt;
   };
 
-  if (uberHasStatement) {
+  if (uberUseStatementForFare) {
     ensurePlat("Uber");
     a.pPlatformStats["Uber"].earnings =
       stmt.netFareStatement + stmt.tipsStatement + stmt.promotionsStatement - stmt.refundsAndExpenses;
@@ -299,8 +314,7 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
   }
 
   /** When org statement includes cash collected, do not also sum per-trip cash (double-count). */
-  const skipUberTripCashBecauseStatement =
-    uberHasStatement && Math.abs(stmt.payoutCash) > 0.0001;
+  const skipUberTripCashBecauseStatement = Math.abs(stmt.payoutCash) > 0.0001;
 
   for (const e of evs) {
     const net = e.netAmount;
@@ -350,7 +364,8 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
         a.pPlatformStats[plat].cashCollected += cashAmt;
       }
       if (plat === "Uber" && !uberHasStatement) {
-        a.pUberFareComponents += gross;
+        /** Match statement `NET_FARE` semantics (driver net), not passenger gross. */
+        a.pUberFareComponents += net;
       }
       addDaily(e.date.slice(0, 10), plat, net);
     } else if (et === "tip") {

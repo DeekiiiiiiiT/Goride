@@ -65,6 +65,7 @@ export interface CanonicalLedgerEvent {
   category?: string;
   description?: string;
   isReconciled?: boolean;
+  /** Trip-sourced `fare_earning`: set `Cash` so driver-overview cash totals roll up (`ledgerMoneyAggregate`). */
   paymentMethod?: string;
   metadata?: Record<string, unknown>;
 }
