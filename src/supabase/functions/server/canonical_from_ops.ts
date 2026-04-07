@@ -222,24 +222,40 @@ export async function appendCanonicalTollIfEligible(
   }
 }
 
-export async function appendCanonicalTripFaresIfEligible(
+/** Aggregate insert/skip/fail counts from canonical append (used by bulk rebuild). */
+export async function appendCanonicalTripFaresIfEligibleWithStats(
   trips: Record<string, unknown>[],
   c: Context,
-): Promise<void> {
+): Promise<{ inserted: number; skipped: number; failed: number }> {
+  let inserted = 0;
+  let skipped = 0;
+  let failed = 0;
   const batch: Record<string, unknown>[] = [];
   for (const trip of trips) {
     batch.push(...buildCanonicalTripFareEventsFromTrip(trip));
   }
-  if (batch.length === 0) return;
+  if (batch.length === 0) return { inserted, skipped, failed };
   const CHUNK = 200;
   for (let i = 0; i < batch.length; i += CHUNK) {
     const chunk = batch.slice(i, i + CHUNK);
     try {
-      await appendCanonicalLedgerEvents(chunk, c);
+      const r = await appendCanonicalLedgerEvents(chunk, c);
+      inserted += r.inserted;
+      skipped += r.skipped;
+      failed += r.failed;
     } catch (e) {
       console.error("[CanonicalOps] trip fare append failed:", e);
+      failed += chunk.length;
     }
   }
+  return { inserted, skipped, failed };
+}
+
+export async function appendCanonicalTripFaresIfEligible(
+  trips: Record<string, unknown>[],
+  c: Context,
+): Promise<void> {
+  await appendCanonicalTripFaresIfEligibleWithStats(trips, c);
 }
 
 // ─── InDrive Wallet Credit ──────────────────────────────────────────────────

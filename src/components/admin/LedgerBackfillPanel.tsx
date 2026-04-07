@@ -3,7 +3,7 @@ import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { api } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';
 import { toast } from 'sonner@2.0.3';
-import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download, Info, Trash2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download, Info, Trash2, RefreshCw } from 'lucide-react';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
@@ -817,7 +817,13 @@ export function LedgerBackfillPanel() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* SECTION 1C: CANONICAL LEDGER BACKFILL                              */}
+      {/* SECTION 1C: REBUILD TRIP FARE LEDGER (InDrive wallet, gross/net)    */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+
+      {can('data.backfill') && <RebuildTripFareLedgerSection />}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 1C-2: CANONICAL LEDGER BACKFILL                            */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
 
       <CanonicalBackfillSection />
@@ -1383,6 +1389,165 @@ export function LedgerBackfillPanel() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REBUILD TRIP FARE LEDGER — delete trip-sourced canonical rows + re-append from trip:*
+// ═══════════════════════════════════════════════════════════════════════════
+
+type RebuildTripFareScope = 'indrive' | 'non_uber';
+
+interface RebuildTripFareLedgerResult {
+  success: boolean;
+  dryRun: boolean;
+  scope: RebuildTripFareScope;
+  stats: {
+    scannedTotal?: number;
+    afterOrgFilter?: number;
+    eligible: number;
+    sampleTripIds?: string[];
+    chunksProcessed?: number;
+    ledgerRowsDeleted?: number;
+    idemKeysDeleted?: number;
+    ledgerInserted?: number;
+    ledgerSkipped?: number;
+    ledgerFailed?: number;
+    errors?: number;
+  };
+  durationMs: number;
+  error?: string;
+}
+
+function RebuildTripFareLedgerSection() {
+  const [scope, setScope] = useState<RebuildTripFareScope>('indrive');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<RebuildTripFareLedgerResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const runRebuild = async (dryRun: boolean) => {
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/ledger/rebuild-trip-fare-ledger`, {
+        method: 'POST',
+        headers: edgeFnHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ dryRun, scope }),
+      });
+      const data = (await res.json()) as RebuildTripFareLedgerResult & { error?: string };
+      if (!res.ok) {
+        setError(data.error || `Server returned ${res.status}`);
+        return;
+      }
+      setResult(data);
+      if (!dryRun && data.success) {
+        toast.success('Trip fare ledger rebuilt', {
+          description: `${data.stats.eligible} trip(s) processed · ${data.stats.ledgerInserted ?? 0} row(s) inserted`,
+        });
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <RefreshCw className="h-6 w-6 text-sky-600 dark:text-sky-400 mt-0.5" />
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Rebuild trip fare ledger</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Removes existing <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">fare_earning</code>{' '}
+            canonical rows for selected trips and writes them again from <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">trip:*</code>.
+            Use this to refresh <span className="font-medium">InDrive wallet</span> fees (gross vs net) without editing each trip.
+            Scoped to your organization when applicable.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-4 items-center">
+        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Scope:</label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+          <input
+            type="radio"
+            name="rebuild-trip-fare-scope"
+            checked={scope === 'indrive'}
+            onChange={() => setScope('indrive')}
+            className="h-4 w-4 text-sky-600"
+          />
+          InDrive only
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+          <input
+            type="radio"
+            name="rebuild-trip-fare-scope"
+            checked={scope === 'non_uber'}
+            onChange={() => setScope('non_uber')}
+            className="h-4 w-4 text-sky-600"
+          />
+          All non-Uber trips (Roam, InDrive, etc.)
+        </label>
+      </div>
+
+      <div className="flex gap-3 flex-wrap">
+        <button
+          type="button"
+          onClick={() => runRebuild(true)}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-50 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200 border border-sky-200 dark:border-sky-700 rounded-lg font-medium text-sm hover:bg-sky-100 dark:hover:bg-sky-900/50 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+          Preview (dry run)
+        </button>
+        <button
+          type="button"
+          onClick={() => runRebuild(false)}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-600 text-white rounded-lg font-medium text-sm hover:bg-sky-700 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Rebuild now
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 text-sm space-y-2">
+          <div className="font-medium text-slate-900 dark:text-white">
+            {result.dryRun ? 'Dry run' : 'Complete'} · scope: {result.scope} · {result.durationMs}ms
+          </div>
+          <ul className="text-slate-600 dark:text-slate-300 space-y-1 list-disc list-inside">
+            <li>Eligible trips: {result.stats.eligible}</li>
+            {result.dryRun && result.stats.scannedTotal != null && (
+              <li>Total trips in store: {result.stats.scannedTotal} (after org filter: {result.stats.afterOrgFilter})</li>
+            )}
+            {!result.dryRun && (
+              <>
+                <li>Ledger rows removed: {result.stats.ledgerRowsDeleted ?? 0}</li>
+                <li>Ledger rows inserted: {result.stats.ledgerInserted ?? 0}</li>
+                <li>Skipped (idempotent): {result.stats.ledgerSkipped ?? 0}</li>
+                <li>Failed: {result.stats.ledgerFailed ?? 0}</li>
+                <li>Chunk errors: {result.stats.errors ?? 0}</li>
+              </>
+            )}
+          </ul>
+          {result.stats.sampleTripIds && result.stats.sampleTripIds.length > 0 && (
+            <details className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              <summary className="cursor-pointer">Sample trip IDs</summary>
+              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono">{result.stats.sampleTripIds.join('\n')}</pre>
+            </details>
+          )}
+        </div>
+      )}
     </div>
   );
 }

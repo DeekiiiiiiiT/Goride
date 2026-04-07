@@ -27,6 +27,7 @@ import {
   appendCanonicalFuelExpenseIfEligible,
   appendCanonicalTollIfEligible,
   appendCanonicalTripFaresIfEligible,
+  appendCanonicalTripFaresIfEligibleWithStats,
   buildCanonicalTripFareEventsFromTrip,
   appendCanonicalWalletCreditIfEligible,
   appendCanonicalFuelReimbursementIfEligible,
@@ -6177,6 +6178,114 @@ app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requi
     return c.json({ error: `Canonical backfill failed: ${e?.message || 'unknown error'}` }, 500);
   }
 });
+
+// ─── POST /ledger/rebuild-trip-fare-ledger — Remove + rewrite trip fare_earning (InDrive gross/net, etc.) ──
+// Scoped by org when the user has organizationId. dryRun previews eligible count only.
+app.post(
+  "/make-server-37f42386/ledger/rebuild-trip-fare-ledger",
+  requireAuth(),
+  requirePermission("data.backfill"),
+  async (c) => {
+    const t0 = Date.now();
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body?.dryRun === true;
+      const scopeRaw = typeof body?.scope === "string" ? body.scope.trim().toLowerCase() : "indrive";
+      const scope = scopeRaw === "non_uber" || scopeRaw === "nonuber" ? "non_uber" : "indrive";
+
+      const allTrips = ((await kv.getByPrefix("trip:")) as any[]).filter((t) => t?.id);
+      const scoped = filterByOrg(allTrips, c);
+
+      const passesScope = (trip: any) => {
+        if (scope === "indrive") {
+          return String(trip?.platform ?? "").trim().toLowerCase() === "indrive";
+        }
+        return !isUberPlatform(trip?.platform);
+      };
+
+      const eligible: any[] = [];
+      for (const trip of scoped) {
+        if (!passesScope(trip)) continue;
+        if (!tripHasMoneyForLedgerProjection(trip)) continue;
+        const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
+        if (evs.length === 0) continue;
+        eligible.push(trip);
+      }
+
+      if (dryRun) {
+        return c.json({
+          success: true,
+          dryRun: true,
+          scope,
+          stats: {
+            scannedTotal: allTrips.length,
+            afterOrgFilter: scoped.length,
+            eligible: eligible.length,
+            sampleTripIds: eligible.slice(0, 20).map((t: any) => String(t.id)),
+          },
+          durationMs: Date.now() - t0,
+        });
+      }
+
+      const CHUNK = 100;
+      let chunksProcessed = 0;
+      let ledgerRowsDeleted = 0;
+      let idemKeysDeleted = 0;
+      let ledgerInserted = 0;
+      let ledgerSkipped = 0;
+      let ledgerFailed = 0;
+      let errors = 0;
+
+      for (let i = 0; i < eligible.length; i += CHUNK) {
+        const chunk = eligible.slice(i, i + CHUNK);
+        const ids = chunk.map((t: any) => String(t.id).trim()).filter(Boolean);
+        try {
+          const del = await deleteCanonicalLedgerBySource("trip", ids);
+          ledgerRowsDeleted += del.deleted;
+          idemKeysDeleted += del.idemDeleted;
+        } catch (e: any) {
+          errors++;
+          console.error("[RebuildTripFareLedger] delete failed:", e?.message);
+          continue;
+        }
+        try {
+          const app = await appendCanonicalTripFaresIfEligibleWithStats(chunk as Record<string, unknown>[], c);
+          ledgerInserted += app.inserted;
+          ledgerSkipped += app.skipped;
+          ledgerFailed += app.failed;
+        } catch (e: any) {
+          errors++;
+          console.error("[RebuildTripFareLedger] append failed:", e?.message);
+        }
+        chunksProcessed++;
+      }
+
+      console.log(
+        `[RebuildTripFareLedger] scope=${scope} eligible=${eligible.length} deleted=${ledgerRowsDeleted} inserted=${ledgerInserted} skipped=${ledgerSkipped} failed=${ledgerFailed} errors=${errors} (${Date.now() - t0}ms)`,
+      );
+
+      return c.json({
+        success: true,
+        dryRun: false,
+        scope,
+        stats: {
+          eligible: eligible.length,
+          chunksProcessed,
+          ledgerRowsDeleted,
+          idemKeysDeleted,
+          ledgerInserted,
+          ledgerSkipped,
+          ledgerFailed,
+          errors,
+        },
+        durationMs: Date.now() - t0,
+      });
+    } catch (e: any) {
+      console.error("[RebuildTripFareLedger] Fatal:", e);
+      return c.json({ error: e?.message || "rebuild-trip-fare-ledger failed" }, 500);
+    }
+  },
+);
 
 // Maintenance Logs Endpoints
 app.get("/make-server-37f42386/maintenance-logs", requireAuth(), async (c) => {
