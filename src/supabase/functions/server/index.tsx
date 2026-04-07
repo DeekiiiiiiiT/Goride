@@ -27,6 +27,12 @@ import {
   appendCanonicalWalletCreditIfEligible,
   appendCanonicalFuelReimbursementIfEligible,
   appendCanonicalTollReimbursementIfEligible,
+  buildCanonicalFuelExpenseEvent,
+  buildCanonicalWalletCreditEvent,
+  buildCanonicalFuelReimbursementEvent,
+  buildCanonicalTollReimbursementEvent,
+  buildCanonicalTollEventFromTollLedger,
+  type TollLedgerLike,
 } from "./canonical_from_ops.ts";
 import {
   addDaysYmd,
@@ -6369,6 +6375,261 @@ app.post("/make-server-37f42386/fuel/backfill-rideshare-payment-source", require
   } catch (e: any) {
     console.log(`[Backfill RideShare] Fatal error: ${e.message}`);
     return c.json({ error: `Backfill failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── POST /ledger/canonical-backfill — Backfill canonical ledger events from existing data ─────
+// Populates ledger_event:* for: trips, fuel_entries, toll_ledger, wallet credits (InDrive, fuel reimbursement, toll reimbursement)
+// Idempotent: uses idempotencyKey to skip duplicates.
+// Supports: ?dryRun=true (count only), ?types=trips,fuel,tolls,indrive,fuel_reimburse,toll_reimburse (filter by type)
+app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requirePermission('data.backfill'), async (c) => {
+  const startMs = Date.now();
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun === true;
+    const typesParam = typeof body?.types === 'string' ? body.types : '';
+    const allowedTypes = new Set(typesParam ? typesParam.split(',').map((t: string) => t.trim().toLowerCase()) : [
+      'trips', 'fuel', 'tolls', 'indrive', 'fuel_reimburse', 'toll_reimburse'
+    ]);
+
+    console.log(`[CanonicalBackfill] Starting dryRun=${dryRun} types=${[...allowedTypes].join(',')}`);
+
+    const stats = {
+      trips: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      fuel: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      tolls: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      indrive: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      fuel_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      toll_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+    };
+
+    // 1. Trips → fare_earning (non-Uber only; Uber comes from CSV imports)
+    if (allowedTypes.has('trips')) {
+      console.log('[CanonicalBackfill] Processing trips...');
+      const allTrips = await kv.getByPrefix('trip:');
+      stats.trips.scanned = allTrips.length;
+
+      const batch: Record<string, unknown>[] = [];
+      for (const trip of allTrips) {
+        if (!trip?.id) continue;
+        const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
+        if (evs.length > 0) {
+          stats.trips.eligible++;
+          batch.push(...evs);
+        }
+      }
+
+      if (!dryRun && batch.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < batch.length; i += CHUNK) {
+          const slice = batch.slice(i, i + CHUNK);
+          try {
+            const r = await appendCanonicalLedgerEvents(slice, c);
+            stats.trips.appended += r.inserted;
+            stats.trips.skipped += r.skipped;
+          } catch (e: any) {
+            stats.trips.errors++;
+            console.error('[CanonicalBackfill] trips append error:', e?.message);
+          }
+        }
+      } else if (dryRun) {
+        stats.trips.appended = batch.length;
+      }
+      console.log(`[CanonicalBackfill] Trips: scanned=${stats.trips.scanned} eligible=${stats.trips.eligible} appended=${stats.trips.appended}`);
+    }
+
+    // 2. Fuel entries → fuel_expense
+    if (allowedTypes.has('fuel')) {
+      console.log('[CanonicalBackfill] Processing fuel entries...');
+      const allFuel = await kv.getByPrefix('fuel_entry:');
+      stats.fuel.scanned = allFuel.length;
+
+      const batch: Record<string, unknown>[] = [];
+      for (const entry of allFuel) {
+        if (!entry?.id) continue;
+        const ev = buildCanonicalFuelExpenseEvent(entry as Record<string, unknown>);
+        if (ev) {
+          stats.fuel.eligible++;
+          batch.push(ev);
+        }
+      }
+
+      if (!dryRun && batch.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < batch.length; i += CHUNK) {
+          const slice = batch.slice(i, i + CHUNK);
+          try {
+            const r = await appendCanonicalLedgerEvents(slice, c);
+            stats.fuel.appended += r.inserted;
+            stats.fuel.skipped += r.skipped;
+          } catch (e: any) {
+            stats.fuel.errors++;
+            console.error('[CanonicalBackfill] fuel append error:', e?.message);
+          }
+        }
+      } else if (dryRun) {
+        stats.fuel.appended = batch.length;
+      }
+      console.log(`[CanonicalBackfill] Fuel: scanned=${stats.fuel.scanned} eligible=${stats.fuel.eligible} appended=${stats.fuel.appended}`);
+    }
+
+    // 3. Toll ledger → toll_charge / toll_refund
+    if (allowedTypes.has('tolls')) {
+      console.log('[CanonicalBackfill] Processing toll ledger...');
+      const allTolls = await kv.getByPrefix('toll_ledger:');
+      stats.tolls.scanned = allTolls.length;
+
+      const batch: Record<string, unknown>[] = [];
+      for (const entry of allTolls) {
+        if (!entry?.id) continue;
+        const ev = buildCanonicalTollEventFromTollLedger(entry as TollLedgerLike);
+        if (ev) {
+          stats.tolls.eligible++;
+          batch.push(ev);
+        }
+      }
+
+      if (!dryRun && batch.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < batch.length; i += CHUNK) {
+          const slice = batch.slice(i, i + CHUNK);
+          try {
+            const r = await appendCanonicalLedgerEvents(slice, c);
+            stats.tolls.appended += r.inserted;
+            stats.tolls.skipped += r.skipped;
+          } catch (e: any) {
+            stats.tolls.errors++;
+            console.error('[CanonicalBackfill] tolls append error:', e?.message);
+          }
+        }
+      } else if (dryRun) {
+        stats.tolls.appended = batch.length;
+      }
+      console.log(`[CanonicalBackfill] Tolls: scanned=${stats.tolls.scanned} eligible=${stats.tolls.eligible} appended=${stats.tolls.appended}`);
+    }
+
+    // 4-6. Transaction-based wallet credits
+    const allTransactions = (allowedTypes.has('indrive') || allowedTypes.has('fuel_reimburse') || allowedTypes.has('toll_reimburse'))
+      ? await kv.getByPrefix('transaction:')
+      : [];
+
+    // 4. InDrive Wallet Credit → wallet_credit
+    if (allowedTypes.has('indrive')) {
+      console.log('[CanonicalBackfill] Processing InDrive Wallet Credits...');
+      const indriveTx = allTransactions.filter((tx: any) => tx?.category === 'InDrive Wallet Credit');
+      stats.indrive.scanned = indriveTx.length;
+
+      const batch: Record<string, unknown>[] = [];
+      for (const tx of indriveTx) {
+        if (!tx?.id) continue;
+        const ev = buildCanonicalWalletCreditEvent(tx as Record<string, unknown>);
+        if (ev) {
+          stats.indrive.eligible++;
+          batch.push(ev);
+        }
+      }
+
+      if (!dryRun && batch.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < batch.length; i += CHUNK) {
+          const slice = batch.slice(i, i + CHUNK);
+          try {
+            const r = await appendCanonicalLedgerEvents(slice, c);
+            stats.indrive.appended += r.inserted;
+            stats.indrive.skipped += r.skipped;
+          } catch (e: any) {
+            stats.indrive.errors++;
+            console.error('[CanonicalBackfill] indrive append error:', e?.message);
+          }
+        }
+      } else if (dryRun) {
+        stats.indrive.appended = batch.length;
+      }
+      console.log(`[CanonicalBackfill] InDrive: scanned=${stats.indrive.scanned} eligible=${stats.indrive.eligible} appended=${stats.indrive.appended}`);
+    }
+
+    // 5. Fuel Reimbursement Credit → fuel_reimbursement
+    if (allowedTypes.has('fuel_reimburse')) {
+      console.log('[CanonicalBackfill] Processing Fuel Reimbursement Credits...');
+      const fuelCreditTx = allTransactions.filter((tx: any) => tx?.category === 'Fuel Reimbursement Credit');
+      stats.fuel_reimburse.scanned = fuelCreditTx.length;
+
+      const batch: Record<string, unknown>[] = [];
+      for (const tx of fuelCreditTx) {
+        if (!tx?.id) continue;
+        const ev = buildCanonicalFuelReimbursementEvent(tx as Record<string, unknown>);
+        if (ev) {
+          stats.fuel_reimburse.eligible++;
+          batch.push(ev);
+        }
+      }
+
+      if (!dryRun && batch.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < batch.length; i += CHUNK) {
+          const slice = batch.slice(i, i + CHUNK);
+          try {
+            const r = await appendCanonicalLedgerEvents(slice, c);
+            stats.fuel_reimburse.appended += r.inserted;
+            stats.fuel_reimburse.skipped += r.skipped;
+          } catch (e: any) {
+            stats.fuel_reimburse.errors++;
+            console.error('[CanonicalBackfill] fuel_reimburse append error:', e?.message);
+          }
+        }
+      } else if (dryRun) {
+        stats.fuel_reimburse.appended = batch.length;
+      }
+      console.log(`[CanonicalBackfill] Fuel Reimburse: scanned=${stats.fuel_reimburse.scanned} eligible=${stats.fuel_reimburse.eligible} appended=${stats.fuel_reimburse.appended}`);
+    }
+
+    // 6. Toll Reimbursement Credit → adjustment
+    if (allowedTypes.has('toll_reimburse')) {
+      console.log('[CanonicalBackfill] Processing Toll Reimbursement Credits...');
+      const tollCreditTx = allTransactions.filter((tx: any) => tx?.category === 'Toll Reimbursement Credit');
+      stats.toll_reimburse.scanned = tollCreditTx.length;
+
+      const batch: Record<string, unknown>[] = [];
+      for (const tx of tollCreditTx) {
+        if (!tx?.id) continue;
+        const ev = buildCanonicalTollReimbursementEvent(tx as Record<string, unknown>);
+        if (ev) {
+          stats.toll_reimburse.eligible++;
+          batch.push(ev);
+        }
+      }
+
+      if (!dryRun && batch.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < batch.length; i += CHUNK) {
+          const slice = batch.slice(i, i + CHUNK);
+          try {
+            const r = await appendCanonicalLedgerEvents(slice, c);
+            stats.toll_reimburse.appended += r.inserted;
+            stats.toll_reimburse.skipped += r.skipped;
+          } catch (e: any) {
+            stats.toll_reimburse.errors++;
+            console.error('[CanonicalBackfill] toll_reimburse append error:', e?.message);
+          }
+        }
+      } else if (dryRun) {
+        stats.toll_reimburse.appended = batch.length;
+      }
+      console.log(`[CanonicalBackfill] Toll Reimburse: scanned=${stats.toll_reimburse.scanned} eligible=${stats.toll_reimburse.eligible} appended=${stats.toll_reimburse.appended}`);
+    }
+
+    const durationMs = Date.now() - startMs;
+    console.log(`[CanonicalBackfill] Complete in ${durationMs}ms dryRun=${dryRun}`);
+
+    return c.json({
+      success: true,
+      dryRun,
+      stats,
+      durationMs,
+    });
+  } catch (e: any) {
+    console.error('[CanonicalBackfill] Fatal error:', e?.message || e);
+    return c.json({ error: `Canonical backfill failed: ${e?.message || 'unknown error'}` }, 500);
   }
 });
 
