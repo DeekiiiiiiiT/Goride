@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { api } from '../../services/api';
-import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download, Info } from 'lucide-react';
+import { usePermissions } from '../../hooks/usePermissions';
+import { toast } from 'sonner@2.0.3';
+import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download, Info, Trash2 } from 'lucide-react';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
@@ -76,6 +78,23 @@ interface TollRepairDatesResponse {
 }
 
 export function LedgerBackfillPanel() {
+  const { can } = usePermissions();
+
+  // ── Orphan ledger cleanup (Transaction List ghosts) ──
+  const [orphanAuditLoading, setOrphanAuditLoading] = useState(false);
+  const [orphanCleanupLoading, setOrphanCleanupLoading] = useState(false);
+  const [orphanAudit, setOrphanAudit] = useState<{
+    scanned: number;
+    orphanCount: number;
+    orphans: Array<{ key: string; sourceType: string; sourceId: string; eventType?: string }>;
+  } | null>(null);
+  const [orphanDry, setOrphanDry] = useState<{
+    scanned?: number;
+    distinctSourceIds?: number;
+    sourceGroups?: Record<string, number>;
+  } | null>(null);
+  const [orphanReal, setOrphanReal] = useState<{ deleted?: number; idemDeleted?: number } | null>(null);
+
   // ── Backfill state ──
   const [driverId, setDriverId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -310,11 +329,140 @@ export function LedgerBackfillPanel() {
     }
   };
 
+  const runOrphanAudit = async () => {
+    setOrphanAuditLoading(true);
+    setOrphanDry(null);
+    setOrphanReal(null);
+    try {
+      const data = await api.ledgerSourceOrphanAudit();
+      setOrphanAudit({
+        scanned: data.scanned,
+        orphanCount: data.orphanCount,
+        orphans: data.orphans?.slice(0, 50) ?? [],
+      });
+      toast.success(`Scan complete: ${data.orphanCount} orphan row(s) (of ${data.scanned} scanned)`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Scan failed');
+      setOrphanAudit(null);
+    } finally {
+      setOrphanAuditLoading(false);
+    }
+  };
+
+  const runOrphanDryRun = async () => {
+    setOrphanCleanupLoading(true);
+    setOrphanDry(null);
+    setOrphanReal(null);
+    try {
+      const data = await api.ledgerSourceOrphanCleanup({ dryRun: true });
+      setOrphanDry({
+        scanned: data.scanned,
+        distinctSourceIds: data.distinctSourceIds,
+        sourceGroups: data.sourceGroups,
+      });
+      toast.message('Dry run — nothing was deleted', {
+        description: `Would clean ${data.distinctSourceIds ?? 0} distinct source id(s).`,
+      });
+    } catch (e: any) {
+      toast.error(e?.message || 'Dry run failed');
+    } finally {
+      setOrphanCleanupLoading(false);
+    }
+  };
+
+  const runOrphanCleanup = async () => {
+    if (
+      !window.confirm(
+        'Remove orphan Transaction List rows? This deletes ledger lines whose trip/fuel/transaction no longer exists. This cannot be undone.',
+      )
+    ) {
+      return;
+    }
+    setOrphanCleanupLoading(true);
+    setOrphanReal(null);
+    try {
+      const data = await api.ledgerSourceOrphanCleanup({ confirm: 'DELETE_ORPHAN_LEDGER_SOURCES' });
+      setOrphanReal({ deleted: data.deleted, idemDeleted: data.idemDeleted });
+      toast.success(`Removed ${data.deleted ?? 0} ledger row(s). Refresh Transaction List.`);
+      setOrphanAudit(null);
+      setOrphanDry(null);
+    } catch (e: any) {
+      toast.error(e?.message || 'Cleanup failed');
+    } finally {
+      setOrphanCleanupLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8">
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* SECTION 1: LEDGER BACKFILL                                        */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
+
+      {can('data.backfill') && (
+        <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/50 rounded-xl p-5 space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Transaction List — remove “ghost” rows</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              If you deleted trips or expenses but old lines still appear on <span className="font-medium">Transaction List</span>, run a scan
+              and then clean up. Uses the same logic as the server (checks trips, batches, transactions, fuel entries, toll ledger).
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={runOrphanAudit}
+              disabled={orphanAuditLoading || orphanCleanupLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm font-medium border border-slate-200 dark:border-slate-600 disabled:opacity-50"
+            >
+              {orphanAuditLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              1. Scan for orphans
+            </button>
+            <button
+              type="button"
+              onClick={runOrphanDryRun}
+              disabled={orphanAuditLoading || orphanCleanupLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200 rounded-lg text-sm font-medium border border-amber-200 dark:border-amber-800 disabled:opacity-50"
+            >
+              {orphanCleanupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              2. Dry run (preview counts)
+            </button>
+            <button
+              type="button"
+              onClick={runOrphanCleanup}
+              disabled={orphanAuditLoading || orphanCleanupLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              {orphanCleanupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              3. Remove orphans
+            </button>
+          </div>
+          {orphanAudit && (
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Last scan: <span className="font-mono">{orphanAudit.orphanCount}</span> orphan(s) of {orphanAudit.scanned} rows
+              {orphanAudit.orphans.length > 0 && (
+                <span className="block mt-1 text-slate-500">
+                  Sample: {orphanAudit.orphans.slice(0, 3).map((o) => `${o.sourceType}/${o.sourceId}`).join(' · ')}
+                  {orphanAudit.orphanCount > 3 ? ' …' : ''}
+                </span>
+              )}
+            </p>
+          )}
+          {orphanDry && (
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Dry run: {orphanDry.distinctSourceIds ?? 0} distinct source id(s) would be cleaned.
+              {orphanDry.sourceGroups && (
+                <span className="block font-mono mt-1">{JSON.stringify(orphanDry.sourceGroups)}</span>
+              )}
+            </p>
+          )}
+          {orphanReal && (
+            <p className="text-xs text-emerald-700 dark:text-emerald-400">
+              Deleted {orphanReal.deleted ?? 0} ledger row(s), {orphanReal.idemDeleted ?? 0} idempotency key(s). Refresh Transaction List.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center gap-3">

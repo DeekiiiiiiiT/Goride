@@ -2537,6 +2537,56 @@ export const api = {
     return response.json();
   },
 
+  /** Dry-run: list canonical ledger rows whose source trip/transaction/fuel/toll row is missing. Requires session + data.backfill. */
+  async ledgerSourceOrphanAudit(): Promise<{
+    success: boolean;
+    scanned: number;
+    orphanCount: number;
+    orphans: Array<{
+      key: string;
+      id: string;
+      sourceType: string;
+      sourceId: string;
+      eventType?: string;
+    }>;
+  }> {
+    const headers = await getHeaders(null);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/admin/ledger-source-orphan-audit`, {
+      headers,
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Orphan audit failed');
+    }
+    return response.json();
+  },
+
+  /** Remove orphaned ledger_event rows (optional dryRun). Requires session + data.backfill. */
+  async ledgerSourceOrphanCleanup(payload: {
+    dryRun?: boolean;
+    confirm?: string;
+  }): Promise<{
+    success: boolean;
+    dryRun?: boolean;
+    scanned?: number;
+    deleted?: number;
+    idemDeleted?: number;
+    sourceGroups?: Record<string, number>;
+    distinctSourceIds?: number;
+  }> {
+    const headers = await getHeaders('application/json');
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/admin/ledger-source-orphan-cleanup`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Orphan cleanup failed');
+    }
+    return response.json();
+  },
+
   async getCanonicalLedgerEvents(params: {
     driverId?: string;
     startDate?: string;
