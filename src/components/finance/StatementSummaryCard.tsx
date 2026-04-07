@@ -1,0 +1,312 @@
+import React, { useState } from 'react';
+import { 
+  ChevronDown, 
+  ChevronUp, 
+  DollarSign, 
+  TrendingUp, 
+  TrendingDown, 
+  Receipt,
+  Wallet,
+  Building2,
+  FileSpreadsheet,
+  Calculator,
+  Car,
+  Fuel
+} from 'lucide-react';
+import { cn } from '../ui/utils';
+import { StatementSummary, StatementPlatform } from '../../types/statementSummary';
+
+interface StatementSummaryCardProps {
+  summary: StatementSummary;
+  className?: string;
+  defaultExpanded?: boolean;
+}
+
+const PLATFORM_CONFIG: Record<StatementPlatform, { 
+  label: string; 
+  color: string; 
+  bgColor: string;
+  icon: React.ElementType;
+}> = {
+  Uber: { 
+    label: 'Uber', 
+    color: 'text-slate-900', 
+    bgColor: 'bg-slate-100',
+    icon: Car
+  },
+  Roam: { 
+    label: 'Roam', 
+    color: 'text-amber-700', 
+    bgColor: 'bg-amber-50',
+    icon: Car
+  },
+  InDrive: { 
+    label: 'InDrive', 
+    color: 'text-emerald-700', 
+    bgColor: 'bg-emerald-50',
+    icon: Car
+  },
+};
+
+function formatCurrency(amount: number | undefined | null): string {
+  if (amount === undefined || amount === null) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'JMD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount).replace('JMD', '$');
+}
+
+function AmountDisplay({ 
+  amount, 
+  isExpense = false,
+  showSign = false 
+}: { 
+  amount: number | undefined | null; 
+  isExpense?: boolean;
+  showSign?: boolean;
+}) {
+  if (amount === undefined || amount === null) {
+    return <span className="text-slate-400">—</span>;
+  }
+  
+  const isZero = Math.abs(amount) < 0.01;
+  const isNegative = amount < 0 || isExpense;
+  
+  return (
+    <span className={cn(
+      'font-medium tabular-nums',
+      isZero ? 'text-slate-400' : isNegative ? 'text-red-600' : 'text-emerald-600'
+    )}>
+      {showSign && !isZero && (isNegative ? '−' : '+')}
+      {formatCurrency(Math.abs(amount))}
+    </span>
+  );
+}
+
+function SectionHeader({ 
+  title, 
+  icon: Icon, 
+  expanded, 
+  onToggle,
+  total,
+  isExpense = false
+}: { 
+  title: string; 
+  icon: React.ElementType;
+  expanded: boolean;
+  onToggle: () => void;
+  total?: number;
+  isExpense?: boolean;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className="w-full flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors"
+    >
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-slate-500" />
+        <span className="font-medium text-slate-700 dark:text-slate-300">{title}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        {total !== undefined && (
+          <AmountDisplay amount={total} isExpense={isExpense} />
+        )}
+        {expanded ? (
+          <ChevronUp className="h-4 w-4 text-slate-400" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-slate-400" />
+        )}
+      </div>
+    </button>
+  );
+}
+
+function LineItem({ 
+  label, 
+  amount, 
+  isExpense = false,
+  indent = false 
+}: { 
+  label: string; 
+  amount: number | undefined | null;
+  isExpense?: boolean;
+  indent?: boolean;
+}) {
+  return (
+    <div className={cn(
+      'flex items-center justify-between py-1.5 text-sm',
+      indent && 'pl-6'
+    )}>
+      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+      <AmountDisplay amount={amount} isExpense={isExpense} />
+    </div>
+  );
+}
+
+export function StatementSummaryCard({ 
+  summary, 
+  className,
+  defaultExpanded = true 
+}: StatementSummaryCardProps) {
+  const [earningsExpanded, setEarningsExpanded] = useState(defaultExpanded);
+  const [expensesExpanded, setExpensesExpanded] = useState(defaultExpanded);
+  const [adjustmentsExpanded, setAdjustmentsExpanded] = useState(defaultExpanded);
+  const [payoutExpanded, setPayoutExpanded] = useState(defaultExpanded);
+
+  const config = PLATFORM_CONFIG[summary.platform];
+  const Icon = config.icon;
+
+  return (
+    <div className={cn(
+      'bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden',
+      className
+    )}>
+      {/* Header */}
+      <div className={cn('px-4 py-3 border-b border-slate-200 dark:border-slate-700', config.bgColor)}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className={cn('h-5 w-5', config.color)} />
+            <h3 className={cn('font-semibold', config.color)}>{config.label}</h3>
+            {summary.tripCount !== undefined && summary.tripCount > 0 && (
+              <span className="text-xs text-slate-500 bg-white/50 px-2 py-0.5 rounded-full">
+                {summary.tripCount} trips
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              'text-xs px-2 py-0.5 rounded-full',
+              summary.sourceType === 'csv_import' 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'bg-purple-100 text-purple-700'
+            )}>
+              {summary.sourceType === 'csv_import' ? (
+                <span className="flex items-center gap-1">
+                  <FileSpreadsheet className="h-3 w-3" />
+                  CSV Import
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <Calculator className="h-3 w-3" />
+                  Computed
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-1">
+          {summary.periodStart} — {summary.periodEnd}
+        </p>
+      </div>
+
+      {/* Content */}
+      <div className="divide-y divide-slate-100 dark:divide-slate-800">
+        {/* Period Net Earnings */}
+        <div>
+          <SectionHeader
+            title="Period Net Earnings"
+            icon={TrendingUp}
+            expanded={earningsExpanded}
+            onToggle={() => setEarningsExpanded(!earningsExpanded)}
+            total={summary.totalEarnings}
+          />
+          {earningsExpanded && (
+            <div className="px-4 pb-3">
+              <LineItem label="Net Fare" amount={summary.netFare} indent />
+              <LineItem label="Promotions" amount={summary.promotions} indent />
+              <LineItem label="Tips" amount={summary.tips} indent />
+              <div className="border-t border-slate-100 dark:border-slate-800 mt-2 pt-2">
+                <div className="flex items-center justify-between text-sm font-medium">
+                  <span className="text-slate-700 dark:text-slate-300">Total Earnings</span>
+                  <AmountDisplay amount={summary.totalEarnings} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Refunds & Expenses */}
+        <div>
+          <SectionHeader
+            title="Refunds & Expenses"
+            icon={TrendingDown}
+            expanded={expensesExpanded}
+            onToggle={() => setExpensesExpanded(!expensesExpanded)}
+            total={summary.totalRefundsExpenses}
+            isExpense
+          />
+          {expensesExpanded && (
+            <div className="px-4 pb-3">
+              <LineItem label="Tolls" amount={summary.tolls} isExpense indent />
+              <LineItem label="Toll Adjustments" amount={summary.tollAdjustments} indent />
+              <div className="border-t border-slate-100 dark:border-slate-800 mt-2 pt-2">
+                <div className="flex items-center justify-between text-sm font-medium">
+                  <span className="text-slate-700 dark:text-slate-300">Total Refunds & Expenses</span>
+                  <AmountDisplay amount={summary.totalRefundsExpenses} isExpense />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Adjustments */}
+        <div>
+          <SectionHeader
+            title="Adjustments"
+            icon={Receipt}
+            expanded={adjustmentsExpanded}
+            onToggle={() => setAdjustmentsExpanded(!adjustmentsExpanded)}
+            total={summary.periodAdjustments}
+          />
+          {adjustmentsExpanded && (
+            <div className="px-4 pb-3">
+              <LineItem label="Period Adjustments" amount={summary.periodAdjustments} indent />
+            </div>
+          )}
+        </div>
+
+        {/* Payout */}
+        <div>
+          <SectionHeader
+            title="Payout"
+            icon={Wallet}
+            expanded={payoutExpanded}
+            onToggle={() => setPayoutExpanded(!payoutExpanded)}
+            total={summary.totalPayout}
+          />
+          {payoutExpanded && (
+            <div className="px-4 pb-3">
+              <LineItem label="Cash Collected" amount={summary.cashCollected} indent />
+              <LineItem label="Transferred to Bank" amount={summary.bankTransfer} indent />
+              <div className="border-t border-slate-100 dark:border-slate-800 mt-2 pt-2">
+                <div className="flex items-center justify-between text-sm font-medium">
+                  <span className="text-slate-700 dark:text-slate-300">Total Payout</span>
+                  <AmountDisplay amount={summary.totalPayout} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer - Grand Total */}
+      <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-slate-700 dark:text-slate-300">
+            Net Period Earnings
+          </span>
+          <span className={cn(
+            'text-lg font-bold tabular-nums',
+            (summary.totalEarnings - summary.totalRefundsExpenses) >= 0 
+              ? 'text-emerald-600' 
+              : 'text-red-600'
+          )}>
+            {formatCurrency(summary.totalEarnings - summary.totalRefundsExpenses + summary.periodAdjustments)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -2386,6 +2386,56 @@ export const api = {
     return response.json();
   },
 
+  /**
+   * Get statement summaries for one or all platforms
+   * - Uber: Aggregates from statement_line, payout_cash, payout_bank events
+   * - Roam/InDrive: Computed from fare_earning, tip, promotion, toll_charge events
+   */
+  async getStatementSummary(params: {
+    platform?: 'Uber' | 'Roam' | 'InDrive' | 'all';
+    startDate: string;
+    endDate: string;
+    driverId?: string;
+  }): Promise<{
+    success: boolean;
+    summaries: Array<{
+      platform: 'Uber' | 'Roam' | 'InDrive';
+      periodStart: string;
+      periodEnd: string;
+      sourceType: 'csv_import' | 'computed';
+      netFare: number;
+      promotions: number;
+      tips: number;
+      totalEarnings: number;
+      tolls: number;
+      tollAdjustments: number;
+      totalRefundsExpenses: number;
+      periodAdjustments: number;
+      cashCollected: number;
+      bankTransfer: number;
+      totalPayout: number;
+      tripCount?: number;
+    }>;
+    periodStart: string;
+    periodEnd: string;
+  }> {
+    const qp = new URLSearchParams();
+    qp.set('startDate', params.startDate);
+    qp.set('endDate', params.endDate);
+    if (params.platform) qp.set('platform', params.platform);
+    if (params.driverId) qp.set('driverId', params.driverId);
+
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/statement-summary?${qp.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Statement summary failed: ${errText}`);
+    }
+    return response.json();
+  },
+
   async getLedgerDriverOverview(params: {
     driverId: string;
     startDate: string;

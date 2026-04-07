@@ -3,7 +3,7 @@ import { Car, Fuel, Receipt, FileText, Loader2 } from 'lucide-react';
 import { TripLedgerPage } from '../database/TripLedgerPage';
 import { FuelLedgerPage } from '../database/FuelLedgerPage';
 import { TollLedgerPage } from '../database/TollLedgerPage';
-import { LedgerView } from './LedgerView';
+import { PlatformStatementSummary } from './PlatformStatementSummary';
 
 type TransactionTab = 'trips' | 'fuel' | 'toll' | 'statement';
 
@@ -13,8 +13,6 @@ const TRANSACTION_TABS: { id: TransactionTab; label: string; icon: React.Element
   { id: 'toll', label: 'Toll Ledger', icon: Receipt, description: 'Toll transactions and reconciliation status' },
   { id: 'statement', label: 'Statement Summary', icon: FileText, description: 'Period payouts, bank transfers, and statement totals' },
 ];
-
-const STATEMENT_EVENT_TYPES = ['payout_cash', 'payout_bank', 'statement_line'];
 
 export function TabbedTransactionList() {
   const [activeTab, setActiveTab] = useState<TransactionTab>('trips');
@@ -78,7 +76,7 @@ export function TabbedTransactionList() {
               <TollLedgerPage />
             )}
             {activeTab === 'statement' && (
-              <LedgerView eventTypesFilter={STATEMENT_EVENT_TYPES} />
+              <PlatformStatementSummary />
             )}
           </div>
         </div>
