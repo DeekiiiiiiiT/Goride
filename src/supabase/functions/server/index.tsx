@@ -1,4 +1,5 @@
 import { Hono } from "npm:hono";
+import type { Context } from "npm:hono";
 import { streamText } from "npm:hono/streaming";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -18,6 +19,12 @@ import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
+import {
+  appendCanonicalFuelExpenseIfEligible,
+  appendCanonicalTollIfEligible,
+  appendCanonicalTripFaresIfEligible,
+  buildCanonicalTripFareEventsFromTrip,
+} from "./canonical_from_ops.ts";
 import {
   addDaysYmd,
   aggregateCanonicalEventsToLedgerDriverOverview,
@@ -145,12 +152,13 @@ const supabase = createClient(
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).
 // The transaction:* store is no longer used for toll data.
 // ───────────────────────────────────────────────────────────────────────
-async function writeTollToLedger(transaction: any): Promise<void> {
+async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
   if (!isTollCategoryServer(transaction.category)) return;
   
   const tollRecord = transactionToTollLedgerServer(transaction);
   await saveTollLedgerEntry(tollRecord);
   console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
+  await appendCanonicalTollIfEligible(tollRecord, c);
 }
 
 // ─── Driver ID Resolution ─────────────────────────────────────────────
@@ -1929,6 +1937,13 @@ app.post("/make-server-37f42386/trips", async (c) => {
     
     // Store using mset
     await kv.mset(keys, processedTrips.map((t: any) => stampWriteOrg(t)));
+
+    // Canonical money events (`ledger_event:*`) for non-Uber trips (Roam / InDrive manual, etc.)
+    try {
+      await appendCanonicalTripFaresIfEligible(processedTrips as Record<string, unknown>[], c);
+    } catch (canonErr) {
+      console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
+    }
     
     // ── Write-Time Ledger (legacy `ledger:%` retired — generators return no rows) ──
     try {
@@ -2760,7 +2775,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             
             // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
             if (isTollCategoryServer(transaction.category)) {
-                await writeTollToLedger(transaction);
+                await writeTollToLedger(transaction, c);
                 return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
             }
             
@@ -2804,7 +2819,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             }
             // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
             if (isTollCategoryServer(transaction.category)) {
-                await writeTollToLedger(transaction);
+                await writeTollToLedger(transaction, c);
                 return c.json({ success: true, data: transaction });
             }
             
@@ -2900,12 +2915,13 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
 
         if (fuelEntry.vehicleId) {
              await kv.set(`fuel_entry:${fuelEntry.id}`, stampOrg(fuelEntry, c));
+             await appendCanonicalFuelExpenseIfEligible(fuelEntry, c);
         }
     }
 
     // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
     if (isTollCategoryServer(transaction.category)) {
-        await writeTollToLedger(transaction);
+        await writeTollToLedger(transaction, c);
         return c.json({ success: true, data: transaction });
     }
     
@@ -5034,37 +5050,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
             return c.json({ error: "Max 12000 trip ids per request — split the import batch" }, 400);
         }
 
-        if (legacyLedgerWritesDisabled()) {
-            return c.json(
-                {
-                    success: false,
-                    error:
-                        "Legacy ledger writes disabled (LEGACY_LEDGER_WRITES=false). Trips still save; use canonical append for money events.",
-                    stats: {
-                        tripIdsRequested: tripIds.length,
-                        tripsLoaded: 0,
-                        skippedNoMoney: 0,
-                        ledgerRowsWritten: 0,
-                        unresolvedAfterGenerate: 0,
-                        errors: 0,
-                        forceDeleted: 0,
-                    },
-                    durationMs: Date.now() - startMs,
-                },
-                403,
-            );
-        }
-
-        let writeOrgId: string | null = getOrgId(c);
-        const stampEntry = (trip: any, entry: any) => {
-            const oid =
-                writeOrgId ||
-                (typeof trip?.organizationId === "string" && trip.organizationId.trim() !== ""
-                    ? trip.organizationId.trim()
-                    : null);
-            return oid ? { ...entry, organizationId: oid } : entry;
-        };
-
         const stats = {
             tripIdsRequested: tripIds.length,
             tripsLoaded: 0,
@@ -5095,6 +5080,45 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
                 }
             }
             stats.tripsLoaded += values.length;
+
+            if (legacyLedgerWritesDisabled()) {
+                const toAppend: Record<string, unknown>[] = [];
+                for (const trip of values) {
+                    if (!trip?.id) continue;
+                    if (!tripHasMoneyForLedgerProjection(trip)) {
+                        stats.skippedNoMoney += 1;
+                        continue;
+                    }
+                    const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
+                    if (evs.length === 0) {
+                        stats.unresolvedAfterGenerate += 1;
+                    } else {
+                        toAppend.push(...evs);
+                    }
+                }
+                const MAX = 200;
+                for (let j = 0; j < toAppend.length; j += MAX) {
+                    const slice = toAppend.slice(j, j + MAX);
+                    try {
+                        const r = await appendCanonicalLedgerEvents(slice, c);
+                        stats.ledgerRowsWritten += r.inserted;
+                    } catch (loopErr: any) {
+                        stats.errors += 1;
+                        console.error(`[Ledger EnsureTripIds] canonical append:`, loopErr?.message || loopErr);
+                    }
+                }
+                continue;
+            }
+
+            let writeOrgId: string | null = getOrgId(c);
+            const stampEntry = (trip: any, entry: any) => {
+                const oid =
+                    writeOrgId ||
+                    (typeof trip?.organizationId === "string" && trip.organizationId.trim() !== ""
+                        ? trip.organizationId.trim()
+                        : null);
+                return oid ? { ...entry, organizationId: oid } : entry;
+            };
 
             for (const trip of values) {
                 if (!trip?.id) continue;
@@ -8709,6 +8733,12 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
         // Match POST /trips: await trip KV write BEFORE ledger. Queueing trip mset in
         // Promise.all runs it concurrently with the ledger loop and can race / lose writes.
         await kv.mset(tripKeys, tripValues);
+
+        try {
+            await appendCanonicalTripFaresIfEligible(uniqueTrips as Record<string, unknown>[], c);
+        } catch (canonErr) {
+            console.error("[FleetSync] Canonical trip fare append failed:", canonErr);
+        }
 
         // ── Write-Time Ledger: Replace trip-sourced ledger rows (same as POST /trips) ──
         // This mirrors the POST /trips ledger generation to ensure fleet/sync

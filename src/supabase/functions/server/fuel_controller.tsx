@@ -1,4 +1,6 @@
 import { Hono } from "npm:hono";
+import type { Context } from "npm:hono";
+import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
@@ -1402,13 +1404,14 @@ app.get(`${BASE_PATH}/analytics/integrity-metrics`, async (c) => {
     }
 });
 
-app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
+app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
   try {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
 
     // Phase 5: Integrity Guardrail - Prevent modifications to signed records
     const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
+    const isNewFuelEntry = !existingEntry;
     if (existingEntry && existingEntry.signature && !entry.bypassSignatureCheck) {
         // If it's already signed, we only allow specific audit resolution metadata updates
         const coreFields = ['liters', 'amount', 'odometer', 'date', 'vehicleId', 'lat', 'lng'];
@@ -1964,6 +1967,13 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c) => {
     }
 
     await kv.set(`fuel_entry:${entry.id}`, entry);
+    if (isNewFuelEntry) {
+      try {
+        await appendCanonicalFuelExpenseIfEligible(entry as Record<string, unknown>, c);
+      } catch (fuelCanonErr) {
+        console.error("[FuelEntry] Canonical ledger append failed (non-fatal):", fuelCanonErr);
+      }
+    }
     return c.json({ success: true, data: entry });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

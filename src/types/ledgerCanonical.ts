@@ -15,6 +15,7 @@ export const CANONICAL_LEDGER_EVENT_TYPES = [
   'promotion',
   'refund_expense',
   'platform_fee',
+  'fuel_expense',
   'toll_charge',
   'adjustment',
   // Statement / payout SSOT (Phase 4+)
