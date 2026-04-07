@@ -32,9 +32,12 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "payout_bank",
   "toll_support_adjustment",
   "dispute_refund",
+  "wallet_credit",
+  "fuel_reimbursement",
+  "toll_reconciled",
 ]);
 
-const VALID_DIRECTIONS = new Set(["inflow", "outflow"]);
+const VALID_DIRECTIONS = new Set(["inflow", "outflow", "neutral"]);
 
 const VALID_SOURCE_TYPES = new Set(["trip", "statement", "import_batch", "transaction", "adjustment"]);
 

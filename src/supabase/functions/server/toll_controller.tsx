@@ -20,6 +20,7 @@ import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
+import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { getFleetTimezone, naiveToUtc, hasTzSuffix } from "./timezone_helper.tsx";
 import {
   parseISO,
@@ -2820,8 +2821,7 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
       }
 
       const tollLedgerUpdates: { id: string; updates: Partial<TollLedgerRecord>; trip: any }[] = [];
-      const ledgerKeys: string[] = [];
-      const ledgerValues: any[] = [];
+      const canonicalAuditEntries: TollReconcileAuditEntry[] = [];
 
       for (let j = 0; j < batch.length; j++) {
         const { transactionId, tripId } = batch[j];
@@ -2860,41 +2860,24 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
           trip,
         });
 
-        // Build ledger entry for audit trail
-        const ledgerId = crypto.randomUUID();
-        ledgerKeys.push(`ledger:${ledgerId}`);
-        ledgerValues.push({
-          id: ledgerId,
+        // Build canonical audit entry for toll reconciliation
+        const auditId = crypto.randomUUID();
+        canonicalAuditEntries.push({
+          id: auditId,
           date: tx.date?.split("T")[0] || new Date().toISOString().split("T")[0],
-          createdAt: new Date().toISOString(),
           driverId: trip.driverId || tx.driverId || "unknown",
-          driverName: trip.driverName || tx.driverName || "Unknown",
+          amount: Math.abs(Number(tx.amount) || 0),
           vehicleId: tx.vehicleId || trip.vehicleId,
-          eventType: "toll_reconciled",
-          category: "Toll Reconciliation",
           description: `Toll matched to trip (bulk): ${(trip.pickupLocation || "").substring(0, 25)} → ${(trip.dropoffLocation || "").substring(0, 25)}`,
-          grossAmount: Math.abs(Number(tx.amount) || 0),
-          netAmount: 0,
-          currency: "JMD",
-          direction: "neutral",
-          isReconciled: true,
-          sourceType: "reconciliation",
-          sourceId: transactionId,
-          metadata: {
-            tripId,
-            matchedAt: new Date().toISOString(),
-            matchedBy: "admin_bulk",
-            tollAmount: Math.abs(Number(tx.amount) || 0),
-            tripTollCharges: trip.tollCharges || 0,
-          },
+          tollLedgerId: transactionId,
         });
 
         results.matched++;
       }
 
-      // Batch write ledger entries (audit trail)
-      if (ledgerKeys.length > 0) {
-        await kv.mset(ledgerKeys, ledgerValues);
+      // Batch append canonical ledger entries (audit trail)
+      if (canonicalAuditEntries.length > 0) {
+        await appendCanonicalTollReconciledBatch(canonicalAuditEntries, c);
       }
 
       // Phase 6: Update toll_ledger entries (primary store)

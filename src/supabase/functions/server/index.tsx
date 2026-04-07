@@ -24,6 +24,9 @@ import {
   appendCanonicalTollIfEligible,
   appendCanonicalTripFaresIfEligible,
   buildCanonicalTripFareEventsFromTrip,
+  appendCanonicalWalletCreditIfEligible,
+  appendCanonicalFuelReimbursementIfEligible,
+  appendCanonicalTollReimbursementIfEligible,
 } from "./canonical_from_ops.ts";
 import {
   addDaysYmd,
@@ -327,10 +330,6 @@ async function buildUberFareEarningFallbackEntriesIfEligible(_trip: any): Promis
   return [];
 }
 
-// ─── Transaction → legacy `ledger:%` (retired) ─────────────────────────────
-async function generateTransactionLedgerEntry(_transaction: any): Promise<any | null> {
-  return null;
-}
 
 // Enable logger - DISABLED to prevent OOM on large payloads
 // app.use('*', logger(console.log));
@@ -2780,16 +2779,6 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             }
             
             await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
-            // ── Write-Time Ledger ──
-            try {
-                const ledgerEntry = await generateTransactionLedgerEntry(transaction);
-                if (ledgerEntry) {
-                    await kv.set(`ledger:${ledgerEntry.id}`, stampOrg(ledgerEntry, c));
-                    console.log(`[Ledger] Created ledger entry ${ledgerEntry.id} for transaction ${transaction.id} (${ledgerEntry.eventType})`);
-                }
-            } catch (ledgerErr) {
-                console.error('[Ledger] Failed to create ledger entry for transaction:', ledgerErr);
-            }
             return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
         }
 
@@ -2824,16 +2813,6 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             }
             
             await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
-            // ── Write-Time Ledger ──
-            try {
-                const ledgerEntry = await generateTransactionLedgerEntry(transaction);
-                if (ledgerEntry) {
-                    await kv.set(`ledger:${ledgerEntry.id}`, stampOrg(ledgerEntry, c));
-                    console.log(`[Ledger] Created ledger entry ${ledgerEntry.id} for transaction ${transaction.id} (${ledgerEntry.eventType})`);
-                }
-            } catch (ledgerErr) {
-                console.error('[Ledger] Failed to create ledger entry for transaction:', ledgerErr);
-            }
             return c.json({ success: true, data: transaction });
         }
 
@@ -2926,16 +2905,12 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
     }
     
     await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
-    // ── Write-Time Ledger ──
-    try {
-        const ledgerEntry = await generateTransactionLedgerEntry(transaction);
-        if (ledgerEntry) {
-            await kv.set(`ledger:${ledgerEntry.id}`, stampOrg(ledgerEntry, c));
-            console.log(`[Ledger] Created ledger entry ${ledgerEntry.id} for transaction ${transaction.id} (${ledgerEntry.eventType})`);
-        }
-    } catch (ledgerErr) {
-        console.error('[Ledger] Failed to create ledger entry for transaction:', ledgerErr);
+
+    // ── Canonical ledger for InDrive Wallet Credit ──
+    if (transaction.category === "InDrive Wallet Credit") {
+        await appendCanonicalWalletCreditIfEligible(transaction, c);
     }
+
     return c.json({ success: true, data: transaction });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -6158,6 +6133,7 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
                 };
 
                 await kv.set(`transaction:${creditId}`, stampOrg(walletCredit, c));
+                await appendCanonicalFuelReimbursementIfEligible(walletCredit, c);
                 console.log(`[FuelCredit] Created wallet credit ${creditId} for driver ${tx.driverId}, amount: ${walletCredit.amount}`);
             } else {
                 console.log(`[FuelCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);
@@ -6203,6 +6179,7 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
                 };
 
                 await kv.set(`transaction:${tollCreditId}`, stampOrg(tollWalletCredit, c));
+                await appendCanonicalTollReimbursementIfEligible(tollWalletCredit, c);
                 console.log(`[TollCredit] Created wallet credit ${tollCreditId} for driver ${tx.driverId}, amount: ${tollWalletCredit.amount}`);
             } else {
                 console.log(`[TollCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);

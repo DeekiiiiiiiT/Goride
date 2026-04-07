@@ -218,3 +218,228 @@ export async function appendCanonicalTripFaresIfEligible(
     }
   }
 }
+
+// ─── InDrive Wallet Credit ──────────────────────────────────────────────────
+
+export function buildCanonicalWalletCreditEvent(
+  transaction: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const id = String(transaction.id ?? "").trim();
+  const driverId = String(transaction.driverId ?? "").trim();
+  if (!id || !driverId) return null;
+
+  const rawDate =
+    typeof transaction.date === "string"
+      ? transaction.date.trim()
+      : typeof transaction.createdAt === "string"
+      ? transaction.createdAt.trim()
+      : "";
+  const date = rawDate.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const amt = Math.abs(coerceAmount(transaction.amount));
+  if (amt <= 1e-9) return null;
+
+  return {
+    idempotencyKey: `transaction:${id}|wallet_credit`,
+    date,
+    driverId,
+    eventType: "wallet_credit",
+    direction: "inflow",
+    netAmount: amt,
+    grossAmount: amt,
+    currency: "JMD",
+    sourceType: "transaction",
+    sourceId: id,
+    platform: "InDrive",
+    description:
+      typeof transaction.description === "string" && transaction.description.trim()
+        ? transaction.description.trim()
+        : "InDrive Wallet Credit",
+    metadata: { transactionId: id },
+  };
+}
+
+export async function appendCanonicalWalletCreditIfEligible(
+  transaction: Record<string, unknown>,
+  c: Context,
+): Promise<void> {
+  const ev = buildCanonicalWalletCreditEvent(transaction);
+  if (!ev) return;
+  try {
+    await appendCanonicalLedgerEvents([ev], c);
+  } catch (e) {
+    console.error("[CanonicalOps] wallet_credit append failed:", e);
+  }
+}
+
+// ─── Fuel Reimbursement Credit ──────────────────────────────────────────────
+
+export function buildCanonicalFuelReimbursementEvent(
+  walletCredit: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const id = String(walletCredit.id ?? "").trim();
+  const driverId = String(walletCredit.driverId ?? "").trim();
+  if (!id || !driverId) return null;
+
+  const rawDate =
+    typeof walletCredit.date === "string"
+      ? walletCredit.date.trim()
+      : typeof walletCredit.createdAt === "string"
+      ? walletCredit.createdAt.trim()
+      : "";
+  const date = rawDate.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const amt = Math.abs(coerceAmount(walletCredit.amount));
+  if (amt <= 1e-9) return null;
+
+  return {
+    idempotencyKey: `transaction:${id}|fuel_reimbursement`,
+    date,
+    driverId,
+    eventType: "fuel_reimbursement",
+    direction: "inflow",
+    netAmount: amt,
+    grossAmount: amt,
+    currency: "JMD",
+    sourceType: "transaction",
+    sourceId: id,
+    platform: "Roam",
+    description:
+      typeof walletCredit.description === "string" && walletCredit.description.trim()
+        ? walletCredit.description.trim()
+        : "Fuel Reimbursement",
+    metadata: { transactionId: id },
+  };
+}
+
+export async function appendCanonicalFuelReimbursementIfEligible(
+  walletCredit: Record<string, unknown>,
+  c: Context,
+): Promise<void> {
+  const ev = buildCanonicalFuelReimbursementEvent(walletCredit);
+  if (!ev) return;
+  try {
+    await appendCanonicalLedgerEvents([ev], c);
+  } catch (e) {
+    console.error("[CanonicalOps] fuel_reimbursement append failed:", e);
+  }
+}
+
+// ─── Toll Reimbursement Credit ──────────────────────────────────────────────
+
+export function buildCanonicalTollReimbursementEvent(
+  walletCredit: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const id = String(walletCredit.id ?? "").trim();
+  const driverId = String(walletCredit.driverId ?? "").trim();
+  if (!id || !driverId) return null;
+
+  const rawDate =
+    typeof walletCredit.date === "string"
+      ? walletCredit.date.trim()
+      : typeof walletCredit.createdAt === "string"
+      ? walletCredit.createdAt.trim()
+      : "";
+  const date = rawDate.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const amt = Math.abs(coerceAmount(walletCredit.amount));
+  if (amt <= 1e-9) return null;
+
+  return {
+    idempotencyKey: `transaction:${id}|toll_reimbursement`,
+    date,
+    driverId,
+    eventType: "adjustment",
+    direction: "inflow",
+    netAmount: amt,
+    grossAmount: amt,
+    currency: "JMD",
+    sourceType: "adjustment",
+    sourceId: id,
+    platform: "Roam",
+    description:
+      typeof walletCredit.description === "string" && walletCredit.description.trim()
+        ? walletCredit.description.trim()
+        : "Toll Reimbursement",
+    metadata: { transactionId: id, adjustmentType: "toll_reimbursement" },
+  };
+}
+
+export async function appendCanonicalTollReimbursementIfEligible(
+  walletCredit: Record<string, unknown>,
+  c: Context,
+): Promise<void> {
+  const ev = buildCanonicalTollReimbursementEvent(walletCredit);
+  if (!ev) return;
+  try {
+    await appendCanonicalLedgerEvents([ev], c);
+  } catch (e) {
+    console.error("[CanonicalOps] toll_reimbursement append failed:", e);
+  }
+}
+
+// ─── Toll Reconciled (bulk-reconcile audit) ─────────────────────────────────
+
+export interface TollReconcileAuditEntry {
+  id: string;
+  date: string;
+  driverId: string;
+  amount: number;
+  description?: string;
+  vehicleId?: string;
+  tollLedgerId?: string;
+}
+
+export function buildCanonicalTollReconciledEvent(
+  entry: TollReconcileAuditEntry,
+): Record<string, unknown> | null {
+  const id = String(entry.id ?? "").trim();
+  const driverId = String(entry.driverId ?? "").trim();
+  if (!id || !driverId) return null;
+
+  const date = String(entry.date ?? "").trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const amt = Math.abs(Number(entry.amount) || 0);
+
+  return {
+    idempotencyKey: `toll_reconcile:${id}|toll_reconciled`,
+    date,
+    driverId,
+    eventType: "toll_reconciled",
+    direction: "neutral",
+    netAmount: amt,
+    grossAmount: amt,
+    currency: "JMD",
+    sourceType: "adjustment",
+    sourceId: id,
+    vehicleId: entry.vehicleId || undefined,
+    platform: "Roam",
+    description: entry.description?.trim() || "Toll reconciled",
+    metadata: { tollReconcileId: id, tollLedgerId: entry.tollLedgerId },
+  };
+}
+
+export async function appendCanonicalTollReconciledBatch(
+  entries: TollReconcileAuditEntry[],
+  c: Context,
+): Promise<void> {
+  const batch: Record<string, unknown>[] = [];
+  for (const entry of entries) {
+    const ev = buildCanonicalTollReconciledEvent(entry);
+    if (ev) batch.push(ev);
+  }
+  if (batch.length === 0) return;
+  const CHUNK = 200;
+  for (let i = 0; i < batch.length; i += CHUNK) {
+    const chunk = batch.slice(i, i + CHUNK);
+    try {
+      await appendCanonicalLedgerEvents(chunk, c);
+    } catch (e) {
+      console.error("[CanonicalOps] toll_reconciled batch append failed:", e);
+    }
+  }
+}
