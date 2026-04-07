@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { ArrowDownLeft, ArrowUpRight, Loader2, Trash2, Wallet } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Filter, Loader2, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import type { IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
@@ -93,6 +93,8 @@ export interface DriverIndriveWalletTabProps {
 }
 
 type RowKind = 'top_up' | 'service_fee';
+
+type ActivityKindFilter = 'all' | RowKind;
 
 interface ActivityRow {
   id: string;
@@ -212,6 +214,7 @@ export function DriverIndriveWalletTab({
   const [topUpDeleteOpen, setTopUpDeleteOpen] = useState(false);
   const [topUpPending, setTopUpPending] = useState<{ transactionId: string; amountLabel: string } | null>(null);
   const [topUpDeleting, setTopUpDeleting] = useState(false);
+  const [activityFilter, setActivityFilter] = useState<ActivityKindFilter>('all');
 
   const loadLedger = useCallback(async () => {
     if (!driverId || !range?.startDate || !range?.endDate) {
@@ -241,7 +244,22 @@ export function DriverIndriveWalletTab({
     void refetchWalletSummary();
   }, [canView, rangeReady, loadLedger, refetchWalletSummary, ledgerRefreshKey]);
 
-  const groupedDays = useMemo(() => {
+  useEffect(() => {
+    setActivityFilter('all');
+  }, [driverId, range?.startDate, range?.endDate]);
+
+  const activityCounts = useMemo(() => {
+    const rows = buildActivityRows(ledgerEntries);
+    let top_up = 0;
+    let service_fee = 0;
+    for (const r of rows) {
+      if (r.kind === 'top_up') top_up++;
+      else service_fee++;
+    }
+    return { top_up, service_fee, total: rows.length };
+  }, [ledgerEntries]);
+
+  const groupedDaysAll = useMemo(() => {
     const activityRows = buildActivityRows(ledgerEntries);
     const byDate = new Map<string, ActivityRow[]>();
     for (const r of activityRows) {
@@ -258,6 +276,16 @@ export function DriverIndriveWalletTab({
       return { day, label: format(parseISO(`${day}T12:00:00`), 'EEE, d MMM yyyy'), rows: list };
     });
   }, [ledgerEntries]);
+
+  const filteredGroupedDays = useMemo(() => {
+    if (activityFilter === 'all') return groupedDaysAll;
+    return groupedDaysAll
+      .map((section) => ({
+        ...section,
+        rows: section.rows.filter((r) => r.kind === activityFilter),
+      }))
+      .filter((section) => section.rows.length > 0);
+  }, [groupedDaysAll, activityFilter]);
 
   const confirmDeleteTopUp = useCallback(async () => {
     if (!topUpPending?.transactionId) return;
@@ -339,7 +367,8 @@ export function DriverIndriveWalletTab({
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
           Activity for the same date range as the driver header — fleet top-ups, InDrive service fees, and (when
           needed) fees implied from fare vs net on trip lines. Saving a trip refresh its ledger rows so edits apply
-          here. Est. balance matches the overview card.
+          here. Est. balance matches the overview card. Summary always reflects the full range; filters apply to the
+          activity list only.
         </p>
       </div>
 
@@ -389,13 +418,50 @@ export function DriverIndriveWalletTab({
       </Card>
 
       <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
-        <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
-          <CardTitle className="text-base font-semibold">Activity</CardTitle>
-          <CardDescription>
-            Grouped by day. Top ups are fleet-reported wallet credits. Service fees are{' '}
-            <code className="text-xs">platform_fee</code> lines, or the fare gap on{' '}
-            <code className="text-xs">fare_earning</code> when no separate fee line exists for that trip.
-          </CardDescription>
+        <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4 space-y-4">
+          <div>
+            <CardTitle className="text-base font-semibold">Activity</CardTitle>
+            <CardDescription>
+              Grouped by day. Top ups are fleet-reported wallet credits. Service fees are{' '}
+              <code className="text-xs">platform_fee</code> lines, or the fare gap on{' '}
+              <code className="text-xs">fare_earning</code> when no separate fee line exists for that trip.
+            </CardDescription>
+          </div>
+          {rangeReady && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                <Filter className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span>Show</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { id: 'all' as const, label: 'All', count: activityCounts.total },
+                    { id: 'top_up' as const, label: 'Top ups', count: activityCounts.top_up },
+                    { id: 'service_fee' as const, label: 'Service fees', count: activityCounts.service_fee },
+                  ] as const
+                ).map(({ id, label, count }) => (
+                  <Button
+                    key={id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      'h-8 rounded-full text-xs font-medium',
+                      activityFilter === id
+                        ? 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-100'
+                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                    )}
+                    onClick={() => setActivityFilter(id)}
+                    aria-pressed={activityFilter === id}
+                  >
+                    {label}
+                    <span className="ml-1.5 tabular-nums opacity-70">({count})</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           {!rangeReady ? (
@@ -405,11 +471,13 @@ export function DriverIndriveWalletTab({
               <Loader2 className="h-5 w-5 animate-spin" />
               Loading activity…
             </div>
-          ) : groupedDays.length === 0 ? (
+          ) : groupedDaysAll.length === 0 ? (
             <p className="text-sm text-slate-500 p-6">No InDrive wallet credits or service fees in this period.</p>
+          ) : filteredGroupedDays.length === 0 ? (
+            <p className="text-sm text-slate-500 p-6">Nothing matches this filter for the selected range.</p>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {groupedDays.map(({ day, label, rows }) => (
+              {filteredGroupedDays.map(({ day, label, rows }) => (
                 <section key={day} className="bg-white dark:bg-slate-950">
                   <div className="sticky top-0 z-[1] bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm px-4 py-2 border-b border-slate-100 dark:border-slate-800">
                     <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 tracking-wide">{label}</p>
