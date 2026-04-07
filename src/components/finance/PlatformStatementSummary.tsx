@@ -7,13 +7,14 @@ import {
   RefreshCw,
   Car,
   FileText,
-  ChevronDown
 } from 'lucide-react';
-import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths, subWeeks } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from 'date-fns';
 import { api } from '../../services/api';
 import { StatementSummaryCard } from './StatementSummaryCard';
 import { StatementSummary, StatementPlatform } from '../../types/statementSummary';
 import { cn } from '../ui/utils';
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
+import { generatePeriodWeekOptions, type PeriodWeekOption } from '../../utils/periodWeekOptions';
 
 type DatePreset = 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'last30Days' | 'custom';
 
@@ -25,33 +26,6 @@ const DATE_PRESETS: { id: DatePreset; label: string }[] = [
   { id: 'last30Days', label: 'Last 30 Days' },
   { id: 'custom', label: 'Custom' },
 ];
-
-interface PeriodOption {
-  id: string;
-  label: string;
-  startDate: string;
-  endDate: string;
-}
-
-function generatePeriodOptions(): PeriodOption[] {
-  const today = new Date();
-  const periods: PeriodOption[] = [];
-  
-  // Generate weekly periods for the past 12 weeks
-  for (let i = 0; i < 12; i++) {
-    const weekStart = startOfWeek(subWeeks(today, i), { weekStartsOn: 1 });
-    const weekEnd = endOfWeek(subWeeks(today, i), { weekStartsOn: 1 });
-    
-    periods.push({
-      id: `week-${i}`,
-      label: `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`,
-      startDate: format(weekStart, 'yyyy-MM-dd'),
-      endDate: format(weekEnd, 'yyyy-MM-dd'),
-    });
-  }
-  
-  return periods;
-}
 
 function getDateRange(preset: DatePreset, customStart?: string, customEnd?: string): { startDate: string; endDate: string } {
   const today = new Date();
@@ -112,25 +86,18 @@ export function PlatformStatementSummary() {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
-  const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
-
-  const periodOptions = useMemo(() => generatePeriodOptions(), []);
+  const weekPeriodOptions = useMemo(() => generatePeriodWeekOptions(12), []);
 
   const { startDate, endDate } = useMemo(() => {
-    // If a period is selected, use it
     if (selectedPeriodId) {
-      const period = periodOptions.find(p => p.id === selectedPeriodId);
-      if (period) {
-        return { startDate: period.startDate, endDate: period.endDate };
-      }
+      const period = weekPeriodOptions.find((p) => p.id === selectedPeriodId);
+      if (period) return { startDate: period.startDate, endDate: period.endDate };
     }
-    // Otherwise use the date preset
     return getDateRange(datePreset, customStartDate, customEndDate);
-  }, [datePreset, customStartDate, customEndDate, selectedPeriodId, periodOptions]);
+  }, [datePreset, customStartDate, customEndDate, selectedPeriodId, weekPeriodOptions]);
 
-  const handlePeriodSelect = (period: PeriodOption) => {
+  const handlePeriodSelect = (period: PeriodWeekOption) => {
     setSelectedPeriodId(period.id);
-    setShowPeriodDropdown(false);
   };
 
   const handlePresetClick = (presetId: DatePreset) => {
@@ -236,66 +203,15 @@ export function PlatformStatementSummary() {
         </div>
       )}
 
-      {/* Period Selector Dropdown */}
-      <div className="relative">
-        <button
-          onClick={() => setShowPeriodDropdown(!showPeriodDropdown)}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors w-full sm:w-auto justify-between',
-            selectedPeriodId
-              ? 'border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
-              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span className="text-sm font-medium">
-              {format(new Date(startDate), 'MMM d, yyyy')} — {format(new Date(endDate), 'MMM d, yyyy')}
-            </span>
-          </div>
-          <ChevronDown className={cn('h-4 w-4 transition-transform', showPeriodDropdown && 'rotate-180')} />
-        </button>
-
-        {/* Period Dropdown */}
-        {showPeriodDropdown && (
-          <>
-            {/* Backdrop */}
-            <div 
-              className="fixed inset-0 z-10" 
-              onClick={() => setShowPeriodDropdown(false)} 
-            />
-            
-            {/* Dropdown Menu */}
-            <div className="absolute left-0 top-full mt-1 z-20 w-72 max-h-80 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
-              <div className="p-2 border-b border-slate-100 dark:border-slate-700">
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-2">
-                  Select Period
-                </p>
-              </div>
-              <div className="py-1">
-                {periodOptions.map((period, index) => (
-                  <button
-                    key={period.id}
-                    onClick={() => handlePeriodSelect(period)}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors',
-                      selectedPeriodId === period.id
-                        ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                    )}
-                  >
-                    <span className={cn(
-                      'w-2 h-2 rounded-full',
-                      index === 0 ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                    )} />
-                    <span className="font-medium">{period.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+      {/* Week period picker (matches Trip Analytics / Driver detail) */}
+      <PeriodWeekDropdown
+        selectedStart={startDate}
+        selectedEnd={endDate}
+        onSelect={handlePeriodSelect}
+        placeholder="Select week period"
+        className="w-full sm:w-auto"
+        buttonClassName="w-full sm:w-auto min-h-[40px] px-4 py-2 text-sm justify-between"
+      />
 
       {/* Platform Tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">

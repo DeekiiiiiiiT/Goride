@@ -135,6 +135,9 @@ export function TripLogsPage() {
     } else if (filters.dateRange === 'custom' && filters.dateStart && filters.dateEnd) {
         start = startOfDay(parseLocalDate(filters.dateStart));
         end = endOfDay(parseLocalDate(filters.dateEnd));
+    } else if (filters.dateRange === 'period' && filters.dateStart && filters.dateEnd) {
+        start = startOfDay(parseLocalDate(filters.dateStart));
+        end = endOfDay(parseLocalDate(filters.dateEnd));
     }
 
     if (start && end) {

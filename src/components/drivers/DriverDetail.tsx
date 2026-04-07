@@ -80,6 +80,8 @@ import {
   Stethoscope
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
+import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
 import { Input } from "../ui/input";
 import { 
   Table, 
@@ -2512,6 +2514,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     }
   };
 
+  const handlePeriodWeekSelect = (p: PeriodWeekOption) => {
+    const [y1, m1, d1] = p.startDate.split('-').map(Number);
+    const [y2, m2, d2] = p.endDate.split('-').map(Number);
+    setDateRange({
+      from: new Date(y1, m1 - 1, d1, 12, 0, 0, 0),
+      to: new Date(y2, m2 - 1, d2, 12, 0, 0, 0),
+    });
+  };
+
   // Phase 6.4: Repair handler — regenerates missing ledger entries for this driver
   const handleRepairLedger = async () => {
     setRepairInProgress(true);
@@ -2687,7 +2698,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
            </DropdownMenu>
 
            <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} inactive={activeTab !== 'overview' && activeTab !== 'trips'} />{/* Date Picker */}
-           <div className="flex items-center gap-1">
+           <div className="flex flex-wrap items-center gap-2">
+            {dateRange?.from && (
+              <PeriodWeekDropdown
+                selectedStart={format(dateRange.from, 'yyyy-MM-dd')}
+                selectedEnd={format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}
+                onSelect={handlePeriodWeekSelect}
+                placeholder="Select week period"
+                buttonClassName="h-9"
+              />
+            )}
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -2737,7 +2757,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             >
               {tripGapDiagLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stethoscope className="h-4 w-4" />}
             </Button>
-          </div>
+           </div>
 
            <Button variant="outline" size="sm">
              <Download className="h-4 w-4 mr-2" />

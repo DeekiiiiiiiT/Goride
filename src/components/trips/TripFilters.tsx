@@ -14,6 +14,7 @@ import {
 } from "../ui/sheet";
 import { Filter, X, ChevronDown } from 'lucide-react';
 import { Separator } from "../ui/separator";
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 
 export interface TripFilterState {
   status: string;
@@ -192,6 +193,25 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
                 />
              </div>
           )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 hidden sm:inline">
+              Week
+            </span>
+            <PeriodWeekDropdown
+              selectedStart={filters.dateRange === 'period' ? filters.dateStart : undefined}
+              selectedEnd={filters.dateRange === 'period' ? filters.dateEnd : undefined}
+              placeholder="Select week period"
+              onSelect={(p) =>
+                onFilterChange({
+                  ...filters,
+                  dateRange: 'period',
+                  dateStart: p.startDate,
+                  dateEnd: p.endDate,
+                })
+              }
+            />
+          </div>
 
           <Separator orientation="vertical" className="h-8 hidden lg:block" />
 
