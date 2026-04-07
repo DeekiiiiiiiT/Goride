@@ -1397,7 +1397,7 @@ export function LedgerBackfillPanel() {
 // REBUILD TRIP FARE LEDGER — delete trip-sourced canonical rows + re-append from trip:*
 // ═══════════════════════════════════════════════════════════════════════════
 
-type RebuildTripFareScope = 'indrive' | 'non_uber';
+type RebuildTripFareScope = 'indrive' | 'non_uber' | 'all' | 'uber';
 
 interface RebuildTripFareLedgerResult {
   success: boolean;
@@ -1461,11 +1461,11 @@ function RebuildTripFareLedgerSection() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Rebuild trip fare ledger</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Removes existing <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">fare_earning</code>{' '}
+            Removes existing <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">fare_earning</code>, <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">tip</code>, <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">promotion</code>{' '}
             canonical rows for selected trips and writes them again from <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">trip:*</code>.
-            Use this to refresh <span className="font-medium">InDrive wallet</span> fees (gross vs net) without editing each trip,
-            and to repost <span className="font-medium">cash / paymentMethod</span> on Roam &amp; InDrive fare lines for driver overview cash totals.
-            Choose <span className="font-medium">All non-Uber</span> after a deploy that changes fare ledger shape. Scoped to your organization when applicable.
+            Use this to refresh <span className="font-medium">InDrive wallet</span> fees (gross vs net), <span className="font-medium">Uber trip fares/tips/promos</span>,
+            and to repost <span className="font-medium">cash / paymentMethod</span> for driver overview cash totals.
+            Choose <span className="font-medium">All trips</span> after a deploy that changes fare ledger shape. Scoped to your organization when applicable.
           </p>
         </div>
       </div>
@@ -1486,11 +1486,31 @@ function RebuildTripFareLedgerSection() {
           <input
             type="radio"
             name="rebuild-trip-fare-scope"
+            checked={scope === 'uber'}
+            onChange={() => setScope('uber')}
+            className="h-4 w-4 text-sky-600"
+          />
+          Uber only
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+          <input
+            type="radio"
+            name="rebuild-trip-fare-scope"
             checked={scope === 'non_uber'}
             onChange={() => setScope('non_uber')}
             className="h-4 w-4 text-sky-600"
           />
-          All non-Uber trips (Roam, InDrive, etc.)
+          All non-Uber (Roam, InDrive, etc.)
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+          <input
+            type="radio"
+            name="rebuild-trip-fare-scope"
+            checked={scope === 'all'}
+            onChange={() => setScope('all')}
+            className="h-4 w-4 text-sky-600"
+          />
+          All trips (recommended)
         </label>
       </div>
 

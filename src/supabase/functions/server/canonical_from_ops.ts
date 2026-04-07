@@ -32,6 +32,9 @@ function detectTripFarePaymentMethod(trip: Record<string, unknown>): "Cash" | "C
   if (pmRaw === "card" || pmRaw.includes("digital") || pmRaw.includes("braintree")) return "Card";
 
   const platformLc = String(trip.platform ?? "").trim().toLowerCase();
+  // Uber trips: use explicit paymentMethod from CSV, don't default to cash
+  if (platformLc === "uber") return undefined;
+  
   const cashHeavy = ["roam", "goride", "indrive", "private", "cash"].includes(platformLc);
   const rawCash = Math.abs(coerceAmount(trip.cashCollected));
   if (rawCash > 0) return "Cash";
@@ -64,12 +67,13 @@ export function tripHasMoneyForLedgerProjection(trip: Record<string, unknown>): 
 }
 
 /**
- * Per-trip fare for non-Uber platforms (Roam, InDrive, etc.).
- * Uber money is expected from CSV canonical / statement lines — skip to avoid double-counting.
+ * Per-trip fare/tip/promotion events for ALL platforms including Uber.
+ * Creates fare_earning, tip (if tips > 0), and promotion (if promotions > 0) events.
+ * For Uber: uses uberFareComponents, uberTips, uberPromotionsAmount fields.
+ * For InDrive: handles indriveNetIncome/indriveServiceFee for net vs gross.
  */
 export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknown>): Record<string, unknown>[] {
   if (!tripHasMoneyForLedgerProjection(trip)) return [];
-  if (isUberPlatform(trip?.platform)) return [];
 
   const id = String(trip.id ?? "").trim();
   const driverId = String(trip.driverId ?? "").trim();
@@ -79,18 +83,39 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
   const date = rawDate.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
 
-  const fareGross = coerceAmount(trip.amount);
-  if (fareGross <= 0) return [];
-
   const platform = String(trip.platform || "Roam").trim();
   const platformLc = platform.toLowerCase();
+  const isUber = isUberPlatform(platform);
 
-  // Default: gross === net. InDrive with fee fields: gross = fare, net = driver profit so (gross − net) is the
-  // wallet service fee (see computeIndriveWalletFeesFromLedgerEntries + DriverIndriveWalletTab).
+  const events: Record<string, unknown>[] = [];
+
+  // Common event fields
+  const commonFields = {
+    driverId,
+    date,
+    currency: "JMD",
+    sourceType: "trip",
+    sourceId: id,
+    batchId: typeof trip.batchId === "string" && trip.batchId.trim() ? trip.batchId.trim() : undefined,
+    platform,
+    vehicleId: typeof trip.vehicleId === "string" && trip.vehicleId.trim() ? trip.vehicleId.trim() : undefined,
+  };
+
+  // ─── FARE EARNING ───────────────────────────────────────────────────────────
+  let fareGross = coerceAmount(trip.amount);
   let netAmount = fareGross;
   let grossAmount = fareGross;
 
-  if (platformLc === "indrive") {
+  if (isUber) {
+    // Uber: use uberFareComponents for fare (excludes tips/promos which are separate events)
+    const uberFare = coerceAmount(trip.uberFareComponents);
+    if (uberFare > 0) {
+      fareGross = uberFare;
+      netAmount = uberFare;
+      grossAmount = uberFare;
+    }
+  } else if (platformLc === "indrive") {
+    // InDrive: handle net income / service fee
     if (trip.indriveNetIncome != null) {
       const netIncome = coerceAmount(trip.indriveNetIncome);
       grossAmount = fareGross;
@@ -107,32 +132,62 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
     }
   }
 
-  const paymentMethod = detectTripFarePaymentMethod(trip);
-  const metadata: Record<string, unknown> = { tripId: id };
-  if (paymentMethod === "Cash") {
-    metadata.cashCollected = computeTripFareCashCollected(trip, fareGross, netAmount);
-  }
+  // Only create fare_earning if there's actual fare
+  if (fareGross > 0 || netAmount > 0) {
+    const paymentMethod = detectTripFarePaymentMethod(trip);
+    const metadata: Record<string, unknown> = { tripId: id };
+    if (paymentMethod === "Cash") {
+      metadata.cashCollected = computeTripFareCashCollected(trip, fareGross, netAmount);
+    }
 
-  return [
-    {
+    events.push({
+      ...commonFields,
       idempotencyKey: `trip:${id}|fare_earning`,
-      date,
-      driverId,
       eventType: "fare_earning",
       direction: "inflow",
       netAmount,
       grossAmount,
-      currency: "JMD",
-      sourceType: "trip",
-      sourceId: id,
-      batchId: typeof trip.batchId === "string" && trip.batchId.trim() ? trip.batchId.trim() : undefined,
-      platform,
-      vehicleId: typeof trip.vehicleId === "string" && trip.vehicleId.trim() ? trip.vehicleId.trim() : undefined,
       description: `Trip fare (${platform})`,
       ...(paymentMethod ? { paymentMethod } : {}),
       metadata,
-    },
-  ];
+    });
+  }
+
+  // ─── TIPS (separate event for Uber) ─────────────────────────────────────────
+  if (isUber) {
+    const tips = coerceAmount(trip.uberTips);
+    if (tips > 0) {
+      events.push({
+        ...commonFields,
+        idempotencyKey: `trip:${id}|tip`,
+        eventType: "tip",
+        direction: "inflow",
+        netAmount: tips,
+        grossAmount: tips,
+        description: `Trip tip (${platform})`,
+        metadata: { tripId: id },
+      });
+    }
+  }
+
+  // ─── PROMOTIONS (separate event for Uber) ───────────────────────────────────
+  if (isUber) {
+    const promos = coerceAmount(trip.uberPromotionsAmount);
+    if (promos > 0) {
+      events.push({
+        ...commonFields,
+        idempotencyKey: `trip:${id}|promotion`,
+        eventType: "promotion",
+        direction: "inflow",
+        netAmount: promos,
+        grossAmount: promos,
+        description: `Trip promotion (${platform})`,
+        metadata: { tripId: id },
+      });
+    }
+  }
+
+  return events;
 }
 
 /** Fuel entry KV shape — amount & driverId required */

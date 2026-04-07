@@ -3615,7 +3615,8 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
 });
 
 // ─── GET /ledger/statement-summary — Universal Statement Summary per platform ──
-// Returns statement summaries for Uber (from statement_line events) and Roam/InDrive (computed from fare_earning)
+// All platforms (Uber, Roam, InDrive) now use unified logic: fare_earning, tip, promotion, toll_charge events
+// Uber also uses payout_cash/payout_bank for actual cash/bank totals from org import
 app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (c) => {
   try {
     const platform = c.req.query("platform"); // Uber, Roam, InDrive, or 'all'
@@ -3635,170 +3636,116 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
     const summaries: any[] = [];
 
     for (const plat of platforms) {
-      let summary: any;
+      // Unified platform filter
+      const platformFilter = plat === 'Roam' 
+        ? 'value->>platform.eq.Roam,value->>platform.eq.GoRide'
+        : `value->>platform.eq.${plat}`;
 
-      if (plat === 'Uber') {
-        // Uber: Aggregate from statement_line, payout_cash, payout_bank events
-        let query = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", CANONICAL_LEDGER_KEY_LIKE)
-          .or('value->>eventType.eq.statement_line,value->>eventType.eq.payout_cash,value->>eventType.eq.payout_bank')
-          .eq("value->>platform", "Uber")
-          .gte("value->>date", startDate)
-          .lte("value->>date", endDate);
+      // Query fare_earning, tip, promotion, toll_charge, toll_refund for all platforms
+      // For Uber, also include payout_cash/payout_bank and statement_line (for REFUNDS_TOLL)
+      const eventTypes = plat === 'Uber'
+        ? 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.payout_cash,value->>eventType.eq.payout_bank,value->>eventType.eq.statement_line'
+        : 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund';
 
-        if (orgId) query = query.eq("value->>organizationId", orgId);
-        if (driverId) query = query.eq("value->>driverId", driverId);
+      let query = supabase
+        .from("kv_store_37f42386")
+        .select("value")
+        .like("key", CANONICAL_LEDGER_KEY_LIKE)
+        .or(eventTypes)
+        .or(platformFilter)
+        .gte("value->>date", startDate)
+        .lte("value->>date", endDate);
 
-        const { data, error } = await query.limit(5000);
-        if (error) throw error;
+      if (orgId) query = query.eq("value->>organizationId", orgId);
+      if (driverId) query = query.eq("value->>driverId", driverId);
 
-        const entries = filterByOrg((data || []).map((d: any) => d.value).filter(Boolean), c);
+      const { data, error } = await query.limit(10000);
+      if (error) throw error;
 
-        // Aggregate by lineCode
-        let netFare = 0, promotions = 0, tips = 0, totalEarnings = 0;
-        let tolls = 0, tollAdjustments = 0;
-        let periodAdjustments = 0;
-        let cashCollected = 0, bankTransfer = 0;
+      // Filter to only the requested platform
+      const entries = filterByOrg((data || []).map((d: any) => d.value).filter(Boolean), c)
+        .filter((e: any) => {
+          const ePlat = e.platform === 'GoRide' ? 'Roam' : e.platform;
+          return ePlat === plat;
+        });
 
-        for (const e of entries) {
-          const net = Number(e.netAmount) || 0;
-          const mag = Math.abs(net);
-          const outflow = e.direction === 'outflow';
+      let netFare = 0, promotions = 0, tips = 0;
+      let tolls = 0, tollAdjustments = 0;
+      let cashCollected = 0, bankTransfer = 0;
+      let tripCount = 0;
+      let hasPayoutEvents = false;
 
-          if (e.eventType === 'statement_line') {
-            const lineCode = e.metadata?.lineCode || '';
-            switch (lineCode) {
-              case 'TOTAL_EARNINGS':
-                totalEarnings += outflow ? -mag : mag;
-                break;
-              case 'NET_FARE':
-              case 'FARE_COMPONENTS':
-                netFare += outflow ? -mag : mag;
-                break;
-              case 'PROMOTIONS':
-                promotions += outflow ? -mag : mag;
-                break;
-              case 'TIPS':
-                tips += outflow ? -mag : mag;
-                break;
-              case 'REFUNDS_EXPENSES':
-                tolls += mag; // Always positive expense
-                break;
-              case 'REFUNDS_TOLL':
-                tollAdjustments += outflow ? -mag : mag;
-                break;
+      for (const e of entries) {
+        const net = Number(e.netAmount) || 0;
+        const mag = Math.abs(net);
+
+        switch (e.eventType) {
+          case 'fare_earning':
+            netFare += net;
+            tripCount++;
+            if (e.paymentMethod === 'Cash') {
+              const cashAmt = e.metadata?.cashCollected != null 
+                ? Number(e.metadata.cashCollected) 
+                : mag;
+              cashCollected += cashAmt;
             }
-          } else if (e.eventType === 'payout_cash') {
-            cashCollected += mag;
-          } else if (e.eventType === 'payout_bank') {
-            bankTransfer += mag;
-          }
-        }
-
-        summary = {
-          platform: 'Uber',
-          periodStart: startDate,
-          periodEnd: endDate,
-          sourceType: 'csv_import',
-          netFare: Number(netFare.toFixed(2)),
-          promotions: Number(promotions.toFixed(2)),
-          tips: Number(tips.toFixed(2)),
-          totalEarnings: Number((totalEarnings || (netFare + promotions + tips)).toFixed(2)),
-          tolls: Number(tolls.toFixed(2)),
-          tollAdjustments: Number(tollAdjustments.toFixed(2)),
-          totalRefundsExpenses: Number((tolls - tollAdjustments).toFixed(2)),
-          periodAdjustments: Number(periodAdjustments.toFixed(2)),
-          cashCollected: Number(cashCollected.toFixed(2)),
-          bankTransfer: Number(bankTransfer.toFixed(2)),
-          totalPayout: Number((cashCollected + bankTransfer).toFixed(2)),
-        };
-      } else {
-        // Roam/InDrive: Compute from fare_earning, tip, promotion, toll_charge events
-        const platformFilter = plat === 'Roam' 
-          ? 'value->>platform.eq.Roam,value->>platform.eq.GoRide'
-          : `value->>platform.eq.${plat}`;
-
-        let query = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", CANONICAL_LEDGER_KEY_LIKE)
-          .or('value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund')
-          .or(platformFilter)
-          .gte("value->>date", startDate)
-          .lte("value->>date", endDate);
-
-        if (orgId) query = query.eq("value->>organizationId", orgId);
-        if (driverId) query = query.eq("value->>driverId", driverId);
-
-        const { data, error } = await query.limit(10000);
-        if (error) throw error;
-
-        // Filter to only the requested platform
-        const entries = filterByOrg((data || []).map((d: any) => d.value).filter(Boolean), c)
-          .filter((e: any) => {
-            const ePlat = e.platform === 'GoRide' ? 'Roam' : e.platform;
-            return ePlat === plat;
-          });
-
-        let netFare = 0, promotions = 0, tips = 0;
-        let tolls = 0, tollAdjustments = 0;
-        let cashCollected = 0;
-        let tripCount = 0;
-
-        for (const e of entries) {
-          const net = Number(e.netAmount) || 0;
-          const mag = Math.abs(net);
-
-          switch (e.eventType) {
-            case 'fare_earning':
-              netFare += net;
-              tripCount++;
-              if (e.paymentMethod === 'Cash') {
-                const cashAmt = e.metadata?.cashCollected != null 
-                  ? Number(e.metadata.cashCollected) 
-                  : mag;
-                cashCollected += cashAmt;
-              }
-              break;
-            case 'tip':
-              tips += net;
-              break;
-            case 'promotion':
-              promotions += net;
-              break;
-            case 'toll_charge':
-              tolls += mag;
-              break;
-            case 'toll_refund':
+            break;
+          case 'tip':
+            tips += net;
+            break;
+          case 'promotion':
+            promotions += net;
+            break;
+          case 'toll_charge':
+            tolls += mag;
+            break;
+          case 'toll_refund':
+            tollAdjustments += mag;
+            break;
+          case 'payout_cash':
+            // Uber: use actual payout_cash for cash collected
+            cashCollected = mag;
+            hasPayoutEvents = true;
+            break;
+          case 'payout_bank':
+            // Uber: use actual payout_bank for bank transfer
+            bankTransfer = mag;
+            hasPayoutEvents = true;
+            break;
+          case 'statement_line':
+            // Only handle REFUNDS_TOLL from statement_line (toll adjustments from org)
+            if (e.metadata?.lineCode === 'REFUNDS_TOLL') {
               tollAdjustments += mag;
-              break;
-          }
+            }
+            break;
         }
-
-        const totalEarnings = netFare + promotions + tips;
-        const bankTransfer = Math.max(0, totalEarnings - tolls - cashCollected);
-
-        summary = {
-          platform: plat,
-          periodStart: startDate,
-          periodEnd: endDate,
-          sourceType: 'computed',
-          netFare: Number(netFare.toFixed(2)),
-          promotions: Number(promotions.toFixed(2)),
-          tips: Number(tips.toFixed(2)),
-          totalEarnings: Number(totalEarnings.toFixed(2)),
-          tolls: Number(tolls.toFixed(2)),
-          tollAdjustments: Number(tollAdjustments.toFixed(2)),
-          totalRefundsExpenses: Number((tolls - tollAdjustments).toFixed(2)),
-          periodAdjustments: 0,
-          cashCollected: Number(cashCollected.toFixed(2)),
-          bankTransfer: Number(bankTransfer.toFixed(2)),
-          totalPayout: Number((cashCollected + bankTransfer).toFixed(2)),
-          tripCount,
-        };
       }
+
+      const totalEarnings = netFare + promotions + tips;
+      
+      // For platforms without payout events, compute bank transfer
+      if (!hasPayoutEvents) {
+        bankTransfer = Math.max(0, totalEarnings - tolls - cashCollected);
+      }
+
+      const summary = {
+        platform: plat,
+        periodStart: startDate,
+        periodEnd: endDate,
+        sourceType: 'computed',
+        netFare: Number(netFare.toFixed(2)),
+        promotions: Number(promotions.toFixed(2)),
+        tips: Number(tips.toFixed(2)),
+        totalEarnings: Number(totalEarnings.toFixed(2)),
+        tolls: Number(tolls.toFixed(2)),
+        tollAdjustments: Number(tollAdjustments.toFixed(2)),
+        totalRefundsExpenses: Number((tolls - tollAdjustments).toFixed(2)),
+        periodAdjustments: 0,
+        cashCollected: Number(cashCollected.toFixed(2)),
+        bankTransfer: Number(bankTransfer.toFixed(2)),
+        totalPayout: Number((cashCollected + bankTransfer).toFixed(2)),
+        tripCount,
+      };
 
       summaries.push(summary);
     }
@@ -6404,8 +6351,9 @@ app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requi
   }
 });
 
-// ─── POST /ledger/rebuild-trip-fare-ledger — Remove + rewrite trip fare_earning (InDrive gross/net, etc.) ──
+// ─── POST /ledger/rebuild-trip-fare-ledger — Remove + rewrite trip fare_earning/tip/promotion ──
 // Scoped by org when the user has organizationId. dryRun previews eligible count only.
+// Scopes: 'indrive', 'uber', 'non_uber', 'all'
 app.post(
   "/make-server-37f42386/ledger/rebuild-trip-fare-ledger",
   requireAuth(),
@@ -6416,16 +6364,25 @@ app.post(
       const body = await c.req.json().catch(() => ({}));
       const dryRun = body?.dryRun === true;
       const scopeRaw = typeof body?.scope === "string" ? body.scope.trim().toLowerCase() : "indrive";
-      const scope = scopeRaw === "non_uber" || scopeRaw === "nonuber" ? "non_uber" : "indrive";
+      
+      // Normalize scope
+      let scope: 'indrive' | 'uber' | 'non_uber' | 'all';
+      if (scopeRaw === 'all') scope = 'all';
+      else if (scopeRaw === 'uber') scope = 'uber';
+      else if (scopeRaw === 'non_uber' || scopeRaw === 'nonuber') scope = 'non_uber';
+      else scope = 'indrive';
 
       const allTrips = ((await kv.getByPrefix("trip:")) as any[]).filter((t) => t?.id);
       const scoped = filterByOrg(allTrips, c);
 
       const passesScope = (trip: any) => {
-        if (scope === "indrive") {
-          return String(trip?.platform ?? "").trim().toLowerCase() === "indrive";
-        }
-        return !isUberPlatform(trip?.platform);
+        const platformLc = String(trip?.platform ?? "").trim().toLowerCase();
+        const isUber = isUberPlatform(trip?.platform);
+        
+        if (scope === "indrive") return platformLc === "indrive";
+        if (scope === "uber") return isUber;
+        if (scope === "non_uber") return !isUber;
+        return true; // 'all'
       };
 
       const eligible: any[] = [];
