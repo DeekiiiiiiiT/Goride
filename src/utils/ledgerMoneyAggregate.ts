@@ -469,6 +469,13 @@ export function canonicalEventInSelectedWindow(
   const et = typeof v.eventType === 'string' ? v.eventType : '';
   const isStatementish =
     et === 'statement_line' || et === 'payout_cash' || et === 'payout_bank';
+
+  // Statement rows with only periodStart (no periodEnd): include if periodStart overlaps range
+  if (isStatementish && ps && !pe) {
+    if (ps >= startDate && ps <= endDate) return true;
+  }
+
+  // Widen band for statement rows whose `date` may be import/posting date rather than period date
   if (isStatementish && d) {
     const bandLo = addDaysYmd(startDate, -14);
     const bandHi = addDaysYmd(endDate, 21);

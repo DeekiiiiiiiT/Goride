@@ -3631,9 +3631,16 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       } catch (lookupErr) {
         console.warn(`[Ledger DriverOverview:canonical] driver lookup ${driverId}:`, lookupErr);
       }
-      const driverIdOrFilterCanon = allDriverIdsCanon.length === 1
+      // Import lowercases Uber UUIDs; include both original and lowercase for matching
+      const allDriverIdsCanonExpanded: string[] = [];
+      for (const id of allDriverIdsCanon) {
+        allDriverIdsCanonExpanded.push(id);
+        const lc = id.toLowerCase();
+        if (lc !== id) allDriverIdsCanonExpanded.push(lc);
+      }
+      const driverIdOrFilterCanon = allDriverIdsCanonExpanded.length === 1
         ? null
-        : allDriverIdsCanon.map((id) => `value->>driverId.eq.${id}`).join(",");
+        : allDriverIdsCanonExpanded.map((id) => `value->>driverId.eq.${id}`).join(",");
 
       const PAGE_CANON = 1000;
       const MAX_ROWS_CANON = 50000;
@@ -3656,8 +3663,17 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
           .from("kv_store_37f42386")
           .select("value")
           .like("key", "ledger_event:%");
-        if (driverIdOrFilterCanon) q = q.or(driverIdOrFilterCanon);
-        else q = q.eq("value->>driverId", driverId);
+        if (driverIdOrFilterCanon) {
+          q = q.or(driverIdOrFilterCanon);
+        } else {
+          // Match both original case and lowercase (import lowercases UUIDs)
+          const lc = driverId.toLowerCase();
+          if (lc !== driverId) {
+            q = q.or(`value->>driverId.eq.${driverId},value->>driverId.eq.${lc}`);
+          } else {
+            q = q.eq("value->>driverId", driverId);
+          }
+        }
         return q;
       };
 
