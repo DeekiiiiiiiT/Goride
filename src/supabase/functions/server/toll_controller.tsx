@@ -2377,8 +2377,8 @@ app.get(`${BASE}/toll-ledger/backfill/status`, async (c) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Create a toll-related ledger entry.
- * Mirrors the shape used by generateTransactionLedgerEntry() in index.tsx.
+ * Create a toll-related audit ledger entry (now writes to canonical ledger_event:*).
+ * Used for reconciliation audit trail entries.
  */
 async function writeTollLedgerEntry(params: {
   eventType: string;
@@ -2396,31 +2396,46 @@ async function writeTollLedgerEntry(params: {
   metadata?: Record<string, any>;
 }): Promise<string> {
   const id = crypto.randomUUID();
-  const entry = {
-    id,
-    date: params.date?.split("T")[0] || new Date().toISOString().split("T")[0],
-    createdAt: new Date().toISOString(),
+  const date = params.date?.split("T")[0] || new Date().toISOString().split("T")[0];
+  
+  // Write to canonical ledger_event:* instead of legacy ledger:%
+  const canonicalEvent = {
+    idempotencyKey: `toll_audit:${id}|${params.eventType}`,
+    date,
     driverId: params.driverId || "unknown",
-    driverName: params.driverName || "Unknown",
-    vehicleId: params.vehicleId || undefined,
-    platform: undefined,
     eventType: params.eventType,
-    category: params.category,
-    description: params.description,
-    grossAmount: params.grossAmount,
-    netAmount: params.netAmount,
-    currency: "JMD",
-    paymentMethod: undefined,
     direction: params.direction,
-    isReconciled: true,
+    netAmount: params.netAmount,
+    grossAmount: params.grossAmount,
+    currency: "JMD",
     sourceType: params.sourceType,
     sourceId: params.sourceId,
-    metadata: params.metadata || {},
+    vehicleId: params.vehicleId,
+    platform: "Roam",
+    description: params.description,
+    metadata: {
+      ...params.metadata,
+      category: params.category,
+      driverName: params.driverName,
+      auditEntryId: id,
+    },
   };
-  await kv.set(`ledger:${id}`, entry);
-  console.log(
-    `[TollLedger] Written ${params.eventType} ledger entry ${id} for tx ${params.sourceId}`,
-  );
+  
+  // Import appendCanonicalLedgerEvents dynamically to avoid circular deps
+  const { appendCanonicalLedgerEvents } = await import("./ledger_canonical.ts");
+  
+  // Create a minimal context-like object for the append (no org scoping for audit entries)
+  const mockContext = { get: () => undefined } as any;
+  
+  try {
+    await appendCanonicalLedgerEvents([canonicalEvent], mockContext);
+    console.log(
+      `[TollLedger] Written ${params.eventType} canonical event for tx ${params.sourceId}`,
+    );
+  } catch (err) {
+    console.error(`[TollLedger] Failed to write canonical event:`, err);
+  }
+  
   return id;
 }
 

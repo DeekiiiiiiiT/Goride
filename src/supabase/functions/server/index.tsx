@@ -322,21 +322,6 @@ function tripHasMoneyForLedgerProjection(trip: any): boolean {
   return hasTripAmount || uberGrossForLedger > 0;
 }
 
-/** Legacy `ledger:%` trip-sourced writes are retired — canonical `ledger_event:*` only. */
-function legacyLedgerWritesDisabled(): boolean {
-  return true;
-}
-
-// ─── Trip → Ledger (retired) — was `ledger:%` fare rows; returns nothing. ────────────────────────
-async function generateTripLedgerEntries(_trip: any): Promise<any[]> {
-  return [];
-}
-
-async function buildUberFareEarningFallbackEntriesIfEligible(_trip: any): Promise<any[]> {
-  return [];
-}
-
-
 // Enable logger - DISABLED to prevent OOM on large payloads
 // app.use('*', logger(console.log));
 
@@ -1948,62 +1933,6 @@ app.post("/make-server-37f42386/trips", async (c) => {
       await appendCanonicalTripFaresIfEligible(processedTrips as Record<string, unknown>[], c);
     } catch (canonErr) {
       console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
-    }
-    
-    // ── Write-Time Ledger (legacy `ledger:%` retired — generators return no rows) ──
-    try {
-        const allLedgerEntries: any[] = [];
-        for (const trip of processedTrips) {
-            let tripEntries: any[] = [];
-            try {
-                // We just attempted deletion above; avoid a stale-read dedup early-return.
-                (trip as any)._skipLedgerDedup = true;
-                tripEntries = await generateTripLedgerEntries(trip);
-            } catch (tripLedgerErr) {
-                console.error(
-                    `[Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`,
-                    tripLedgerErr
-                );
-                tripEntries = [];
-            }
-            if (tripEntries.length === 0) {
-                try {
-                    tripEntries = await buildUberFareEarningFallbackEntriesIfEligible(trip);
-                } catch (fbErr) {
-                    console.error(`[Ledger] Uber fallback failed for trip ${trip?.id}:`, fbErr);
-                }
-            }
-            allLedgerEntries.push(...tripEntries);
-        }
-        if (allLedgerEntries.length > 0) {
-            // Batch save in chunks of 100
-            for (let i = 0; i < allLedgerEntries.length; i += 100) {
-                const chunk = allLedgerEntries.slice(i, i + 100);
-                const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
-                await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
-            }
-            console.log(`[Ledger] Created ${allLedgerEntries.length} ledger entries for ${processedTrips.length} trips`);
-            // Phase 6.6: Verification — count completed trips with amount > 0 vs ledger entries created
-            const completedCount = processedTrips.filter((t: any) => {
-              if (!isCompletedTripStatus(t.status)) return false;
-              const amt = coerceAmount(t.amount);
-              if (amt > 0) return true;
-              if (!isUberPlatform(t.platform)) return false;
-              return (
-                coerceAmount(t.uberFareComponents) +
-                  coerceAmount(t.uberTips) +
-                  coerceAmount(t.uberPriorPeriodAdjustment) >
-                0
-              );
-            }).length;
-            const fareEntries = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning').length;
-            if (fareEntries < completedCount) {
-                console.warn(`[Ledger] INTEGRITY WARNING: ${completedCount} completed trips but only ${fareEntries} fare_earning entries created. ${completedCount - fareEntries} trips may be missing ledger entries.`);
-            }
-        }
-    } catch (ledgerErr) {
-        // Ledger creation failure should NOT break trip import
-        console.error('[Ledger] Failed to create ledger entries for trip import:', ledgerErr);
     }
 
     // Invalidate stats cache since data has changed
@@ -3996,73 +3925,12 @@ app.get(
   }
 });
 
-// ─── POST /ledger — Create a single ledger entry ───────────────────
-app.post("/make-server-37f42386/ledger", requireAuth(), requirePermission('transactions.edit'), async (c) => {
-  try {
-    if (legacyLedgerWritesDisabled()) {
-      return c.json(
-        { error: "Legacy ledger writes disabled (LEGACY_LEDGER_WRITES=false). Use POST /ledger/canonical-events/append." },
-        403,
-      );
-    }
-    const entry = await c.req.json();
-
-    if (!entry.id) entry.id = crypto.randomUUID();
-    if (!entry.createdAt) entry.createdAt = new Date().toISOString();
-
-    const requiredFields = ["date", "driverId", "eventType", "direction", "sourceType", "sourceId"];
-    for (const field of requiredFields) {
-      if (!entry[field]) {
-        return c.json({ error: `Missing required field: ${field}` }, 400);
-      }
-    }
-    if (entry.netAmount === undefined || entry.netAmount === null) {
-      return c.json({ error: "Missing required field: netAmount" }, 400);
-    }
-
-    if (!VALID_LEDGER_EVENT_TYPES.has(entry.eventType)) {
-      return c.json({ error: `Invalid eventType: ${entry.eventType}` }, 400);
-    }
-    if (!VALID_LEDGER_DIRECTIONS.has(entry.direction)) {
-      return c.json({ error: `Invalid direction: ${entry.direction}` }, 400);
-    }
-    if (typeof entry.netAmount !== "number" || !isFinite(entry.netAmount)) {
-      return c.json({ error: `netAmount must be a finite number, got: ${entry.netAmount}` }, 400);
-    }
-    // Phase 11: date format validation
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
-      return c.json({ error: `date must be YYYY-MM-DD format, got: ${entry.date}` }, 400);
-    }
-    if (typeof entry.driverId !== "string" || entry.driverId.trim().length === 0) {
-      return c.json({ error: `driverId must be a non-empty string` }, 400);
-    }
-
-    if (!entry.currency) entry.currency = "JMD";
-    if (entry.isReconciled === undefined) entry.isReconciled = false;
-    if (!entry.category) entry.category = entry.eventType;
-    if (entry.grossAmount === undefined) entry.grossAmount = Math.abs(entry.netAmount);
-
-    // Deduplication: same sourceType + sourceId + eventType
-    const { data: existing } = await supabase
-      .from("kv_store_37f42386")
-      .select("key")
-      .like("key", "ledger:%")
-      .eq("value->>sourceId", entry.sourceId)
-      .eq("value->>sourceType", entry.sourceType)
-      .eq("value->>eventType", entry.eventType)
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      return c.json({ success: true, skipped: true, message: "Duplicate ledger entry — already exists for this source + eventType" });
-    }
-
-    await kv.set(`ledger:${entry.id}`, stampOrg(entry, c));
-    console.log(`[Ledger POST] Created ${entry.id} (${entry.eventType}) for driver ${entry.driverId}`);
-    return c.json({ success: true, data: entry });
-  } catch (e: any) {
-    console.log(`[Ledger POST] Error: ${e.message}`);
-    return c.json({ error: `Ledger create failed: ${e.message}` }, 500);
-  }
+// ─── POST /ledger — RETIRED: Use POST /ledger/canonical-events/append instead ───────────────────
+app.post("/make-server-37f42386/ledger", requireAuth(), async (c) => {
+  return c.json(
+    { error: "This endpoint is retired. Use POST /ledger/canonical-events/append for canonical ledger writes." },
+    410,
+  );
 });
 
 // ─── POST /ledger/canonical-events/append — Phase 2 canonical SSOT events (idempotent) ──
@@ -4207,165 +4075,29 @@ app.get(
   },
 );
 
-// ─── POST /ledger/batch — Create multiple ledger entries ────────────
-app.post("/make-server-37f42386/ledger/batch", requireAuth(), requirePermission('transactions.edit'), async (c) => {
-  try {
-    if (legacyLedgerWritesDisabled()) {
-      return c.json(
-        { error: "Legacy ledger batch writes disabled (LEGACY_LEDGER_WRITES=false). Use canonical append API." },
-        403,
-      );
-    }
-    const body = await c.req.json();
-    const entries = body.entries;
-
-    if (!Array.isArray(entries) || entries.length === 0) {
-      return c.json({ error: "entries must be a non-empty array" }, 400);
-    }
-    if (entries.length > 500) {
-      return c.json({ error: `Max 500 entries per batch, got ${entries.length}` }, 400);
-    }
-
-    const sourceIds = entries.map((e: any) => e.sourceId).filter(Boolean);
-    const existingSet = new Set<string>();
-
-    if (sourceIds.length > 0) {
-      for (let i = 0; i < sourceIds.length; i += 50) {
-        const chunk = sourceIds.slice(i, i + 50);
-        const orClause = chunk.map((id: string) => `value->>sourceId.eq.${id}`).join(",");
-        const { data: existingData } = await supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "ledger:%")
-          .or(orClause)
-          .limit(1000);
-
-        if (existingData) {
-          for (const row of existingData) {
-            const v = (row as any).value;
-            if (v?.sourceId && v?.eventType) existingSet.add(`${v.sourceId}|${v.eventType}`);
-          }
-        }
-      }
-    }
-
-    let created = 0;
-    let skipped = 0;
-    let invalid = 0;
-    const toSave: { key: string; value: any }[] = [];
-    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-    for (const entry of entries) {
-      // Phase 11: Per-entry validation — skip invalid entries instead of failing entire batch
-      if (!entry.date || !DATE_RE.test(entry.date) || !entry.driverId || !entry.eventType || !entry.direction || !entry.sourceType || !entry.sourceId) {
-        console.log(`[Ledger Batch] Skipping invalid entry (missing required fields): eventType=${entry.eventType}, date=${entry.date}, driverId=${entry.driverId}`);
-        invalid++;
-        continue;
-      }
-      if (!VALID_LEDGER_EVENT_TYPES.has(entry.eventType)) { invalid++; continue; }
-      if (!VALID_LEDGER_DIRECTIONS.has(entry.direction)) { invalid++; continue; }
-      const amt = Number(entry.netAmount);
-      if (isNaN(amt) || !isFinite(amt)) { invalid++; continue; }
-      entry.netAmount = amt;
-
-      if (!entry.id) entry.id = crypto.randomUUID();
-      if (!entry.createdAt) entry.createdAt = new Date().toISOString();
-      if (!entry.currency) entry.currency = "JMD";
-      if (entry.isReconciled === undefined) entry.isReconciled = false;
-      if (!entry.category) entry.category = entry.eventType;
-      if (entry.grossAmount === undefined) entry.grossAmount = Math.abs(Number(entry.netAmount) || 0);
-
-      const dedupKey = `${entry.sourceId}|${entry.eventType}`;
-      if (existingSet.has(dedupKey)) {
-        skipped++;
-        continue;
-      }
-      existingSet.add(dedupKey);
-
-      toSave.push({ key: `ledger:${entry.id}`, value: stampOrg(entry, c) });
-      created++;
-    }
-
-    for (let i = 0; i < toSave.length; i += 100) {
-      const chunk = toSave.slice(i, i + 100);
-      const keys = chunk.map((item: any) => item.key);
-      const values = chunk.map((item: any) => item.value);
-      await kv.mset(keys, values);
-    }
-
-    console.log(`[Ledger Batch] Created ${created}, skipped ${skipped}, invalid ${invalid} (total input: ${entries.length})`);
-    return c.json({ success: true, created, skipped, invalid, total: entries.length });
-  } catch (e: any) {
-    console.log(`[Ledger Batch] Error: ${e.message}`);
-    return c.json({ error: `Ledger batch failed: ${e.message}` }, 500);
-  }
+// ─── POST /ledger/batch — RETIRED: Use POST /ledger/canonical-events/append instead ────────────
+app.post("/make-server-37f42386/ledger/batch", requireAuth(), async (c) => {
+  return c.json(
+    { error: "This endpoint is retired. Use POST /ledger/canonical-events/append for canonical ledger writes." },
+    410,
+  );
 });
 
-// ─── PATCH /ledger/:id — Update a ledger entry (whitelist) ─────────
-app.patch("/make-server-37f42386/ledger/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
-  try {
-    if (legacyLedgerWritesDisabled()) {
-      return c.json({ error: "Legacy ledger updates disabled (LEGACY_LEDGER_WRITES=false)." }, 403);
-    }
-    const id = c.req.param("id");
-    const updates = await c.req.json();
-
-    const existing = await kv.get(`ledger:${id}`);
-    if (!existing) {
-      return c.json({ error: `Ledger entry not found: ${id}` }, 404);
-    }
-
-    const ALLOWED_UPDATE_FIELDS = new Set([
-      "isReconciled", "reconciledAt", "reconciledBy",
-      "category", "description", "metadata",
-    ]);
-
-    const sanitized: Record<string, any> = {};
-    for (const key of Object.keys(updates)) {
-      if (ALLOWED_UPDATE_FIELDS.has(key)) {
-        sanitized[key] = updates[key];
-      }
-    }
-
-    if (Object.keys(sanitized).length === 0) {
-      return c.json({ error: "No valid updatable fields provided. Allowed: " + [...ALLOWED_UPDATE_FIELDS].join(", ") }, 400);
-    }
-
-    if (sanitized.isReconciled === true && !sanitized.reconciledAt) {
-      sanitized.reconciledAt = new Date().toISOString();
-    }
-
-    const updated = { ...existing, ...sanitized };
-    await kv.set(`ledger:${id}`, stampOrg(updated, c));
-
-    console.log(`[Ledger PATCH] Updated ${id}: ${Object.keys(sanitized).join(", ")}`);
-    return c.json({ success: true, data: updated });
-  } catch (e: any) {
-    console.log(`[Ledger PATCH] Error: ${e.message}`);
-    return c.json({ error: `Ledger update failed: ${e.message}` }, 500);
-  }
+// ─── PATCH /ledger/:id — RETIRED: Legacy ledger updates no longer supported ─────────
+app.patch("/make-server-37f42386/ledger/:id", requireAuth(), async (c) => {
+  return c.json({ error: "This endpoint is retired. Legacy ledger:% data is no longer used." }, 410);
 });
 
-// ─── DELETE /ledger/:id — Delete a single ledger entry ──────────────
-app.delete("/make-server-37f42386/ledger/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
-  try {
-    const id = c.req.param("id");
-    await kv.del(`ledger:${id}`);
-    console.log(`[Ledger DELETE] Deleted ${id}`);
-    return c.json({ success: true });
-  } catch (e: any) {
-    console.log(`[Ledger DELETE] Error: ${e.message}`);
-    return c.json({ error: `Ledger delete failed: ${e.message}` }, 500);
-  }
+// ─── DELETE /ledger/:id — RETIRED: Legacy ledger deletes no longer supported ──────────────
+app.delete("/make-server-37f42386/ledger/:id", requireAuth(), async (c) => {
+  return c.json({ error: "This endpoint is retired. Legacy ledger:% data is no longer used." }, 410);
 });
 
-// ─── POST /ledger/backfill — Historical data backfill (Phase 2 Enhanced) ──────
-// Supports: ?dryRun=true, ?driverId=xxx, per-platform stats, skip reasons, error details, timing
+// ─── POST /ledger/backfill — RETIRED: Use POST /ledger/canonical-backfill instead ──────
+// Toll ledger utilities (backup, date repair) still work via query params.
 app.post("/make-server-37f42386/ledger/backfill", requireAuth(), requirePermission('data.backfill'), async (c) => {
     try {
-        // ── Toll ledger: backup + date repair (branch on this SAME handler) ──
-        // Ledger Backfill UI calls these; some gateways / older bundles never registered
-        // separate /ledger/toll-* routes, but this path has worked since Phase 2 backfill.
+        // ── Toll ledger: backup + date repair (still supported) ──
         if (c.req.query("tollLedgerBackup") === "1") {
             const backup = await buildTollLedgerFullBackupPayload();
             return c.json(backup);
@@ -4377,198 +4109,16 @@ app.post("/make-server-37f42386/ledger/backfill", requireAuth(), requirePermissi
             return c.json({ success: true, results });
         }
 
-        const startedAt = new Date().toISOString();
-        const startMs = Date.now();
-
-        // ── Query params ──
-        const dryRun = c.req.query("dryRun") === "true";
-        const filterDriverId = c.req.query("driverId") || null;
-
-        if (!dryRun && legacyLedgerWritesDisabled()) {
-          return c.json(
+        // Main legacy backfill is retired — use POST /ledger/canonical-backfill
+        return c.json(
             {
-              error:
-                "Legacy ledger backfill writes disabled (LEGACY_LEDGER_WRITES=false). Use dryRun=true to preview.",
+                error: "Legacy ledger backfill is retired. Use POST /ledger/canonical-backfill instead.",
+                hint: "Toll ledger backup/repair still works via ?tollLedgerBackup=1 or ?tollLedgerDateRepair=1",
             },
-            403,
-          );
-        }
-
-        console.log(`[Ledger Backfill] Starting... dryRun=${dryRun} driverId=${filterDriverId || 'ALL'}`);
-
-        const stats = {
-            tripsProcessed: 0,
-            tripsSkipped: 0,
-            txProcessed: 0,
-            txSkipped: 0,
-            ledgerCreated: 0,
-            errors: 0,
-        };
-
-        // Per-platform breakdown of ledger entries that would be / were created
-        const byPlatform: Record<string, number> = {};
-        // Skip-reason tracking
-        const skipped: Record<string, number> = {
-            notCompleted: 0,
-            zeroAmount: 0,
-            noDriverId: 0,
-            alreadyHasLedger: 0,
-        };
-        // Error details (capped at 50 for response size)
-        const errorDetails: { tripId: string; platform: string; driverId: string; error: string }[] = [];
-
-        // ── Step 1: Backfill from trips ──
-        let tripOffset = 0;
-        const PAGE_SIZE = 500;
-        let hasMoreTrips = true;
-
-        while (hasMoreTrips) {
-            let query = supabase
-                .from("kv_store_37f42386")
-                .select("value")
-                .like("key", "trip:%");
-
-            // Optional driverId filter at query level (works for canonical IDs)
-            if (filterDriverId) {
-                query = query.eq("value->>driverId", filterDriverId);
-            }
-
-            const { data: tripData } = await query.range(tripOffset, tripOffset + PAGE_SIZE - 1);
-
-            const trips = (tripData || []).map((d: any) => d.value).filter(Boolean);
-            if (trips.length < PAGE_SIZE) hasMoreTrips = false;
-            tripOffset += PAGE_SIZE;
-
-            const ledgerBatch: any[] = [];
-            for (const trip of trips) {
-                try {
-                    // ── Pre-flight skip-reason checks ──
-                    if (trip.status !== 'Completed') {
-                        skipped.notCompleted++;
-                        stats.tripsSkipped++;
-                        continue;
-                    }
-                    if (!trip.amount || trip.amount <= 0) {
-                        skipped.zeroAmount++;
-                        stats.tripsSkipped++;
-                        continue;
-                    }
-                    if (!trip.driverId) {
-                        skipped.noDriverId++;
-                        stats.tripsSkipped++;
-                        continue;
-                    }
-
-                    // Call generator (includes its own dedup check)
-                    const entries = await generateTripLedgerEntries(trip);
-                    if (entries.length > 0) {
-                        ledgerBatch.push(...entries);
-                        stats.tripsProcessed++;
-                        // Track per-platform
-                        const plat = trip.platform || 'Unknown';
-                        byPlatform[plat] = (byPlatform[plat] || 0) + entries.length;
-                    } else {
-                        // Pre-flight passed but generator returned [] → dedup caught it
-                        skipped.alreadyHasLedger++;
-                        stats.tripsSkipped++;
-                    }
-                } catch (e: any) {
-                    stats.errors++;
-                    console.error(`[Ledger Backfill] Error processing trip ${trip.id} (${trip.platform || 'Unknown'}, driver=${trip.driverId || 'N/A'}):`, e);
-                    if (errorDetails.length < 50) {
-                        errorDetails.push({
-                            tripId: trip.id || 'unknown',
-                            platform: trip.platform || 'Unknown',
-                            driverId: trip.driverId || 'N/A',
-                            error: String(e?.message || e),
-                        });
-                    }
-                }
-            }
-
-            // Write batch (skip writes if dryRun)
-            if (ledgerBatch.length > 0 && !dryRun) {
-                for (let i = 0; i < ledgerBatch.length; i += 100) {
-                    const chunk = ledgerBatch.slice(i, i + 100);
-                    const keys = chunk.map((e: any) => `ledger:${e.id}`);
-                    await kv.mset(keys, chunk);
-                }
-            }
-            // Always count (even in dryRun) so the preview shows what WOULD be created
-            stats.ledgerCreated += ledgerBatch.length;
-
-            console.log(`[Ledger Backfill] Trips page done. Offset: ${tripOffset}, batch entries: ${ledgerBatch.length}${dryRun ? ' (DRY RUN — not written)' : ''}`);
-        }
-
-        // ── Step 2: Backfill from transactions ──
-        let txOffset = 0;
-        let hasMoreTx = true;
-
-        while (hasMoreTx) {
-            const { data: txData } = await supabase
-                .from("kv_store_37f42386")
-                .select("value")
-                .like("key", "transaction:%")
-                .range(txOffset, txOffset + PAGE_SIZE - 1);
-
-            const transactions = (txData || []).map((d: any) => d.value).filter(Boolean);
-            if (transactions.length < PAGE_SIZE) hasMoreTx = false;
-            txOffset += PAGE_SIZE;
-
-            const ledgerBatch: any[] = [];
-            for (const tx of transactions) {
-                try {
-                    const entry = await generateTransactionLedgerEntry(tx);
-                    if (entry) {
-                        ledgerBatch.push(entry);
-                        stats.txProcessed++;
-                    } else {
-                        stats.txSkipped++;
-                    }
-                } catch (e: any) {
-                    stats.errors++;
-                    console.error(`[Ledger Backfill] Error processing transaction ${tx.id}:`, e);
-                    if (errorDetails.length < 50) {
-                        errorDetails.push({
-                            tripId: tx.id || 'unknown',
-                            platform: 'transaction',
-                            driverId: tx.driverId || 'N/A',
-                            error: String(e?.message || e),
-                        });
-                    }
-                }
-            }
-
-            if (ledgerBatch.length > 0 && !dryRun) {
-                for (let i = 0; i < ledgerBatch.length; i += 100) {
-                    const chunk = ledgerBatch.slice(i, i + 100);
-                    const keys = chunk.map((e: any) => `ledger:${e.id}`);
-                    await kv.mset(keys, chunk);
-                }
-            }
-            stats.ledgerCreated += ledgerBatch.length;
-
-            console.log(`[Ledger Backfill] Transactions page done. Offset: ${txOffset}, batch entries: ${ledgerBatch.length}${dryRun ? ' (DRY RUN — not written)' : ''}`);
-        }
-
-        const completedAt = new Date().toISOString();
-        const durationMs = Date.now() - startMs;
-
-        console.log(`[Ledger Backfill] ${dryRun ? 'DRY RUN ' : ''}Complete in ${durationMs}ms:`, JSON.stringify({ stats, byPlatform, skipped }));
-        return c.json({
-            success: true,
-            dryRun,
-            filterDriverId,
-            stats,
-            byPlatform,
-            skipped,
-            errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
-            startedAt,
-            completedAt,
-            durationMs,
-        });
+            410,
+        );
     } catch (e: any) {
-        console.error('[Ledger Backfill] Fatal error:', e);
+        console.error('[Ledger Backfill] Error:', e);
         return c.json({ error: e.message }, 500);
     }
 });
@@ -4819,204 +4369,17 @@ app.post("/make-server-37f42386/ledger/repair-driver-ids", requireAuth(), requir
     }
 });
 
-// ─── POST /ledger/repair-driver — Phase 6.3: Targeted per-driver ledger repair ──────
-// Fetches trips for a driver, deletes trip-sourced ledger rows per trip (same as POST /trips),
-// then generateTripLedgerEntries + Uber fallback; stamps organizationId on new ledger rows.
-app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), requirePermission('data.backfill'), async (c) => {
-    try {
-        const startMs = Date.now();
-        const body = await c.req.json();
-        const driverId = body.driverId;
-        if (!driverId) {
-            return c.json({ error: "Missing required field: driverId" }, 400);
-        }
-
-        if (legacyLedgerWritesDisabled()) {
-            return c.json(
-                { error: "Legacy ledger repair writes disabled (LEGACY_LEDGER_WRITES=false)." },
-                403,
-            );
-        }
-
-        const clientTripIds: string[] | undefined = body.tripIds;
-        const force: boolean = body.force === true;
-        console.log(`[Ledger RepairDriver] Starting ${force ? 'FORCE ' : ''}repair for driver ${driverId}${clientTripIds ? ` with ${clientTripIds.length} client-supplied tripIds` : ''}`);
-
-        let allTrips: any[] = [];
-
-        if (clientTripIds && Array.isArray(clientTripIds) && clientTripIds.length > 0) {
-            // ── Fast path: Client supplied trip IDs (most reliable — the client already
-            // found these trips via the broader driverIds+driverName OR search). ──
-            // Batch-fetch trips by key using kv.mget in chunks of 100.
-            console.log(`[Ledger RepairDriver] Using ${clientTripIds.length} client-supplied trip IDs`);
-            for (let i = 0; i < clientTripIds.length; i += 100) {
-                const chunk = clientTripIds.slice(i, i + 100);
-                const keys = chunk.map(id => `trip:${id}`);
-                try {
-                    const values = await kv.mget(keys);
-                    if (Array.isArray(values)) {
-                        allTrips = allTrips.concat(values.filter(Boolean));
-                    }
-                } catch (mgetErr) {
-                    console.warn(`[Ledger RepairDriver] mget chunk failed, falling back to individual gets:`, mgetErr);
-                    for (const key of keys) {
-                        try {
-                            const val = await kv.get(key);
-                            if (val) allTrips.push(val);
-                        } catch { /* skip */ }
-                    }
-                }
-            }
-            console.log(`[Ledger RepairDriver] Fetched ${allTrips.length} trips from ${clientTripIds.length} client IDs`);
-        } else {
-            // ── Fallback: Server-side discovery using all known driver IDs + name ──
-            const allDriverIds: string[] = [driverId];
-            let resolvedDriverName = '';
-            try {
-                const driverRecord = await kv.get(`driver:${driverId}`);
-                if (driverRecord) {
-                    if (driverRecord.uberDriverId) allDriverIds.push(driverRecord.uberDriverId);
-                    if (driverRecord.inDriveDriverId) allDriverIds.push(driverRecord.inDriveDriverId);
-                    resolvedDriverName = driverRecord.name || [driverRecord.firstName, driverRecord.lastName].filter(Boolean).join(' ') || '';
-                }
-            } catch (lookupErr) {
-                console.warn(`[Ledger RepairDriver] Could not look up driver record for ${driverId}:`, lookupErr);
-            }
-
-            console.log(`[Ledger RepairDriver] Searching with IDs: [${allDriverIds.join(', ')}]${resolvedDriverName ? `, name: "${resolvedDriverName}"` : ''}`);
-
-            const orParts: string[] = [];
-            for (const id of allDriverIds) {
-                orParts.push(`value->>driverId.eq.${id}`);
-            }
-            if (resolvedDriverName) {
-                orParts.push(`value->>driverName.ilike.${resolvedDriverName}`);
-            }
-            const orFilter = orParts.join(',');
-
-            const PAGE = 1000;
-            const MAX_ROWS = 50000;
-            let offset = 0;
-            while (offset < MAX_ROWS) {
-                const { data, error } = await supabase
-                    .from("kv_store_37f42386")
-                    .select("value")
-                    .like("key", "trip:%")
-                    .or(orFilter)
-                    .range(offset, offset + PAGE - 1);
-                if (error) throw error;
-                const page = data || [];
-                allTrips = allTrips.concat(page.map((d: any) => d.value).filter(Boolean));
-                if (page.length < PAGE) break;
-                offset += PAGE;
-            }
-        }
-
-        const stats = {
-            totalTrips: allTrips.length,
-            completedWithAmount: 0,
-            ledgerCreated: 0,
-            alreadyExisted: 0,
-            skippedNotCompleted: 0,
-            skippedNoAmount: 0,
-            fallbackFareRows: 0,
-            unresolvedAfterRepair: 0,
-            errors: 0,
-            forceDeleted: 0,
-            byPlatform: {} as Record<string, { trips: number; created: number; existed: number }>,
-        };
-
-        // Org stamp on new ledger rows (same as POST /trips / fleet/sync)
-        let repairWriteOrgId: string | null = getOrgId(c);
-        if (!repairWriteOrgId) {
-            try {
-                const driverRec = await kv.get(`driver:${driverId}`);
-                const cand = typeof driverRec?.organizationId === "string" ? driverRec.organizationId.trim() : "";
-                if (cand) repairWriteOrgId = cand;
-            } catch {
-                /* ignore */
-            }
-        }
-        const stampRepairOrg = <T extends Record<string, any>>(record: T): T =>
-            repairWriteOrgId ? ({ ...record, organizationId: repairWriteOrgId } as T) : record;
-
-        for (const trip of allTrips) {
-            const isUber = String(trip.platform || '').toLowerCase() === 'uber';
-            const plat = isUber ? 'Uber' : (trip.platform === 'GoRide' ? 'Roam' : trip.platform) || 'Other';
-            if (!stats.byPlatform[plat]) {
-                stats.byPlatform[plat] = { trips: 0, created: 0, existed: 0 };
-            }
-            stats.byPlatform[plat].trips += 1;
-
-            if (trip.status !== 'Completed') {
-                stats.skippedNotCompleted += 1;
-                continue;
-            }
-
-            if (!tripHasMoneyForLedgerProjection(trip)) {
-                stats.skippedNoAmount += 1;
-                continue;
-            }
-
-            stats.completedWithAmount += 1;
-
-            try {
-                // Normalize driverId to canonical Roam UUID before generating ledger entries.
-                const baseTrip = trip.driverId === driverId ? trip : { ...trip, driverId };
-                const tripForLedger = { ...baseTrip, _skipLedgerDedup: true };
-
-                let entries: any[] = [];
-                try {
-                    entries = await generateTripLedgerEntries(tripForLedger);
-                } catch (genErr: any) {
-                    console.error(`[Ledger RepairDriver] generateTripLedgerEntries failed for trip ${trip.id}:`, genErr);
-                    entries = [];
-                }
-                // Mirror POST /trips: fallback when generator returns [] without throwing (Uber edge cases).
-                if (entries.length === 0) {
-                    try {
-                        const fb = await buildUberFareEarningFallbackEntriesIfEligible(tripForLedger);
-                        if (fb.length > 0) {
-                            entries = fb;
-                            stats.fallbackFareRows += fb.filter((e: any) => e.eventType === "fare_earning").length;
-                        }
-                    } catch (fbErr: any) {
-                        console.error(`[Ledger RepairDriver] Uber fallback failed for trip ${trip.id}:`, fbErr);
-                    }
-                }
-
-                if (entries.length > 0) {
-                    const keys = entries.map((e: any) => `ledger:${e.id}`);
-                    await kv.mset(keys, entries.map((e: any) => stampRepairOrg(e)));
-                    stats.ledgerCreated += entries.length;
-                    stats.byPlatform[plat].created += entries.length;
-                } else {
-                    stats.unresolvedAfterRepair += 1;
-                }
-            } catch (err: any) {
-                stats.errors += 1;
-                console.error(`[Ledger RepairDriver] Error processing trip ${trip.id}: ${err.message}`);
-            }
-        }
-
-        const durationMs = Date.now() - startMs;
-        console.log(`[Ledger RepairDriver] Complete for ${driverId}: created=${stats.ledgerCreated}, existed=${stats.alreadyExisted}, errors=${stats.errors} (${durationMs}ms)`);
-
-        return c.json({
-            success: true,
-            driverId,
-            stats,
-            durationMs,
-        });
-    } catch (e: any) {
-        console.error('[Ledger RepairDriver] Fatal error:', e);
-        return c.json({ error: `Ledger repair failed: ${e.message}` }, 500);
-    }
+// ─── POST /ledger/repair-driver — RETIRED: Use POST /ledger/canonical-backfill instead ──────
+app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), async (c) => {
+    return c.json(
+        { error: "This endpoint is retired. Use POST /ledger/canonical-backfill to populate canonical ledger events." },
+        410,
+    );
 });
 
-// ─── POST /ledger/ensure-from-trip-ids — Idempotent ledger backfill for a list of trip UUIDs ─────────
+// ─── POST /ledger/ensure-from-trip-ids — Idempotent canonical ledger backfill for a list of trip UUIDs ─────────
 // Used after CSV / fleet import so drivers do not need manual "Repair Now" for missing fare_earning rows.
-// Same projection rules as POST /trips + repair-driver (delete trip-sourced rows → generate → Uber fallback).
+// Writes to canonical ledger_event:* only (non-Uber trips).
 // Auth: none (matches POST /trips / fleet/sync — anon import key).
 app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
     const startMs = Date.now();
@@ -5038,7 +4401,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
             ledgerRowsWritten: 0,
             unresolvedAfterGenerate: 0,
             errors: 0,
-            forceDeleted: 0,
         };
 
         const CHUNK = 100;
@@ -5062,77 +4424,29 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
             }
             stats.tripsLoaded += values.length;
 
-            if (legacyLedgerWritesDisabled()) {
-                const toAppend: Record<string, unknown>[] = [];
-                for (const trip of values) {
-                    if (!trip?.id) continue;
-                    if (!tripHasMoneyForLedgerProjection(trip)) {
-                        stats.skippedNoMoney += 1;
-                        continue;
-                    }
-                    const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
-                    if (evs.length === 0) {
-                        stats.unresolvedAfterGenerate += 1;
-                    } else {
-                        toAppend.push(...evs);
-                    }
-                }
-                const MAX = 200;
-                for (let j = 0; j < toAppend.length; j += MAX) {
-                    const slice = toAppend.slice(j, j + MAX);
-                    try {
-                        const r = await appendCanonicalLedgerEvents(slice, c);
-                        stats.ledgerRowsWritten += r.inserted;
-                    } catch (loopErr: any) {
-                        stats.errors += 1;
-                        console.error(`[Ledger EnsureTripIds] canonical append:`, loopErr?.message || loopErr);
-                    }
-                }
-                continue;
-            }
-
-            let writeOrgId: string | null = getOrgId(c);
-            const stampEntry = (trip: any, entry: any) => {
-                const oid =
-                    writeOrgId ||
-                    (typeof trip?.organizationId === "string" && trip.organizationId.trim() !== ""
-                        ? trip.organizationId.trim()
-                        : null);
-                return oid ? { ...entry, organizationId: oid } : entry;
-            };
-
+            const toAppend: Record<string, unknown>[] = [];
             for (const trip of values) {
                 if (!trip?.id) continue;
                 if (!tripHasMoneyForLedgerProjection(trip)) {
                     stats.skippedNoMoney += 1;
                     continue;
                 }
+                const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
+                if (evs.length === 0) {
+                    stats.unresolvedAfterGenerate += 1;
+                } else {
+                    toAppend.push(...evs);
+                }
+            }
+            const MAX = 200;
+            for (let j = 0; j < toAppend.length; j += MAX) {
+                const slice = toAppend.slice(j, j + MAX);
                 try {
-                    const tripForLedger = { ...trip, _skipLedgerDedup: true };
-                    let entries: any[] = [];
-                    try {
-                        entries = await generateTripLedgerEntries(tripForLedger);
-                    } catch (genErr: any) {
-                        console.warn(`[Ledger EnsureTripIds] generate failed trip ${trip.id}:`, genErr?.message || genErr);
-                        entries = [];
-                    }
-                    if (entries.length === 0) {
-                        try {
-                            entries = await buildUberFareEarningFallbackEntriesIfEligible(tripForLedger);
-                        } catch (fbErr: any) {
-                            console.warn(`[Ledger EnsureTripIds] fallback failed trip ${trip.id}:`, fbErr?.message || fbErr);
-                        }
-                    }
-                    if (entries.length > 0) {
-                        const ledgerKeys = entries.map((e: any) => `ledger:${e.id}`);
-                        await kv.mset(ledgerKeys, entries.map((e: any) => stampEntry(trip, e)));
-                        stats.ledgerRowsWritten += entries.length;
-                    } else {
-                        stats.unresolvedAfterGenerate += 1;
-                    }
+                    const r = await appendCanonicalLedgerEvents(slice, c);
+                    stats.ledgerRowsWritten += r.inserted;
                 } catch (loopErr: any) {
                     stats.errors += 1;
-                    console.error(`[Ledger EnsureTripIds] trip ${trip.id}:`, loopErr?.message || loopErr);
+                    console.error(`[Ledger EnsureTripIds] canonical append:`, loopErr?.message || loopErr);
                 }
             }
         }
@@ -8976,54 +8290,6 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
             await appendCanonicalTripFaresIfEligible(uniqueTrips as Record<string, unknown>[], c);
         } catch (canonErr) {
             console.error("[FleetSync] Canonical trip fare append failed:", canonErr);
-        }
-
-        // ── Write-Time Ledger: Replace trip-sourced ledger rows (same as POST /trips) ──
-        // This mirrors the POST /trips ledger generation to ensure fleet/sync
-        // imports (Uber Mega-JSON path) also populate the ledger.
-        try {
-            const allLedgerEntries: any[] = [];
-            for (const trip of uniqueTrips) {
-                let tripEntries: any[] = [];
-                try {
-                    (trip as any)._skipLedgerDedup = true;
-                    tripEntries = await generateTripLedgerEntries(trip);
-                } catch (tripLedgerErr) {
-                    console.error(
-                        `[FleetSync Ledger] Failed to generate ledger entries for trip ${trip?.id} (platform=${trip?.platform}):`,
-                        tripLedgerErr
-                    );
-                    tripEntries = [];
-                }
-                if (tripEntries.length === 0) {
-                    try {
-                        tripEntries = await buildUberFareEarningFallbackEntriesIfEligible(trip);
-                    } catch (fbErr) {
-                        console.error(`[FleetSync Ledger] Uber fallback failed for trip ${trip?.id}:`, fbErr);
-                    }
-                }
-                allLedgerEntries.push(...tripEntries);
-            }
-            if (allLedgerEntries.length > 0) {
-                // Batch save in chunks of 100
-                for (let i = 0; i < allLedgerEntries.length; i += 100) {
-                    const chunk = allLedgerEntries.slice(i, i + 100);
-                    const ledgerKeys = chunk.map((e: any) => `ledger:${e.id}`);
-                    await kv.mset(ledgerKeys, chunk.map((e: any) => stampWriteOrg(e)));
-                }
-                console.log(`[FleetSync Ledger] Created ${allLedgerEntries.length} ledger entries for ${uniqueTrips.length} trips`);
-                // Verification: count completed trips with amount > 0 vs ledger entries created
-                const completedCount = uniqueTrips.filter(
-                    (t: any) => isCompletedTripStatus(t.status) && coerceAmount(t.amount) > 0
-                ).length;
-                const fareEntries = allLedgerEntries.filter((e: any) => e.eventType === 'fare_earning').length;
-                if (fareEntries < completedCount) {
-                    console.warn(`[FleetSync Ledger] INTEGRITY WARNING: ${completedCount} completed trips but only ${fareEntries} fare_earning entries created. ${completedCount - fareEntries} trips may be missing ledger entries.`);
-                }
-            }
-        } catch (ledgerErr) {
-            // Ledger creation failure should NOT break fleet sync
-            console.error('[FleetSync Ledger] Failed to create ledger entries:', ledgerErr);
         }
     }
 

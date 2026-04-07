@@ -35,11 +35,14 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "wallet_credit",
   "fuel_reimbursement",
   "toll_reconciled",
+  "toll_unreconciled",
+  "toll_approved",
+  "toll_rejected",
 ]);
 
 const VALID_DIRECTIONS = new Set(["inflow", "outflow", "neutral"]);
 
-const VALID_SOURCE_TYPES = new Set(["trip", "statement", "import_batch", "transaction", "adjustment"]);
+const VALID_SOURCE_TYPES = new Set(["trip", "statement", "import_batch", "transaction", "adjustment", "reconciliation"]);
 
 async function sha256Hex(text: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(text);
