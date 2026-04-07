@@ -1934,6 +1934,10 @@ app.post("/make-server-37f42386/trips", async (c) => {
 
     // Canonical money events (`ledger_event:*`) for non-Uber trips (Roam / InDrive manual, etc.)
     try {
+      const tripIdsForLedger = processedTrips.map((t: any) => String(t?.id || "").trim()).filter(Boolean);
+      if (tripIdsForLedger.length > 0) {
+        await deleteCanonicalLedgerBySource("trip", tripIdsForLedger);
+      }
       await appendCanonicalTripFaresIfEligible(processedTrips as Record<string, unknown>[], c);
     } catch (canonErr) {
       console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
@@ -8519,6 +8523,10 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
         await kv.mset(tripKeys, tripValues);
 
         try {
+            const tripIdsForLedger = uniqueTrips.map((t: any) => String(t?.id || "").trim()).filter(Boolean);
+            if (tripIdsForLedger.length > 0) {
+              await deleteCanonicalLedgerBySource("trip", tripIdsForLedger);
+            }
             await appendCanonicalTripFaresIfEligible(uniqueTrips as Record<string, unknown>[], c);
         } catch (canonErr) {
             console.error("[FleetSync] Canonical trip fare append failed:", canonErr);

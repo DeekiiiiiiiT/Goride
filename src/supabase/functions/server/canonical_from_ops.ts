@@ -51,10 +51,33 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
   const date = rawDate.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
 
-  const net = coerceAmount(trip.amount);
-  if (net <= 0) return [];
+  const fareGross = coerceAmount(trip.amount);
+  if (fareGross <= 0) return [];
 
   const platform = String(trip.platform || "Roam").trim();
+  const platformLc = platform.toLowerCase();
+
+  // Default: gross === net. InDrive with fee fields: gross = fare, net = driver profit so (gross − net) is the
+  // wallet service fee (see computeIndriveWalletFeesFromLedgerEntries + DriverIndriveWalletTab).
+  let netAmount = fareGross;
+  let grossAmount = fareGross;
+
+  if (platformLc === "indrive") {
+    if (trip.indriveNetIncome != null) {
+      const netIncome = coerceAmount(trip.indriveNetIncome);
+      grossAmount = fareGross;
+      netAmount = netIncome;
+      if (netAmount > grossAmount) grossAmount = netAmount;
+    } else if (trip.indriveServiceFee != null) {
+      const fee = Math.max(0, coerceAmount(trip.indriveServiceFee));
+      if (fee > 0) {
+        grossAmount = fareGross;
+        netAmount = Number((fareGross - fee).toFixed(2));
+        if (netAmount < 0) netAmount = 0;
+        if (netAmount > grossAmount) grossAmount = netAmount;
+      }
+    }
+  }
 
   return [
     {
@@ -63,8 +86,8 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
       driverId,
       eventType: "fare_earning",
       direction: "inflow",
-      netAmount: net,
-      grossAmount: net,
+      netAmount,
+      grossAmount,
       currency: "JMD",
       sourceType: "trip",
       sourceId: id,
