@@ -669,6 +669,12 @@ export function LedgerBackfillPanel() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 1C: CANONICAL LEDGER BACKFILL                              */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+
+      <CanonicalBackfillSection />
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* SECTION 2: DRIVER ID REPAIR                                       */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
 
@@ -1223,6 +1229,283 @@ export function LedgerBackfillPanel() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANONICAL LEDGER BACKFILL SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface CanonicalBackfillResult {
+  success: boolean;
+  dryRun: boolean;
+  stats: {
+    trips: { scanned: number; eligible: number; appended: number; skipped: number; errors: number };
+    fuel: { scanned: number; eligible: number; appended: number; skipped: number; errors: number };
+    tolls: { scanned: number; eligible: number; appended: number; skipped: number; errors: number };
+    indrive: { scanned: number; eligible: number; appended: number; skipped: number; errors: number };
+    fuel_reimburse: { scanned: number; eligible: number; appended: number; skipped: number; errors: number };
+    toll_reimburse: { scanned: number; eligible: number; appended: number; skipped: number; errors: number };
+  };
+  durationMs: number;
+  error?: string;
+}
+
+function CanonicalBackfillSection() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<CanonicalBackfillResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(
+    new Set(['trips', 'fuel', 'tolls', 'indrive', 'fuel_reimburse', 'toll_reimburse'])
+  );
+
+  const allTypes = [
+    { id: 'trips', label: 'Trips → fare_earning', description: 'Non-Uber trips (Roam, InDrive, etc.)' },
+    { id: 'fuel', label: 'Fuel Entries → fuel_expense', description: 'From fuel_entry:* records' },
+    { id: 'tolls', label: 'Toll Ledger → toll_charge/refund', description: 'From toll_ledger:* records' },
+    { id: 'indrive', label: 'InDrive Wallet Credit → wallet_credit', description: 'InDrive Wallet Credit transactions' },
+    { id: 'fuel_reimburse', label: 'Fuel Reimbursement Credit → fuel_reimbursement', description: 'Fuel Reimbursement Credit transactions' },
+    { id: 'toll_reimburse', label: 'Toll Reimbursement Credit → adjustment', description: 'Toll Reimbursement Credit transactions' },
+  ];
+
+  const toggleType = (typeId: string) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(typeId)) {
+        next.delete(typeId);
+      } else {
+        next.add(typeId);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedTypes(new Set(allTypes.map(t => t.id)));
+  const selectNone = () => setSelectedTypes(new Set());
+
+  const runCanonicalBackfill = async (dryRun: boolean) => {
+    if (selectedTypes.size === 0) {
+      setError('Select at least one data type to backfill.');
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
+    setError(null);
+
+    try {
+      const url = `${API_BASE}/ledger/canonical-backfill`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: edgeFnHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          dryRun,
+          types: [...selectedTypes].join(','),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Server returned ${res.status}`);
+      } else {
+        setResult(data);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalAppended = result
+    ? Object.values(result.stats).reduce((sum, s) => sum + s.appended, 0)
+    : 0;
+  const totalSkipped = result
+    ? Object.values(result.stats).reduce((sum, s) => sum + s.skipped, 0)
+    : 0;
+  const totalErrors = result
+    ? Object.values(result.stats).reduce((sum, s) => sum + s.errors, 0)
+    : 0;
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-700 rounded-xl p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <Database className="h-6 w-6 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Canonical Ledger Backfill</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Populate <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">ledger_event:*</code> from existing data. 
+            Idempotent — duplicates are skipped via idempotency keys.
+          </p>
+        </div>
+      </div>
+
+      {/* Type Selection */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            Select data types to backfill:
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Select All
+            </button>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
+            <button
+              type="button"
+              onClick={selectNone}
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Select None
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {allTypes.map((type) => (
+            <label
+              key={type.id}
+              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                selectedTypes.has(type.id)
+                  ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
+                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selectedTypes.has(type.id)}
+                onChange={() => toggleType(type.id)}
+                className="mt-1 h-4 w-4 text-emerald-600 border-slate-300 dark:border-slate-600 rounded focus:ring-emerald-500"
+              />
+              <div>
+                <div className="text-sm font-medium text-slate-900 dark:text-white">{type.label}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">{type.description}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-3 flex-wrap">
+        <button
+          onClick={() => runCanonicalBackfill(true)}
+          disabled={loading || selectedTypes.size === 0}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700 rounded-lg font-medium text-sm hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-50 transition-colors"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+          Preview (Dry Run)
+        </button>
+
+        <button
+          onClick={() => runCanonicalBackfill(false)}
+          disabled={loading || selectedTypes.size === 0}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg font-medium text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          Run Backfill
+        </button>
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4 flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-emerald-600 dark:text-emerald-400" />
+          <span className="text-emerald-700 dark:text-emerald-300 font-medium">
+            Running canonical backfill... this may take a few minutes for large datasets.
+          </span>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-medium mb-1">
+            <AlertTriangle className="h-4 w-4" />
+            Backfill Failed
+          </div>
+          <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <div className="space-y-4">
+          {/* Status Banner */}
+          <div className={`rounded-lg p-4 flex items-center gap-3 ${
+            result.dryRun
+              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+              : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+          }`}>
+            {result.dryRun ? (
+              <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+            )}
+            <div>
+              <span className={`font-semibold ${result.dryRun ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-300'}`}>
+                {result.dryRun ? 'Dry Run Complete' : 'Backfill Complete'}
+              </span>
+              <span className="text-sm ml-2">
+                — {totalAppended.toLocaleString()} {result.dryRun ? 'would be appended' : 'appended'}, 
+                {' '}{totalSkipped.toLocaleString()} skipped (duplicates)
+                {totalErrors > 0 && <span className="text-red-600 dark:text-red-400">, {totalErrors} errors</span>}
+              </span>
+            </div>
+          </div>
+
+          {/* Timing */}
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <Clock className="h-4 w-4" />
+            Completed in {(result.durationMs / 1000).toFixed(1)}s
+          </div>
+
+          {/* Per-Type Results Table */}
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium text-slate-600 dark:text-slate-300">Type</th>
+                  <th className="text-right px-4 py-2 font-medium text-slate-600 dark:text-slate-300">Scanned</th>
+                  <th className="text-right px-4 py-2 font-medium text-slate-600 dark:text-slate-300">Eligible</th>
+                  <th className="text-right px-4 py-2 font-medium text-slate-600 dark:text-slate-300">Appended</th>
+                  <th className="text-right px-4 py-2 font-medium text-slate-600 dark:text-slate-300">Skipped</th>
+                  <th className="text-right px-4 py-2 font-medium text-slate-600 dark:text-slate-300">Errors</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(result.stats).map(([type, stats]) => (
+                  <tr key={type} className="border-b border-slate-100 dark:border-slate-700 last:border-0">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">{type}</td>
+                    <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-300">{stats.scanned.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-300">{stats.eligible.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">{stats.appended.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-slate-500 dark:text-slate-400">{stats.skipped.toLocaleString()}</td>
+                    <td className={`px-4 py-2 text-right ${stats.errors > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {stats.errors.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Raw JSON */}
+          <details className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+            <summary className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 cursor-pointer hover:text-slate-900 dark:hover:text-white">
+              Raw JSON Response
+            </summary>
+            <pre className="px-4 pb-3 text-xs text-slate-600 dark:text-slate-400 overflow-x-auto whitespace-pre-wrap font-mono">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 }
