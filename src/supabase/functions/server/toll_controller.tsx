@@ -21,6 +21,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
+import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { getFleetTimezone, naiveToUtc, hasTzSuffix } from "./timezone_helper.tsx";
 import {
   parseISO,
@@ -1604,6 +1605,11 @@ async function deleteTollLedgerEntry(id: string): Promise<boolean> {
   const existing = await getTollLedgerEntry(id);
   if (!existing) return false;
   await kv.del(`${TOLL_LEDGER_PREFIX}${id}`);
+  try {
+    await deleteCanonicalLedgerBySource("transaction", [id]);
+  } catch (e: any) {
+    console.warn(`[TollLedgerStorage] Ledger cleanup failed (non-fatal) toll_ledger=${id}:`, e?.message);
+  }
   console.log(`[TollLedgerStorage] Deleted toll_ledger:${id}`);
   return true;
 }

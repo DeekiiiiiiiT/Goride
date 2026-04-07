@@ -3,6 +3,7 @@
  * Idempotency index: `ledger_event_idem:{sha256(idempotencyKey)}` → `{ id }`.
  */
 import type { Context } from "npm:hono";
+import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
 import { stampOrg } from "./org_scope.ts";
 
@@ -49,6 +50,132 @@ async function sha256Hex(text: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function supabaseKv() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+}
+
+const LEDGER_DELETE_PAGE = 1000;
+const SOURCE_ID_IN_CHUNK = 80;
+
+/** Delete idempotency keys for distinct idempotencyKey strings (same hash as append). */
+async function deleteIdemKeysForKeys(idempotencyKeys: string[]): Promise<number> {
+  let n = 0;
+  const seen = new Set<string>();
+  for (const idem of idempotencyKeys) {
+    const k = String(idem).trim();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    try {
+      const idemKvKey = `ledger_event_idem:${await sha256Hex(k)}`;
+      await kv.del(idemKvKey);
+      n++;
+    } catch {
+      /* non-fatal */
+    }
+  }
+  return n;
+}
+
+/**
+ * Remove canonical `ledger_event:*` rows matching sourceType + sourceId, and their idempotency index keys.
+ */
+export async function deleteCanonicalLedgerBySource(
+  sourceType: string,
+  sourceIds: string[],
+): Promise<{ deleted: number; idemDeleted: number }> {
+  const ids = [...new Set(sourceIds.map((s) => String(s).trim()).filter(Boolean))];
+  if (!ids.length || !VALID_SOURCE_TYPES.has(sourceType)) {
+    return { deleted: 0, idemDeleted: 0 };
+  }
+
+  const sb = supabaseKv();
+  const allRows: { key: string; value: Record<string, unknown> }[] = [];
+
+  for (let i = 0; i < ids.length; i += SOURCE_ID_IN_CHUNK) {
+    const chunk = ids.slice(i, i + SOURCE_ID_IN_CHUNK);
+    let offset = 0;
+    while (offset < 500_000) {
+      const { data, error } = await sb
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .like("key", "ledger_event:%")
+        .eq("value->>sourceType", sourceType)
+        .in("value->>sourceId", chunk)
+        .range(offset, offset + LEDGER_DELETE_PAGE - 1);
+      if (error) throw error;
+      const page = (data || []) as { key: string; value: Record<string, unknown> }[];
+      allRows.push(...page);
+      if (page.length < LEDGER_DELETE_PAGE) break;
+      offset += LEDGER_DELETE_PAGE;
+    }
+  }
+
+  if (allRows.length === 0) return { deleted: 0, idemDeleted: 0 };
+
+  const idemKeys: string[] = [];
+  for (const row of allRows) {
+    const v = row.value;
+    const idem = typeof v?.idempotencyKey === "string" ? String(v.idempotencyKey).trim() : "";
+    if (idem) idemKeys.push(idem);
+  }
+
+  const keys = allRows.map((r) => r.key);
+  for (let i = 0; i < keys.length; i += 100) {
+    await kv.mdel(keys.slice(i, i + 100));
+  }
+  const idemDeleted = await deleteIdemKeysForKeys(idemKeys);
+  console.log(
+    `[CanonicalLedger] deleteCanonicalLedgerBySource type=${sourceType} ids=${ids.length} deleted=${keys.length} idem=${idemDeleted}`,
+  );
+  return { deleted: keys.length, idemDeleted };
+}
+
+/** Delete every canonical ledger row with the given sourceType (e.g. all trip fares when wiping trips). */
+export async function deleteAllCanonicalLedgerBySourceType(
+  sourceType: string,
+): Promise<{ deleted: number; idemDeleted: number }> {
+  if (!VALID_SOURCE_TYPES.has(sourceType)) {
+    return { deleted: 0, idemDeleted: 0 };
+  }
+
+  const sb = supabaseKv();
+  let totalDeleted = 0;
+  let totalIdem = 0;
+
+  while (true) {
+    const { data, error } = await sb
+      .from("kv_store_37f42386")
+      .select("key, value")
+      .like("key", "ledger_event:%")
+      .eq("value->>sourceType", sourceType)
+      .range(0, LEDGER_DELETE_PAGE - 1);
+    if (error) throw error;
+    const page = (data || []) as { key: string; value: Record<string, unknown> }[];
+    if (page.length === 0) break;
+
+    const idemKeys: string[] = [];
+    for (const row of page) {
+      const v = row.value;
+      const idem = typeof v?.idempotencyKey === "string" ? String(v.idempotencyKey).trim() : "";
+      if (idem) idemKeys.push(idem);
+    }
+    const keys = page.map((r) => r.key);
+    for (let i = 0; i < keys.length; i += 100) {
+      await kv.mdel(keys.slice(i, i + 100));
+    }
+    totalDeleted += keys.length;
+    totalIdem += await deleteIdemKeysForKeys(idemKeys);
+  }
+
+  console.log(
+    `[CanonicalLedger] deleteAllCanonicalLedgerBySourceType type=${sourceType} deleted=${totalDeleted} idem=${totalIdem}`,
+  );
+  return { deleted: totalDeleted, idemDeleted: totalIdem };
 }
 
 function validateOne(raw: unknown, index: number): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {

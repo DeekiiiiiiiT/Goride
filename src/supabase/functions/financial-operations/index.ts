@@ -5,6 +5,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { Buffer } from "node:buffer";
 import * as kv from "./kv_store.tsx";
+import { deleteCanonicalLedgerBySource } from "../server/ledger_canonical.ts";
 
 const app = new Hono();
 
@@ -117,6 +118,11 @@ app.delete("/financial-operations/transactions/:id", async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`transaction:${id}`);
+    try {
+      await deleteCanonicalLedgerBySource("transaction", [id]);
+    } catch (le: any) {
+      console.warn(`[financial-operations DELETE transaction] Ledger cleanup failed:`, le?.message);
+    }
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

@@ -3,6 +3,7 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { deleteCanonicalLedgerBySource } from "../server/ledger_canonical.ts";
 
 const app = new Hono();
 
@@ -84,6 +85,11 @@ app.delete("/fuel-maintenance/fuel-entries/:id", async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`fuel_entry:${id}`);
+    try {
+      await deleteCanonicalLedgerBySource("transaction", [id]);
+    } catch (le: any) {
+      console.warn(`[fuel-maintenance DELETE fuel-entry] Ledger cleanup failed:`, le?.message);
+    }
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

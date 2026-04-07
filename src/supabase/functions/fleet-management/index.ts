@@ -3,6 +3,10 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import {
+  deleteAllCanonicalLedgerBySourceType,
+  deleteCanonicalLedgerBySource,
+} from "../server/ledger_canonical.ts";
 
 const app = new Hono();
 
@@ -156,6 +160,14 @@ app.delete("/fleet-management/trips", async (c) => {
         if (error) throw error;
         counts[prefix] = count || 0;
     }
+
+    try {
+      await deleteAllCanonicalLedgerBySourceType("trip");
+      await deleteAllCanonicalLedgerBySourceType("transaction");
+    } catch (ledgerErr: any) {
+      console.warn("[fleet DELETE /trips] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
+    }
+
     return c.json({ 
         success: true, 
         deletedTrips: counts["trip:"] || 0,
@@ -174,6 +186,11 @@ app.delete("/fleet-management/trips/:id", async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`trip:${id}`);
+    try {
+      await deleteCanonicalLedgerBySource("trip", [id]);
+    } catch (ledgerErr: any) {
+      console.warn(`[fleet DELETE /trips/:id] Ledger cleanup failed (non-fatal) trip=${id}:`, ledgerErr?.message);
+    }
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message || "Internal Server Error" }, 500);

@@ -310,26 +310,18 @@ async function tripDeleteItems(keys: string[]): Promise<number> {
   // 1. Delete the trip records themselves
   const result = await api.bulkDeleteExecute({ keys, cleanupStorage: false });
 
-  // 2. Clean up associated ledger entries (sourceType === 'trip')
-  //    Extract trip IDs from keys like "trip:abc-123" → "abc-123"
+  // 2. Canonical ledger (`ledger_event:*`) — remove fare rows for deleted trip ids
+  const tripIds = keys.map((k) => k.replace(/^trip:/, '')).filter(Boolean);
+  const CHUNK = 80;
   try {
-    const { items: ledgerItems } = await api.bulkDeletePreview({
-      prefix: 'ledger:',
-      startDate: '1970-01-01',
-      endDate: '2100-01-01',
-      fields: ['id', 'sourceType', 'sourceId'],
-    });
-    const tripIds = new Set(keys.map(k => k.replace('trip:', '')));
-    const orphanedLedgerKeys = ledgerItems
-      .filter((item: any) => item.sourceType === 'trip' && tripIds.has(item.sourceId))
-      .map((item: any) => item.key || `ledger:${item.id}`);
-
-    if (orphanedLedgerKeys.length > 0) {
-      await api.bulkDeleteExecute({ keys: orphanedLedgerKeys, cleanupStorage: false });
-      console.log(`[TripDelete] Cleaned up ${orphanedLedgerKeys.length} associated ledger entries`);
+    for (let i = 0; i < tripIds.length; i += CHUNK) {
+      const chunk = tripIds.slice(i, i + CHUNK);
+      await api.deleteLedgerBySource({ sourceType: 'trip', sourceIds: chunk });
+    }
+    if (tripIds.length > 0) {
+      console.log(`[TripDelete] Cleaned up canonical ledger for ${tripIds.length} trip id(s)`);
     }
   } catch (ledgerErr) {
-    // Ledger cleanup failure should not break the trip delete — log and move on
     console.warn('[TripDelete] Ledger cleanup failed (non-fatal):', ledgerErr);
   }
 
@@ -556,8 +548,9 @@ async function fetchCheckins(config: DeleteConfig) {
 const FACTORY_RESET_PREFIXES = [
   'trip:', 'batch:', 'driver:', 'driver_metric:', 'vehicle:', 'vehicle_metric:',
   'transaction:', 'fuel_entry:', 'fuel_card:', 'station:', 'learnt_location:',
-  'toll_tag:', 'toll_plaza:', 'claim:', 'equipment:', 'inventory:',
+  'toll_tag:', 'toll_plaza:', 'toll_ledger:', 'claim:', 'equipment:', 'inventory:',
   'maintenance_log:', 'odometer_reading:', 'checkin:', 'organization_metric:',
+  'ledger_event:', 'ledger_event_idem:',
 ];
 
 async function fetchAllForFactoryReset(_config: DeleteConfig) {

@@ -2517,6 +2517,26 @@ export const api = {
     return response.json();
   },
 
+  /** Remove canonical ledger_event rows for sourceType + sourceIds (after deleting trips / ops rows). */
+  async deleteLedgerBySource(payload: {
+    sourceType: string;
+    sourceIds: string[];
+  }): Promise<{ success: boolean; deleted: number; idemDeleted: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/ledger/delete-by-source`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'deleteLedgerBySource failed');
+    }
+    return response.json();
+  },
+
   async getCanonicalLedgerEvents(params: {
     driverId?: string;
     startDate?: string;

@@ -1,6 +1,7 @@
 import { Hono } from "npm:hono";
 import type { Context } from "npm:hono";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
+import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
@@ -276,9 +277,12 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
       }
     }
 
+    const ledgerTransactionIds = new Set<string>(txIdsToDelete);
     // Remove paired Cash Wallet credits (fuel-credit-<sourceTxId>) before deleting source txs
     for (const txId of txIdsToDelete) {
       try {
+        const fc = await kv.get(`transaction:fuel-credit-${txId}`);
+        if (fc?.id) ledgerTransactionIds.add(String(fc.id));
         await kv.del(`transaction:fuel-credit-${txId}`);
       } catch {
         /* ignore missing */
@@ -288,6 +292,12 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
       } catch (delErr: any) {
         console.log(`[FinalizedReports] Failed to delete transaction ${txId}: ${delErr?.message}`);
       }
+    }
+
+    try {
+      await deleteCanonicalLedgerBySource("transaction", [...ledgerTransactionIds]);
+    } catch (ledgerErr: any) {
+      console.warn("[FinalizedReports] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
     }
 
     // Reset fuel logs finalized in this statement (Pending + strip finalize metadata)
@@ -2396,6 +2406,11 @@ app.post(`${BASE_PATH}/admin/spatial-review/delete`, async (c) => {
             }
             await cleanupOrphanLearnt(id, "fuel_entry");
             await kv.del(`fuel_entry:${id}`);
+            try {
+              await deleteCanonicalLedgerBySource("transaction", [id]);
+            } catch (le: any) {
+              console.warn(`[SpatialReviewDelete] Ledger cleanup fuel_entry failed:`, le?.message);
+            }
             console.log(`[SpatialReviewDelete] Deleted fuel_entry:${id}`);
             return c.json({ success: true, deleted: "fuel_entry", id });
         }
@@ -2420,6 +2435,11 @@ app.post(`${BASE_PATH}/admin/spatial-review/delete`, async (c) => {
         }
         await cleanupOrphanLearnt(id, "transaction");
         await kv.del(`transaction:${id}`);
+        try {
+          await deleteCanonicalLedgerBySource("transaction", [id]);
+        } catch (le: any) {
+          console.warn(`[SpatialReviewDelete] Ledger cleanup transaction failed:`, le?.message);
+        }
         console.log(`[SpatialReviewDelete] Deleted transaction:${id}`);
         return c.json({ success: true, deleted: "transaction", id });
     } catch (e: any) {
@@ -2742,6 +2762,11 @@ app.delete(`${BASE_PATH}/fuel-entries/:id`, async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`fuel_entry:${id}`);
+    try {
+      await deleteCanonicalLedgerBySource("transaction", [id]);
+    } catch (le: any) {
+      console.warn(`[DELETE fuel-entries] Ledger cleanup failed (non-fatal) entry=${id}:`, le?.message);
+    }
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

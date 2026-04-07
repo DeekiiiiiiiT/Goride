@@ -18,7 +18,11 @@ import { Buffer } from "node:buffer";
 import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
-import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
+import {
+  appendCanonicalLedgerEvents,
+  deleteAllCanonicalLedgerBySourceType,
+  deleteCanonicalLedgerBySource,
+} from "./ledger_canonical.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
   appendCanonicalTollIfEligible,
@@ -2027,6 +2031,14 @@ app.delete("/make-server-37f42386/trips", requireAuth(), requirePermission('tran
         }
         counts[prefix] = count || 0;
     }
+
+    // Canonical ledger: trip + transaction rows (trips + transaction:* wiped above)
+    try {
+      await deleteAllCanonicalLedgerBySourceType("trip");
+      await deleteAllCanonicalLedgerBySourceType("transaction");
+    } catch (ledgerErr: any) {
+      console.warn("[DELETE /trips] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
+    }
     
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
@@ -2050,6 +2062,11 @@ app.delete("/make-server-37f42386/trips/:id", requireAuth(), requirePermission('
   const id = c.req.param("id");
   try {
     await kv.del(`trip:${id}`);
+    try {
+      await deleteCanonicalLedgerBySource("trip", [id]);
+    } catch (ledgerErr: any) {
+      console.warn(`[DELETE /trips/:id] Ledger cleanup failed (non-fatal) trip=${id}:`, ledgerErr?.message);
+    }
     
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
@@ -2865,11 +2882,39 @@ app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requirePermi
     
     // Not a toll, delete from transaction:*
     await kv.del(`transaction:${id}`);
+    try {
+      await deleteCanonicalLedgerBySource("transaction", [id]);
+    } catch (ledgerErr: any) {
+      console.warn(`[DELETE /transactions/:id] Ledger cleanup failed (non-fatal) tx=${id}:`, ledgerErr?.message);
+    }
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
+
+/** Bulk-delete canonical ledger rows by source (used by Data Center trip bulk delete). */
+app.post(
+  "/make-server-37f42386/ledger/delete-by-source",
+  requireAuth(),
+  requirePermission("transactions.edit"),
+  async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const sourceType = typeof body?.sourceType === "string" ? body.sourceType.trim() : "";
+      const sourceIds = Array.isArray(body?.sourceIds)
+        ? body.sourceIds.map((x: unknown) => String(x).trim()).filter(Boolean)
+        : [];
+      if (!sourceType || sourceIds.length === 0) {
+        return c.json({ error: "sourceType and non-empty sourceIds[] required" }, 400);
+      }
+      const result = await deleteCanonicalLedgerBySource(sourceType, sourceIds);
+      return c.json({ success: true, ...result });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 // ═══════════════════════════════════════════════════════════════════════
 // WRITE-TIME LEDGER ENDPOINTS
@@ -3057,6 +3102,166 @@ app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+
+/** Whether a canonical ledger row's source record still exists in KV. */
+async function canonicalLedgerSourceStillExists(sourceType: string, sourceId: string): Promise<boolean> {
+  const sid = String(sourceId).trim();
+  if (!sid) return false;
+  switch (sourceType) {
+    case "trip":
+      return !!(await kv.get(`trip:${sid}`));
+    case "import_batch":
+      return !!(await kv.get(`batch:${sid}`));
+    case "transaction": {
+      if (await kv.get(`transaction:${sid}`)) return true;
+      if (await kv.get(`fuel_entry:${sid}`)) return true;
+      const toll = await getTollLedgerEntry(sid);
+      return !!toll;
+    }
+    case "adjustment":
+    case "reconciliation":
+    case "statement":
+      return true;
+    default:
+      return true;
+  }
+}
+
+// ─── GET /admin/ledger-source-orphan-audit — Dry-run: ledger_event rows whose source KV row is gone ─────
+app.get(
+  "/make-server-37f42386/admin/ledger-source-orphan-audit",
+  requireAuth(),
+  requirePermission("data.backfill"),
+  async (c) => {
+    try {
+      const PAGE = 500;
+      let offset = 0;
+      const orphans: Array<{
+        key: string;
+        id: string;
+        sourceType: string;
+        sourceId: string;
+        eventType?: string;
+      }> = [];
+      let scanned = 0;
+
+      while (offset < 100_000) {
+        const { data: rows, error } = await supabase
+          .from("kv_store_37f42386")
+          .select("key, value")
+          .like("key", "ledger_event:%")
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = rows || [];
+        if (page.length === 0) break;
+        for (const row of page as { key: string; value: Record<string, unknown> }[]) {
+          scanned++;
+          const v = row.value || {};
+          const st = typeof v.sourceType === "string" ? v.sourceType.trim() : "";
+          const sid = typeof v.sourceId === "string" ? v.sourceId.trim() : "";
+          const id = typeof v.id === "string" ? v.id.trim() : "";
+          if (!st || !sid) continue;
+          const exists = await canonicalLedgerSourceStillExists(st, sid);
+          if (!exists) {
+            orphans.push({
+              key: row.key,
+              id: id || row.key.replace(/^ledger_event:/, ""),
+              sourceType: st,
+              sourceId: sid,
+              eventType: typeof v.eventType === "string" ? String(v.eventType) : undefined,
+            });
+          }
+        }
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+
+      return c.json({ success: true, scanned, orphanCount: orphans.length, orphans });
+    } catch (e: any) {
+      console.error("[ledger-source-orphan-audit]", e);
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
+
+// ─── POST /admin/ledger-source-orphan-cleanup — Remove orphaned ledger_event rows (grouped by source) ─────
+app.post(
+  "/make-server-37f42386/admin/ledger-source-orphan-cleanup",
+  requireAuth(),
+  requirePermission("data.backfill"),
+  async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body?.dryRun === true;
+      if (!dryRun && body?.confirm !== "DELETE_ORPHAN_LEDGER_SOURCES") {
+        return c.json(
+          {
+            error:
+              'Send { "dryRun": true } to preview counts, or { "confirm": "DELETE_ORPHAN_LEDGER_SOURCES" } to delete.',
+          },
+          400,
+        );
+      }
+
+      const PAGE = 500;
+      let offset = 0;
+      const byType = new Map<string, Set<string>>();
+      let scanned = 0;
+
+      while (offset < 100_000) {
+        const { data: rows, error } = await supabase
+          .from("kv_store_37f42386")
+          .select("key, value")
+          .like("key", "ledger_event:%")
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = rows || [];
+        if (page.length === 0) break;
+        for (const row of page as { key: string; value: Record<string, unknown> }[]) {
+          scanned++;
+          const v = row.value || {};
+          const st = typeof v.sourceType === "string" ? v.sourceType.trim() : "";
+          const sid = typeof v.sourceId === "string" ? v.sourceId.trim() : "";
+          if (!st || !sid) continue;
+          const exists = await canonicalLedgerSourceStillExists(st, sid);
+          if (!exists) {
+            if (!byType.has(st)) byType.set(st, new Set());
+            byType.get(st)!.add(sid);
+          }
+        }
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+
+      if (dryRun) {
+        let totalIds = 0;
+        const summary: Record<string, number> = {};
+        for (const [st, ids] of byType) {
+          summary[st] = ids.size;
+          totalIds += ids.size;
+        }
+        return c.json({ success: true, dryRun: true, scanned, sourceGroups: summary, distinctSourceIds: totalIds });
+      }
+
+      let deleted = 0;
+      let idemDeleted = 0;
+      for (const [st, idSet] of byType) {
+        const ids = [...idSet];
+        for (let i = 0; i < ids.length; i += 80) {
+          const chunk = ids.slice(i, i + 80);
+          const r = await deleteCanonicalLedgerBySource(st, chunk);
+          deleted += r.deleted;
+          idemDeleted += r.idemDeleted;
+        }
+      }
+
+      return c.json({ success: true, dryRun: false, scanned, deleted, idemDeleted });
+    } catch (e: any) {
+      console.error("[ledger-source-orphan-cleanup]", e);
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 // ─── POST /ledger/purge-legacy-all — Delete all `ledger:%` KV rows (one-time cleanup) ─────
 app.post("/make-server-37f42386/ledger/purge-legacy-all", requireAuth(), requirePermission("data.backfill"), async (c) => {
@@ -5535,14 +5740,34 @@ app.post("/make-server-37f42386/expenses/reject", requireAuth(), requirePermissi
     const fuelCreditKey = `transaction:fuel-credit-${id}`;
     const existingFuelCredit = await kv.get(fuelCreditKey);
     if (existingFuelCredit) {
+        const fcId = typeof (existingFuelCredit as { id?: string }).id === "string"
+          ? String((existingFuelCredit as { id?: string }).id)
+          : "";
         await kv.del(fuelCreditKey);
+        if (fcId) {
+          try {
+            await deleteCanonicalLedgerBySource("transaction", [fcId]);
+          } catch (e: any) {
+            console.warn(`[expenses/reject] Ledger cleanup fuel credit failed:`, e?.message);
+          }
+        }
         console.log(`[FuelCredit] Removed wallet credit for rejected reimbursement: ${id}`);
     }
 
     const tollCreditKey = `transaction:toll-credit-${id}`;
     const existingTollCredit = await kv.get(tollCreditKey);
     if (existingTollCredit) {
+        const tcId = typeof (existingTollCredit as { id?: string }).id === "string"
+          ? String((existingTollCredit as { id?: string }).id)
+          : "";
         await kv.del(tollCreditKey);
+        if (tcId) {
+          try {
+            await deleteCanonicalLedgerBySource("transaction", [tcId]);
+          } catch (e: any) {
+            console.warn(`[expenses/reject] Ledger cleanup toll credit failed:`, e?.message);
+          }
+        }
         console.log(`[TollCredit] Removed wallet credit for rejected toll: ${id}`);
     }
 
@@ -6285,6 +6510,11 @@ app.delete("/make-server-37f42386/fuel-entries/:id", requireAuth(), requirePermi
   const id = c.req.param("id");
   try {
     await kv.del(`fuel_entry:${id}`);
+    try {
+      await deleteCanonicalLedgerBySource("transaction", [id]);
+    } catch (ledgerErr: any) {
+      console.warn(`[DELETE /fuel-entries/:id] Ledger cleanup failed (non-fatal) entry=${id}:`, ledgerErr?.message);
+    }
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -11039,6 +11269,11 @@ app.delete("/make-server-37f42386/fuel-entries/:id", requireAuth(), requirePermi
     const id = c.req.param("id");
     try {
         await kv.del(`fuel_entry:${id}`);
+        try {
+          await deleteCanonicalLedgerBySource("transaction", [id]);
+        } catch (ledgerErr: any) {
+          console.warn(`[DELETE /fuel-entries/:id dup] Ledger cleanup failed (non-fatal) entry=${id}:`, ledgerErr?.message);
+        }
         return c.json({ success: true });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
