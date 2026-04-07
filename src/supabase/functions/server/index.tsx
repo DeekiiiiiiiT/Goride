@@ -3009,7 +3009,9 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
     query = query.order(sortField, { ascending: sortDir === "asc" });
 
     if (needsAmountFilter) {
-      const overfetchLimit = limit + 500;
+      // Amount is filtered in memory after fetch; scan enough rows that older matches aren't
+      // dropped (still capped at 25k for safety on very large stores).
+      const overfetchLimit = 25000;
       query = query.range(0, overfetchLimit - 1);
 
       const { data, error, count } = await query;

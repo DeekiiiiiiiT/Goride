@@ -213,6 +213,35 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     }, 400);
   }, []);
 
+  /** Local strings for amount range; committed to `filters` on blur or Enter. */
+  const [amountMinStr, setAmountMinStr] = useState('');
+  const [amountMaxStr, setAmountMaxStr] = useState('');
+
+  const parseAmountInput = useCallback((raw: string): number | undefined => {
+    const t = raw.trim().replace(/,/g, '');
+    if (!t) return undefined;
+    const n = parseFloat(t);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  }, []);
+
+  const applyAmountRangeToFilters = useCallback(() => {
+    let minV = parseAmountInput(amountMinStr);
+    let maxV = parseAmountInput(amountMaxStr);
+    if (minV !== undefined && maxV !== undefined && minV > maxV) {
+      const t = minV;
+      minV = maxV;
+      maxV = t;
+      setAmountMinStr(String(minV));
+      setAmountMaxStr(String(maxV));
+    }
+    setFilters((prev) => {
+      if (prev.minAmount === minV && prev.maxAmount === maxV) return prev;
+      return { ...prev, minAmount: minV, maxAmount: maxV };
+    });
+    setPage(1);
+    setSelectedIds((prev) => (prev.size === 0 ? prev : new Set()));
+  }, [amountMinStr, amountMaxStr, parseAmountInput]);
+
   // ─── Data fetching ────────────────────────────────────────────────
 
   // Memoize filter string to prevent infinite re-renders from object reference changes
@@ -327,14 +356,26 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     setFilters({ driverId, vehicleId });
     setSearchTermInput('');
     setSearchTerm('');
+    setAmountMinStr('');
+    setAmountMaxStr('');
     setActiveDatePreset('All Time');
     setPage(1);
     setSelectedIds(prev => prev.size === 0 ? prev : new Set());
   }, [driverId, vehicleId]);
 
   const hasActiveFilters = useMemo(() => {
-    return !!(filters.startDate || filters.endDate || filters.eventType || filters.direction || filters.platform || filters.isReconciled !== undefined || searchTerm);
-  }, [filterKey, searchTerm]);
+    return !!(
+      filters.startDate ||
+      filters.endDate ||
+      filters.eventType ||
+      filters.direction ||
+      filters.platform ||
+      filters.isReconciled !== undefined ||
+      filters.minAmount !== undefined ||
+      filters.maxAmount !== undefined ||
+      searchTerm
+    );
+  }, [filterKey, searchTerm, filters.minAmount, filters.maxAmount]);
 
   // ─── Selection handlers ───────────────────────────────────────────
 
@@ -474,7 +515,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
     } finally {
       setExporting(false);
     }
-  }, [filterKey, searchTerm]);
+  }, [filterKey, filters, searchTerm]);
 
   // ─── Derived values ───────────────────────────────────────────────
 
@@ -678,7 +719,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search descriptions, drivers..."
+                placeholder="Search descriptions, drivers…"
                 value={searchTermInput}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-9 bg-slate-50 border-slate-200 h-9 text-sm"
@@ -708,6 +749,46 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
                 Export CSV
               </Button>
             </div>
+          </div>
+
+          {/* Amount range (|net amount| on ledger rows) */}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 sm:gap-3 pt-1 border-t border-slate-100">
+            <span className="text-xs font-medium text-slate-500 sm:mr-1 sm:pb-2">Amount</span>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="space-y-0.5">
+                <label htmlFor="ledger-amount-min" className="text-[11px] text-slate-500">
+                  Min
+                </label>
+                <Input
+                  id="ledger-amount-min"
+                  inputMode="decimal"
+                  placeholder="Any"
+                  value={amountMinStr}
+                  onChange={(e) => setAmountMinStr(e.target.value)}
+                  onBlur={applyAmountRangeToFilters}
+                  onKeyDown={(e) => e.key === 'Enter' && applyAmountRangeToFilters()}
+                  className="h-9 w-[7.5rem] text-sm bg-white border-slate-200"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <label htmlFor="ledger-amount-max" className="text-[11px] text-slate-500">
+                  Max
+                </label>
+                <Input
+                  id="ledger-amount-max"
+                  inputMode="decimal"
+                  placeholder="Any"
+                  value={amountMaxStr}
+                  onChange={(e) => setAmountMaxStr(e.target.value)}
+                  onBlur={applyAmountRangeToFilters}
+                  onKeyDown={(e) => e.key === 'Enter' && applyAmountRangeToFilters()}
+                  className="h-9 w-[7.5rem] text-sm bg-white border-slate-200"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 sm:pb-2 max-w-md leading-snug">
+              Absolute net amount. One value = lower or upper bound only; both = range. Match exact: same min and max.
+            </p>
           </div>
 
           {/* Date presets row */}
