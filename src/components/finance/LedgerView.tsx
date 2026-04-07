@@ -110,6 +110,8 @@ interface LedgerViewProps {
   vehicleId?: string;
   /** Optional: compact mode hides some columns */
   compact?: boolean;
+  /** Optional: filter to specific event types (e.g., for Statement Summary tab) */
+  eventTypesFilter?: string[];
 }
 
 // ─── Detail Dialog Helper Components ─────────────────────────────────
@@ -150,7 +152,7 @@ function DetailRow({ icon: Icon, label, value, mono, copyable }: DetailRowProps)
 
 // ─── Component ────────────────────────────────────────────────────────
 
-function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewProps) {
+function LedgerViewInner({ driverId, vehicleId, compact = false, eventTypesFilter }: LedgerViewProps) {
   // Data state
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -174,6 +176,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false }: LedgerViewPro
   const [filters, setFilters] = useState<LedgerFilterParams>(() => ({
     driverId,
     vehicleId,
+    ...(eventTypesFilter && eventTypesFilter.length > 0 ? { eventTypes: eventTypesFilter } : {}),
   }));
   const [searchTermInput, setSearchTermInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');

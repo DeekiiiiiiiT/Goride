@@ -3,7 +3,7 @@ import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { Loader2 } from 'lucide-react';
 import { TransactionsTab } from '../finance/TransactionsTab';
-import { LedgerView } from '../finance/LedgerView';
+import { TabbedTransactionList } from '../finance/TabbedTransactionList';
 import { toast } from "sonner@2.0.3";
 
 export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 'list' }) {
@@ -12,7 +12,7 @@ export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 
 
   useEffect(() => {
     if (mode === 'list') {
-      // LedgerView handles its own data fetching — no trips needed
+      // TabbedTransactionList handles its own data fetching — no trips needed
       setLoading(false);
       return;
     }
@@ -31,17 +31,9 @@ export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 
     fetchTrips();
   }, [mode]);
 
-  // ── List mode: render the new LedgerView ──
+  // ── List mode: render the tabbed transaction list ──
   if (mode === 'list') {
-    return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Transaction List</h2>
-          <p className="text-slate-500">View and manage your complete transaction history.</p>
-        </div>
-        <LedgerView />
-      </div>
-    );
+    return <TabbedTransactionList />;
   }
 
   // ── Analytics mode: keep existing TransactionsTab ──

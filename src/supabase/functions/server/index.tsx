@@ -1604,7 +1604,7 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
   try {
     let { 
         driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
-        platform, tripType, vehicleId, anchorPeriodId
+        platform, tripType, vehicleId, anchorPeriodId, organizationId
     } = await c.req.json();
     
     // Query JSONB value directly
@@ -1612,6 +1612,14 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
         .from("kv_store_37f42386")
         .select("value", { count: 'exact' })
         .like("key", "trip:%");
+
+    // Organization scoping: filter by organizationId when provided (customer portal)
+    // Also respect RBAC org context for fleet users
+    const rbacOrgId = getOrgId(c);
+    const effectiveOrgId = organizationId || rbacOrgId;
+    if (effectiveOrgId) {
+        query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
+    }
 
     // driverIds: broad OR search across multiple IDs + optional name
     // This ensures we find trips regardless of which ID format was stored
