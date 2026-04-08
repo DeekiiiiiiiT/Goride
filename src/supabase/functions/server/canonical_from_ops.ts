@@ -187,6 +187,23 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
     }
   }
 
+  // ─── TOLLS (Uber trips) ─────────────────────────────────────────────────────
+  if (isUber) {
+    const tollAmount = coerceAmount(trip.tollCharges);
+    if (tollAmount > 0) {
+      events.push({
+        ...commonFields,
+        idempotencyKey: `trip:${id}|toll_charge`,
+        eventType: "toll_charge",
+        direction: "outflow",
+        netAmount: tollAmount,
+        grossAmount: tollAmount,
+        description: `Trip toll (${platform})`,
+        metadata: { tripId: id },
+      });
+    }
+  }
+
   return events;
 }
 

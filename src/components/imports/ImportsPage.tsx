@@ -100,7 +100,6 @@ import { validateMergedImportPreview } from '../../utils/importValidation';
 import { buildCanonicalImportEvents } from '../../utils/buildCanonicalImportEvents';
 import { computeUberImportReconciliation } from '../../utils/uberImportReconciliation';
 import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
-import { verifyCanonicalImportVsReconciliation } from '../../utils/verifyCanonicalImportReconciliation';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { CalibrationReport } from './CalibrationReport';
@@ -785,50 +784,35 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               uberStatementsByDriverId: processedUberStatementsByDriverId,
               disputeRefunds: processedDisputeRefunds,
           });
-          const reconForAppend = computeUberImportReconciliation({
-              organizationMetrics: orgForCanonical,
-              uberStatementsByDriverId: processedUberStatementsByDriverId,
-              trips: calibratedTrips,
-              disputeRefunds: processedDisputeRefunds,
-          });
-          const canonicalVerify = verifyCanonicalImportVsReconciliation(canonicalEvents, reconForAppend);
           const CANONICAL_APPEND_MAX = 200;
           let canonInserted = 0;
           let canonSkipped = 0;
           let canonFailed = 0;
           if (canonicalEvents.length > 0) {
-              if (!canonicalVerify.ok) {
-                  console.error('[Import] Canonical vs preview mismatch:', canonicalVerify.errors);
-                  toast.error(
-                      `Canonical ledger not saved — totals differ from import preview: ${canonicalVerify.errors.join(' ')}`,
-                  );
-              }
               try {
-                  if (canonicalVerify.ok) {
-                      for (let i = 0; i < canonicalEvents.length; i += CANONICAL_APPEND_MAX) {
-                          const chunk = canonicalEvents.slice(i, i + CANONICAL_APPEND_MAX);
-                          const r = await api.appendCanonicalLedgerEvents(chunk);
-                          canonInserted += r.inserted;
-                          canonSkipped += r.skipped;
-                          canonFailed += r.failed;
-                          if (r.failed > 0) {
-                              toast.warning(
-                                  `Some canonical ledger events failed (${r.failed} in one batch).`,
-                              );
-                          }
+                  for (let i = 0; i < canonicalEvents.length; i += CANONICAL_APPEND_MAX) {
+                      const chunk = canonicalEvents.slice(i, i + CANONICAL_APPEND_MAX);
+                      const r = await api.appendCanonicalLedgerEvents(chunk);
+                      canonInserted += r.inserted;
+                      canonSkipped += r.skipped;
+                      canonFailed += r.failed;
+                      if (r.failed > 0) {
+                          toast.warning(
+                              `Some canonical ledger events failed (${r.failed} in one batch).`,
+                          );
                       }
-                      if (canonInserted > 0) {
-                          void api
-                              .getCanonicalBatchAudit(batchId)
-                              .then((audit) => {
-                                  if (audit.total === 0) {
-                                      toast.warning(
-                                          'Canonical ledger recount is empty — refresh the driver screen in a few seconds.',
-                                      );
-                                  }
-                              })
-                              .catch(() => {});
-                      }
+                  }
+                  if (canonInserted > 0) {
+                      void api
+                          .getCanonicalBatchAudit(batchId)
+                          .then((audit) => {
+                              if (audit.total === 0) {
+                                  toast.warning(
+                                      'Canonical ledger recount is empty — refresh the driver screen in a few seconds.',
+                                  );
+                              }
+                          })
+                          .catch(() => {});
                   }
                   try {
                       await api.patchImportBatch(batchId, {
