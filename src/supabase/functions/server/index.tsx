@@ -3730,7 +3730,10 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         }
       }
 
-      const totalEarnings = netFare + promotions + tips;
+      // Net Fare = sum of fare_earning events MINUS prior period adjustments
+      // This matches Uber's calculation: "Paid to you: Your earnings" - "Period Adjustments" = Net Fare
+      const computedNetFare = netFare - periodAdjustments;
+      const totalEarnings = computedNetFare + promotions + tips;
       
       // For platforms without payout events, compute bank transfer
       if (!hasPayoutEvents) {
@@ -3742,7 +3745,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         periodStart: startDate,
         periodEnd: endDate,
         sourceType: 'computed',
-        netFare: Number(netFare.toFixed(2)),
+        netFare: Number(computedNetFare.toFixed(2)),
         promotions: Number(promotions.toFixed(2)),
         tips: Number(tips.toFixed(2)),
         totalEarnings: Number(totalEarnings.toFixed(2)),

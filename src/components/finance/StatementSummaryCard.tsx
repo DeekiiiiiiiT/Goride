@@ -20,7 +20,7 @@ export const STATEMENT_HELP = {
   periodNetEarnings:
     'Gross in-period earnings before tolls and payout split. Sum of all canonical ledger inflows in your date range for this platform: trip fares (fare_earning), promotions, and tips.',
   netFare:
-    'Sum of net amounts on fare_earning events in the period. Each completed trip with a fare posts one row; InDrive uses net fare after service fee when that data exists on the trip.',
+    'Sum of fare_earning events in the period MINUS prior period adjustments. For Uber, this matches the official "Net Fare" calculation: total "Your Earnings" minus any adjustments from previous periods. Each completed trip with a fare posts one row.',
   promotions:
     'Sum of promotion ledger events in the period (e.g. Uber promo amounts from imported trip data).',
   tips:
