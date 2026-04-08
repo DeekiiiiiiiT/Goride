@@ -3641,11 +3641,11 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         ? 'value->>platform.eq.Roam,value->>platform.eq.GoRide'
         : `value->>platform.eq.${plat}`;
 
-      // Query fare_earning, tip, promotion, toll_charge, toll_refund for all platforms
+      // Query fare_earning, tip, promotion, toll_charge, toll_refund, toll_support_adjustment, prior_period_adjustment for all platforms
       // For Uber, also include payout_cash/payout_bank and statement_line (for REFUNDS_TOLL)
       const eventTypes = plat === 'Uber'
-        ? 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.payout_cash,value->>eventType.eq.payout_bank,value->>eventType.eq.statement_line'
-        : 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund';
+        ? 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment,value->>eventType.eq.payout_cash,value->>eventType.eq.payout_bank,value->>eventType.eq.statement_line'
+        : 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment';
 
       let query = supabase
         .from("kv_store_37f42386")
@@ -3671,6 +3671,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
 
       let netFare = 0, promotions = 0, tips = 0;
       let tolls = 0, tollAdjustments = 0;
+      let periodAdjustments = 0;
       let cashCollected = 0, bankTransfer = 0;
       let tripCount = 0;
       let hasPayoutEvents = false;
@@ -3701,6 +3702,14 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
             break;
           case 'toll_refund':
             tollAdjustments += mag;
+            break;
+          case 'toll_support_adjustment':
+            // Toll support adjustments reduce toll expense (credits)
+            tollAdjustments += mag;
+            break;
+          case 'prior_period_adjustment':
+            // Adjustments from previous periods (can be positive or negative)
+            periodAdjustments += net;
             break;
           case 'payout_cash':
             // Uber: use actual payout_cash for cash collected
@@ -3740,7 +3749,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         tolls: Number(tolls.toFixed(2)),
         tollAdjustments: Number(tollAdjustments.toFixed(2)),
         totalRefundsExpenses: Number((tolls - tollAdjustments).toFixed(2)),
-        periodAdjustments: 0,
+        periodAdjustments: Number(periodAdjustments.toFixed(2)),
         cashCollected: Number(cashCollected.toFixed(2)),
         bankTransfer: Number(bankTransfer.toFixed(2)),
         totalPayout: Number((cashCollected + bankTransfer).toFixed(2)),

@@ -204,6 +204,23 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
     }
   }
 
+  // ─── PRIOR PERIOD ADJUSTMENTS (Uber trips) ──────────────────────────────────
+  if (isUber) {
+    const priorAdj = coerceAmount(trip.uberPriorPeriodAdjustment);
+    if (Math.abs(priorAdj) > 0.005) {
+      events.push({
+        ...commonFields,
+        idempotencyKey: `trip:${id}|prior_period_adjustment`,
+        eventType: "prior_period_adjustment",
+        direction: priorAdj >= 0 ? "inflow" : "outflow",
+        netAmount: priorAdj,
+        grossAmount: Math.abs(priorAdj),
+        description: `Adjustment from previous period (${platform})`,
+        metadata: { tripId: id },
+      });
+    }
+  }
+
   return events;
 }
 
