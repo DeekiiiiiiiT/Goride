@@ -113,6 +113,14 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
       fareGross = uberFare;
       netAmount = uberFare;
       grossAmount = uberFare;
+    } else {
+      // uberFareComponents is 0 (not populated), so compute fare from trip.amount
+      // Subtract promotions since they are distributed from statement-level (payments_driver.csv)
+      // and created as separate promotion events - avoid double-counting
+      const promos = coerceAmount(trip.uberPromotionsAmount);
+      fareGross = Math.max(0, fareGross - promos);
+      netAmount = fareGross;
+      grossAmount = fareGross;
     }
   } else if (platformLc === "indrive") {
     // InDrive: handle net income / service fee
