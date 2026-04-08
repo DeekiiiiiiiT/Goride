@@ -115,10 +115,12 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
       grossAmount = uberFare;
     } else {
       // uberFareComponents is 0 (not populated), so compute fare from trip.amount
-      // Subtract promotions since they are distributed from statement-level (payments_driver.csv)
-      // and created as separate promotion events - avoid double-counting
+      // trip.amount = sum of "Paid to you : Your earnings" which includes fares + tips + promos + adjustments
+      // Subtract tips, promotions, and prior period adjustments since they are created as separate events
+      const tips = coerceAmount(trip.uberTips);
       const promos = coerceAmount(trip.uberPromotionsAmount);
-      fareGross = Math.max(0, fareGross - promos);
+      const priorAdj = coerceAmount(trip.uberPriorPeriodAdjustment);
+      fareGross = Math.max(0, fareGross - tips - promos - priorAdj);
       netAmount = fareGross;
       grossAmount = fareGross;
     }

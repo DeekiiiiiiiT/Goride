@@ -3730,9 +3730,9 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         }
       }
 
-      // Net Fare = sum of fare_earning events MINUS prior period adjustments
-      // This matches Uber's calculation: "Paid to you: Your earnings" - "Period Adjustments" = Net Fare
-      const computedNetFare = netFare - periodAdjustments;
+      // Net Fare = sum of fare_earning events (already excludes tips, promotions, and prior period adjustments)
+      // fare_earning events are created from: trip.amount - tips - promos - priorAdj
+      const computedNetFare = netFare;
       const totalEarnings = computedNetFare + promotions + tips;
       
       // For platforms without payout events, compute bank transfer
