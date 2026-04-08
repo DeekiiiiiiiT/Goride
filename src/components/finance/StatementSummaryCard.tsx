@@ -28,17 +28,17 @@ export const STATEMENT_HELP = {
   totalEarnings:
     'Net Fare + Promotions + Tips. This is the earnings subtotal before Refunds & Expenses.',
   refundsExpenses:
-    'Toll-related costs and credits in the period, expressed as a single net expense figure for the statement.',
+    'Toll charges paid during trips plus any additional toll adjustments recovered from the platform. This represents the total toll-related amount that was refunded or should be reimbursed.',
   tolls:
-    'Total of toll_charge ledger events (absolute amounts). This is what was charged or attributed to tolls.',
+    'Total toll charges attributed to trips in this period. These are tolls the driver paid during trips that the platform refunds as part of the trip fare.',
   tollAdjustments:
-    'Credits that reduce toll expense: toll_refund events, and for Uber, organization toll refunds (statement REFUNDS_TOLL) when present.',
+    'Additional toll credits recovered from the platform (e.g. Uber Support adjustments). When a toll refund is short, the driver contacts support and the difference is credited here. This amount is ADDED to Tolls to get Total Refunds & Expenses.',
   totalRefundsExpenses:
-    'Net toll impact: Tolls minus Toll Adjustments. Shown as an expense in the statement flow.',
+    'Tolls + Toll Adjustments. The full toll amount that was or should be reimbursed. For example: $1,385 tolls + $10 support adjustment = $1,395 total.',
   adjustments:
-    'Corrections that apply to this statement period (e.g. prior-period items).',
+    'Corrections from previous statement periods that apply to this period (e.g. Uber "Adjustments from previous periods").',
   periodAdjustments:
-    'Reserved for future prior-period adjustment lines. Currently zero unless we add those events to the ledger.',
+    'Sum of prior_period_adjustment ledger events. These are credits or debits from previous periods that Uber applies to the current statement (e.g. fare corrections, disputed amounts resolved).',
   payout:
     'How earnings are allocated between cash collected from passengers and amounts treated as bank/digital payout for this platform in the period.',
   cashCollected:

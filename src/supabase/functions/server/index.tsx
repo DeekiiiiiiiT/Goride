@@ -3748,7 +3748,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         totalEarnings: Number(totalEarnings.toFixed(2)),
         tolls: Number(tolls.toFixed(2)),
         tollAdjustments: Number(tollAdjustments.toFixed(2)),
-        totalRefundsExpenses: Number((tolls - tollAdjustments).toFixed(2)),
+        totalRefundsExpenses: Number((tolls + tollAdjustments).toFixed(2)),
         periodAdjustments: Number(periodAdjustments.toFixed(2)),
         cashCollected: Number(cashCollected.toFixed(2)),
         bankTransfer: Number(bankTransfer.toFixed(2)),
