@@ -3663,7 +3663,12 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
             .like("key", CANONICAL_LEDGER_KEY_LIKE)
             .or(eventTypes)
             .or(platformFilter);
-          if (orgId) q = q.eq("value->>organizationId", orgId);
+          // Match `filterByOrg` + trips/search: include legacy rows with no organizationId. A strict `.eq(org)`
+          // alone drops idempotent `import_batch` promotion rows first inserted without stampOrg, while newer
+          // `fare_earning` rows (new idempotency keys) have orgId — promotions then sum to $0.
+          if (orgId) {
+            q = q.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
+          }
           if (driverId) q = q.eq("value->>driverId", driverId);
           return q;
         };
@@ -3705,7 +3710,9 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
           .gte("value->>date", startDate)
           .lte("value->>date", endDate);
 
-        if (orgId) query = query.eq("value->>organizationId", orgId);
+        if (orgId) {
+          query = query.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
+        }
         if (driverId) query = query.eq("value->>driverId", driverId);
 
         const res = await query.limit(10000);
