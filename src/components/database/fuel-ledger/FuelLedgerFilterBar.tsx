@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, XIcon, Calendar, ChevronDown } from 'lucide-react';
+import { PeriodWeekDropdown } from '../../ui/PeriodWeekDropdown';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -262,6 +263,18 @@ export function FuelLedgerFilterBar({ filters, onChange, loading, totalResults, 
           colorMap={AUDIT_STATUS_COLORS}
           onChange={v => update({ auditStatus: v })}
         />
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 hidden sm:inline">
+            Week
+          </span>
+          <PeriodWeekDropdown
+            selectedStart={filters.dateFrom || undefined}
+            selectedEnd={filters.dateTo || undefined}
+            placeholder="Select week period"
+            onSelect={(p) => update({ dateFrom: p.startDate, dateTo: p.endDate })}
+          />
+        </div>
 
         {/* Date From */}
         <div className="relative">
