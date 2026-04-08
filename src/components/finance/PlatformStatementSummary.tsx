@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from 'date-fns';
 import { api } from '../../services/api';
-import { StatementSummaryCard } from './StatementSummaryCard';
+import { StatementSummaryCard, StatementTooltipIcon, STATEMENT_HELP } from './StatementSummaryCard';
 import { StatementSummary, StatementPlatform } from '../../types/statementSummary';
 import { cn } from '../ui/utils';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
@@ -290,25 +290,37 @@ export function PlatformStatementSummary() {
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Total Earnings</p>
+              <div className="mb-0.5 flex items-center gap-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Total Earnings</p>
+                <StatementTooltipIcon content={STATEMENT_HELP.combinedTotalEarnings} />
+              </div>
               <p className="text-lg font-bold text-emerald-600">
                 ${filteredSummaries.reduce((sum, s) => sum + s.totalEarnings, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Total Expenses</p>
+              <div className="mb-0.5 flex items-center gap-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Total Expenses</p>
+                <StatementTooltipIcon content={STATEMENT_HELP.combinedTotalExpenses} />
+              </div>
               <p className="text-lg font-bold text-red-600">
                 ${filteredSummaries.reduce((sum, s) => sum + s.totalRefundsExpenses, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Cash Collected</p>
+              <div className="mb-0.5 flex items-center gap-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Cash Collected</p>
+                <StatementTooltipIcon content={STATEMENT_HELP.combinedCashCollected} />
+              </div>
               <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
                 ${filteredSummaries.reduce((sum, s) => sum + s.cashCollected, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Bank Transfer</p>
+              <div className="mb-0.5 flex items-center gap-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Bank Transfer</p>
+                <StatementTooltipIcon content={STATEMENT_HELP.combinedBankTransfer} />
+              </div>
               <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
                 ${filteredSummaries.reduce((sum, s) => sum + s.bankTransfer, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
