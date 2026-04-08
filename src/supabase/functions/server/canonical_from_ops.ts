@@ -107,19 +107,23 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
   let grossAmount = fareGross;
 
   if (isUber) {
-    // Uber: use uberFareComponents for fare (excludes tips/promos which are separate events)
+    // Uber: uberFareComponents = sum of fare breakdown columns (Fare:Fare, Surge, WaitTime, etc.)
+    // This INCLUDES promotions (CSV structure: fareComponents + tips = Total Earnings, promotions are inside fareComponents)
+    // So we must subtract promotions (which are also created as separate events) to get true Net Fare.
     const uberFare = coerceAmount(trip.uberFareComponents);
+    const promos = coerceAmount(trip.uberPromotionsAmount);
+    const priorAdj = coerceAmount(trip.uberPriorPeriodAdjustment);
+    
     if (uberFare > 0) {
-      fareGross = uberFare;
-      netAmount = uberFare;
-      grossAmount = uberFare;
+      // uberFareComponents exists, but it includes promotions - subtract them
+      fareGross = Math.max(0, uberFare - promos);
+      netAmount = fareGross;
+      grossAmount = fareGross;
     } else {
       // uberFareComponents is 0 (not populated), so compute fare from trip.amount
       // trip.amount = sum of "Paid to you : Your earnings" which includes fares + tips + promos + adjustments
       // Subtract tips, promotions, and prior period adjustments since they are created as separate events
       const tips = coerceAmount(trip.uberTips);
-      const promos = coerceAmount(trip.uberPromotionsAmount);
-      const priorAdj = coerceAmount(trip.uberPriorPeriodAdjustment);
       fareGross = Math.max(0, fareGross - tips - promos - priorAdj);
       netAmount = fareGross;
       grossAmount = fareGross;
