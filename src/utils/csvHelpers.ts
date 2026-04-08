@@ -2323,6 +2323,53 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         tr.uberRefundExpenseAmount = (Number(statement.refundsAndExpenses) || 0) * share;
     }
 
+    // Exact statement match: proportional `share` uses floating-point math, so Σ promo_i can drift
+    // a few cents from `statement.promotions`. Ledger Net Fare = Σ(uberFareComponents − promo_i) must
+    // match org "Total Earnings : Net Fare" — apply remainder to the largest-gross trip per driver.
+    for (const driverKey of uberStatementKeys) {
+        const statement = uberStatementsByDriverId.get(driverKey);
+        if (!statement) continue;
+        const targetPromo = Number(statement.promotions) || 0;
+        const targetRefunds = Number(statement.refundsAndExpenses) || 0;
+        const tripsDriver = mergedTrips.filter((tr) => {
+            if (!(tr.uberFareComponents != null || tr.uberTips != null)) return false;
+            if (cleanId(tr.driverId).toLowerCase() !== driverKey) return false;
+            const farePlusTips = (Number(tr.uberFareComponents) || 0) + (Number(tr.uberTips) || 0);
+            const g = farePlusTips > 0 ? farePlusTips : Math.abs(Number(tr.amount) || 0);
+            const totalGross = uberDriverGross.get(driverKey) || 0;
+            return g > 0 && totalGross > 0;
+        });
+        if (tripsDriver.length === 0) continue;
+
+        const sumPromo = tripsDriver.reduce((s, tr) => s + (Number(tr.uberPromotionsAmount) || 0), 0);
+        const sumRef = tripsDriver.reduce((s, tr) => s + (Number(tr.uberRefundExpenseAmount) || 0), 0);
+        const driftPromo = Number((targetPromo - sumPromo).toFixed(4));
+        const driftRef = Number((targetRefunds - sumRef).toFixed(4));
+
+        const pickLargestGross = () => {
+            let best: (typeof mergedTrips)[0] | null = null;
+            let bestG = -1;
+            for (const tr of tripsDriver) {
+                const farePlusTips = (Number(tr.uberFareComponents) || 0) + (Number(tr.uberTips) || 0);
+                const g = farePlusTips > 0 ? farePlusTips : Math.abs(Number(tr.amount) || 0);
+                if (g > bestG) {
+                    bestG = g;
+                    best = tr;
+                }
+            }
+            return best;
+        };
+
+        if (Math.abs(driftPromo) > 1e-6) {
+            const t = pickLargestGross();
+            if (t) t.uberPromotionsAmount = (Number(t.uberPromotionsAmount) || 0) + driftPromo;
+        }
+        if (Math.abs(driftRef) > 1e-6) {
+            const t = pickLargestGross();
+            if (t) t.uberRefundExpenseAmount = (Number(t.uberRefundExpenseAmount) || 0) + driftRef;
+        }
+    }
+
     // Phase 1: Logic Correction (Phantom Trip Filtering)
     const finalizedTrips = mergedTrips.filter(t => {
         const hasMoney = Math.abs(t.amount) > 5;
