@@ -20,9 +20,9 @@ export const STATEMENT_HELP = {
   periodNetEarnings:
     'Gross in-period earnings before tolls and payout split. Sum of all canonical ledger inflows in your date range for this platform: trip fares (fare_earning), promotions, and tips.',
   netFare:
-    'Sum of fare_earning events in the period MINUS prior period adjustments. For Uber, this matches the official "Net Fare" calculation: total "Your Earnings" minus any adjustments from previous periods. Each completed trip with a fare posts one row.',
+    'Uber: sum of fare_earning minus sum of promotion (fare rows use CSV fare components; promotions are the exact payments_driver total). Other platforms: sum of fare_earning.',
   promotions:
-    'Sum of promotion ledger events in the period (e.g. Uber promo amounts from imported trip data).',
+    'Uber: promotion ledger rows from import (exact Total Earnings : Promotions from payments_driver per driver/period). Other platforms: any promotion events in range.',
   tips:
     'Sum of tip ledger events in the period (e.g. Uber tips from imported trip data).',
   totalEarnings:

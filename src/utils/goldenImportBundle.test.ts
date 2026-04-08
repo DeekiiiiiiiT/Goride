@@ -59,9 +59,8 @@ describe('Phase 8 golden import bundle', () => {
   });
 
   /**
-   * NOTE: Fare-related statement_line events (TOTAL_EARNINGS, NET_FARE, PROMOTIONS, TIPS, REFUNDS_EXPENSES)
-   * are NO LONGER emitted from buildCanonicalImportEvents. Fare data now comes from trip-level events.
-   * This test verifies the events that ARE still emitted: payouts, toll refunds, toll support adjustments.
+   * Promotions: one import_batch `promotion` per driver from payments_driver. Fares from trip ledger events.
+   * Also: payouts, toll refunds, toll support adjustments.
    */
   it('buildCanonicalImportEvents matches golden counts (no fare statement lines)', () => {
     const batch = mergeAndProcessData(loadGoldenBundle(), []);

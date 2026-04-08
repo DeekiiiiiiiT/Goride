@@ -103,10 +103,12 @@ export interface BuildCanonicalImportEventsParams {
  * Phase 3–4: deterministic canonical events from merged import preview data.
  * 
  * IMPORTANT: Fare-related statement_line events (TOTAL_EARNINGS, NET_FARE, PROMOTIONS, TIPS, REFUNDS_EXPENSES)
- * are NO LONGER created here. Instead, Uber trips now generate fare_earning, tip, and promotion events
- * via buildCanonicalTripFareEventsFromTrip (same as Roam/InDrive) for consistent architecture.
- * 
- * This function now only creates:
+ * are NO LONGER created here. Uber trips generate fare_earning, tip, toll, prior_period via
+ * buildCanonicalTripFareEventsFromTrip. Promotions use the exact **payments_driver** total per driver as
+ * one `promotion` event per import batch (no per-trip split).
+ *
+ * This function creates:
+ * - promotion (driver statement total from uberStatementsByDriverId / payments_driver)
  * - payout_cash / payout_bank (actual cash/bank payout totals from org)
  * - toll refund lines (REFUNDS_TOLL)
  * - toll_support_adjustment / dispute_refund events
@@ -116,7 +118,7 @@ export interface BuildCanonicalImportEventsParams {
 export function buildCanonicalImportEvents(
   params: BuildCanonicalImportEventsParams,
 ): CanonicalLedgerEventInput[] {
-  const { batchId, sourceFileHash, trips, organizationMetrics, disputeRefunds } =
+  const { batchId, sourceFileHash, trips, organizationMetrics, disputeRefunds, uberStatementsByDriverId } =
     params;
   const org = organizationMetrics ?? null;
   const bounds = tripDateBounds(trips);
@@ -142,6 +144,39 @@ export function buildCanonicalImportEvents(
       periodEnd,
       description: 'Organization statement: toll refunds',
     });
+  }
+
+  // ─── PROMOTIONS (exact payments_driver total per driver, one row per batch) ─
+  const ssot = uberStatementsByDriverId ?? null;
+  if (ssot && Object.keys(ssot).length > 0) {
+    const driverIds = Object.keys(ssot).sort((a, b) => a.localeCompare(b));
+    for (const driverId of driverIds) {
+      const totals = ssot[driverId];
+      if (!totals) continue;
+      const promo = Number(totals.promotions) || 0;
+      if (Math.abs(promo) < 1e-9) continue;
+      const did = String(driverId).trim();
+      if (!did) continue;
+      out.push({
+        idempotencyKey: `${batchId}|driver_promotion|${did.toLowerCase()}`,
+        date: reportingDate,
+        driverId: did,
+        eventType: 'promotion',
+        direction: 'inflow',
+        netAmount: promo,
+        grossAmount: promo,
+        currency: 'JMD',
+        sourceType: 'import_batch',
+        sourceId: batchId,
+        batchId,
+        sourceFileHash,
+        periodStart,
+        periodEnd,
+        platform: 'Uber',
+        description: 'Promotions (payments_driver statement total)',
+        metadata: { source: 'payments_driver' },
+      });
+    }
   }
 
   // ─── PAYOUTS (actual cash/bank payout totals) ───────────────────────────────

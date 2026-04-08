@@ -32,6 +32,7 @@ describe('buildCanonicalImportEvents', () => {
    * Fare data now comes from trip-level fare_earning/tip/promotion events via buildCanonicalTripFareEventsFromTrip.
    * 
    * This test verifies the events that ARE still emitted:
+   * - promotion (payments_driver total per driver)
    * - payout_cash / payout_bank (org-level cash/bank totals)
    * - REFUNDS_TOLL statement_line (org-level toll refunds)
    * - toll_support_adjustment / dispute_refund (support case refunds)
@@ -126,7 +127,10 @@ describe('buildCanonicalImportEvents', () => {
     expect(events[0].sourceType).toBe('import_batch');
     expect(events.every((e) => e.sourceId === batchId)).toBe(true);
     
-    // Should have exactly 4 events: REFUNDS_TOLL statement_line, payout_cash, payout_bank, toll_support_adjustment
-    expect(events.length).toBe(4);
+    // REFUNDS_TOLL, promotion, payout_cash, payout_bank, toll_support_adjustment
+    expect(events.length).toBe(5);
+    const promoEv = events.find((e) => e.eventType === 'promotion');
+    expect(promoEv?.netAmount).toBe(5);
+    expect(promoEv?.idempotencyKey).toBe(`${batchId}|driver_promotion|${driverId.toLowerCase()}`);
   });
 });

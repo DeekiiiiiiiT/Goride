@@ -3730,9 +3730,11 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         }
       }
 
-      // Net Fare = sum of fare_earning events (already excludes tips, promotions, and prior period adjustments)
-      // fare_earning events are created from: trip.amount - tips - promos - priorAdj
-      const computedNetFare = netFare;
+      // Uber: fare_earning = CSV fare components (includes promotions in the fare bucket). Promotions are
+      // import_batch rows from payments_driver. Net Fare = Σ fare_earning − Σ promotion.
+      // Other platforms: Net Fare = Σ fare_earning (promotions only if present as separate events).
+      const computedNetFare =
+        plat === 'Uber' ? netFare - promotions : netFare;
       const totalEarnings = computedNetFare + promotions + tips;
       
       // For platforms without payout events, compute bank transfer

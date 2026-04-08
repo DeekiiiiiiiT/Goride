@@ -67,10 +67,9 @@ export function tripHasMoneyForLedgerProjection(trip: Record<string, unknown>): 
 }
 
 /**
- * Per-trip fare/tip/promotion events for ALL platforms including Uber.
- * Creates fare_earning, tip (if tips > 0), and promotion (if promotions > 0) events.
- * For Uber: uses uberFareComponents, uberTips, uberPromotionsAmount fields.
- * For InDrive: handles indriveNetIncome/indriveServiceFee for net vs gross.
+ * Per-trip fare/tip events for all platforms; Uber promotions are import_batch (payments_driver), not per trip.
+ * Creates fare_earning, tip (Uber if tips > 0). Uber promotions: see buildCanonicalImportEvents.
+ * For Uber: uberFareComponents, uberTips; InDrive: indrive net/fee handling.
  */
 export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknown>): Record<string, unknown>[] {
   if (!tripHasMoneyForLedgerProjection(trip)) return [];
@@ -107,24 +106,20 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
   let grossAmount = fareGross;
 
   if (isUber) {
-    // Uber: uberFareComponents = sum of fare breakdown columns (Fare:Fare, Surge, WaitTime, etc.)
-    // This INCLUDES promotions (CSV structure: fareComponents + tips = Total Earnings, promotions are inside fareComponents)
-    // So we must subtract promotions (which are also created as separate events) to get true Net Fare.
+    // Uber: fare_earning = CSV fare breakdown (uberFareComponents). Promotions are embedded in that total.
+    // Driver-statement promotions ($ payments_driver) are posted as a single import_batch promotion event,
+    // not split per trip — Statement Summary derives Net Fare as Σ fare_earning − Σ promotion.
     const uberFare = coerceAmount(trip.uberFareComponents);
-    const promos = coerceAmount(trip.uberPromotionsAmount);
     const priorAdj = coerceAmount(trip.uberPriorPeriodAdjustment);
-    
+
     if (uberFare > 0) {
-      // uberFareComponents exists, but it includes promotions - subtract them
-      fareGross = Math.max(0, uberFare - promos);
-      netAmount = fareGross;
-      grossAmount = fareGross;
+      fareGross = uberFare;
+      netAmount = uberFare;
+      grossAmount = uberFare;
     } else {
-      // uberFareComponents is 0 (not populated), so compute fare from trip.amount
-      // trip.amount = sum of "Paid to you : Your earnings" which includes fares + tips + promos + adjustments
-      // Subtract tips, promotions, and prior period adjustments since they are created as separate events
+      // uberFareComponents is 0: derive from trip.amount minus tips and prior-period (separate ledger events)
       const tips = coerceAmount(trip.uberTips);
-      fareGross = Math.max(0, fareGross - tips - promos - priorAdj);
+      fareGross = Math.max(0, fareGross - tips - priorAdj);
       netAmount = fareGross;
       grossAmount = fareGross;
     }
@@ -184,22 +179,8 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
     }
   }
 
-  // ─── PROMOTIONS (separate event for Uber) ───────────────────────────────────
-  if (isUber) {
-    const promos = coerceAmount(trip.uberPromotionsAmount);
-    if (promos > 0) {
-      events.push({
-        ...commonFields,
-        idempotencyKey: `trip:${id}|promotion`,
-        eventType: "promotion",
-        direction: "inflow",
-        netAmount: promos,
-        grossAmount: promos,
-        description: `Trip promotion (${platform})`,
-        metadata: { tripId: id },
-      });
-    }
-  }
+  // ─── PROMOTIONS (Uber) ──────────────────────────────────────────────────────
+  // Posted once per driver/period from payments_driver via buildCanonicalImportEvents (import_batch).
 
   // ─── TOLLS (Uber trips) ─────────────────────────────────────────────────────
   if (isUber) {
