@@ -3641,26 +3641,78 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         ? 'value->>platform.eq.Roam,value->>platform.eq.GoRide'
         : `value->>platform.eq.${plat}`;
 
-      // Query fare_earning, tip, promotion, toll_charge, toll_refund, toll_support_adjustment, prior_period_adjustment for all platforms
-      // For Uber, also include payout_cash/payout_bank and statement_line (for REFUNDS_TOLL)
-      const eventTypes = plat === 'Uber'
-        ? 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment,value->>eventType.eq.payout_cash,value->>eventType.eq.payout_bank,value->>eventType.eq.statement_line'
-        : 'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment';
+      // Query fare_earning, tip, promotion, toll_*, prior_period_adjustment for all platforms.
+      // Uber: split trip-dated rows vs statement/payout/promotion rows. The latter used to use
+      // `date` = org periodStart (before trip dates), so a calendar-week filter dropped promotions.
+      // Import events still carry periodStart/periodEnd — second query includes period overlap with [startDate,endDate].
+      const eventTypesNonUber =
+        'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment';
+      const uberTripEventTypes =
+        'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment';
+      const uberImportEventTypes =
+        'value->>eventType.eq.promotion,value->>eventType.eq.payout_cash,value->>eventType.eq.payout_bank,value->>eventType.eq.statement_line';
 
-      let query = supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", CANONICAL_LEDGER_KEY_LIKE)
-        .or(eventTypes)
-        .or(platformFilter)
-        .gte("value->>date", startDate)
-        .lte("value->>date", endDate);
+      let data: { value: unknown }[] | null = null;
+      let error: { message: string } | null = null;
 
-      if (orgId) query = query.eq("value->>organizationId", orgId);
-      if (driverId) query = query.eq("value->>driverId", driverId);
+      if (plat === 'Uber') {
+        const buildBase = (eventTypes: string) => {
+          let q = supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", CANONICAL_LEDGER_KEY_LIKE)
+            .or(eventTypes)
+            .or(platformFilter);
+          if (orgId) q = q.eq("value->>organizationId", orgId);
+          if (driverId) q = q.eq("value->>driverId", driverId);
+          return q;
+        };
 
-      const { data, error } = await query.limit(10000);
-      if (error) throw error;
+        const qTrip = buildBase(uberTripEventTypes)
+          .gte("value->>date", startDate)
+          .lte("value->>date", endDate)
+          .limit(10000);
+        const dateOrPeriodOverlap = `and(value->>date.gte.${startDate},value->>date.lte.${endDate}),and(value->>periodStart.lte.${endDate},value->>periodEnd.gte.${startDate})`;
+        const qImport = buildBase(uberImportEventTypes).or(dateOrPeriodOverlap).limit(10000);
+
+        const [rTrip, rImport] = await Promise.all([qTrip, qImport]);
+        error = rTrip.error || rImport.error;
+        if (error) throw error;
+
+        const merged = new Map<string, unknown>();
+        for (const row of [...(rTrip.data || []), ...(rImport.data || [])]) {
+          const v = (row as { value?: Record<string, unknown> }).value;
+          if (!v || typeof v !== "object") continue;
+          const id =
+            typeof v.idempotencyKey === "string" && v.idempotencyKey
+              ? v.idempotencyKey
+              : typeof v.id === "string"
+                ? v.id
+                : "";
+          const sig =
+            id ||
+            `${String(v.eventType)}|${String(v.date)}|${String(v.driverId)}|${String(v.netAmount)}`;
+          if (!merged.has(sig)) merged.set(sig, v);
+        }
+        data = [...merged.values()].map((value) => ({ value }));
+      } else {
+        let query = supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", CANONICAL_LEDGER_KEY_LIKE)
+          .or(eventTypesNonUber)
+          .or(platformFilter)
+          .gte("value->>date", startDate)
+          .lte("value->>date", endDate);
+
+        if (orgId) query = query.eq("value->>organizationId", orgId);
+        if (driverId) query = query.eq("value->>driverId", driverId);
+
+        const res = await query.limit(10000);
+        data = res.data;
+        error = res.error;
+        if (error) throw error;
+      }
 
       // Filter to only the requested platform
       const entries = filterByOrg((data || []).map((d: any) => d.value).filter(Boolean), c)

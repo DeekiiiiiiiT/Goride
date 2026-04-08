@@ -447,8 +447,9 @@ export function addDaysYmd(ymd: string, days: number): string {
  * (simple interval). Uber money here is **ledger_event**-based, not raw trip rows — so a 1-day picker can
  * include Roam/InDrive trips for that day while Uber canonical rows need this window + statement rules.
  *
- * Import canonical events set `date` to `periodStart` for Uber statement/payout lines (`buildCanonicalImportEvents`),
- * so a UI range like Mar 23–29 matches on `date`; overlap on `periodStart`/`periodEnd` still applies when present.
+ * Import canonical events set `date` to the **earliest trip day** in the batch for Uber promotion/payout/REFUNDS_TOLL
+ * (`buildCanonicalImportEvents`), so calendar-week filters align with trip activity; `periodStart`/`periodEnd` still carry
+ * the statement window for overlap rules (e.g. driver-overview).
  *
  * Legacy rows often omitted `periodStart`/`periodEnd` in KV. `date` may be period end, a mid-week posting day,
  * or a **pay/settlement day many days after** the statement week (e.g. week ending Mar 29 but `date` Apr 10).

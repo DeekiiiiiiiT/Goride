@@ -124,8 +124,13 @@ export function buildCanonicalImportEvents(
   const bounds = tripDateBounds(trips);
   const periodStart = org ? toYmd(org.periodStart, bounds.min) : bounds.min;
   const periodEnd = org ? toYmd(org.periodEnd, bounds.max) : bounds.max;
-  /** Ledger `date` for payout rows — use period **start** so driver UI ranges match. */
-  const reportingDate = periodStart;
+  /**
+   * Ledger `date` for import_batch rows (promotion, payouts, REFUNDS_TOLL): **earliest trip day** in the batch.
+   * Statement Summary and other views filter on `value->>date`. Uber org `periodStart` often precedes trip dates
+   * (billing week vs calendar), which excluded driver-level promotions from the selected range → $0 promotions.
+   * `periodStart` / `periodEnd` on each event still carry the financial statement window for overlap queries.
+   */
+  const ledgerPostingDate = bounds.min;
 
   const primary = pickPrimaryUberDriverId(trips);
   const out: CanonicalLedgerEventInput[] = [];
@@ -139,7 +144,7 @@ export function buildCanonicalImportEvents(
       lineCode: LINE.REFUNDS_TOLL,
       netAmount: Math.abs(org.refundsToll),
       direction: 'inflow',
-      date: reportingDate,
+      date: ledgerPostingDate,
       periodStart,
       periodEnd,
       description: 'Organization statement: toll refunds',
@@ -159,7 +164,7 @@ export function buildCanonicalImportEvents(
       if (!did) continue;
       out.push({
         idempotencyKey: `${batchId}|driver_promotion|${did.toLowerCase()}`,
-        date: reportingDate,
+        date: ledgerPostingDate,
         driverId: did,
         eventType: 'promotion',
         direction: 'inflow',
@@ -186,7 +191,7 @@ export function buildCanonicalImportEvents(
     if (Math.abs(cash) > 1e-9) {
       out.push({
         idempotencyKey: `${batchId}|payout|CASH`,
-        date: reportingDate,
+        date: ledgerPostingDate,
         driverId: primary,
         eventType: 'payout_cash',
         direction: 'inflow',
@@ -206,7 +211,7 @@ export function buildCanonicalImportEvents(
     if (Math.abs(bank) > 1e-9) {
       out.push({
         idempotencyKey: `${batchId}|payout|BANK`,
-        date: reportingDate,
+        date: ledgerPostingDate,
         driverId: primary,
         eventType: 'payout_bank',
         direction: 'inflow',
@@ -232,7 +237,7 @@ export function buildCanonicalImportEvents(
   for (const ref of sortedDr) {
     const driverId = String(ref.driverId || '').trim();
     if (!driverId) continue;
-    const d = toYmd(ref.date, reportingDate);
+    const d = toYmd(ref.date, ledgerPostingDate);
     const useTollSupport =
       ref.source === 'platform_import' ||
       ref.source === 'toll_usage';

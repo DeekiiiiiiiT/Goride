@@ -132,5 +132,44 @@ describe('buildCanonicalImportEvents', () => {
     const promoEv = events.find((e) => e.eventType === 'promotion');
     expect(promoEv?.netAmount).toBe(5);
     expect(promoEv?.idempotencyKey).toBe(`${batchId}|driver_promotion|${driverId.toLowerCase()}`);
+    expect(promoEv?.date).toBe('2026-03-01');
+  });
+
+  it('posts import_batch promotion on earliest trip date when org period starts earlier than trips', () => {
+    const batchId = 'batch-22222222-2222-2222-2222-222222222222';
+    const driverId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+    const ssot: Record<string, UberSsotTotals> = {
+      [driverId]: {
+        periodEarningsGross: 0,
+        fareComponents: 0,
+        statementNetFare: 0,
+        promotions: 197.23,
+        tips: 0,
+        refundsAndExpenses: 0,
+      },
+    };
+    const org: OrganizationMetrics = {
+      periodStart: '2026-03-17T00:00:00.000Z',
+      periodEnd: '2026-03-23T23:59:59.999Z',
+      totalEarnings: 0,
+      netFare: 0,
+      balanceStart: 0,
+      balanceEnd: 0,
+      periodChange: 0,
+      fleetProfitMargin: 0,
+      cashPosition: 0,
+    };
+    const trips = [baseTrip({ driverId, date: '2026-03-23' })];
+    const events = buildCanonicalImportEvents({
+      batchId,
+      trips,
+      organizationMetrics: org,
+      uberStatementsByDriverId: ssot,
+      disputeRefunds: [],
+    });
+    const promoEv = events.find((e) => e.eventType === 'promotion');
+    expect(promoEv?.date).toBe('2026-03-23');
+    expect(promoEv?.periodStart).toBe('2026-03-17');
+    expect(promoEv?.periodEnd).toBe('2026-03-23');
   });
 });
