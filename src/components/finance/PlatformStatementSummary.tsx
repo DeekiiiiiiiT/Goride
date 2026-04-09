@@ -24,6 +24,7 @@ import { StatementSummary, StatementPlatform } from '../../types/statementSummar
 import { cn } from '../ui/utils';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import { generatePeriodWeekOptions, type PeriodWeekOption } from '../../utils/periodWeekOptions';
+import { mergeUberStatementSummaryFromDriverOverview } from '../../utils/mapLedgerDriverOverviewToUberStatementSummary';
 
 type DatePreset = 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'last30Days' | 'custom';
 
@@ -134,37 +135,72 @@ export function PlatformStatementSummary() {
   const driverFilterReady =
     summaryScope === 'fleet' || (summaryScope === 'driver' && selectedDriverId.trim().length > 0);
 
-  const { 
-    data, 
-    isLoading, 
-    error, 
-    refetch,
-    isFetching 
-  } = useQuery({
+  const needsDriverOverviewMerge =
+    summaryScope === 'driver' &&
+    selectedDriverId.trim().length > 0 &&
+    (activeTab === 'all' || activeTab === 'Uber');
+
+  const driverIdTrim = selectedDriverId.trim();
+
+  const statementQuery = useQuery({
     queryKey: [
       'statement-summary',
       activeTab,
       startDate,
       endDate,
       summaryScope,
-      summaryScope === 'driver' ? selectedDriverId : null,
+      summaryScope === 'driver' ? driverIdTrim : null,
     ],
-    queryFn: async () => {
-      const response = await api.getStatementSummary({
+    queryFn: () =>
+      api.getStatementSummary({
         platform: activeTab === 'all' ? 'all' : activeTab,
         startDate,
         endDate,
-        ...(summaryScope === 'driver' && selectedDriverId.trim()
-          ? { driverId: selectedDriverId.trim() }
-          : {}),
-      });
-      return response;
-    },
+        ...(summaryScope === 'driver' && driverIdTrim ? { driverId: driverIdTrim } : {}),
+      }),
     enabled: driverFilterReady,
     staleTime: 30000,
   });
 
-  const summaries = data?.summaries || [];
+  const driverOverviewQuery = useQuery({
+    queryKey: ['ledger-driver-overview', 'statement-merge', driverIdTrim, startDate, endDate],
+    queryFn: () =>
+      api.getLedgerDriverOverview({
+        driverId: driverIdTrim,
+        startDate,
+        endDate,
+      }),
+    enabled: driverFilterReady && needsDriverOverviewMerge,
+    staleTime: 30000,
+  });
+
+  const summaries = useMemo(() => {
+    const raw = statementQuery.data?.summaries ?? [];
+    if (!needsDriverOverviewMerge) return raw;
+    return mergeUberStatementSummaryFromDriverOverview(
+      raw,
+      driverOverviewQuery.data,
+      startDate,
+      endDate,
+    );
+  }, [
+    statementQuery.data,
+    driverOverviewQuery.data,
+    needsDriverOverviewMerge,
+    startDate,
+    endDate,
+  ]);
+
+  const isLoading =
+    statementQuery.isLoading || (needsDriverOverviewMerge && driverOverviewQuery.isLoading);
+  const isFetching =
+    statementQuery.isFetching || (needsDriverOverviewMerge && driverOverviewQuery.isFetching);
+  const error = statementQuery.error || (needsDriverOverviewMerge ? driverOverviewQuery.error : null);
+
+  const refetch = () => {
+    void statementQuery.refetch();
+    if (needsDriverOverviewMerge) void driverOverviewQuery.refetch();
+  };
 
   const filteredSummaries = activeTab === 'all' 
     ? summaries 
@@ -188,7 +224,7 @@ export function PlatformStatementSummary() {
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {summaryScope === 'fleet'
               ? 'Fleet: all drivers in range — breakdown by platform'
-              : 'Driver: ledger rows for this driver (Roam + linked platform IDs)'}
+              : 'Driver: ledger rows for this driver (Roam + linked platform IDs). Uber matches the driver Period earnings (ledger) breakdown.'}
           </p>
         </div>
 
