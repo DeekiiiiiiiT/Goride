@@ -16,24 +16,34 @@ export function mapLedgerDriverOverviewToUberStatementSummary(
   const u = overview.platformStats?.Uber;
   const priorAdj = Number(ul.priorPeriodAdjustments) || 0;
   const stmtTotal = Number(ul.statementTotalEarnings);
-  const sumAsSeparateLines =
-    (ul.fareComponents ?? 0) + (ul.promotions ?? 0) + (ul.tips ?? 0) + priorAdj;
-  const matchesStmtAsSeparate =
-    Number.isFinite(stmtTotal) && Math.abs(sumAsSeparateLines - stmtTotal) < 0.05;
+  const fareC = ul.fareComponents ?? 0;
+  const promoC = ul.promotions ?? 0;
+  const tipsRaw = ul.tips ?? 0;
+  const sumSeparatePromoPrior = fareC + promoC + tipsRaw + priorAdj;
+  const sumFareEmbedsPromoPrior = fareC + tipsRaw + priorAdj;
+  const stmtTol = 0.05;
+  const matchesSeparatePromo =
+    Number.isFinite(stmtTotal) && Math.abs(sumSeparatePromoPrior - stmtTotal) < stmtTol;
+  const matchesFareEmbedsPromo =
+    Number.isFinite(stmtTotal) && Math.abs(sumFareEmbedsPromoPrior - stmtTotal) < stmtTol;
+  const matchesStmtAsSeparate = matchesSeparatePromo || matchesFareEmbedsPromo;
+  const promotionsDoubleCountedInFare =
+    matchesFareEmbedsPromo && !matchesSeparatePromo && promoC > 0.005;
   const periodTips =
     priorAdj > 0.005 &&
-    (ul.tips ?? 0) > priorAdj + 0.005 &&
+    tipsRaw > priorAdj + 0.005 &&
     !matchesStmtAsSeparate
-      ? Math.max(0, (ul.tips ?? 0) - priorAdj)
-      : ul.tips ?? 0;
+      ? Math.max(0, tipsRaw - priorAdj)
+      : tipsRaw;
 
   const refundsMag = ul.refundExpense;
   const tollSupportAmt = Number(overview.period.disputeRefunds) || 0;
   const tollsSub =
     (u?.tolls || 0) > 0.005 ? u!.tolls : Math.max(0, refundsMag - tollSupportAmt);
 
-  const periodTotalEarnings =
-    (ul.fareComponents ?? 0) + (ul.promotions ?? 0) + periodTips;
+  const periodTotalEarnings = promotionsDoubleCountedInFare
+    ? fareC + periodTips
+    : fareC + promoC + periodTips;
 
   const payoutCash = (u?.cashCollected || 0) > 0.005 ? u!.cashCollected : 0;
   const bankMag = Math.abs(Number(overview.period.bankTransferred) || 0);

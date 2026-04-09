@@ -49,13 +49,13 @@ describe('mapLedgerDriverOverviewToUberStatementSummary', () => {
         disputeRefunds: 10,
         uber: {
           fareComponents: 81558.73,
-          tips: 1600,
+          tips: 1760,
           priorPeriodAdjustments: 160,
           promotions: 197.23,
           refundExpense: 1395,
           netEarnings: 0,
-          /** Matches fare+promo+tips+prior so modal keeps full tips line (see OverviewMetricsGrid). */
-          statementTotalEarnings: 83515.96,
+          /** Uber Total Earnings line = fare (embeds promo) + tips + prior — not fare+promo+tips+prior. */
+          statementTotalEarnings: 83478.73,
         },
       },
       platformStats: {
@@ -73,6 +73,7 @@ describe('mapLedgerDriverOverviewToUberStatementSummary', () => {
     expect(s!.netFare).toBe(81558.73);
     expect(s!.promotions).toBe(197.23);
     expect(s!.periodAdjustments).toBe(160);
+    expect(s!.tips).toBe(1760);
     expect(s!.tolls).toBe(1385);
     expect(s!.tollAdjustments).toBe(10);
     expect(s!.totalRefundsExpenses).toBe(1395);
@@ -80,7 +81,35 @@ describe('mapLedgerDriverOverviewToUberStatementSummary', () => {
     expect(s!.bankTransfer).toBe(51860.53);
     expect(s!.totalPayout).toBe(84873.73);
     expect(s!.tripCount).toBe(83);
-    expect(s!.totalEarnings).toBe(83355.96);
+    expect(s!.totalEarnings).toBe(83318.73);
+  });
+
+  it('uses fare+promo+tips+prior when statement decomposes without embedded promo in fare', () => {
+    const o = baseOverview({
+      period: {
+        earnings: 0,
+        cashCollected: 0,
+        tolls: 0,
+        tips: 0,
+        baseFare: 0,
+        platformFees: 0,
+        tripCount: 83,
+        cancelledCount: 0,
+        uber: {
+          fareComponents: 81361.5,
+          tips: 1760,
+          priorPeriodAdjustments: 160,
+          promotions: 197.23,
+          refundExpense: 0,
+          netEarnings: 0,
+          statementTotalEarnings: 83478.73,
+        },
+      },
+      platformStats: { Uber: { earnings: 0, tripCount: 83, cashCollected: 0, tolls: 0 } },
+    });
+    const s = mapLedgerDriverOverviewToUberStatementSummary(o, '2026-03-23', '2026-03-29');
+    expect(s!.tips).toBe(1760);
+    expect(s!.totalEarnings).toBe(83318.73);
   });
 
   it('uses platformStats.Uber.tolls when present instead of refunds − dispute', () => {

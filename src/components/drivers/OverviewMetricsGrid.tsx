@@ -585,22 +585,35 @@ export function OverviewMetricsGrid({
                     const ledgerOk = resolvedFinancials.source === 'ledger' && !!ul;
                     const priorAdj = ledgerOk ? Number(ul!.priorPeriodAdjustments) || 0 : 0;
                     const stmtTotal = ledgerOk ? Number(ul!.statementTotalEarnings) : NaN;
-                    /** Tips line may include prior-period tip; if statement total already matches fare+promo+tips+prior as separate lines, do not subtract. */
-                    const sumAsSeparateLines =
-                      (ul?.fareComponents ?? 0) +
-                      (ul?.promotions ?? 0) +
-                      (ul?.tips ?? 0) +
-                      priorAdj;
-                    const matchesStmtAsSeparate =
+                    const fareC = ul?.fareComponents ?? 0;
+                    const promoC = ul?.promotions ?? 0;
+                    const tipsRaw = ul?.tips ?? 0;
+                    /**
+                     * Statement total can match either:
+                     * - fare + promotions + tips + prior (CSV-style separate lines), or
+                     * - fare + tips + prior when `fareComponents` already embeds promotions (trip roll + statement promo),
+                     *   in which case fare+promo+tips+prior double-counts promo and must not drive `periodTips` heuristics.
+                     */
+                    const sumSeparatePromoPrior = fareC + promoC + tipsRaw + priorAdj;
+                    const sumFareEmbedsPromoPrior = fareC + tipsRaw + priorAdj;
+                    const stmtTol = 0.05;
+                    const matchesSeparatePromo =
                       Number.isFinite(stmtTotal) &&
-                      Math.abs(sumAsSeparateLines - stmtTotal) < 0.05;
+                      Math.abs(sumSeparatePromoPrior - stmtTotal) < stmtTol;
+                    const matchesFareEmbedsPromo =
+                      Number.isFinite(stmtTotal) &&
+                      Math.abs(sumFareEmbedsPromoPrior - stmtTotal) < stmtTol;
+                    const matchesStmtAsSeparate = matchesSeparatePromo || matchesFareEmbedsPromo;
+                    const promotionsDoubleCountedInFare =
+                      matchesFareEmbedsPromo && !matchesSeparatePromo && promoC > 0.005;
+                    /** Tips line may include prior-period tip; if statement total already reconciles, do not subtract. */
                     const periodTips =
                       ledgerOk &&
                       priorAdj > 0.005 &&
-                      (ul?.tips ?? 0) > priorAdj + 0.005 &&
+                      tipsRaw > priorAdj + 0.005 &&
                       !matchesStmtAsSeparate
-                        ? Math.max(0, (ul?.tips ?? 0) - priorAdj)
-                        : ul?.tips ?? 0;
+                        ? Math.max(0, tipsRaw - priorAdj)
+                        : tipsRaw;
                     const totalEarningsRow = ledgerOk
                       ? Number.isFinite(stmtTotal) && Math.abs(stmtTotal) > 0.005
                         ? stmtTotal
@@ -623,11 +636,15 @@ export function OverviewMetricsGrid({
                       (u?.tolls || 0) > 0.005
                         ? u!.tolls
                         : Math.max(0, refundsMag - tollSupportAmt);
+                    /** Matches Statement Summary / mapper: tolls + toll support, not `refundExpense` alone (toll_charge → platform tolls, not pUberRefund). */
+                    const totalRefundsExpenses = tollsSub + tollSupportAmt;
                     const periodTotalEarnings = ledgerOk
-                      ? ul.fareComponents + ul.promotions + periodTips
+                      ? promotionsDoubleCountedInFare
+                        ? fareC + periodTips
+                        : fareC + promoC + periodTips
                       : 0;
                     const uberGrandTotal = ledgerOk
-                      ? periodTotalEarnings + refundsMag + priorAdj
+                      ? periodTotalEarnings - totalRefundsExpenses + priorAdj
                       : 0;
                     const payoutCash =
                       (u?.cashCollected || 0) > 0.005
@@ -681,7 +698,7 @@ export function OverviewMetricsGrid({
 
                               <PeriodBreakdownCollapsible
                                 title="Refunds & Expenses"
-                                headerAmount={refundsMag}
+                                headerAmount={totalRefundsExpenses}
                               >
                                 <PeriodBreakdownSubLine label="Tolls" value={tollsSub} />
                                 <PeriodBreakdownSubLine
