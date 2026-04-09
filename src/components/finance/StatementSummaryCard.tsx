@@ -32,7 +32,7 @@ export const STATEMENT_HELP = {
   tolls:
     'Total toll charges attributed to trips in this period. These are tolls the driver paid during trips that the platform refunds as part of the trip fare.',
   tollAdjustments:
-    'Additional toll credits recovered from the platform (e.g. Uber Support adjustments). When a toll refund is short, the driver contacts support and the difference is credited here. This amount is ADDED to Tolls to get Total Refunds & Expenses.',
+    'Uber: sum of toll_support_adjustment and toll_refund only (org REFUNDS_TOLL is excluded here — trip tolls are in Tolls; support cases are toll_support_adjustment). Other platforms: same plus org REFUNDS_TOLL statement lines. ADDED to Tolls for Total Refunds & Expenses.',
   totalRefundsExpenses:
     'Tolls + Toll Adjustments. The full toll amount that was or should be reimbursed. For example: $1,385 tolls + $10 support adjustment = $1,395 total.',
   adjustments:

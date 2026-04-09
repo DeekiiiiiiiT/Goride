@@ -3781,8 +3781,10 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
             hasPayoutEvents = true;
             break;
           case 'statement_line':
-            // Only handle REFUNDS_TOLL from statement_line (toll adjustments from org)
-            if (e.metadata?.lineCode === 'REFUNDS_TOLL') {
+            // REFUNDS_TOLL (org CSV) — Roam/InDrive: add as toll-side credit. Uber: skip here; that line
+            // often equals full "Refunds & Expenses" while trip toll_charge already sums the toll bucket,
+            // and toll_support_adjustment carries dispute/support credits (import preview splits the same way).
+            if (e.metadata?.lineCode === 'REFUNDS_TOLL' && plat !== 'Uber') {
               tollAdjustments += mag;
             }
             break;
