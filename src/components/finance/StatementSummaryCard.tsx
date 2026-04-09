@@ -63,6 +63,8 @@ interface StatementSummaryCardProps {
   summary: StatementSummary;
   className?: string;
   defaultExpanded?: boolean;
+  /** When true (driver-scoped summary), show a note under Payout for Uber org-level cash/bank rows. */
+  showUberDriverScopePayoutNote?: boolean;
 }
 
 const PLATFORM_CONFIG: Record<StatementPlatform, { 
@@ -254,7 +256,8 @@ function TotalLineRow({
 export function StatementSummaryCard({ 
   summary, 
   className,
-  defaultExpanded = true 
+  defaultExpanded = true,
+  showUberDriverScopePayoutNote = false,
 }: StatementSummaryCardProps) {
   const [earningsExpanded, setEarningsExpanded] = useState(defaultExpanded);
   const [expensesExpanded, setExpensesExpanded] = useState(defaultExpanded);
@@ -422,6 +425,12 @@ export function StatementSummaryCard({
           />
           {payoutExpanded && (
             <div className="px-4 pb-3">
+              {showUberDriverScopePayoutNote && summary.platform === 'Uber' && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-snug">
+                  Cash and bank totals come from import batch rows; they may reflect fleet-level payouts when
+                  the ledger does not split org payout by driver.
+                </p>
+              )}
               <LineItem
                 label="Cash Collected"
                 amount={summary.cashCollected}

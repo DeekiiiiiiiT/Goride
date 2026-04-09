@@ -3614,6 +3614,41 @@ app.get("/make-server-37f42386/ledger/summary", requireAuth(), async (c) => {
   }
 });
 
+/**
+ * Roam UUID + linked Uber/InDrive IDs + lowercase variants — matches ledger `driverId` storage (see driver-overview).
+ */
+async function expandStatementSummaryDriverIds(raw: string | undefined | null): Promise<string[]> {
+  const trimmed = raw != null && String(raw).trim() ? String(raw).trim() : "";
+  if (!trimmed) return [];
+  const ids: string[] = [trimmed];
+  try {
+    const driverRecord = await kv.get(`driver:${trimmed}`);
+    if (driverRecord && typeof driverRecord === "object") {
+      const dr = driverRecord as Record<string, unknown>;
+      if (dr.uberDriverId) ids.push(String(dr.uberDriverId).trim());
+      if (dr.inDriveDriverId) ids.push(String(dr.inDriveDriverId).trim());
+    }
+  } catch {
+    /* ignore KV errors */
+  }
+  const out: string[] = [];
+  for (const id of ids) {
+    if (!id) continue;
+    out.push(id);
+    const lc = id.toLowerCase();
+    if (lc !== id) out.push(lc);
+  }
+  return [...new Set(out)];
+}
+
+function applyStatementSummaryDriverFilter<
+  T extends { eq(column: string, value: string): T; or(filter: string): T },
+>(q: T, variants: string[]): T {
+  if (variants.length === 0) return q;
+  if (variants.length === 1) return q.eq("value->>driverId", variants[0]);
+  return q.or(variants.map((id) => `value->>driverId.eq.${id}`).join(","));
+}
+
 // ─── GET /ledger/statement-summary — Universal Statement Summary per platform ──
 // All platforms (Uber, Roam, InDrive) now use unified logic: fare_earning, tip, promotion, toll_charge events
 // Uber also uses payout_cash/payout_bank for actual cash/bank totals from org import
@@ -3622,11 +3657,16 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
     const platform = c.req.query("platform"); // Uber, Roam, InDrive, or 'all'
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
-    const driverId = c.req.query("driverId");
+    const driverIdParam = c.req.query("driverId");
 
     if (!startDate || !endDate) {
       return c.json({ error: "startDate and endDate are required" }, 400);
     }
+
+    const driverIdVariants =
+      driverIdParam && String(driverIdParam).trim()
+        ? await expandStatementSummaryDriverIds(driverIdParam)
+        : [];
 
     const orgId = getOrgId(c);
     const platforms = platform === 'all' || !platform 
@@ -3669,7 +3709,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
           if (orgId) {
             q = q.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
           }
-          if (driverId) q = q.eq("value->>driverId", driverId);
+          q = applyStatementSummaryDriverFilter(q, driverIdVariants);
           return q;
         };
 
@@ -3713,7 +3753,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         if (orgId) {
           query = query.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
         }
-        if (driverId) query = query.eq("value->>driverId", driverId);
+        query = applyStatementSummaryDriverFilter(query, driverIdVariants);
 
         const res = await query.limit(10000);
         data = res.data;

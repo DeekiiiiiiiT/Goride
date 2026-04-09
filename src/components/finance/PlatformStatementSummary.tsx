@@ -7,7 +7,16 @@ import {
   RefreshCw,
   Car,
   FileText,
+  Users,
+  User,
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from 'date-fns';
 import { api } from '../../services/api';
 import { StatementSummaryCard, StatementTooltipIcon, STATEMENT_HELP } from './StatementSummaryCard';
@@ -80,8 +89,12 @@ const PLATFORM_TABS: { id: StatementPlatform | 'all'; label: string; icon: React
   { id: 'InDrive', label: 'InDrive', icon: Car },
 ];
 
+type SummaryScope = 'fleet' | 'driver';
+
 export function PlatformStatementSummary() {
   const [activeTab, setActiveTab] = useState<StatementPlatform | 'all'>('all');
+  const [summaryScope, setSummaryScope] = useState<SummaryScope>('fleet');
+  const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -105,6 +118,22 @@ export function PlatformStatementSummary() {
     setSelectedPeriodId(null); // Clear period selection when preset is clicked
   };
 
+  const { data: driversList } = useQuery({
+    queryKey: ['drivers', 'statement-summary-scope'],
+    queryFn: () => api.getDrivers(),
+    staleTime: 60_000,
+  });
+
+  const driversSorted = useMemo(() => {
+    const raw = Array.isArray(driversList) ? driversList : [];
+    return [...raw].sort((a: { name?: string }, b: { name?: string }) =>
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
+    );
+  }, [driversList]);
+
+  const driverFilterReady =
+    summaryScope === 'fleet' || (summaryScope === 'driver' && selectedDriverId.trim().length > 0);
+
   const { 
     data, 
     isLoading, 
@@ -112,15 +141,26 @@ export function PlatformStatementSummary() {
     refetch,
     isFetching 
   } = useQuery({
-    queryKey: ['statement-summary', activeTab, startDate, endDate],
+    queryKey: [
+      'statement-summary',
+      activeTab,
+      startDate,
+      endDate,
+      summaryScope,
+      summaryScope === 'driver' ? selectedDriverId : null,
+    ],
     queryFn: async () => {
       const response = await api.getStatementSummary({
         platform: activeTab === 'all' ? 'all' : activeTab,
         startDate,
         endDate,
+        ...(summaryScope === 'driver' && selectedDriverId.trim()
+          ? { driverId: selectedDriverId.trim() }
+          : {}),
       });
       return response;
     },
+    enabled: driverFilterReady,
     staleTime: 30000,
   });
 
@@ -146,7 +186,9 @@ export function PlatformStatementSummary() {
             Statement Summary
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Period earnings breakdown by platform
+            {summaryScope === 'fleet'
+              ? 'Fleet: all drivers in range — breakdown by platform'
+              : 'Driver: ledger rows for this driver (Roam + linked platform IDs)'}
           </p>
         </div>
 
@@ -179,6 +221,55 @@ export function PlatformStatementSummary() {
             <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
           </button>
         </div>
+      </div>
+
+      {/* Fleet vs driver scope */}
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40">
+        <div className="flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
+          <button
+            type="button"
+            onClick={() => setSummaryScope('fleet')}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+              summaryScope === 'fleet'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900',
+            )}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Fleet
+          </button>
+          <button
+            type="button"
+            onClick={() => setSummaryScope('driver')}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+              summaryScope === 'driver'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900',
+            )}
+          >
+            <User className="h-3.5 w-3.5" />
+            Driver
+          </button>
+        </div>
+        {summaryScope === 'driver' && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 flex-1 sm:max-w-md">
+            <span className="text-xs text-slate-500 shrink-0">Driver</span>
+            <Select value={selectedDriverId || undefined} onValueChange={setSelectedDriverId}>
+              <SelectTrigger className="w-full sm:min-w-[220px] bg-white dark:bg-slate-900">
+                <SelectValue placeholder="Select a driver" />
+              </SelectTrigger>
+              <SelectContent>
+                {driversSorted.map((d: { id: string; name?: string }) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name || d.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Custom Date Range (when custom preset is selected) */}
@@ -245,7 +336,15 @@ export function PlatformStatementSummary() {
       </div>
 
       {/* Content */}
-      {isLoading ? (
+      {summaryScope === 'driver' && !selectedDriverId.trim() ? (
+        <div className="flex flex-col items-center justify-center py-12 text-slate-500 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+          <User className="h-10 w-10 mb-3 text-slate-300" />
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Select a driver</p>
+          <p className="text-xs text-slate-500 mt-1 text-center max-w-sm">
+            Choose a driver above to see Uber, Roam, and InDrive totals for this period.
+          </p>
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
         </div>
@@ -267,6 +366,7 @@ export function PlatformStatementSummary() {
               key={summary.platform} 
               summary={summary}
               defaultExpanded={false}
+              showUberDriverScopePayoutNote={summaryScope === 'driver'}
             />
           ))}
         </div>
@@ -277,13 +377,14 @@ export function PlatformStatementSummary() {
               key={summary.platform} 
               summary={summary}
               defaultExpanded={true}
+              showUberDriverScopePayoutNote={summaryScope === 'driver'}
             />
           ))}
         </div>
       )}
 
-      {/* Summary Totals (when showing all platforms) */}
-      {activeTab === 'all' && filteredSummaries.length > 0 && (
+      {/* Summary Totals (fleet only — driver view is not a fleet rollup) */}
+      {summaryScope === 'fleet' && activeTab === 'all' && filteredSummaries.length > 0 && (
         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800">
           <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">
             Combined Totals
