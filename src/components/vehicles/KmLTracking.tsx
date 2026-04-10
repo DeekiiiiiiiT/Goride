@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  CalendarRange,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -42,8 +43,31 @@ import {
   Legend,
 } from 'recharts';
 import { SafeResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { format } from 'date-fns';
+import {
+  format,
+  subDays,
+  subMonths,
+  startOfDay,
+  endOfDay,
+  isWithinInterval,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  parseISO,
+} from 'date-fns';
+import type { DateRange } from 'react-day-picker';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
+import { DatePickerWithRange } from '../ui/date-range-picker';
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
+import { generateWeekOptionsForDateRange, ENTIRE_PERIOD_OPTION_ID } from '../../utils/periodWeekOptions';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
 
@@ -95,6 +119,8 @@ interface CycleData {
   variance: number;
 }
 
+type PeriodPreset = 'all' | '7d' | '30d' | '90d' | '12m' | 'custom';
+
 export function KmLTracking({ vehicle }: KmLTrackingProps) {
   const [entries, setEntries] = useState<FuelEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,8 +128,130 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
   const [sortField, setSortField] = useState<'date' | 'kmL' | 'variance'>('date');
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllEntries, setShowAllEntries] = useState(false);
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all');
+  const [customRange, setCustomRange] = useState<DateRange | undefined>(() => ({
+    from: subDays(new Date(), 29),
+    to: new Date(),
+  }));
+  const [selectedWeekKey, setSelectedWeekKey] = useState<number | null>(null);
 
   const vehicleId = vehicle.id || vehicle.licensePlate;
+
+  const periodBounds = useMemo((): { start: Date; end: Date } | null => {
+    if (periodPreset === 'all') return null;
+    const end = endOfDay(new Date());
+    if (periodPreset === 'custom') {
+      if (!customRange?.from) return null;
+      let start = startOfDay(customRange.from);
+      let rangeEnd = customRange.to ? endOfDay(customRange.to) : endOfDay(customRange.from);
+      if (start > rangeEnd) [start, rangeEnd] = [rangeEnd, start];
+      return { start, end: rangeEnd };
+    }
+    switch (periodPreset) {
+      case '7d':
+        return { start: startOfDay(subDays(end, 6)), end };
+      case '30d':
+        return { start: startOfDay(subDays(end, 29)), end };
+      case '90d':
+        return { start: startOfDay(subDays(end, 89)), end };
+      case '12m':
+        return { start: startOfDay(subMonths(end, 12)), end };
+      default:
+        return null;
+    }
+  }, [periodPreset, customRange]);
+
+  const periodLabel = useMemo(() => {
+    if (periodPreset === 'all') return 'All time';
+    if (periodPreset === 'custom' && customRange?.from) {
+      const a = format(customRange.from, 'MMM d, yyyy');
+      const b = customRange.to ? format(customRange.to, 'MMM d, yyyy') : a;
+      return `${a} – ${b}`;
+    }
+    if (periodPreset === 'custom') return 'Custom range';
+    const labels: Record<Exclude<PeriodPreset, 'all' | 'custom'>, string> = {
+      '7d': 'Last 7 days',
+      '30d': 'Last 30 days',
+      '90d': 'Last 90 days',
+      '12m': 'Last 12 months',
+    };
+    return labels[periodPreset];
+  }, [periodPreset, customRange]);
+
+  const filteredEntries = useMemo(() => {
+    if (!periodBounds) return entries;
+    return entries.filter(e => {
+      const t = new Date(e.date);
+      return !isNaN(t.getTime()) && isWithinInterval(t, periodBounds);
+    });
+  }, [entries, periodBounds]);
+
+  const dataDateBounds = useMemo((): { start: Date; end: Date } | null => {
+    let minT = Infinity;
+    let maxT = -Infinity;
+    for (const e of entries) {
+      const t = new Date(e.date).getTime();
+      if (!isNaN(t)) {
+        minT = Math.min(minT, t);
+        maxT = Math.max(maxT, t);
+      }
+    }
+    if (minT === Infinity) return null;
+    return { start: startOfDay(new Date(minT)), end: endOfDay(new Date(maxT)) };
+  }, [entries]);
+
+  const primaryRangeForWeeks = useMemo(() => {
+    if (periodBounds) return periodBounds;
+    return dataDateBounds;
+  }, [periodBounds, dataDateBounds]);
+
+  const monthHeaderLabel = useMemo(() => {
+    if (!primaryRangeForWeeks) return '';
+    const anchor = primaryRangeForWeeks.end;
+    return `${format(startOfMonth(anchor), 'MMM d, yyyy')} – ${format(endOfMonth(anchor), 'MMM d, yyyy')}`;
+  }, [primaryRangeForWeeks]);
+
+  const weekOptionsForDropdown = useMemo(() => {
+    if (!primaryRangeForWeeks) return [];
+    return generateWeekOptionsForDateRange(primaryRangeForWeeks.start, primaryRangeForWeeks.end);
+  }, [primaryRangeForWeeks]);
+
+  const scopedEntries = useMemo(() => {
+    if (selectedWeekKey === null) return filteredEntries;
+    const ws = new Date(selectedWeekKey);
+    const we = endOfWeek(ws, { weekStartsOn: 1 });
+    return filteredEntries.filter(e => {
+      const t = new Date(e.date);
+      return !isNaN(t.getTime()) && isWithinInterval(t, { start: startOfDay(ws), end: endOfDay(we) });
+    });
+  }, [filteredEntries, selectedWeekKey]);
+
+  const selectedWeekLabel = useMemo(() => {
+    if (selectedWeekKey === null) return null;
+    const ws = new Date(selectedWeekKey);
+    const we = endOfWeek(ws, { weekStartsOn: 1 });
+    return `${format(ws, 'MMM d')} – ${format(we, 'MMM d, yyyy')}`;
+  }, [selectedWeekKey]);
+
+  const selectedWeekRangeStrings = useMemo(() => {
+    if (selectedWeekKey === null) return undefined;
+    const ws = new Date(selectedWeekKey);
+    const we = endOfWeek(ws, { weekStartsOn: 1 });
+    return { start: format(ws, 'yyyy-MM-dd'), end: format(we, 'yyyy-MM-dd') };
+  }, [selectedWeekKey]);
+
+  useEffect(() => {
+    setSelectedWeekKey(null);
+  }, [periodPreset, customRange]);
+
+  useEffect(() => {
+    if (selectedWeekKey === null) return;
+    const ok = weekOptionsForDropdown.some(w => {
+      const d = parseISO(w.startDate);
+      return startOfWeek(d, { weekStartsOn: 1 }).getTime() === selectedWeekKey;
+    });
+    if (!ok) setSelectedWeekKey(null);
+  }, [weekOptionsForDropdown, selectedWeekKey]);
 
   useEffect(() => {
     fetchEntries();
@@ -130,7 +278,7 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
 
   // Compute rolling average from entries (same logic as backend)
   const rollingAverage = useMemo(() => {
-    const valid = entries
+    const valid = scopedEntries
       .filter(e => (Number(e.odometer) || 0) > 0 && (Number(e.liters) || 0) > 0)
       .sort((a, b) => (Number(a.odometer) || 0) - (Number(b.odometer) || 0));
 
@@ -151,11 +299,11 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
       firstOdo,
       lastOdo,
     };
-  }, [entries]);
+  }, [scopedEntries]);
 
   // Extract anchor cycles from entries
   const cycles = useMemo(() => {
-    const valid = entries
+    const valid = scopedEntries
       .filter(e => (Number(e.odometer) || 0) > 0)
       .sort((a, b) => {
         const dA = new Date(a.date).getTime();
@@ -207,7 +355,7 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
       }
     }
     return result;
-  }, [entries, rollingAverage]);
+  }, [scopedEntries, rollingAverage]);
 
   // Chart data: km/L per cycle over time
   const chartData = useMemo(() => {
@@ -223,7 +371,7 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
 
   // All entries with metadata for the detail table
   const allEntriesData = useMemo(() => {
-    return entries
+    return scopedEntries
       .filter(e => (Number(e.odometer) || 0) > 0)
       .sort((a, b) => {
         if (sortField === 'date') {
@@ -242,7 +390,7 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
         }
         return 0;
       });
-  }, [entries, sortField, sortAsc]);
+  }, [scopedEntries, sortField, sortAsc]);
 
   // Stats
   const stats = useMemo(() => {
@@ -306,21 +454,130 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
     );
   }
 
+  const noEntriesInPeriod = filteredEntries.length === 0 && entries.length > 0;
+  const noEntriesInWeek =
+    scopedEntries.length === 0 && filteredEntries.length > 0 && selectedWeekKey !== null;
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Km/L Efficiency Tracking</h3>
           <p className="text-sm text-slate-500">
-            Rolling average computed from {entries.length} fuel entries using the fill-up method
+            {periodPreset === 'all' && !selectedWeekLabel ? (
+              <>
+                Rolling average computed from {entries.length} fuel entries using the fill-up method
+              </>
+            ) : (
+              <>
+                {periodPreset !== 'all' && (
+                  <span className="text-slate-700 font-medium">{periodLabel}</span>
+                )}
+                {periodPreset !== 'all' && selectedWeekLabel && ' · '}
+                {selectedWeekLabel && (
+                  <span className="text-slate-700 font-medium">Week {selectedWeekLabel}</span>
+                )}
+                {(periodPreset !== 'all' || selectedWeekLabel) && (
+                  <>
+                    {' · '}
+                    Rolling average from {scopedEntries.length} fuel entries in scope ({entries.length}{' '}
+                    loaded)
+                  </>
+                )}
+              </>
+            )}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchEntries}>
-          <RefreshCw className="h-4 w-4 mr-2" /> Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <CalendarRange className="h-4 w-4 text-slate-400 hidden sm:block" aria-hidden />
+            <Select
+              value={periodPreset}
+              onValueChange={(v) => {
+                const next = v as PeriodPreset;
+                setPeriodPreset(next);
+                if (next === 'custom' && !customRange?.from) {
+                  setCustomRange({ from: subDays(new Date(), 29), to: new Date() });
+                }
+              }}
+            >
+              <SelectTrigger className="w-[160px] h-9" aria-label="Period">
+                <SelectValue placeholder="Period" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="all">All time</SelectItem>
+                <SelectItem value="7d">Last 7 days</SelectItem>
+                <SelectItem value="30d">Last 30 days</SelectItem>
+                <SelectItem value="90d">Last 90 days</SelectItem>
+                <SelectItem value="12m">Last 12 months</SelectItem>
+                <SelectItem value="custom">Custom range…</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {primaryRangeForWeeks && weekOptionsForDropdown.length > 0 && !noEntriesInPeriod && (
+            <PeriodWeekDropdown
+              optionsOverride={weekOptionsForDropdown}
+              headerLabel={monthHeaderLabel}
+              prependEntireOption
+              selectedStart={selectedWeekRangeStrings?.start}
+              selectedEnd={selectedWeekRangeStrings?.end}
+              onSelect={period => {
+                if (period.id === ENTIRE_PERIOD_OPTION_ID) {
+                  setSelectedWeekKey(null);
+                  return;
+                }
+                const d = parseISO(period.startDate);
+                setSelectedWeekKey(startOfWeek(d, { weekStartsOn: 1 }).getTime());
+              }}
+              buttonClassName="h-9 min-w-[220px] max-w-[260px] justify-between rounded-md border-sky-200 bg-white py-2 text-sm font-normal shadow-none hover:border-sky-300"
+            />
+          )}
+          {periodPreset === 'custom' && (
+            <DatePickerWithRange
+              date={customRange}
+              setDate={setCustomRange}
+              className="w-auto"
+            />
+          )}
+          <Button variant="outline" size="sm" onClick={fetchEntries}>
+            <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+          </Button>
+        </div>
       </div>
 
+      {noEntriesInPeriod ? (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <Fuel className="h-8 w-8 text-slate-400 mx-auto mb-3" />
+            <p className="text-slate-600 font-medium">No fuel entries in this period</p>
+            <p className="text-sm text-slate-500 mt-1">Try a wider range or switch to all time.</p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => {
+                setPeriodPreset('all');
+              }}
+            >
+              Show all time
+            </Button>
+          </CardContent>
+        </Card>
+      ) : noEntriesInWeek ? (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <Fuel className="h-8 w-8 text-slate-400 mx-auto mb-3" />
+            <p className="text-slate-600 font-medium">No fuel entries in this week</p>
+            <p className="text-sm text-slate-500 mt-1">
+              Choose another week or use &quot;Entire selected period&quot; in the week menu.
+            </p>
+            <Button variant="outline" className="mt-4" onClick={() => setSelectedWeekKey(null)}>
+              Clear week filter
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Rolling Average */}
@@ -444,6 +701,20 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
                 Each fill-up <em>cycle</em> (anchor to anchor) is then compared:
                 if the cycle's actual km/L is more than <strong>30%</strong> worse than the rolling average, it's flagged as High Consumption.
               </p>
+              {(periodPreset !== 'all' || selectedWeekLabel) && (
+                <p className="text-slate-500 pt-1">
+                  Numbers below reflect{' '}
+                  {periodPreset !== 'all' && <strong>{periodLabel}</strong>}
+                  {periodPreset !== 'all' && selectedWeekLabel && ' · '}
+                  {selectedWeekLabel && (
+                    <>
+                      Week <strong>{selectedWeekLabel}</strong>
+                    </>
+                  )}
+                  {' '}
+                  (entry dates within the selected scope).
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -452,11 +723,19 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
       {/* Efficiency Chart */}
       {chartData.length >= 2 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Efficiency per Fill-Up Cycle</CardTitle>
-            <CardDescription>
-              Actual km/L at each anchor point vs. rolling average baseline
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between space-y-0">
+            <div>
+              <CardTitle className="text-base">Efficiency per Fill-Up Cycle</CardTitle>
+              <CardDescription>
+                Actual km/L at each anchor point vs. rolling average baseline
+                {periodPreset !== 'all' && (
+                  <span className="text-slate-600"> · {periodLabel}</span>
+                )}
+                {selectedWeekLabel && (
+                  <span className="text-slate-600"> · Week {selectedWeekLabel}</span>
+                )}
+              </CardDescription>
+            </div>
           </CardHeader>
           <CardContent className="h-[320px]">
             <SafeResponsiveContainer width="100%" height="100%" minHeight={280}>
@@ -848,6 +1127,8 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
           </CardContent>
         )}
       </Card>
+        </>
+      )}
     </div>
   );
 }

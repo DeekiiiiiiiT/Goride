@@ -6,6 +6,7 @@ import {
   generatePeriodWeekOptions,
   findPeriodWeekOptionByRange,
   type PeriodWeekOption,
+  ENTIRE_PERIOD_OPTION_ID,
 } from '../../utils/periodWeekOptions';
 
 function fmtYmd(ymd: string, fmt: string) {
@@ -20,6 +21,12 @@ export interface PeriodWeekDropdownProps {
   selectedEnd?: string;
   onSelect: (period: PeriodWeekOption) => void;
   weekCount?: number;
+  /** When set, these options replace rolling week presets (e.g. weeks for a chosen date range). */
+  optionsOverride?: PeriodWeekOption[];
+  /** Fixed label on the trigger (e.g. calendar month span). When set, overrides dynamic week label on the button. */
+  headerLabel?: string;
+  /** Prepends “Entire selected period” to clear a week drill-down. */
+  prependEntireOption?: boolean;
   className?: string;
   buttonClassName?: string;
   placeholder?: string;
@@ -30,18 +37,39 @@ export function PeriodWeekDropdown({
   selectedEnd,
   onSelect,
   weekCount = 12,
+  optionsOverride,
+  headerLabel,
+  prependEntireOption = false,
   className,
   buttonClassName,
   placeholder = 'Select week period',
 }: PeriodWeekDropdownProps) {
   const [open, setOpen] = useState(false);
-  const options = useMemo(() => generatePeriodWeekOptions(weekCount), [weekCount]);
-  const matched = findPeriodWeekOptionByRange(options, selectedStart, selectedEnd);
+  const options = useMemo(() => {
+    const base = optionsOverride ?? generatePeriodWeekOptions(weekCount);
+    if (prependEntireOption) {
+      const entire: PeriodWeekOption = {
+        id: ENTIRE_PERIOD_OPTION_ID,
+        label: 'Entire selected period',
+        startDate: '',
+        endDate: '',
+      };
+      return [entire, ...base];
+    }
+    return base;
+  }, [optionsOverride, weekCount, prependEntireOption]);
+  const matched = useMemo(() => {
+    if (prependEntireOption && !selectedStart && !selectedEnd) {
+      return options[0];
+    }
+    return findPeriodWeekOptionByRange(options, selectedStart, selectedEnd);
+  }, [prependEntireOption, options, selectedStart, selectedEnd]);
   const displayLabel =
-    matched?.label ??
-    (selectedStart && selectedEnd
-      ? `${fmtYmd(selectedStart, 'MMM d, yyyy')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
-      : placeholder);
+    headerLabel ??
+    (matched?.label ??
+      (selectedStart && selectedEnd
+        ? `${fmtYmd(selectedStart, 'MMM d, yyyy')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
+        : placeholder));
 
   return (
     <div className={cn('relative', className)}>
@@ -74,7 +102,7 @@ export function PeriodWeekDropdown({
               </p>
             </div>
             <div className="py-1">
-              {options.map((period, index) => {
+              {options.map((period) => {
                 const isSel = matched?.id === period.id;
                 return (
                   <button
@@ -96,7 +124,7 @@ export function PeriodWeekDropdown({
                     <span
                       className={cn(
                         'h-2 w-2 shrink-0 rounded-full',
-                        index === 0 ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
+                        isSel ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
                       )}
                     />
                     <span className="font-medium">{period.label}</span>
