@@ -23,13 +23,17 @@ export interface PeriodWeekDropdownProps {
   weekCount?: number;
   /** When set, these options replace rolling week presets (e.g. weeks for a chosen date range). */
   optionsOverride?: PeriodWeekOption[];
-  /** Fixed label on the trigger (e.g. calendar month span). When set, overrides dynamic week label on the button. */
+  /** Context label on the trigger when no specific week is highlighted (e.g. overall range). Must not be set when a week row is selected, or it hides the selected week label. */
   headerLabel?: string;
   /** Prepends “Entire selected period” to clear a week drill-down. */
   prependEntireOption?: boolean;
   className?: string;
   buttonClassName?: string;
   placeholder?: string;
+  /** When true, the control is non-interactive (e.g. primary date preset is not “All time”). */
+  disabled?: boolean;
+  /** Native tooltip when disabled */
+  title?: string;
 }
 
 export function PeriodWeekDropdown({
@@ -43,6 +47,8 @@ export function PeriodWeekDropdown({
   className,
   buttonClassName,
   placeholder = 'Select week period',
+  disabled = false,
+  title,
 }: PeriodWeekDropdownProps) {
   const [open, setOpen] = useState(false);
   const options = useMemo(() => {
@@ -65,22 +71,26 @@ export function PeriodWeekDropdown({
     return findPeriodWeekOptionByRange(options, selectedStart, selectedEnd);
   }, [prependEntireOption, options, selectedStart, selectedEnd]);
   const displayLabel =
-    headerLabel ??
-    (matched?.label ??
-      (selectedStart && selectedEnd
-        ? `${fmtYmd(selectedStart, 'MMM d, yyyy')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
-        : placeholder));
+    headerLabel && headerLabel.trim().length > 0
+      ? headerLabel
+      : (matched?.label ??
+        (selectedStart && selectedEnd
+          ? `${fmtYmd(selectedStart, 'MMM d, yyyy')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
+          : placeholder));
 
   return (
     <div className={cn('relative', className)}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        title={title}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
         className={cn(
           'flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors',
           matched
             ? 'border-indigo-300 bg-indigo-50 dark:bg-indigo-900/25 text-indigo-800 dark:text-indigo-200'
             : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-500',
+          disabled && 'opacity-50 cursor-not-allowed pointer-events-none',
           buttonClassName,
         )}
       >
@@ -89,7 +99,7 @@ export function PeriodWeekDropdown({
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 opacity-60 transition-transform', open && 'rotate-180')} />
       </button>
 
-      {open && (
+      {open && !disabled && (
         <>
           <div className="fixed inset-0 z-40" aria-hidden onClick={() => setOpen(false)} />
           <div

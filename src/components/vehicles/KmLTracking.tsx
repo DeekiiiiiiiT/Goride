@@ -52,8 +52,6 @@ import {
   isWithinInterval,
   startOfWeek,
   endOfWeek,
-  startOfMonth,
-  endOfMonth,
   parseISO,
 } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
@@ -205,10 +203,12 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
     return dataDateBounds;
   }, [periodBounds, dataDateBounds]);
 
-  const monthHeaderLabel = useMemo(() => {
+  /** Shown on week picker when no week is selected — full bounds of the list, not “month of last entry” (which looked stuck on April). */
+  const weekListRangeBanner = useMemo(() => {
     if (!primaryRangeForWeeks) return '';
-    const anchor = primaryRangeForWeeks.end;
-    return `${format(startOfMonth(anchor), 'MMM d, yyyy')} – ${format(endOfMonth(anchor), 'MMM d, yyyy')}`;
+    const a = primaryRangeForWeeks.start;
+    const b = primaryRangeForWeeks.end;
+    return `${format(a, 'MMM d, yyyy')} – ${format(b, 'MMM d, yyyy')}`;
   }, [primaryRangeForWeeks]);
 
   const weekOptionsForDropdown = useMemo(() => {
@@ -301,9 +301,34 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
     };
   }, [scopedEntries]);
 
-  // Extract anchor cycles from entries
+  /** Rolling average over the primary date filter only (ignores week drill-down). Used for cycle variance vs fleet-in-period baseline. */
+  const rollingAveragePeriod = useMemo(() => {
+    const valid = filteredEntries
+      .filter(e => (Number(e.odometer) || 0) > 0 && (Number(e.liters) || 0) > 0)
+      .sort((a, b) => (Number(a.odometer) || 0) - (Number(b.odometer) || 0));
+
+    if (valid.length < 3) return null;
+
+    const firstOdo = Number(valid[0].odometer);
+    const lastOdo = Number(valid[valid.length - 1].odometer);
+    const totalDistance = lastOdo - firstOdo;
+    const totalFuel = valid.slice(1).reduce((sum, e) => sum + (Number(e.liters) || 0), 0);
+
+    if (totalDistance <= 0 || totalFuel <= 0) return null;
+
+    return {
+      avgKmPerLiter: Number((totalDistance / totalFuel).toFixed(2)),
+      entryCount: valid.length,
+      totalDistance,
+      totalFuel: Number(totalFuel.toFixed(1)),
+      firstOdo,
+      lastOdo,
+    };
+  }, [filteredEntries]);
+
+  // Build cycles from the full primary-period entry stream, then optionally keep only cycles whose closing anchor falls in the selected week (dates match the week filter).
   const cycles = useMemo(() => {
-    const valid = scopedEntries
+    const valid = filteredEntries
       .filter(e => (Number(e.odometer) || 0) > 0)
       .sort((a, b) => {
         const dA = new Date(a.date).getTime();
@@ -312,11 +337,15 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
         return (Number(a.odometer) || 0) - (Number(b.odometer) || 0);
       });
 
+    const baseline =
+      selectedWeekKey !== null
+        ? rollingAverage?.avgKmPerLiter || 0
+        : rollingAveragePeriod?.avgKmPerLiter || 0;
+
     const result: CycleData[] = [];
     let lastAnchorOdo = 0;
     let cumulativeFuel = 0;
     let cycleEntryCount = 0;
-    const baseline = rollingAverage?.avgKmPerLiter || 0;
 
     for (const entry of valid) {
       const odo = Number(entry.odometer) || 0;
@@ -354,20 +383,33 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
         cycleEntryCount = 0;
       }
     }
-    return result;
-  }, [scopedEntries, rollingAverage]);
 
-  // Chart data: km/L per cycle over time
+    if (selectedWeekKey === null) return result;
+
+    const ws = new Date(selectedWeekKey);
+    const we = endOfWeek(ws, { weekStartsOn: 1 });
+    const weekInterval = { start: startOfDay(ws), end: endOfDay(we) };
+    return result.filter(c => {
+      if (!c.date) return false;
+      const t = new Date(c.date);
+      return !isNaN(t.getTime()) && isWithinInterval(t, weekInterval);
+    });
+  }, [filteredEntries, rollingAveragePeriod, rollingAverage, selectedWeekKey]);
+
   const chartData = useMemo(() => {
+    const base =
+      selectedWeekKey !== null
+        ? rollingAverage?.avgKmPerLiter || 0
+        : rollingAveragePeriod?.avgKmPerLiter || 0;
     return cycles.map((c, i) => ({
       label: c.date ? format(new Date(c.date), 'MMM d') : `Cycle ${i + 1}`,
       date: c.date,
       actualKmL: c.actualKmL,
-      baseline: rollingAverage?.avgKmPerLiter || 0,
-      threshold: (rollingAverage?.avgKmPerLiter || 0) * 0.7,
+      baseline: base,
+      threshold: base * 0.7,
       variance: Number((c.variance * 100).toFixed(1)),
     }));
-  }, [cycles, rollingAverage]);
+  }, [cycles, rollingAverage, rollingAveragePeriod, selectedWeekKey]);
 
   // All entries with metadata for the detail table
   const allEntriesData = useMemo(() => {
@@ -458,6 +500,10 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
   const noEntriesInWeek =
     scopedEntries.length === 0 && filteredEntries.length > 0 && selectedWeekKey !== null;
 
+  /** Picking a week fixes Period to All time and disables the period control; any non–All time preset disables the week control. */
+  const periodFilterLocked = selectedWeekKey !== null;
+  const weekFilterLocked = periodPreset !== 'all';
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -494,6 +540,7 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
             <CalendarRange className="h-4 w-4 text-slate-400 hidden sm:block" aria-hidden />
             <Select
               value={periodPreset}
+              disabled={periodFilterLocked}
               onValueChange={(v) => {
                 const next = v as PeriodPreset;
                 setPeriodPreset(next);
@@ -502,7 +549,15 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
                 }
               }}
             >
-              <SelectTrigger className="w-[160px] h-9" aria-label="Period">
+              <SelectTrigger
+                className="w-[160px] h-9"
+                aria-label="Period"
+                title={
+                  periodFilterLocked
+                    ? 'Clear the week filter (choose Entire selected period in the week menu) to change period'
+                    : undefined
+                }
+              >
                 <SelectValue placeholder="Period" />
               </SelectTrigger>
               <SelectContent align="end">
@@ -518,15 +573,22 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
           {primaryRangeForWeeks && weekOptionsForDropdown.length > 0 && !noEntriesInPeriod && (
             <PeriodWeekDropdown
               optionsOverride={weekOptionsForDropdown}
-              headerLabel={monthHeaderLabel}
+              headerLabel={selectedWeekKey === null ? weekListRangeBanner : undefined}
               prependEntireOption
               selectedStart={selectedWeekRangeStrings?.start}
               selectedEnd={selectedWeekRangeStrings?.end}
+              disabled={weekFilterLocked}
+              title={
+                weekFilterLocked
+                  ? 'Switch Period to All time to filter by week'
+                  : undefined
+              }
               onSelect={period => {
                 if (period.id === ENTIRE_PERIOD_OPTION_ID) {
                   setSelectedWeekKey(null);
                   return;
                 }
+                setPeriodPreset('all');
                 const d = parseISO(period.startDate);
                 setSelectedWeekKey(startOfWeek(d, { weekStartsOn: 1 }).getTime());
               }}
@@ -703,16 +765,17 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
               </p>
               {(periodPreset !== 'all' || selectedWeekLabel) && (
                 <p className="text-slate-500 pt-1">
-                  Numbers below reflect{' '}
-                  {periodPreset !== 'all' && <strong>{periodLabel}</strong>}
-                  {periodPreset !== 'all' && selectedWeekLabel && ' · '}
-                  {selectedWeekLabel && (
+                  {selectedWeekLabel ? (
                     <>
-                      Week <strong>{selectedWeekLabel}</strong>
+                      The chart and table list only cycles whose <strong>closing anchor date</strong> falls in{' '}
+                      <strong>Week {selectedWeekLabel}</strong> (same dates as the summary cards). Period is locked to{' '}
+                      <strong>All time</strong> until you clear the week (choose &quot;Entire selected period&quot; in the week menu).
+                    </>
+                  ) : (
+                    <>
+                      Numbers below reflect <strong>{periodLabel}</strong> (entry dates within the selected window).
                     </>
                   )}
-                  {' '}
-                  (entry dates within the selected scope).
                 </p>
               )}
             </div>
@@ -721,18 +784,16 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
       </Card>
 
       {/* Efficiency Chart */}
-      {chartData.length >= 2 && (
+      {chartData.length >= 1 && (
         <Card>
           <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between space-y-0">
             <div>
               <CardTitle className="text-base">Efficiency per Fill-Up Cycle</CardTitle>
               <CardDescription>
-                Actual km/L at each anchor point vs. rolling average baseline
-                {periodPreset !== 'all' && (
+                Actual km/L at each anchor vs. rolling average for the same scope as the table
+                {selectedWeekLabel && <span className="text-slate-600"> · Week {selectedWeekLabel}</span>}
+                {!selectedWeekLabel && periodPreset !== 'all' && (
                   <span className="text-slate-600"> · {periodLabel}</span>
-                )}
-                {selectedWeekLabel && (
-                  <span className="text-slate-600"> · Week {selectedWeekLabel}</span>
                 )}
               </CardDescription>
             </div>
@@ -804,14 +865,26 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
         <CardHeader>
           <CardTitle className="text-base">Fill-Up Cycles (Anchor to Anchor)</CardTitle>
           <CardDescription>
-            Each row = one complete tank cycle. Variance shows how much worse (-) or better (+) than the rolling average.
+            {selectedWeekLabel ? (
+              <>
+                Cycles that <strong>closed</strong> during <strong>Week {selectedWeekLabel}</strong> (date column = closing anchor). Variance vs that week&apos;s rolling average.
+              </>
+            ) : (
+              <>
+                Each row = one complete tank cycle for your <strong>date filter</strong> (left). Variance vs that period&apos;s rolling average.
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {cycles.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
               <Fuel className="h-6 w-6 mx-auto mb-2 text-slate-400" />
-              <p>No complete fill-up cycles found. Need at least two anchor points (full-tank events).</p>
+              <p>
+                {selectedWeekKey
+                  ? 'No fill-up cycle closed in this week. Try another week or another period.'
+                  : 'No complete fill-up cycles found. Need at least two anchor points (full-tank events).'}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
