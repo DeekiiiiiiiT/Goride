@@ -212,6 +212,11 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
             onClick={() => onNavigate('toll-info')}
           />
           <QuickAction
+            label="Motor vehicle catalog"
+            description="Platform-wide make, model, and specification reference data"
+            onClick={() => onNavigate('motor-vehicles')}
+          />
+          <QuickAction
             label="Platform Settings"
             description="Configure global platform options"
             onClick={() => onNavigate('settings')}

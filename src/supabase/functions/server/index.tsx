@@ -12530,6 +12530,137 @@ app.get("/make-server-37f42386/admin-stats", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Vehicle catalog (motor vehicles master DB) — platform owner / support
+// ---------------------------------------------------------------------------
+
+const VEHICLE_CATALOG_WRITABLE_KEYS = [
+  "make", "model", "year", "trim_series", "generation",
+  "body_type", "doors", "exterior_color", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
+  "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_type", "transmission", "drivetrain",
+  "horsepower", "torque", "torque_unit",
+  "fuel_tank_capacity", "fuel_tank_unit", "seating_capacity", "curb_weight_kg", "gross_vehicle_weight_kg", "max_payload_kg", "max_towing_kg",
+] as const;
+
+function assertVehicleCatalogAccess(c: any) {
+  const rbacUser = c.get("rbacUser") as any;
+  const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+  if (callerRole !== "platform_owner" && callerRole !== "superadmin" && callerRole !== "platform_support") {
+    return c.json({ error: "Only platform owner or support can manage the vehicle catalog" }, 403);
+  }
+  return null;
+}
+
+function pickVehicleCatalogRow(raw: Record<string, unknown>, partial: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of VEHICLE_CATALOG_WRITABLE_KEYS) {
+    if (!(k in raw)) continue;
+    const v = raw[k];
+    if (v === undefined) continue;
+    if (partial) {
+      if (v === "") continue;
+      out[k] = v;
+    } else {
+      if (v === "" && k !== "make" && k !== "model") continue;
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+// GET /admin/vehicle-catalog
+app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const { data, error } = await supabase
+      .from("vehicle_catalog")
+      .select("*")
+      .order("make", { ascending: true })
+      .order("model", { ascending: true })
+      .order("year", { ascending: false });
+    if (error) throw error;
+    return c.json({ items: data || [] });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] list:", e);
+    return c.json({ error: e.message || "Failed to list vehicle catalog" }, 500);
+  }
+});
+
+// POST /admin/vehicle-catalog
+app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const body = (await c.req.json()) as Record<string, unknown>;
+    const make = String(body.make ?? "").trim();
+    const model = String(body.model ?? "").trim();
+    const yearNum = Number(body.year);
+    if (!make || !model || body.year === undefined || body.year === null || body.year === "") {
+      return c.json({ error: "make, model, and year are required" }, 400);
+    }
+    if (!Number.isFinite(yearNum) || yearNum < 1900 || yearNum > 2100) {
+      return c.json({ error: "year must be between 1900 and 2100" }, 400);
+    }
+    const row = pickVehicleCatalogRow({ ...body, make, model, year: yearNum }, false);
+    row.updated_at = new Date().toISOString();
+    const { data, error } = await supabase.from("vehicle_catalog").insert(row).select().single();
+    if (error) throw error;
+    return c.json({ item: data });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] create:", e);
+    return c.json({ error: e.message || "Failed to create vehicle catalog entry" }, 500);
+  }
+});
+
+// PATCH /admin/vehicle-catalog/:id
+app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const id = c.req.param("id");
+    const body = (await c.req.json()) as Record<string, unknown>;
+    const row = pickVehicleCatalogRow(body, true);
+    if (row.year !== undefined) {
+      const y = Number(row.year);
+      if (!Number.isFinite(y) || y < 1900 || y > 2100) {
+        return c.json({ error: "year must be between 1900 and 2100" }, 400);
+      }
+      row.year = y;
+    }
+    if (row.make !== undefined) row.make = String(row.make).trim();
+    if (row.model !== undefined) row.model = String(row.model).trim();
+    row.updated_at = new Date().toISOString();
+    const keys = Object.keys(row).filter((k) => k !== "updated_at");
+    if (keys.length === 0) {
+      return c.json({ error: "No fields to update" }, 400);
+    }
+    const { data, error } = await supabase.from("vehicle_catalog").update(row).eq("id", id).select().single();
+    if (error) throw error;
+    if (!data) return c.json({ error: "Not found" }, 404);
+    return c.json({ item: data });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] patch:", e);
+    return c.json({ error: e.message || "Failed to update vehicle catalog entry" }, 500);
+  }
+});
+
+// DELETE /admin/vehicle-catalog/:id
+app.delete("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const id = c.req.param("id");
+    const { data, error } = await supabase.from("vehicle_catalog").delete().eq("id", id).select("id");
+    if (error) throw error;
+    if (!data?.length) return c.json({ error: "Not found" }, 404);
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] delete:", e);
+    return c.json({ error: e.message || "Failed to delete vehicle catalog entry" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Admin Customers - Multi-Layer Caching Helper
 // ---------------------------------------------------------------------------
 
