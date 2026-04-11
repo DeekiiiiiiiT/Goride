@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import {
   createVehicleCatalog,
@@ -8,6 +8,8 @@ import {
   updateVehicleCatalog,
 } from "../../../services/vehicleCatalogService";
 import type { VehicleCatalogCreatePayload, VehicleCatalogRecord } from "../../../types/vehicleCatalog";
+import { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../types/csv-schemas";
+import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
 import { Button } from "../../ui/button";
 import {
   Dialog,
@@ -27,13 +29,51 @@ import {
   TableRow,
 } from "../../ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../ui/select";
+import { TOYOTA_REFERENCE_MAKE } from "../../../data/toyotaVehicleReference";
+import { VEHICLE_BODY_TYPE_OPTIONS, VEHICLE_DOOR_COUNT_OPTIONS } from "../../../data/vehicleBodyOptions";
+import {
+  VEHICLE_DRIVETRAIN_OPTIONS,
+  VEHICLE_FUEL_TYPE_OPTIONS,
+  VEHICLE_TRANSMISSION_OPTIONS,
+} from "../../../data/vehicleEngineOptions";
+import { EngineCatalogSelect } from "./EngineCatalogSelect";
+import { ToyotaModelCombobox } from "./ToyotaModelCombobox";
+
+/** DB allows 1900–2100; list next model year through 1900, newest first. */
+function standardModelYearRange(): number[] {
+  const max = Math.min(2100, new Date().getFullYear() + 1);
+  const min = 1900;
+  const years: number[] = [];
+  for (let y = max; y >= min; y--) years.push(y);
+  return years;
+}
+
+/** Include the current form year if it is valid but missing from the standard list. */
+function modelYearsForForm(selectedYearStr: string, standard: number[]): number[] {
+  const y = parseInt(selectedYearStr, 10);
+  if (!Number.isFinite(y) || y < 1900 || y > 2100) return standard;
+  if (standard.includes(y)) return standard;
+  return [y, ...standard].sort((a, b) => b - a);
+}
+
+type MakeSelection = "Toyota" | "Other";
 
 type FormState = {
-  make: string;
+  makeSelection: MakeSelection;
+  /** Used when makeSelection is Other */
+  makeOther: string;
   model: string;
   year: string;
   trim_series: string;
   generation: string;
+  model_code: string;
   body_type: string;
   doors: string;
   exterior_color: string;
@@ -60,9 +100,15 @@ type FormState = {
   max_towing_kg: string;
 };
 
+function resolveMake(form: FormState): string {
+  if (form.makeSelection === "Toyota") return TOYOTA_REFERENCE_MAKE;
+  return form.makeOther.trim();
+}
+
 function emptyForm(): FormState {
   return {
-    make: "",
+    makeSelection: "Toyota",
+    makeOther: "",
     model: "",
     year: String(new Date().getFullYear()),
     trim_series: "",
@@ -98,11 +144,13 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
   const s = (n: number | null | undefined) => (n == null ? "" : String(n));
   const t = (v: string | null | undefined) => v ?? "";
   return {
-    make: r.make,
+    makeSelection: r.make === TOYOTA_REFERENCE_MAKE ? "Toyota" : "Other",
+    makeOther: r.make === TOYOTA_REFERENCE_MAKE ? "" : r.make,
     model: r.model,
     year: String(r.year),
     trim_series: t(r.trim_series),
     generation: s(r.generation),
+    model_code: t(r.model_code),
     body_type: t(r.body_type),
     doors: s(r.doors),
     exterior_color: t(r.exterior_color),
@@ -146,8 +194,9 @@ function optNum(s: string): number | null {
 
 function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   const year = parseInt(form.year, 10);
+  const make = resolveMake(form);
   const base: VehicleCatalogCreatePayload = {
-    make: form.make.trim(),
+    make,
     model: form.model.trim(),
     year,
   };
@@ -156,6 +205,7 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   };
   assign("trim_series", form.trim_series.trim() || null);
   assign("generation", optInt(form.generation));
+  assign("model_code", form.model_code.trim() || null);
   assign("body_type", form.body_type.trim() || null);
   assign("doors", optInt(form.doors));
   assign("exterior_color", form.exterior_color.trim() || null);
@@ -185,12 +235,14 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
 
 function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
   const year = parseInt(form.year, 10);
+  const make = resolveMake(form);
   return {
-    make: form.make.trim(),
+    make,
     model: form.model.trim(),
     year: Number.isFinite(year) ? year : 0,
     trim_series: form.trim_series.trim() || null,
     generation: optInt(form.generation),
+    model_code: form.model_code.trim() || null,
     body_type: form.body_type.trim() || null,
     doors: optInt(form.doors),
     exterior_color: form.exterior_color.trim() || null,
@@ -222,6 +274,8 @@ export function VehicleCatalogManager() {
   const { session } = useAuth();
   const token = session?.access_token;
 
+  const standardModelYears = useMemo(() => standardModelYearRange(), []);
+
   const [items, setItems] = useState<VehicleCatalogRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -230,6 +284,11 @@ export function VehicleCatalogManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm());
+
+  const yearDropdownYears = useMemo(
+    () => modelYearsForForm(form.year, standardModelYears),
+    [form.year, standardModelYears],
+  );
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -265,9 +324,13 @@ export function VehicleCatalogManager() {
 
   const handleSave = async () => {
     if (!token) return;
-    const make = form.make.trim();
+    const make = resolveMake(form);
     const model = form.model.trim();
     const year = parseInt(form.year, 10);
+    if (form.makeSelection === "Other" && !form.makeOther.trim()) {
+      setError("Enter a custom make, or choose Toyota.");
+      return;
+    }
     if (!make || !model) {
       setError("Make and model are required.");
       return;
@@ -310,6 +373,12 @@ export function VehicleCatalogManager() {
     (value: string) =>
       setForm((f) => ({ ...f, [key]: value }));
 
+  const handleExportCsv = () => {
+    const csv = jsonToCsv(items, VEHICLE_CATALOG_CSV_COLUMNS);
+    const today = new Date().toISOString().split("T")[0];
+    downloadBlob(csv, `motor_vehicle_catalog_${today}.csv`);
+  };
+
   if (!token) {
     return <p className="text-sm text-slate-500">Sign in to manage the vehicle catalog.</p>;
   }
@@ -323,10 +392,23 @@ export function VehicleCatalogManager() {
             Platform-wide vehicle specifications. Used as reference data for fleets.
           </p>
         </div>
-        <Button onClick={openCreate} className="shrink-0 gap-2">
-          <Plus className="w-4 h-4" />
-          Add vehicle
-        </Button>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            onClick={handleExportCsv}
+            disabled={loading}
+            title={items.length === 0 ? "Exports column headers only until you add vehicles" : undefined}
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </Button>
+          <Button onClick={openCreate} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Add vehicle
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -425,18 +507,112 @@ export function VehicleCatalogManager() {
 
             <TabsContent value="primary" className="mt-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Make *" value={form.make} onChange={update("make")} />
-                <Field label="Model *" value={form.model} onChange={update("model")} />
-                <Field label="Year *" value={form.year} onChange={update("year")} type="number" />
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-600">Make *</Label>
+                  <Select
+                    value={form.makeSelection}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        makeSelection: v as MakeSelection,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                      <SelectValue placeholder="Select make" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Toyota">{TOYOTA_REFERENCE_MAKE}</SelectItem>
+                      <SelectItem value="Other">Other (custom make)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {form.makeSelection === "Toyota" ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-600">Model *</Label>
+                    <ToyotaModelCombobox
+                      value={form.model}
+                      onChange={(v) => setForm((f) => ({ ...f, model: v }))}
+                    />
+                  </div>
+                ) : null}
+
+                {form.makeSelection === "Other" && (
+                  <>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs text-slate-600">Custom make *</Label>
+                      <Input
+                        value={form.makeOther}
+                        onChange={(e) => setForm((f) => ({ ...f, makeOther: e.target.value }))}
+                        className="h-9 bg-white"
+                        placeholder="e.g. Honda"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs text-slate-600">Model *</Label>
+                      <Input
+                        value={form.model}
+                        onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                        className="h-9 bg-white"
+                        placeholder="Vehicle model"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-600">Year *</Label>
+                  <Select
+                    value={form.year}
+                    onValueChange={(v) => setForm((f) => ({ ...f, year: v }))}
+                  >
+                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                      <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[min(320px,50vh)]">
+                      {yearDropdownYears.map((y) => (
+                        <SelectItem key={y} value={String(y)}>
+                          {y}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Field label="Trim / series" value={form.trim_series} onChange={update("trim_series")} />
-                <Field label="Generation" value={form.generation} onChange={update("generation")} type="number" />
+                <Field
+                  label="Generation"
+                  value={form.generation}
+                  onChange={update("generation")}
+                  type="number"
+                />
+                <Field
+                  label="Model code"
+                  value={form.model_code}
+                  onChange={update("model_code")}
+                  placeholder="e.g. OEM / platform code"
+                />
               </div>
             </TabsContent>
 
             <TabsContent value="body" className="mt-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Body type" value={form.body_type} onChange={update("body_type")} />
-                <Field label="Doors" value={form.doors} onChange={update("doors")} type="number" />
+                <EngineCatalogSelect
+                  label="Body type"
+                  value={form.body_type}
+                  onChange={(v) => setForm((f) => ({ ...f, body_type: v }))}
+                  options={VEHICLE_BODY_TYPE_OPTIONS}
+                  placeholder="Select a Body Type"
+                />
+                <EngineCatalogSelect
+                  label="Doors"
+                  value={form.doors}
+                  onChange={(v) => setForm((f) => ({ ...f, doors: v }))}
+                  options={VEHICLE_DOOR_COUNT_OPTIONS}
+                  placeholder="Select doors"
+                />
                 <Field label="Exterior color" value={form.exterior_color} onChange={update("exterior_color")} />
                 <Field label="Length (mm)" value={form.length_mm} onChange={update("length_mm")} />
                 <Field label="Width (mm)" value={form.width_mm} onChange={update("width_mm")} />
@@ -460,9 +636,27 @@ export function VehicleCatalogManager() {
                   onChange={update("engine_configuration")}
                   placeholder="e.g. I4, V6"
                 />
-                <Field label="Fuel type" value={form.fuel_type} onChange={update("fuel_type")} />
-                <Field label="Transmission" value={form.transmission} onChange={update("transmission")} />
-                <Field label="Drivetrain" value={form.drivetrain} onChange={update("drivetrain")} />
+                <EngineCatalogSelect
+                  label="Fuel type"
+                  value={form.fuel_type}
+                  onChange={(v) => setForm((f) => ({ ...f, fuel_type: v }))}
+                  options={VEHICLE_FUEL_TYPE_OPTIONS}
+                  placeholder="Select a Fuel"
+                />
+                <EngineCatalogSelect
+                  label="Transmission"
+                  value={form.transmission}
+                  onChange={(v) => setForm((f) => ({ ...f, transmission: v }))}
+                  options={VEHICLE_TRANSMISSION_OPTIONS}
+                  placeholder="Select a Transmission"
+                />
+                <EngineCatalogSelect
+                  label="Drivetrain"
+                  value={form.drivetrain}
+                  onChange={(v) => setForm((f) => ({ ...f, drivetrain: v }))}
+                  options={VEHICLE_DRIVETRAIN_OPTIONS}
+                  placeholder="Select a Drivetrain"
+                />
                 <Field label="Horsepower" value={form.horsepower} onChange={update("horsepower")} />
                 <Field label="Torque" value={form.torque} onChange={update("torque")} />
                 <Field label="Torque unit" value={form.torque_unit} onChange={update("torque_unit")} placeholder="Nm" />

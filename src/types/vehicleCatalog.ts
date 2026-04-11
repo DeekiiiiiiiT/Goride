@@ -6,6 +6,7 @@ export interface VehicleCatalogRecord {
   year: number;
   trim_series: string | null;
   generation: number | null;
+  model_code: string | null;
   body_type: string | null;
   doors: number | null;
   exterior_color: string | null;

@@ -2,6 +2,7 @@ import { CsvColumn, formatDateJM } from "../utils/csv-helper";
 import { FuelEntry } from "./fuel";
 import { ServiceRequest, Trip } from "./data";
 import { OdometerReading } from "./vehicle";
+import type { VehicleCatalogRecord } from "./vehicleCatalog";
 
 export const FUEL_CSV_COLUMNS: CsvColumn<FuelEntry>[] = [
     { key: 'date', label: 'date', formatter: formatDateJM },
@@ -291,4 +292,41 @@ export const TOLL_TRANSACTION_CSV_COLUMNS: CsvColumn<any>[] = [
     { key: 'topSuggestionScore', label: 'topSuggestionScore' },
     { key: 'topSuggestionTripId', label: 'topSuggestionTripId' },
     { key: 'suggestionCount', label: 'suggestionCount' },
+];
+
+/** Super Admin motor vehicle master catalog export */
+export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
+    { key: "id", label: "id" },
+    { key: "make", label: "make" },
+    { key: "model", label: "model" },
+    { key: "year", label: "year" },
+    { key: "trim_series", label: "trim_series" },
+    { key: "generation", label: "generation" },
+    { key: "model_code", label: "model_code" },
+    { key: "body_type", label: "body_type" },
+    { key: "doors", label: "doors" },
+    { key: "exterior_color", label: "exterior_color" },
+    { key: "length_mm", label: "length_mm" },
+    { key: "width_mm", label: "width_mm" },
+    { key: "height_mm", label: "height_mm" },
+    { key: "wheelbase_mm", label: "wheelbase_mm" },
+    { key: "ground_clearance_mm", label: "ground_clearance_mm" },
+    { key: "engine_displacement_l", label: "engine_displacement_l" },
+    { key: "engine_displacement_cc", label: "engine_displacement_cc" },
+    { key: "engine_configuration", label: "engine_configuration" },
+    { key: "fuel_type", label: "fuel_type" },
+    { key: "transmission", label: "transmission" },
+    { key: "drivetrain", label: "drivetrain" },
+    { key: "horsepower", label: "horsepower" },
+    { key: "torque", label: "torque" },
+    { key: "torque_unit", label: "torque_unit" },
+    { key: "fuel_tank_capacity", label: "fuel_tank_capacity" },
+    { key: "fuel_tank_unit", label: "fuel_tank_unit" },
+    { key: "seating_capacity", label: "seating_capacity" },
+    { key: "curb_weight_kg", label: "curb_weight_kg" },
+    { key: "gross_vehicle_weight_kg", label: "gross_vehicle_weight_kg" },
+    { key: "max_payload_kg", label: "max_payload_kg" },
+    { key: "max_towing_kg", label: "max_towing_kg" },
+    { key: "created_at", label: "created_at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },
+    { key: "updated_at", label: "updated_at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },
 ];
