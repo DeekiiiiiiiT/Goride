@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
 import { 
     Wrench, 
@@ -37,6 +37,7 @@ import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import type { CatalogMaintenanceTaskOption } from '../../types/maintenance';
 
 // --- Constants ---
 
@@ -104,6 +105,8 @@ export interface MaintenanceLog {
     vehicleId: string;
     date: string;
     type: string;
+    /** When set, server advances `vehicle_maintenance_schedule` for this template. */
+    templateId?: string;
     serviceInterval?: 'A' | 'B' | 'C' | 'D';
     cost: number;
     odo: number;
@@ -131,6 +134,8 @@ interface MaintenanceManagerProps {
         nextOdo: number;
         remainingKm: number;
     };
+    /** Super Admin templates for this vehicle's catalog match — drives checklist + `templateId` on save. */
+    catalogTemplates?: CatalogMaintenanceTaskOption[];
     onRefresh: () => void;
 }
 
@@ -144,6 +149,7 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
         nextOdo: 0,
         remainingKm: 0
     }, 
+    catalogTemplates = [],
     onRefresh 
 }) => {
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -175,24 +181,42 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
     const [selectedScheduleId, setSelectedScheduleId] = useState<string>('');
     const [checklistItems, setChecklistItems] = useState<string[]>([]);
 
+    const scheduleChoices = useMemo(() => {
+        if (catalogTemplates.length > 0) {
+            return catalogTemplates.map((t) => ({
+                id: t.templateId,
+                label: t.label,
+                items: t.checklistLines,
+                templateId: t.templateId as string | undefined,
+            }));
+        }
+        return MAINTENANCE_SCHEDULES.map((s) => ({
+            id: s.id,
+            label: s.label,
+            items: s.items,
+            templateId: undefined as string | undefined,
+        }));
+    }, [catalogTemplates]);
+
     // Update checklist items when schedule changes
     useEffect(() => {
         if (selectedScheduleId) {
-            const schedule = MAINTENANCE_SCHEDULES.find(s => s.id === selectedScheduleId);
+            const schedule = scheduleChoices.find((s) => s.id === selectedScheduleId);
             if (schedule) {
-                // Merge existing checklist with new schedule items to avoid losing custom checked items if any
-                // But for simplicity, let's just use the schedule items + any already checked items that are not in schedule
                 const newItems = schedule.items;
                 setChecklistItems(newItems);
                 
                 // Auto-check schedule items
                 setFormData(prev => ({
                     ...prev,
-                    checklist: [...new Set([...(prev.checklist || []), ...newItems])]
+                    checklist: [...new Set([...(prev.checklist || []), ...newItems])],
+                    ...(schedule.templateId
+                        ? { type: schedule.label }
+                        : {}),
                 }));
             }
         }
-    }, [selectedScheduleId]);
+    }, [selectedScheduleId, scheduleChoices]);
 
     const handleServiceScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -254,12 +278,16 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
 
         setIsLoading(true);
         try {
+            const choice = scheduleChoices.find((s) => s.id === selectedScheduleId);
             const payload = {
                 ...formData,
                 vehicleId,
                 id: formData.id || crypto.randomUUID(),
                 cost: Number(formData.cost) || 0,
-                odo: Number(formData.odo) || 0
+                odo: Number(formData.odo) || 0,
+                ...(choice?.templateId
+                    ? { templateId: choice.templateId, type: choice.label }
+                    : {}),
             };
 
             await api.saveMaintenanceLog(payload);
@@ -292,8 +320,9 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
             }
         });
         setStep(1);
-        setSelectedScheduleId('');
-        setChecklistItems(MAINTENANCE_SCHEDULES[0].items); // Default to basic
+        const first = scheduleChoices[0];
+        setSelectedScheduleId(first?.id ?? '');
+        setChecklistItems(first?.items ?? MAINTENANCE_SCHEDULES[0].items);
         setIsAddDialogOpen(true);
     };
 
@@ -529,7 +558,7 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
                                             <SelectValue placeholder="Select maintenance schedule..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {MAINTENANCE_SCHEDULES.map(s => (
+                                            {scheduleChoices.map((s) => (
                                                 <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
                                             ))}
                                         </SelectContent>

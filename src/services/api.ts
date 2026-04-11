@@ -1239,7 +1239,7 @@ export const api = {
 
   async getMaintenanceLogs(vehicleId: string) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs/${vehicleId}`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+          headers: await getHeaders(null),
       });
       if (!response.ok) throw new Error("Failed to fetch maintenance logs");
       return response.json();
@@ -1247,23 +1247,69 @@ export const api = {
 
   async getAllMaintenanceLogs() {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+          headers: await getHeaders(null),
       });
       if (!response.ok) throw new Error("Failed to fetch all maintenance logs");
       return response.json();
   },
 
-  async saveMaintenanceLog(log: any) {
+  async saveMaintenanceLog(log: unknown) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs`, {
           method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${publicAnonKey}`
-          },
+          headers: await getHeaders(),
           body: JSON.stringify(log)
       });
       if (!response.ok) throw new Error("Failed to save maintenance log");
       return response.json();
+  },
+
+  async getMaintenanceSchedule(vehicleId: string) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-schedule/${vehicleId}`, {
+          headers: await getHeaders(null),
+      });
+      if (!response.ok) throw new Error("Failed to fetch maintenance schedule");
+      return response.json() as Promise<{
+        catalogId: string | null;
+        catalogMatched: boolean;
+        maintenanceStatus: {
+          status: string;
+          nextTypeLabel: string;
+          daysToService: number;
+          nextOdo: number;
+          remainingKm: number;
+        };
+        schedule: unknown[];
+      }>;
+  },
+
+  async bootstrapMaintenanceSchedule(vehicleId: string, currentOdometer?: number) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-schedule/${vehicleId}/bootstrap`, {
+          method: 'POST',
+          headers: await getHeaders(),
+          body: JSON.stringify({ currentOdometer: currentOdometer ?? null }),
+      });
+      if (!response.ok) throw new Error("Failed to bootstrap maintenance schedule");
+      return response.json() as Promise<{ created: number; catalogId?: string; message?: string }>;
+  },
+
+  async getMaintenanceFleetSummary() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-fleet-summary`, {
+          headers: await getHeaders(null),
+      });
+      if (!response.ok) throw new Error("Failed to fetch maintenance fleet summary");
+      return response.json() as Promise<{
+        items: Array<{
+          vehicleId: string;
+          licensePlate?: string;
+          make?: string;
+          model?: string;
+          year?: string;
+          odometer: number;
+          fleetStatus: string;
+          nextDueOdometer: number | null;
+          scheduleRowCount: number;
+        }>;
+      }>;
   },
 
   async getTollTags() {
@@ -2080,7 +2126,7 @@ export const api = {
   async deleteMaintenanceLog(id: string, vehicleId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs/${vehicleId}/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to delete maintenance log");
     return response.json();

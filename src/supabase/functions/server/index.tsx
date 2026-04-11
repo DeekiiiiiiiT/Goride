@@ -66,6 +66,7 @@ import { getFleetTimezone } from "./timezone_helper.tsx";
 import * as unverifiedVendor from './unverified_vendor_controller.tsx';
 import { suggestStationMatches } from './vendor_matcher.ts';
 import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRateLimitStats } from './rate_limiter.ts';
+import { registerMaintenanceRoutes } from "./maintenance_routes.ts";
 
 // ---------------------------------------------------------------------------
 // Future-Date Guardrail
@@ -161,6 +162,8 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
+
+registerMaintenanceRoutes(app, supabase);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).
@@ -6584,55 +6587,7 @@ app.post(
   },
 );
 
-// Maintenance Logs Endpoints
-app.get("/make-server-37f42386/maintenance-logs", requireAuth(), async (c) => {
-  try {
-    const { data: logsData } = await supabase
-      .from("kv_store_37f42386")
-      .select("value")
-      .like("key", "maintenance-log:%");
-    
-    const logs = (logsData || []).map(d => d.value);
-    return c.json(filterByOrg(logs, c));
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.get("/make-server-37f42386/maintenance-logs/:vehicleId", requireAuth(), async (c) => {
-  try {
-    const vehicleId = c.req.param("vehicleId");
-    const { data, error } = await supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", `maintenance_log:${vehicleId}:`)
-        .order("value->>date", { ascending: false });
-
-    if (error) throw error;
-    const logs = data?.map((d: any) => d.value) || [];
-    return c.json(filterByOrg(logs, c));
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.post("/make-server-37f42386/maintenance-logs", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
-  try {
-    const log = await c.req.json();
-    if (!log.id) {
-        log.id = crypto.randomUUID();
-    }
-    if (!log.vehicleId) {
-        return c.json({ error: "Vehicle ID is required" }, 400);
-    }
-    
-    // Key structure: maintenance_log:{vehicleId}:{logId}
-    await kv.set(`maintenance_log:${log.vehicleId}:${log.id}`, stampOrg(log, c));
-    return c.json({ success: true, data: log });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
+// Maintenance logs: Postgres-backed — see maintenance_routes.ts
 
 // --- FUEL SCENARIOS ---
 app.get("/make-server-37f42386/scenarios", requireAuth(), async (c) => {
@@ -11664,17 +11619,6 @@ app.delete("/make-server-37f42386/check-ins/:id", async (c) => {
   const id = c.req.param("id");
   try {
     await kv.del(`checkin:${id}`);
-    return c.json({ success: true });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.delete("/make-server-37f42386/maintenance-logs/:vehicleId/:id", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
-  const vehicleId = c.req.param("vehicleId");
-  const id = c.req.param("id");
-  try {
-    await kv.del(`maintenance_log:${vehicleId}:${id}`);
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

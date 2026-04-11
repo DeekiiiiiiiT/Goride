@@ -189,6 +189,14 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             onClick={() => onNavigate?.('vehicles')}
           />
           )}
+          {canView('maintenance-hub') && (
+          <NavItem 
+            icon={<Wrench className="h-4 w-4" />} 
+            label="Maintenance" 
+            active={currentPage === 'maintenance-hub'}
+            onClick={() => onNavigate?.('maintenance-hub')}
+          />
+          )}
           {canView('fleet') && (
           <NavItem 
             icon={<LayoutGrid className="h-4 w-4" />} 

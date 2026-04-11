@@ -115,6 +115,10 @@ import { EquipmentManager } from './EquipmentManager';
 import { ExteriorManager } from './ExteriorManager';
 import { MaintenanceManager, MaintenanceLog } from './MaintenanceManager';
 import { KmLTracking } from './KmLTracking';
+import type {
+  CatalogMaintenanceTaskOption,
+  VehicleMaintenanceScheduleRowApi,
+} from '../../types/maintenance';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -124,52 +128,6 @@ interface VehicleDetailProps {
   onAssignDriver?: () => void;
   onUpdate?: (vehicle: Vehicle) => void;
 }
-
-const MAINTENANCE_SCHEDULE = {
-    A: {
-        label: "Basic Service (Every 5,000 km)",
-        interval: 5000,
-        items: [
-            "Replace Engine Oil (0W-20 or 5W-30)",
-            "Replace Oil Filter",
-            "Check Tire Pressures",
-            "Top Up Window Washer Fluid",
-            "Check Coolant Level",
-            "Check Lights"
-        ]
-    },
-    B: {
-        label: "Intermediate Service (Every 10,000 km)",
-        interval: 10000,
-        items: [
-            "Includes all Basic Service items",
-            "Rotate Tires",
-            "Inspect/Clean/Replace Engine Air Filter",
-            "Replace Cabin A/C Filter",
-            "Inspect Wiper Blades",
-            "Inspect Brake Pads"
-        ]
-    },
-    C: {
-        label: "Major Service (Every 40,000 km)",
-        interval: 40000,
-        items: [
-            "Includes all Intermediate Service items",
-            "Drain & Refill CVT Transmission Fluid",
-            "Flush & Replace Brake Fluid",
-            "Inspect Drive/Serpentine Belt",
-            "Inspect Suspension Bushings & Boots"
-        ]
-    },
-    D: {
-        label: "Long-Term Service (Every 100,000 km)",
-        interval: 100000,
-        items: [
-            "Replace Spark Plugs (Iridium)",
-            "Flush Radiator Coolant"
-        ]
-    }
-};
 
 export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssignDriver, onUpdate }: VehicleDetailProps) {
 
@@ -199,6 +157,40 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
 
   // Service Log State
   const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
+  const [maintenanceScheduleRows, setMaintenanceScheduleRows] = useState<
+    VehicleMaintenanceScheduleRowApi[]
+  >([]);
+
+  const catalogMaintenanceOptions = useMemo((): CatalogMaintenanceTaskOption[] => {
+    const seen = new Set<string>();
+    const out: CatalogMaintenanceTaskOption[] = [];
+    for (const row of maintenanceScheduleRows) {
+      if (!row.template_id || !row.template) continue;
+      const tid = String(row.template_id);
+      if (seen.has(tid)) continue;
+      seen.add(tid);
+      const tpl = row.template;
+      const taskName = tpl.task_name || "Service";
+      const desc = tpl.description?.trim();
+      const lines = desc
+        ? desc.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+        : [];
+      out.push({
+        templateId: tid,
+        label: taskName,
+        checklistLines: lines.length ? lines : [taskName],
+      });
+    }
+    return out;
+  }, [maintenanceScheduleRows]);
+
+  const [maintenanceStatus, setMaintenanceStatus] = useState({
+    status: "Healthy",
+    nextTypeLabel: "Service",
+    daysToService: 0,
+    nextOdo: 0,
+    remainingKm: 0,
+  });
   const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
   const [odometerHistory, setOdometerHistory] = useState<any[]>([]);
   const [isOdometerLoading, setIsOdometerLoading] = useState(false);
@@ -398,29 +390,39 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       }
   }, [vehicle.id, vehicle.licensePlate, vehicle.metrics.odometer, trips]);
 
-  const maintenanceStatus = useMemo(() => {
-      const currentOdo = vehicle.metrics.odometer || 0;
-      const lastService = maintenanceLogs[0];
-      const lastOdo = lastService?.odo || 0;
-      
-      const distToNext5k = 5000 - (currentOdo % 5000);
-      const nextDueOdo = currentOdo + distToNext5k;
-      
-      let nextType = 'A';
-      if (nextDueOdo % 100000 === 0) nextType = 'D';
-      else if (nextDueOdo % 40000 === 0) nextType = 'C';
-      else if (nextDueOdo % 10000 === 0) nextType = 'B';
-      
-      const daysToService = Math.ceil(distToNext5k / 50);
-      
-      return {
-          nextTypeLabel: MAINTENANCE_SCHEDULE[nextType as keyof typeof MAINTENANCE_SCHEDULE].label.split('(')[0].trim(),
-          nextOdo: nextDueOdo,
-          remainingKm: distToNext5k,
-          daysToService,
-          status: distToNext5k < 500 ? 'Due Soon' : 'Healthy'
-      };
-  }, [vehicle.metrics.odometer, maintenanceLogs]);
+  useEffect(() => {
+    const vId = vehicle.id || vehicle.licensePlate;
+    if (!vId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        let sch = await api.getMaintenanceSchedule(vId);
+        if (!cancelled && sch.catalogMatched && (!sch.schedule || sch.schedule.length === 0)) {
+          await api.bootstrapMaintenanceSchedule(vId, vehicle.metrics.odometer);
+          sch = await api.getMaintenanceSchedule(vId);
+        }
+        if (!cancelled) {
+          setMaintenanceScheduleRows(
+            Array.isArray(sch.schedule) ? (sch.schedule as VehicleMaintenanceScheduleRowApi[]) : [],
+          );
+        }
+        if (!cancelled && sch.maintenanceStatus) {
+          setMaintenanceStatus({
+            status: sch.maintenanceStatus.status,
+            nextTypeLabel: sch.maintenanceStatus.nextTypeLabel,
+            daysToService: sch.maintenanceStatus.daysToService,
+            nextOdo: sch.maintenanceStatus.nextOdo,
+            remainingKm: sch.maintenanceStatus.remainingKm,
+          });
+        }
+      } catch (e) {
+        console.error("[maintenance schedule]", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [vehicle.id, vehicle.licensePlate, vehicle.metrics.odometer]);
 
   // Analytics Logic
   const analytics = useMemo(() => {
@@ -692,6 +694,23 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const handleRefreshMaintenance = () => {
       const vId = vehicle.id || vehicle.licensePlate;
       api.getMaintenanceLogs(vId).then(setMaintenanceLogs).catch(console.error);
+      api
+        .getMaintenanceSchedule(vId)
+        .then((sch) => {
+          setMaintenanceScheduleRows(
+            Array.isArray(sch.schedule) ? (sch.schedule as VehicleMaintenanceScheduleRowApi[]) : [],
+          );
+          if (sch.maintenanceStatus) {
+            setMaintenanceStatus({
+              status: sch.maintenanceStatus.status,
+              nextTypeLabel: sch.maintenanceStatus.nextTypeLabel,
+              daysToService: sch.maintenanceStatus.daysToService,
+              nextOdo: sch.maintenanceStatus.nextOdo,
+              remainingKm: sch.maintenanceStatus.remainingKm,
+            });
+          }
+        })
+        .catch(console.error);
   };
 
   const handleUnassignTag = async () => {
@@ -1669,6 +1688,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                         vehicleId={vehicle.id || vehicle.licensePlate} 
                         logs={maintenanceLogs}
                         maintenanceStatus={maintenanceStatus}
+                        catalogTemplates={catalogMaintenanceOptions}
                         onRefresh={handleRefreshMaintenance}
                       />
                   </TabsContent>

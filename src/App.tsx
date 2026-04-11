@@ -12,6 +12,7 @@ import { TripLogsPage } from './components/trips/TripLogsPage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { DriversPage } from './components/drivers/DriversPage';
 import { VehiclesPage } from './components/vehicles/VehiclesPage';
+import { FleetMaintenanceHub } from './components/vehicles/FleetMaintenanceHub';
 import { FleetPage } from './components/fleet/FleetPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { TransactionsPage } from './components/transactions/TransactionsPage';
@@ -311,6 +312,11 @@ function AppContent() {
         {currentPage === 'vehicles' && (
           <PermissionGate permission="nav.vehicles" onNavigate={setCurrentPage}>
             <VehiclesPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'maintenance-hub' && (
+          <PermissionGate permission="nav.maintenance" onNavigate={setCurrentPage}>
+            <FleetMaintenanceHub onNavigate={setCurrentPage} />
           </PermissionGate>
         )}
         {currentPage === 'fleet' && (

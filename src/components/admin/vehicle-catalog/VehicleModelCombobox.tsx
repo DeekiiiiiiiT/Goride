@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import { TOYOTA_MODELS } from "../../../data/toyotaVehicleReference";
 import { Button } from "../../ui/button";
 import {
   Command,
@@ -13,7 +12,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 import { cn } from "../../ui/utils";
 
-interface ToyotaModelComboboxProps {
+interface VehicleModelComboboxProps {
+  /** Models for the selected make (from reference data). */
+  models: readonly string[];
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -21,21 +22,21 @@ interface ToyotaModelComboboxProps {
 }
 
 /**
- * Searchable dropdown of Toyota models from IDEA_2.md. If `value` is not in the list
+ * Searchable dropdown of vehicle models for a chosen make. If `value` is not in the list
  * (legacy/imported row), it is still shown and selectable.
  */
-export function ToyotaModelCombobox({ value, onChange, disabled, id }: ToyotaModelComboboxProps) {
+export function VehicleModelCombobox({ models, value, onChange, disabled, id }: VehicleModelComboboxProps) {
   const [open, setOpen] = useState(false);
 
-  const modelSet = useMemo(() => new Set(TOYOTA_MODELS), []);
+  const modelSet = useMemo(() => new Set(models), [models]);
 
   const options = useMemo(() => {
     const v = value.trim();
     if (v && !modelSet.has(v)) {
-      return [v, ...TOYOTA_MODELS];
+      return [v, ...models];
     }
-    return [...TOYOTA_MODELS];
-  }, [value, modelSet]);
+    return [...models];
+  }, [value, modelSet, models]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -62,10 +63,14 @@ export function ToyotaModelCombobox({ value, onChange, disabled, id }: ToyotaMod
         side="bottom"
         avoidCollisions
         collisionPadding={8}
+        onWheel={(e) => e.stopPropagation()}
       >
         <Command className="bg-popover">
           <CommandInput placeholder="Search model…" className="h-9" />
-          <CommandList className="max-h-[min(60vh,320px)]">
+          <CommandList
+            className="max-h-[min(60vh,320px)] overscroll-contain"
+            onWheel={(e) => e.stopPropagation()}
+          >
             <CommandEmpty>No matching model.</CommandEmpty>
             <CommandGroup>
               {options.map((m) => (

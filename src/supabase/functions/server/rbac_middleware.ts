@@ -30,7 +30,7 @@ export type Role =
   | 'driver';
 
 export type Permission =
-  | 'nav.dashboard' | 'nav.imports' | 'nav.drivers' | 'nav.vehicles'
+  | 'nav.dashboard' | 'nav.imports' | 'nav.drivers' | 'nav.vehicles' | 'nav.maintenance'
   | 'nav.fleet' | 'nav.fuel_overview' | 'nav.fuel_review_queue'
   | 'nav.fuel_audit' | 'nav.fuel_integrity_gap' | 'nav.fuel_reconciliation'
   | 'nav.fuel_cards' | 'nav.fuel_logs' | 'nav.fuel_reports'
@@ -103,7 +103,7 @@ const ROLE_LEVELS: Record<Role, number> = {
 // ---------------------------------------------------------------------------
 
 const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
-  'nav.dashboard', 'nav.imports', 'nav.drivers', 'nav.vehicles', 'nav.fleet',
+  'nav.dashboard', 'nav.imports', 'nav.drivers', 'nav.vehicles', 'nav.maintenance', 'nav.fleet',
   'nav.fuel_overview', 'nav.fuel_review_queue', 'nav.fuel_audit',
   'nav.fuel_integrity_gap', 'nav.fuel_reconciliation', 'nav.fuel_cards',
   'nav.fuel_logs', 'nav.fuel_reports', 'nav.fuel_configuration',

@@ -1,5 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  type LucideIcon,
+  Armchair,
+  Calendar,
+  CarFront,
+  ChevronDown,
+  CircleDot,
+  DoorOpen,
+  Download,
+  Eye,
+  Fuel,
+  Gauge,
+  Loader2,
+  Pencil,
+  Plus,
+  Ruler,
+  Settings2,
+  Tag,
+  Trash2,
+  Weight,
+} from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import {
   createVehicleCatalog,
@@ -11,6 +31,7 @@ import type { VehicleCatalogCreatePayload, VehicleCatalogRecord } from "../../..
 import { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../types/csv-schemas";
 import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
 import { Button } from "../../ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +57,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../ui/select";
-import { TOYOTA_REFERENCE_MAKE } from "../../../data/toyotaVehicleReference";
+import {
+  CATALOG_REFERENCE_MAKES,
+  MODELS_BY_MAKE,
+  isCatalogReferenceMake,
+  type CatalogReferenceMake,
+} from "../../../data/vehicleMakesReference";
 import { VEHICLE_BODY_TYPE_OPTIONS, VEHICLE_DOOR_COUNT_OPTIONS } from "../../../data/vehicleBodyOptions";
 import {
   VEHICLE_DRIVETRAIN_OPTIONS,
@@ -44,7 +70,7 @@ import {
   VEHICLE_TRANSMISSION_OPTIONS,
 } from "../../../data/vehicleEngineOptions";
 import { EngineCatalogSelect } from "./EngineCatalogSelect";
-import { ToyotaModelCombobox } from "./ToyotaModelCombobox";
+import { VehicleModelCombobox } from "./VehicleModelCombobox";
 
 /** DB allows 1900–2100; list next model year through 1900, newest first. */
 function standardModelYearRange(): number[] {
@@ -63,7 +89,7 @@ function modelYearsForForm(selectedYearStr: string, standard: number[]): number[
   return [y, ...standard].sort((a, b) => b - a);
 }
 
-type MakeSelection = "Toyota" | "Other";
+type MakeSelection = CatalogReferenceMake | "Other";
 
 type FormState = {
   makeSelection: MakeSelection;
@@ -101,8 +127,8 @@ type FormState = {
 };
 
 function resolveMake(form: FormState): string {
-  if (form.makeSelection === "Toyota") return TOYOTA_REFERENCE_MAKE;
-  return form.makeOther.trim();
+  if (form.makeSelection === "Other") return form.makeOther.trim();
+  return form.makeSelection;
 }
 
 function emptyForm(): FormState {
@@ -143,9 +169,10 @@ function emptyForm(): FormState {
 function recordToForm(r: VehicleCatalogRecord): FormState {
   const s = (n: number | null | undefined) => (n == null ? "" : String(n));
   const t = (v: string | null | undefined) => v ?? "";
+  const ref = isCatalogReferenceMake(r.make) ? r.make : "Other";
   return {
-    makeSelection: r.make === TOYOTA_REFERENCE_MAKE ? "Toyota" : "Other",
-    makeOther: r.make === TOYOTA_REFERENCE_MAKE ? "" : r.make,
+    makeSelection: ref,
+    makeOther: ref === "Other" ? r.make : "",
     model: r.model,
     year: String(r.year),
     trim_series: t(r.trim_series),
@@ -282,6 +309,7 @@ export function VehicleCatalogManager() {
   const [saving, setSaving] = useState(false);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewRecord, setViewRecord] = useState<VehicleCatalogRecord | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm());
 
@@ -328,7 +356,7 @@ export function VehicleCatalogManager() {
     const model = form.model.trim();
     const year = parseInt(form.year, 10);
     if (form.makeSelection === "Other" && !form.makeOther.trim()) {
-      setError("Enter a custom make, or choose Toyota.");
+      setError("Enter a custom make, or pick a make from the list.");
       return;
     }
     if (!make || !model) {
@@ -384,7 +412,7 @@ export function VehicleCatalogManager() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-6">
+    <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900 [color-scheme:light]">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Motor vehicles</h2>
@@ -422,43 +450,54 @@ export function VehicleCatalogManager() {
           <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
         </div>
       ) : (
-        <Table>
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <Table className="[&_th]:text-slate-800 [&_td]:text-slate-900 [&_tbody_tr]:border-slate-200 [&_tbody_tr:hover]:bg-slate-50">
           <TableHeader>
-            <TableRow>
-              <TableHead>Make</TableHead>
-              <TableHead>Model</TableHead>
-              <TableHead>Year</TableHead>
-              <TableHead className="hidden md:table-cell">Trim</TableHead>
-              <TableHead className="hidden lg:table-cell">Body</TableHead>
-              <TableHead className="w-[120px] text-right">Actions</TableHead>
+            <TableRow className="border-slate-200 hover:bg-transparent">
+              <TableHead className="bg-slate-50/90">Make</TableHead>
+              <TableHead className="bg-slate-50/90">Model</TableHead>
+              <TableHead className="bg-slate-50/90">Year</TableHead>
+              <TableHead className="hidden md:table-cell bg-slate-50/90">Trim</TableHead>
+              <TableHead className="hidden lg:table-cell bg-slate-50/90">Body</TableHead>
+              <TableHead className="w-[140px] text-right bg-slate-50/90">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-12">
+              <TableRow className="hover:bg-transparent border-slate-200">
+                <TableCell colSpan={6} className="text-center text-slate-600 py-12">
                   No vehicles yet. Add one to get started.
                 </TableCell>
               </TableRow>
             ) : (
               items.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-medium">{row.make}</TableCell>
-                  <TableCell>{row.model}</TableCell>
-                  <TableCell>{row.year}</TableCell>
-                  <TableCell className="hidden md:table-cell text-slate-600">
+                <TableRow key={row.id} className="border-slate-200 hover:bg-slate-50 data-[state=selected]:bg-slate-50">
+                  <TableCell className="font-medium text-slate-900">{row.make}</TableCell>
+                  <TableCell className="text-slate-900">{row.model}</TableCell>
+                  <TableCell className="text-slate-900">{row.year}</TableCell>
+                  <TableCell className="hidden md:table-cell text-slate-700">
                     {row.trim_series ?? "—"}
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell text-slate-600">
+                  <TableCell className="hidden lg:table-cell text-slate-700">
                     {row.body_type ?? "—"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="inline-flex gap-1">
+                    <div className="inline-flex gap-1 justify-end">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-8 w-8 text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+                        onClick={() => setViewRecord(row)}
+                        title="View details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-slate-700 hover:text-slate-900 hover:bg-slate-100"
                         onClick={() => openEdit(row)}
                         title="Edit"
                       >
@@ -481,7 +520,33 @@ export function VehicleCatalogManager() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
+
+      <Dialog open={viewRecord !== null} onOpenChange={(o) => !o && setViewRecord(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[92vh] overflow-y-auto bg-white border-slate-200/80 p-0 gap-0 shadow-xl sm:rounded-2xl">
+          {viewRecord && (
+            <>
+              <div className="px-6 pt-6 pb-2 sm:px-8 sm:pt-8">
+                <DialogHeader className="space-y-1 text-left">
+                  <DialogTitle className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
+                    {viewRecord.make} {viewRecord.model}
+                  </DialogTitle>
+                  <p className="text-sm font-normal text-slate-500">{viewRecord.year} model year</p>
+                </DialogHeader>
+              </div>
+              <div className="px-6 pb-6 sm:px-8 sm:pb-8">
+                <VehicleViewBody record={viewRecord} />
+              </div>
+              <DialogFooter className="border-t border-slate-100 bg-slate-50/50 px-6 py-4 sm:px-8 sm:py-4">
+                <Button type="button" variant="outline" className="w-full sm:w-auto border-slate-200" onClick={() => setViewRecord(null)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto bg-white">
@@ -515,23 +580,30 @@ export function VehicleCatalogManager() {
                       setForm((f) => ({
                         ...f,
                         makeSelection: v as MakeSelection,
+                        makeOther: v === "Other" ? f.makeOther : "",
+                        model: v === f.makeSelection ? f.model : "",
                       }))
                     }
                   >
                     <SelectTrigger className="h-9 bg-white border-slate-300">
                       <SelectValue placeholder="Select make" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Toyota">{TOYOTA_REFERENCE_MAKE}</SelectItem>
+                    <SelectContent className="max-h-[min(320px,50vh)]">
+                      {CATALOG_REFERENCE_MAKES.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
                       <SelectItem value="Other">Other (custom make)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {form.makeSelection === "Toyota" ? (
+                {form.makeSelection !== "Other" ? (
                   <div className="space-y-1.5">
                     <Label className="text-xs text-slate-600">Model *</Label>
-                    <ToyotaModelCombobox
+                    <VehicleModelCombobox
+                      models={MODELS_BY_MAKE[form.makeSelection]}
                       value={form.model}
                       onChange={(v) => setForm((f) => ({ ...f, model: v }))}
                     />
@@ -546,7 +618,7 @@ export function VehicleCatalogManager() {
                         value={form.makeOther}
                         onChange={(e) => setForm((f) => ({ ...f, makeOther: e.target.value }))}
                         className="h-9 bg-white"
-                        placeholder="e.g. Honda"
+                        placeholder="e.g. Lexus, BMW"
                         autoComplete="off"
                       />
                     </div>
@@ -687,6 +759,152 @@ export function VehicleCatalogManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function viewText(v: string | number | null | undefined): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "string" && v.trim() === "") return "—";
+  return String(v);
+}
+
+function formatEngineDisplacement(r: VehicleCatalogRecord): string {
+  if (r.engine_displacement_cc != null && Number.isFinite(Number(r.engine_displacement_cc))) {
+    return `${Math.round(Number(r.engine_displacement_cc)).toLocaleString()}cc`;
+  }
+  if (r.engine_displacement_l != null && Number.isFinite(Number(r.engine_displacement_l))) {
+    return `${r.engine_displacement_l}L`;
+  }
+  return "—";
+}
+
+function VehicleSpecItem({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Icon className="h-[18px] w-[18px] shrink-0 text-slate-400" strokeWidth={1.5} aria-hidden />
+        <span className="text-[13px] text-slate-500">{label}</span>
+      </div>
+      <span className="shrink-0 text-right text-[13px] font-semibold tabular-nums text-slate-950">{value}</span>
+    </div>
+  );
+}
+
+function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
+  const colA = (
+    <>
+      <VehicleSpecItem icon={Calendar} label="Year" value={viewText(r.year)} />
+      <VehicleSpecItem icon={Settings2} label="Transmission" value={viewText(r.transmission)} />
+      <VehicleSpecItem icon={CarFront} label="Body type" value={viewText(r.body_type)} />
+      <VehicleSpecItem icon={DoorOpen} label="Doors" value={viewText(r.doors)} />
+    </>
+  );
+  const colB = (
+    <>
+      <VehicleSpecItem icon={Gauge} label="Engine" value={formatEngineDisplacement(r)} />
+      <VehicleSpecItem icon={CircleDot} label="Drive" value={viewText(r.drivetrain)} />
+      <VehicleSpecItem icon={Fuel} label="Fuel" value={viewText(r.fuel_type)} />
+      <VehicleSpecItem icon={Armchair} label="Seats" value={viewText(r.seating_capacity)} />
+    </>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200/70 bg-gradient-to-b from-slate-50/90 to-white p-5 shadow-sm sm:p-6">
+        <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-x-10">
+          <div className="flex flex-col divide-y divide-slate-100">{colA}</div>
+          <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 md:border-t-0 md:pt-0">
+            {colB}
+          </div>
+        </div>
+      </div>
+
+      <Collapsible className="group">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50/90"
+          >
+            <span>Full specifications</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-3 space-y-6 rounded-2xl border border-slate-200/60 bg-white p-5 sm:p-6">
+            <ViewSpecSection title="Identifiers">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
+                <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={Tag} label="Trim / series" value={viewText(r.trim_series)} />
+                  <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
+                  <VehicleSpecItem icon={Tag} label="Model code" value={viewText(r.model_code)} />
+                  <VehicleSpecItem icon={CarFront} label="Exterior color" value={viewText(r.exterior_color)} />
+                </div>
+              </div>
+            </ViewSpecSection>
+
+            <ViewSpecSection title="Dimensions">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
+                <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={Ruler} label="Length (mm)" value={viewText(r.length_mm)} />
+                  <VehicleSpecItem icon={Ruler} label="Width (mm)" value={viewText(r.width_mm)} />
+                  <VehicleSpecItem icon={Ruler} label="Height (mm)" value={viewText(r.height_mm)} />
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
+                  <VehicleSpecItem icon={Ruler} label="Wheelbase (mm)" value={viewText(r.wheelbase_mm)} />
+                  <VehicleSpecItem icon={Ruler} label="Ground clearance (mm)" value={viewText(r.ground_clearance_mm)} />
+                </div>
+              </div>
+            </ViewSpecSection>
+
+            <ViewSpecSection title="Engine & performance">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
+                <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={Gauge} label="Displacement (L)" value={viewText(r.engine_displacement_l)} />
+                  <VehicleSpecItem icon={Gauge} label="Displacement (cc)" value={viewText(r.engine_displacement_cc)} />
+                  <VehicleSpecItem icon={Settings2} label="Configuration" value={viewText(r.engine_configuration)} />
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
+                  <VehicleSpecItem icon={Gauge} label="Horsepower" value={viewText(r.horsepower)} />
+                  <VehicleSpecItem icon={Gauge} label="Torque" value={viewText(r.torque)} />
+                  <VehicleSpecItem icon={Gauge} label="Torque unit" value={viewText(r.torque_unit)} />
+                </div>
+              </div>
+            </ViewSpecSection>
+
+            <ViewSpecSection title="Fuel & weight">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
+                <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={Fuel} label="Fuel tank capacity" value={viewText(r.fuel_tank_capacity)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel tank unit" value={viewText(r.fuel_tank_unit)} />
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
+                  <VehicleSpecItem icon={Weight} label="Curb weight (kg)" value={viewText(r.curb_weight_kg)} />
+                  <VehicleSpecItem icon={Weight} label="GVWR (kg)" value={viewText(r.gross_vehicle_weight_kg)} />
+                  <VehicleSpecItem icon={Weight} label="Max payload (kg)" value={viewText(r.max_payload_kg)} />
+                  <VehicleSpecItem icon={Weight} label="Max towing (kg)" value={viewText(r.max_towing_kg)} />
+                </div>
+              </div>
+            </ViewSpecSection>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      <p className="text-center text-[11px] text-slate-400">
+        Updated {new Date(r.updated_at).toLocaleString()}
+        {r.created_at !== r.updated_at && <> · Created {new Date(r.created_at).toLocaleString()}</>}
+      </p>
+    </div>
+  );
+}
+
+function ViewSpecSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{title}</h4>
+      {children}
     </div>
   );
 }

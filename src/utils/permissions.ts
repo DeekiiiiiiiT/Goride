@@ -122,6 +122,7 @@ export type Permission =
   | 'nav.imports'
   | 'nav.drivers'
   | 'nav.vehicles'
+  | 'nav.maintenance'
   | 'nav.fleet'
   | 'nav.fuel_overview'
   | 'nav.fuel_review_queue'
@@ -199,6 +200,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.imports',
   'nav.drivers',
   'nav.vehicles',
+  'nav.maintenance',
   'nav.fleet',
   'nav.fuel_overview',
   'nav.fuel_review_queue',
@@ -388,6 +390,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
 
   // Vehicles / Fleet
   'vehicles':           'nav.vehicles',
+  'maintenance-hub':    'nav.maintenance',
   'fleet':              'nav.fleet',
 
   // Fuel Management
