@@ -1,21 +1,45 @@
 import { API_ENDPOINTS } from "./apiConfig";
 import type { MaintenanceTaskTemplate } from "../types/maintenance";
+import { publicAnonKey } from "../utils/supabase/info";
 
 const base = () => `${API_ENDPOINTS.admin}`;
+
+/** Supabase Edge Functions expect both JWT (user) and anon apikey on requests from the browser. */
+function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
+  const h: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    apikey: publicAnonKey,
+  };
+  if (contentType) h["Content-Type"] = contentType;
+  return h;
+}
 
 async function parseError(res: Response): Promise<string> {
   const body = await res.json().catch(() => ({}));
   return (body as { error?: string }).error || `HTTP ${res.status}`;
 }
 
+async function edgeFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "Failed to fetch" || msg.includes("NetworkError")) {
+      throw new Error(
+        "Could not reach the API (network or CORS). Check your connection, redeploy make-server-37f42386 with maintenance routes, and confirm this app’s Supabase project id matches your deployment.",
+      );
+    }
+    throw e;
+  }
+}
+
 export async function listMaintenanceTemplates(
   accessToken: string,
   catalogId: string,
 ): Promise<MaintenanceTaskTemplate[]> {
-  const res = await fetch(
-    `${base()}/admin/vehicle-catalog/${catalogId}/maintenance-templates`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
+  const res = await edgeFetch(`${base()}/admin/vehicle-catalog/${catalogId}/maintenance-templates`, {
+    headers: edgeHeaders(accessToken),
+  });
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
   return (data.items || []) as MaintenanceTaskTemplate[];
@@ -26,12 +50,9 @@ export async function createMaintenanceTemplate(
   catalogId: string,
   payload: Partial<MaintenanceTaskTemplate> & { task_name: string },
 ): Promise<MaintenanceTaskTemplate> {
-  const res = await fetch(`${base()}/admin/vehicle-catalog/${catalogId}/maintenance-templates`, {
+  const res = await edgeFetch(`${base()}/admin/vehicle-catalog/${catalogId}/maintenance-templates`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -44,12 +65,9 @@ export async function updateMaintenanceTemplate(
   templateId: string,
   payload: Partial<MaintenanceTaskTemplate>,
 ): Promise<MaintenanceTaskTemplate> {
-  const res = await fetch(`${base()}/admin/maintenance-templates/${templateId}`, {
+  const res = await edgeFetch(`${base()}/admin/maintenance-templates/${templateId}`, {
     method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -58,9 +76,9 @@ export async function updateMaintenanceTemplate(
 }
 
 export async function deleteMaintenanceTemplate(accessToken: string, templateId: string): Promise<void> {
-  const res = await fetch(`${base()}/admin/maintenance-templates/${templateId}`, {
+  const res = await edgeFetch(`${base()}/admin/maintenance-templates/${templateId}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
 }
@@ -71,9 +89,9 @@ export async function migrateMaintenanceFromKv(accessToken: string): Promise<{
   skipped: number;
   scanned: number;
 }> {
-  const res = await fetch(`${base()}/admin/migrate-maintenance-from-kv`, {
+  const res = await edgeFetch(`${base()}/admin/migrate-maintenance-from-kv`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();

@@ -1,7 +1,17 @@
 import { API_ENDPOINTS } from "./apiConfig";
 import type { VehicleCatalogCreatePayload, VehicleCatalogRecord } from "../types/vehicleCatalog";
+import { publicAnonKey } from "../utils/supabase/info";
 
 const url = () => `${API_ENDPOINTS.admin}/admin/vehicle-catalog`;
+
+function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
+  const h: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    apikey: publicAnonKey,
+  };
+  if (contentType) h["Content-Type"] = contentType;
+  return h;
+}
 
 async function parseError(res: Response): Promise<string> {
   const body = await res.json().catch(() => ({}));
@@ -10,7 +20,7 @@ async function parseError(res: Response): Promise<string> {
 
 export async function listVehicleCatalog(accessToken: string): Promise<VehicleCatalogRecord[]> {
   const res = await fetch(url(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
@@ -23,10 +33,7 @@ export async function createVehicleCatalog(
 ): Promise<VehicleCatalogRecord> {
   const res = await fetch(url(), {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -41,10 +48,7 @@ export async function updateVehicleCatalog(
 ): Promise<VehicleCatalogRecord> {
   const res = await fetch(`${url()}/${id}`, {
     method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -55,7 +59,7 @@ export async function updateVehicleCatalog(
 export async function deleteVehicleCatalog(accessToken: string, id: string): Promise<void> {
   const res = await fetch(`${url()}/${id}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
 }

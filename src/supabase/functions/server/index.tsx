@@ -138,6 +138,10 @@ function normalizeEdgePathname(pathname: string): string {
   if (pathname === "/make-server-37f42386" || pathname.startsWith("/make-server-37f42386/")) {
     return pathname;
   }
+  // Some gateways invoke the function with paths rooted at /admin/... without the function prefix.
+  if (pathname.startsWith("/admin/")) {
+    return `/make-server-37f42386${pathname}`;
+  }
   if (
     pathname.startsWith("/ledger/") ||
     pathname.startsWith("/toll-reconciliation/") ||
