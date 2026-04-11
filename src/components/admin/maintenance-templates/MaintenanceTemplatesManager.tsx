@@ -11,6 +11,7 @@ import {
 } from "../../../services/maintenanceTemplateService";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
 import type { MaintenanceTaskTemplate } from "../../../types/maintenance";
+import { MAINTENANCE_SCHEDULE_PRESETS } from "../../../constants/maintenanceSchedulePresets";
 import { Button } from "../../ui/button";
 import {
   Dialog,
@@ -21,6 +22,7 @@ import {
 } from "../../ui/dialog";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
+import { Textarea } from "../../ui/textarea";
 import {
   Select,
   SelectContent,
@@ -66,6 +68,26 @@ export function MaintenanceTemplatesManager() {
     priority: "standard" as MaintenanceTaskTemplate["priority"],
     sort_order: "0",
   });
+  /** Create dialog only: which built-in interval preset was applied (optional). */
+  const [presetId, setPresetId] = useState<string>("__none__");
+
+  const applyPreset = (id: string) => {
+    setPresetId(id);
+    if (id === "__none__") return;
+    const preset = MAINTENANCE_SCHEDULE_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    const shortName = preset.label.includes(" (")
+      ? preset.label.slice(0, preset.label.indexOf(" ("))
+      : preset.label;
+    setForm({
+      task_name: shortName,
+      description: preset.items.join("\n"),
+      interval_miles: String(preset.interval_miles),
+      interval_months: String(preset.interval_months),
+      priority: "standard",
+      sort_order: String(preset.sort_order),
+    });
+  };
 
   const loadCatalog = useCallback(async () => {
     if (!token) return;
@@ -115,6 +137,7 @@ export function MaintenanceTemplatesManager() {
 
   const openCreate = () => {
     setEditing(null);
+    setPresetId("__none__");
     setForm({
       task_name: "",
       description: "",
@@ -128,6 +151,7 @@ export function MaintenanceTemplatesManager() {
 
   const openEdit = (t: MaintenanceTaskTemplate) => {
     setEditing(t);
+    setPresetId("__none__");
     setForm({
       task_name: t.task_name,
       description: t.description ?? "",
@@ -325,18 +349,44 @@ export function MaintenanceTemplatesManager() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-white">
+        <DialogContent className="sm:max-w-lg bg-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit task" : "New task"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
+            {!editing && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-600">Quick fill</Label>
+                <Select value={presetId} onValueChange={applyPreset}>
+                  <SelectTrigger className="h-9 bg-slate-50 border-slate-200">
+                    <SelectValue placeholder="Choose a preset…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None — enter manually</SelectItem>
+                    {MAINTENANCE_SCHEDULE_PRESETS.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Fills task name, checklist lines, mileage/month intervals, and sort order. Edit anything before saving.
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Task name *</Label>
               <Input value={form.task_name} onChange={(e) => setForm((f) => ({ ...f, task_name: e.target.value }))} className="h-9" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Description</Label>
-              <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="h-9" />
+              <Label className="text-xs">Description (checklist — one line per item)</Label>
+              <Textarea
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="min-h-[140px] text-sm resize-y bg-white border-slate-200"
+                placeholder="e.g. pick Quick fill above, or type one checklist item per line"
+              />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">

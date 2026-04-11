@@ -38,58 +38,16 @@ import { api } from '../../services/api';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import type { CatalogMaintenanceTaskOption } from '../../types/maintenance';
+import { MAINTENANCE_SCHEDULE_PRESETS } from '../../constants/maintenanceSchedulePresets';
 
-// --- Constants ---
+// --- Legacy A–D schedules (same presets as Super Admin template quick-fill) ---
 
-const MAINTENANCE_SCHEDULES = [
-    {
-        id: 'A',
-        label: "Basic Service (Every 5,000 km)",
-        interval: 5000,
-        items: [
-            "Replace Engine Oil (0W-20 or 5W-30)",
-            "Replace Oil Filter",
-            "Check Tire Pressures",
-            "Top Up Window Washer Fluid",
-            "Check Coolant Level",
-            "Check Lights"
-        ]
-    },
-    {
-        id: 'B',
-        label: "Intermediate Service (Every 10,000 km)",
-        interval: 10000,
-        items: [
-            "Includes all Basic Service items",
-            "Rotate Tires",
-            "Inspect/Clean/Replace Engine Air Filter",
-            "Replace Cabin A/C Filter",
-            "Inspect Wiper Blades",
-            "Inspect Brake Pads"
-        ]
-    },
-    {
-        id: 'C',
-        label: "Major Service (Every 40,000 km)",
-        interval: 40000,
-        items: [
-            "Includes all Intermediate Service items",
-            "Drain & Refill CVT Transmission Fluid",
-            "Flush & Replace Brake Fluid",
-            "Inspect Drive/Serpentine Belt",
-            "Inspect Suspension Bushings & Boots"
-        ]
-    },
-    {
-        id: 'D',
-        label: "Long-Term Service (Every 100,000 km)",
-        interval: 100000,
-        items: [
-            "Replace Spark Plugs (Iridium)",
-            "Flush Radiator Coolant"
-        ]
-    }
-];
+const MAINTENANCE_SCHEDULES = MAINTENANCE_SCHEDULE_PRESETS.map((p) => ({
+    id: p.id,
+    label: p.label,
+    interval: p.interval_miles,
+    items: p.items,
+}));
 
 const INSPECTION_ITEMS = [
     "Flush Coolant", "Transmission Service",
