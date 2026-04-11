@@ -236,8 +236,14 @@ export function requireAuth() {
         return;
       }
 
+      // Prefer app_metadata.role (set by Supabase admin / server) over user_metadata.role
+      const appMeta = (data.user.app_metadata || {}) as Record<string, unknown>;
       const meta = data.user.user_metadata || {};
-      const rawRole = meta.role || 'fleet_viewer';
+      const rawRole = (typeof appMeta.role === "string" && appMeta.role)
+        ? appMeta.role
+        : (typeof meta.role === "string" && meta.role)
+        ? meta.role
+        : "fleet_viewer";
       const resolved = resolveRole(rawRole);
 
       const rbacUser: RbacUser = {

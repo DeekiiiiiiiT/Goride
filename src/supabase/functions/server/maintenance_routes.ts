@@ -52,6 +52,12 @@ function aggregateFleetStatus(
   return "Healthy";
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(s: string): boolean {
+  return UUID_RE.test(s.trim());
+}
+
 export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; patch: unknown; delete: unknown }, supabase: SupabaseClient) {
   const route = app as {
     get: (path: string, ...handlers: unknown[]) => void;
@@ -68,7 +74,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
       if (denied) return denied;
-      const catalogId = c.req.param("catalogId");
+      const catalogId = c.req.param("catalogId")?.trim() ?? "";
+      if (!isUuid(catalogId)) {
+        return c.json({ error: "Invalid catalog id" }, 400);
+      }
       try {
         const { data, error } = await supabase
           .from("maintenance_task_templates")
@@ -80,6 +89,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         return c.json({ items: data || [] });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
+        console.error("[maintenance-templates] GET:", msg);
         return c.json({ error: msg }, 500);
       }
     },
@@ -91,7 +101,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
       if (denied) return denied;
-      const catalogId = c.req.param("catalogId");
+      const catalogId = c.req.param("catalogId")?.trim() ?? "";
+      if (!isUuid(catalogId)) {
+        return c.json({ error: "Invalid catalog id" }, 400);
+      }
       try {
         const body = (await c.req.json()) as Record<string, unknown>;
         const task_name = String(body.task_name ?? "").trim();

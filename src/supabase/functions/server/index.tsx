@@ -162,6 +162,19 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// CORS must be registered before route handlers so all responses (including 4xx/5xx) expose
+// Access-Control-Allow-Origin — otherwise cross-origin fetch() rejects and the client shows a generic network error.
+app.use(
+  "/*",
+  cors({
+    origin: "*",
+    allowHeaders: ["Content-Type", "Authorization", "apikey"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    exposeHeaders: ["Content-Length", "X-Cache"],
+    maxAge: 600,
+  }),
+);
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -336,18 +349,6 @@ function tripHasMoneyForLedgerProjection(trip: any): boolean {
 
 // Enable logger - DISABLED to prevent OOM on large payloads
 // app.use('*', logger(console.log));
-
-// Enable CORS for all routes and methods
-app.use(
-  "/*",
-  cors({
-    origin: "*",
-    allowHeaders: ["Content-Type", "Authorization", "apikey"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    exposeHeaders: ["Content-Length", "X-Cache"],
-    maxAge: 600,
-  }),
-);
 
 // Phase 8.1: Payload Size Logging & Phase 8.2: Big Data Protection Middleware
 app.use('*', async (c, next) => {
