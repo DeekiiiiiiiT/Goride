@@ -48,16 +48,19 @@ function scheduleKindShort(k: string | undefined): string {
   return "Recurring";
 }
 
-/** Never show "[object Object]" in the alert banner; prefer API / Error text. */
+/** Prefer API / Error text; avoid useless "[object Object]" from `new Error(nonString)`. */
 function formatCatchError(e: unknown, fallback: string): string {
   if (e instanceof Error) {
     const m = e.message?.trim() ?? "";
     if (m && m !== "[object Object]") return m;
+    return fallback;
   }
   if (typeof e === "string" && e.trim()) return e.trim();
-  if (e && typeof e === "object") {
+  if (e && typeof e === "object" && !(e instanceof Error)) {
     const o = e as Record<string, unknown>;
-    if (typeof o.message === "string" && o.message.trim()) return o.message.trim();
+    if (typeof o.message === "string" && o.message.trim() && o.message.trim() !== "[object Object]") {
+      return o.message.trim();
+    }
     if (typeof o.error === "string" && o.error.trim()) return o.error.trim();
     const nested = o.error && typeof o.error === "object" ? (o.error as { message?: unknown }).message : undefined;
     if (typeof nested === "string" && nested.trim()) return nested.trim();

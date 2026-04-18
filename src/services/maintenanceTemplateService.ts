@@ -33,7 +33,7 @@ function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
 async function parseError(res: Response): Promise<string> {
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const err = body.error ?? body.message;
-  return apiErrorBodyToString(err, `HTTP ${res.status}`);
+  return String(apiErrorBodyToString(err, `HTTP ${res.status}`));
 }
 
 async function edgeFetch(url: string, init?: RequestInit): Promise<Response> {
@@ -57,7 +57,7 @@ export async function listMaintenanceTemplates(
   const res = await edgeFetch(`${base()}/admin/vehicle-catalog/${catalogId}/maintenance-templates`, {
     headers: edgeHeaders(accessToken),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) throw new Error(String(await parseError(res)));
   const data = await res.json();
   return (data.items || []) as MaintenanceTaskTemplate[];
 }
@@ -68,7 +68,7 @@ export async function listGlobalMaintenanceTemplates(
   const res = await edgeFetch(`${base()}/admin/maintenance-templates/global`, {
     headers: edgeHeaders(accessToken),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) throw new Error(String(await parseError(res)));
   const data = await res.json();
   return (data.items || []) as MaintenanceTaskTemplate[];
 }
@@ -83,7 +83,7 @@ export async function createMaintenanceTemplate(
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) throw new Error(String(await parseError(res)));
   const data = await res.json();
   return data.item as MaintenanceTaskTemplate;
 }
@@ -97,7 +97,7 @@ export async function createGlobalMaintenanceTemplate(
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) throw new Error(String(await parseError(res)));
   const data = await res.json();
   return data.item as MaintenanceTaskTemplate;
 }
@@ -112,7 +112,7 @@ export async function updateMaintenanceTemplate(
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) throw new Error(String(await parseError(res)));
   const data = await res.json();
   return data.item as MaintenanceTaskTemplate;
 }
@@ -122,7 +122,7 @@ export async function deleteMaintenanceTemplate(accessToken: string, templateId:
     method: "DELETE",
     headers: edgeHeaders(accessToken),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) throw new Error(String(await parseError(res)));
 }
 
 export async function migrateMaintenanceFromKv(accessToken: string): Promise<{
@@ -135,6 +135,6 @@ export async function migrateMaintenanceFromKv(accessToken: string): Promise<{
     method: "POST",
     headers: edgeHeaders(accessToken),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) throw new Error(String(await parseError(res)));
   return res.json();
 }
