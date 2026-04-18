@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from "./apiConfig";
 import type { MaintenanceTaskTemplate } from "../types/maintenance";
+import { apiErrorBodyToString } from "../utils/apiErrorMessage";
 import { publicAnonKey } from "../utils/supabase/info";
 
 const base = () => `${API_ENDPOINTS.admin}`;
@@ -15,8 +16,9 @@ function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
 }
 
 async function parseError(res: Response): Promise<string> {
-  const body = await res.json().catch(() => ({}));
-  return (body as { error?: string }).error || `HTTP ${res.status}`;
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const err = body.error ?? body.message;
+  return apiErrorBodyToString(err, `HTTP ${res.status}`);
 }
 
 async function edgeFetch(url: string, init?: RequestInit): Promise<Response> {

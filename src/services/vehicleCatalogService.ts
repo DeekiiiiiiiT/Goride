@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from "./apiConfig";
 import type { VehicleCatalogCreatePayload, VehicleCatalogRecord } from "../types/vehicleCatalog";
+import { apiErrorBodyToString } from "../utils/apiErrorMessage";
 import { publicAnonKey } from "../utils/supabase/info";
 
 const url = () => `${API_ENDPOINTS.admin}/admin/vehicle-catalog`;
@@ -14,8 +15,9 @@ function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
 }
 
 async function parseError(res: Response): Promise<string> {
-  const body = await res.json().catch(() => ({}));
-  return (body as { error?: string }).error || `HTTP ${res.status}`;
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const err = body.error ?? body.message;
+  return apiErrorBodyToString(err, `HTTP ${res.status}`);
 }
 
 export async function listVehicleCatalog(accessToken: string): Promise<VehicleCatalogRecord[]> {
