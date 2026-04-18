@@ -5,8 +5,10 @@
  * Deploy (from repo root):
  *   npx supabase functions deploy make-server-37f42386 --use-api
  *
- * Explicit `toll_controller` import: the CLI packager sometimes omits this module when only
- * pulled in transitively from `index.tsx` (remote bundle then fails with "Module not found").
+ * Explicit `toll_controller` and `maintenance_schedule_engine` imports: the CLI packager
+ * sometimes omits modules when only pulled in transitively from `index.tsx` (remote bundle
+ * then fails with "Module not found").
  */
 import "../../../src/supabase/functions/server/toll_controller.tsx";
+import "../../../src/supabase/functions/server/maintenance_schedule_engine.ts";
 import "../../../src/supabase/functions/server/index.tsx";
