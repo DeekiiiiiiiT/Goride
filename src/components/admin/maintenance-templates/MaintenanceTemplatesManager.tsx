@@ -198,8 +198,7 @@ export function MaintenanceTemplatesManager() {
           : await listMaintenanceTemplates(token, selectedCatalogId);
       setTemplates(items);
     } catch (e: unknown) {
-      console.error("[MaintenanceTemplates] loadTemplates", e);
-      setError(formatCatchError(e, "Failed to load templates"));
+      setError(formatCatchError(e, "Could not load templates. Please refresh the page. If it continues, contact support."));
     } finally {
       setLoadingTemplates(false);
     }
