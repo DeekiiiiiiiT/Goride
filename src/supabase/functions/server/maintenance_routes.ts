@@ -7,6 +7,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
+import { advanceAfterService, computeInitialScheduleRow } from "./maintenance_schedule_engine.ts";
 
 function assertVehicleCatalogPlatformAccess(c: Context) {
   const rbacUser = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
@@ -15,14 +16,6 @@ function assertVehicleCatalogPlatformAccess(c: Context) {
     return c.json({ error: "Only platform owner or support can manage maintenance templates" }, 403);
   }
   return null;
-}
-
-function addMonthsIso(ymd: string, months: number): string {
-  const d = new Date(ymd + "T12:00:00Z");
-  const day = d.getUTCDate();
-  d.setUTCMonth(d.getUTCMonth() + months);
-  if (d.getUTCDate() < day) d.setUTCDate(0);
-  return d.toISOString().slice(0, 10);
 }
 
 function todayIso(): string {
@@ -34,7 +27,9 @@ function computeScheduleRowStatus(
   today: string,
   nextMiles: number | null,
   nextDate: string | null,
-): "ok" | "pending" | "overdue" {
+  scheduleRowStatus?: string | null,
+): "ok" | "pending" | "overdue" | "fulfilled" {
+  if (scheduleRowStatus === "fulfilled") return "fulfilled";
   const dueMiles = nextMiles != null && currentOdo >= nextMiles;
   const overdueMiles = nextMiles != null && currentOdo > nextMiles;
   const dueDate = nextDate != null && today >= nextDate;
@@ -45,10 +40,11 @@ function computeScheduleRowStatus(
 }
 
 function aggregateFleetStatus(
-  rows: Array<{ status: "ok" | "pending" | "overdue" }>,
+  rows: Array<{ status: "ok" | "pending" | "overdue" | "fulfilled" }>,
 ): "Healthy" | "Due Soon" | "Overdue" {
-  if (rows.some((r) => r.status === "overdue")) return "Overdue";
-  if (rows.some((r) => r.status === "pending")) return "Due Soon";
+  const relevant = rows.filter((r) => r.status !== "fulfilled");
+  if (relevant.some((r) => r.status === "overdue")) return "Overdue";
+  if (relevant.some((r) => r.status === "pending")) return "Due Soon";
   return "Healthy";
 }
 
@@ -109,6 +105,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const body = (await c.req.json()) as Record<string, unknown>;
         const task_name = String(body.task_name ?? "").trim();
         if (!task_name) return c.json({ error: "task_name is required" }, 400);
+        const fkRaw = String(body.frequency_kind ?? "recurring").trim();
+        const frequency_kind = ["recurring", "once_milestone", "manual_only"].includes(fkRaw)
+          ? fkRaw
+          : "recurring";
+        const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
+        const frequency_label = fl.length ? fl.slice(0, 120) : null;
         const row = {
           vehicle_catalog_id: catalogId,
           task_name,
@@ -119,6 +121,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           interval_months: body.interval_months != null && body.interval_months !== ""
             ? Number(body.interval_months)
             : null,
+          frequency_kind,
+          frequency_label,
           priority: String(body.priority ?? "standard"),
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
           updated_at: new Date().toISOString(),
@@ -157,6 +161,14 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         }
         if (body.priority !== undefined) patch.priority = String(body.priority);
         if (body.sort_order !== undefined) patch.sort_order = Number(body.sort_order);
+        if (body.frequency_kind !== undefined) {
+          const fk = String(body.frequency_kind).trim();
+          patch.frequency_kind = ["recurring", "once_milestone", "manual_only"].includes(fk) ? fk : "recurring";
+        }
+        if (body.frequency_label !== undefined) {
+          const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
+          patch.frequency_label = fl.length ? fl.slice(0, 120) : null;
+        }
         const { data, error } = await supabase
           .from("maintenance_task_templates")
           .update(patch)
@@ -327,28 +339,38 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const enriched = (scheduleRows || []).map((row: Record<string, unknown>) => {
           const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
           const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
-          const st = computeScheduleRowStatus(currentOdo, today, nextMiles, nextDate);
+          const schRowStatus = row.schedule_status != null ? String(row.schedule_status) : "active";
+          const st = computeScheduleRowStatus(currentOdo, today, nextMiles, nextDate, schRowStatus);
           const tid = String(row.template_id ?? "");
           return { ...row, template: tplById[tid] || null, computed_status: st };
         });
 
         const fleetStatus = enriched.length
           ? aggregateFleetStatus(enriched.map((r: { computed_status: string }) => ({
-            status: r.computed_status as "ok" | "pending" | "overdue",
+            status: r.computed_status as "ok" | "pending" | "overdue" | "fulfilled",
           })))
           : "Healthy";
 
-        const minNextMiles = enriched
-          .map((r: Record<string, unknown>) =>
-            r.next_due_miles != null ? Number(r.next_due_miles) : Infinity
-          )
-          .reduce((a: number, b: number) => Math.min(a, b), Infinity);
+        const dueSoonRows = enriched.filter((r: Record<string, unknown>) => {
+          const st = r.computed_status as string;
+          if (st === "fulfilled") return false;
+          return r.next_due_miles != null;
+        });
+        const minNextMiles = dueSoonRows.length
+          ? dueSoonRows
+            .map((r: Record<string, unknown>) =>
+              r.next_due_miles != null ? Number(r.next_due_miles) : Infinity
+            )
+            .reduce((a: number, b: number) => Math.min(a, b), Infinity)
+          : Infinity;
         const nextOdo = minNextMiles === Infinity ? currentOdo + 5000 : minNextMiles;
         const remainingKm = Math.max(0, nextOdo - currentOdo);
         const daysToService = Math.max(0, Math.ceil(remainingKm / 50));
 
         const nextTypeLabel = enriched.find((r: Record<string, unknown>) =>
-          r.next_due_miles != null && Number(r.next_due_miles) === minNextMiles
+          r.computed_status !== "fulfilled" &&
+          r.next_due_miles != null &&
+          Number(r.next_due_miles) === minNextMiles
         );
         const tpl = nextTypeLabel?.template as { task_name?: string } | null | undefined;
 
@@ -401,19 +423,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         if (!templates?.length) return c.json({ created: 0, message: "No templates for this catalog row" });
 
         let created = 0;
+        const bootstrapErrors: string[] = [];
         for (const t of templates) {
-          const intM = t.interval_miles != null ? Number(t.interval_miles) : null;
-          const intMo = t.interval_months != null ? Number(t.interval_months) : null;
-          let nextMiles: number | null = intM != null ? currentOdo + intM : null;
-          let nextDate: string | null = intMo != null ? addMonthsIso(today, intMo) : null;
+          const computed = computeInitialScheduleRow(t as Record<string, unknown>, currentOdo, today);
+          if (!computed.ok) {
+            bootstrapErrors.push(`${(t as { task_name?: string }).task_name ?? t.id}: ${computed.reason}`);
+            continue;
+          }
           const row = {
             organization_id: orgId,
             vehicle_id: vehicleId,
             template_id: t.id,
             last_performed_miles: currentOdo,
             last_performed_date: today,
-            next_due_miles: nextMiles,
-            next_due_date: nextDate,
+            next_due_miles: computed.next_due_miles,
+            next_due_date: computed.next_due_date,
+            schedule_status: computed.schedule_status,
             updated_at: new Date().toISOString(),
           };
           const { error } = await supabase.from("vehicle_maintenance_schedule").upsert(row, {
@@ -421,7 +446,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           });
           if (!error) created++;
         }
-        return c.json({ created, catalogId });
+        if (bootstrapErrors.length && created === 0) {
+          return c.json({ error: bootstrapErrors.join("; "), catalogId, created: 0 }, 400);
+        }
+        return c.json({ created, catalogId, warnings: bootstrapErrors.length ? bootstrapErrors : undefined });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -549,17 +577,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
             .eq("id", templateId)
             .maybeSingle();
           if (template) {
-            const intM = template.interval_miles != null ? Number(template.interval_miles) : null;
-            const intMo = template.interval_months != null ? Number(template.interval_months) : null;
-            let nextMiles: number | null = intM != null ? performed_at_miles + intM : null;
-            let nextDate: string | null = intMo != null ? addMonthsIso(performed_at_date, intMo) : null;
+            const adv = advanceAfterService(template as Record<string, unknown>, performed_at_miles, performed_at_date);
             await supabase
               .from("vehicle_maintenance_schedule")
               .update({
                 last_performed_miles: performed_at_miles,
                 last_performed_date: performed_at_date,
-                next_due_miles: nextMiles,
-                next_due_date: nextDate,
+                next_due_miles: adv.next_due_miles,
+                next_due_date: adv.next_due_date,
+                schedule_status: adv.schedule_status,
                 updated_at: new Date().toISOString(),
               })
               .eq("organization_id", orgId)
@@ -621,7 +647,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
 
         const { data: schedules } = await supabase
           .from("vehicle_maintenance_schedule")
-          .select("vehicle_id, next_due_miles, next_due_date, template_id")
+          .select("vehicle_id, next_due_miles, next_due_date, template_id, schedule_status")
           .eq("organization_id", orgId);
 
         const byVehicle: Record<string, Record<string, unknown>[]> = {};
@@ -639,12 +665,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           const statuses = sch.map((row) => {
             const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
             const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
-            return computeScheduleRowStatus(odo, today, nextMiles, nextDate);
+            const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
+            return computeScheduleRowStatus(odo, today, nextMiles, nextDate, schSt);
           });
           const st = sch.length ? aggregateFleetStatus(statuses.map((s) => ({ status: s }))) : "Healthy";
-          const minM = sch
-            .map((r) => r.next_due_miles != null ? Number(r.next_due_miles) : Infinity)
-            .reduce((a, b) => Math.min(a, b), Infinity);
+          const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");
+          const minM = eligibleForNext.length
+            ? eligibleForNext
+              .map((r) => r.next_due_miles != null ? Number(r.next_due_miles) : Infinity)
+              .reduce((a, b) => Math.min(a, b), Infinity)
+            : Infinity;
           const nextOdo = minM === Infinity ? null : minM;
           return {
             vehicleId: vid,

@@ -10,7 +10,7 @@ import {
   updateMaintenanceTemplate,
 } from "../../../services/maintenanceTemplateService";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
-import type { MaintenanceTaskTemplate } from "../../../types/maintenance";
+import type { MaintenanceFrequencyKind, MaintenanceTaskTemplate } from "../../../types/maintenance";
 import { MAINTENANCE_SCHEDULE_PRESETS } from "../../../constants/maintenanceSchedulePresets";
 import { Button } from "../../ui/button";
 import {
@@ -22,7 +22,7 @@ import {
 } from "../../ui/dialog";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
-import { Textarea } from "../../ui/textarea";
+import { Checkbox } from "../../ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -38,6 +38,12 @@ import {
   TableHeader,
   TableRow,
 } from "../../ui/table";
+
+function scheduleKindShort(k: string | undefined): string {
+  if (k === "once_milestone") return "One-time";
+  if (k === "manual_only") return "Manual";
+  return "Recurring";
+}
 
 export function MaintenanceTemplatesManager() {
   const { session, user } = useAuth();
@@ -65,11 +71,38 @@ export function MaintenanceTemplatesManager() {
     description: "",
     interval_miles: "",
     interval_months: "",
+    frequency_kind: "recurring" as MaintenanceFrequencyKind,
+    frequency_label: "",
     priority: "standard" as MaintenanceTaskTemplate["priority"],
     sort_order: "0",
   });
   /** Create dialog only: which built-in interval preset was applied (optional). */
   const [presetId, setPresetId] = useState<string>("__none__");
+
+  const updateChecklistLine = (index: number, value: string) => {
+    setForm((f) => {
+      const lines = !f.description.trim() ? [""] : f.description.split("\n");
+      const next = [...lines];
+      next[index] = value;
+      return { ...f, description: next.join("\n") };
+    });
+  };
+
+  const removeChecklistLine = (index: number) => {
+    setForm((f) => {
+      let lines = !f.description.trim() ? [""] : f.description.split("\n");
+      lines = lines.filter((_, i) => i !== index);
+      if (lines.length === 0) lines = [""];
+      return { ...f, description: lines.join("\n") };
+    });
+  };
+
+  const addChecklistLine = () => {
+    setForm((f) => {
+      const lines = !f.description.trim() ? [""] : f.description.split("\n");
+      return { ...f, description: [...lines, ""].join("\n") };
+    });
+  };
 
   const applyPreset = (id: string) => {
     setPresetId(id);
@@ -84,10 +117,22 @@ export function MaintenanceTemplatesManager() {
       description: preset.items.join("\n"),
       interval_miles: String(preset.interval_miles),
       interval_months: String(preset.interval_months),
+      frequency_kind: "recurring",
+      frequency_label: "",
       priority: "standard",
       sort_order: String(preset.sort_order),
     });
   };
+
+  const checklistLines = useMemo(() => {
+    if (!form.description.trim()) return [""];
+    return form.description.split("\n");
+  }, [form.description]);
+
+  const checklistFilledCount = useMemo(
+    () => checklistLines.filter((l) => l.trim()).length,
+    [checklistLines],
+  );
 
   const loadCatalog = useCallback(async () => {
     if (!token) return;
@@ -143,6 +188,8 @@ export function MaintenanceTemplatesManager() {
       description: "",
       interval_miles: "",
       interval_months: "",
+      frequency_kind: "recurring",
+      frequency_label: "",
       priority: "standard",
       sort_order: String(templates.length),
     });
@@ -157,6 +204,8 @@ export function MaintenanceTemplatesManager() {
       description: t.description ?? "",
       interval_miles: t.interval_miles != null ? String(t.interval_miles) : "",
       interval_months: t.interval_months != null ? String(t.interval_months) : "",
+      frequency_kind: t.frequency_kind ?? "recurring",
+      frequency_label: t.frequency_label ?? "",
       priority: t.priority,
       sort_order: String(t.sort_order),
     });
@@ -178,6 +227,8 @@ export function MaintenanceTemplatesManager() {
         description: form.description.trim() || undefined,
         interval_miles: form.interval_miles.trim() === "" ? null : Number(form.interval_miles),
         interval_months: form.interval_months.trim() === "" ? null : Number(form.interval_months),
+        frequency_kind: form.frequency_kind,
+        frequency_label: form.frequency_label.trim() || null,
         priority: form.priority,
         sort_order: Number(form.sort_order) || 0,
       };
@@ -302,6 +353,7 @@ export function MaintenanceTemplatesManager() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Task</TableHead>
+                  <TableHead>Schedule</TableHead>
                   <TableHead>Every (mi)</TableHead>
                   <TableHead>Every (mo)</TableHead>
                   <TableHead>Priority</TableHead>
@@ -311,7 +363,7 @@ export function MaintenanceTemplatesManager() {
               <TableBody>
                 {templates.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-slate-500 py-10">
+                    <TableCell colSpan={6} className="text-center text-slate-500 py-10">
                       No templates yet. Add tasks that apply to this catalog entry.
                     </TableCell>
                   </TableRow>
@@ -319,6 +371,14 @@ export function MaintenanceTemplatesManager() {
                   templates.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium">{t.task_name}</TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {scheduleKindShort(t.frequency_kind)}
+                        {t.frequency_label ? (
+                          <span className="block text-[11px] text-slate-400 truncate max-w-[140px]" title={t.frequency_label}>
+                            {t.frequency_label}
+                          </span>
+                        ) : null}
+                      </TableCell>
                       <TableCell>{t.interval_miles ?? "—"}</TableCell>
                       <TableCell>{t.interval_months ?? "—"}</TableCell>
                       <TableCell className="capitalize">{t.priority}</TableCell>
@@ -379,14 +439,93 @@ export function MaintenanceTemplatesManager() {
               <Label className="text-xs">Task name *</Label>
               <Input value={form.task_name} onChange={(e) => setForm((f) => ({ ...f, task_name: e.target.value }))} className="h-9" />
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Schedule type</Label>
+                <Select
+                  value={form.frequency_kind}
+                  onValueChange={(v) => setForm((f) => ({ ...f, frequency_kind: v as MaintenanceFrequencyKind }))}
+                >
+                  <SelectTrigger className="h-9 bg-white border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recurring">Recurring (repeat by interval)</SelectItem>
+                    <SelectItem value="once_milestone">One-time milestone</SelectItem>
+                    <SelectItem value="manual_only">Manual (no auto next due)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Service label (optional)</Label>
+                <Input
+                  className="h-9 bg-white border-slate-200"
+                  placeholder="e.g. A-service, Inspection I"
+                  value={form.frequency_label}
+                  onChange={(e) => setForm((f) => ({ ...f, frequency_label: e.target.value }))}
+                />
+                <p className="text-[10px] text-slate-400 leading-snug">Display only; scheduling follows schedule type.</p>
+              </div>
+            </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Description (checklist — one line per item)</Label>
-              <Textarea
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                className="min-h-[140px] text-sm resize-y bg-white border-slate-200"
-                placeholder="e.g. pick Quick fill above, or type one checklist item per line"
-              />
+              <div className="flex justify-between items-center gap-2">
+                <Label className="text-xs">Checklist items</Label>
+                <span className="text-xs text-slate-400 tabular-nums">
+                  {checklistFilledCount}/{checklistLines.length}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-snug -mt-0.5">
+                Use Quick fill or add lines below. Uncheck a row to remove it from the checklist.
+              </p>
+              <div className="rounded-lg border border-slate-200 bg-white p-3 flex flex-col max-h-[280px]">
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-[120px]">
+                  {checklistLines.map((item, idx) => (
+                    <div
+                      key={`checklist-${idx}-${checklistLines.length}`}
+                      className={`p-3 rounded-md border transition-all ${
+                        item.trim()
+                          ? "border-indigo-200 bg-indigo-50/50"
+                          : "border-slate-100 bg-slate-50/80"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          id={`template-checklist-${idx}`}
+                          checked={true}
+                          onCheckedChange={(checked) => {
+                            if (checked === false) removeChecklistLine(idx);
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <Label
+                            htmlFor={`template-checklist-${idx}`}
+                            className="sr-only"
+                          >
+                            Checklist item {idx + 1}
+                          </Label>
+                          <Input
+                            value={item}
+                            onChange={(e) => updateChecklistLine(idx, e.target.value)}
+                            className="h-9 text-sm bg-white border-slate-200"
+                            placeholder="e.g. Replace engine oil"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 w-full gap-1.5 border-slate-200 text-slate-700"
+                  onClick={addChecklistLine}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add checklist item
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
@@ -410,6 +549,16 @@ export function MaintenanceTemplatesManager() {
                 />
               </div>
             </div>
+            {form.frequency_kind === "manual_only" && (
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Manual tasks may leave intervals empty; the system will not compute a next due date or odometer automatically.
+              </p>
+            )}
+            {form.frequency_kind === "once_milestone" && (
+              <p className="text-[11px] text-amber-800/90 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 leading-snug">
+                Set at least one interval (miles or months) so the first milestone can be scheduled. After this service is logged once, the task is marked fulfilled.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Priority</Label>
