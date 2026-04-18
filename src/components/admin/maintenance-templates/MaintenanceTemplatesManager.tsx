@@ -48,17 +48,19 @@ function scheduleKindShort(k: string | undefined): string {
   return "Recurring";
 }
 
-/** Never show "[object Object]" in the alert banner. */
+/** Never show "[object Object]" in the alert banner; prefer API / Error text. */
 function formatCatchError(e: unknown, fallback: string): string {
   if (e instanceof Error) {
     const m = e.message?.trim() ?? "";
     if (m && m !== "[object Object]") return m;
-    return fallback;
   }
-  if (typeof e === "string") return e;
-  if (e && typeof e === "object" && "message" in e) {
-    const m = (e as { message?: unknown }).message;
-    if (typeof m === "string" && m.length > 0) return m;
+  if (typeof e === "string" && e.trim()) return e.trim();
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    if (typeof o.message === "string" && o.message.trim()) return o.message.trim();
+    if (typeof o.error === "string" && o.error.trim()) return o.error.trim();
+    const nested = o.error && typeof o.error === "object" ? (o.error as { message?: unknown }).message : undefined;
+    if (typeof nested === "string" && nested.trim()) return nested.trim();
   }
   return fallback;
 }
@@ -193,6 +195,7 @@ export function MaintenanceTemplatesManager() {
           : await listMaintenanceTemplates(token, selectedCatalogId);
       setTemplates(items);
     } catch (e: unknown) {
+      console.error("[MaintenanceTemplates] loadTemplates", e);
       setError(formatCatchError(e, "Failed to load templates"));
     } finally {
       setLoadingTemplates(false);
