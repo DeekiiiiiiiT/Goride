@@ -1,9 +1,24 @@
 import { API_ENDPOINTS } from "./apiConfig";
 import type { MaintenanceTaskTemplate } from "../types/maintenance";
-import { apiErrorBodyToString } from "../utils/apiErrorMessage";
 import { publicAnonKey } from "../utils/supabase/info";
 
 const base = () => `${API_ENDPOINTS.admin}`;
+
+/** Coerce API JSON `error` field (string or object) to a displayable string. */
+function apiErrorBodyToString(raw: unknown, fallback: string): string {
+  if (raw == null || raw === "") return fallback;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if (typeof raw === "object" && raw !== null && "message" in raw) {
+    const m = (raw as { message?: unknown }).message;
+    if (typeof m === "string" && m.length > 0) return m;
+  }
+  try {
+    return JSON.stringify(raw);
+  } catch {
+    return fallback;
+  }
+}
 
 /** Supabase Edge Functions expect both JWT (user) and anon apikey on requests from the browser. */
 function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {

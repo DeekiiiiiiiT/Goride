@@ -1,9 +1,23 @@
 import { API_ENDPOINTS } from "./apiConfig";
 import type { VehicleCatalogCreatePayload, VehicleCatalogRecord } from "../types/vehicleCatalog";
-import { apiErrorBodyToString } from "../utils/apiErrorMessage";
 import { publicAnonKey } from "../utils/supabase/info";
 
 const url = () => `${API_ENDPOINTS.admin}/admin/vehicle-catalog`;
+
+function apiErrorBodyToString(raw: unknown, fallback: string): string {
+  if (raw == null || raw === "") return fallback;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if (typeof raw === "object" && raw !== null && "message" in raw) {
+    const m = (raw as { message?: unknown }).message;
+    if (typeof m === "string" && m.length > 0) return m;
+  }
+  try {
+    return JSON.stringify(raw);
+  } catch {
+    return fallback;
+  }
+}
 
 function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {

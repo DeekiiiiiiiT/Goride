@@ -48,6 +48,21 @@ function scheduleKindShort(k: string | undefined): string {
   return "Recurring";
 }
 
+/** Never show "[object Object]" in the alert banner. */
+function formatCatchError(e: unknown, fallback: string): string {
+  if (e instanceof Error) {
+    const m = e.message?.trim() ?? "";
+    if (m && m !== "[object Object]") return m;
+    return fallback;
+  }
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object" && "message" in e) {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === "string" && m.length > 0) return m;
+  }
+  return fallback;
+}
+
 export function MaintenanceTemplatesManager() {
   const { session, user } = useAuth();
   const token = session?.access_token;
@@ -150,7 +165,7 @@ export function MaintenanceTemplatesManager() {
       setCatalog(items);
       setSelectedCatalogId((prev) => (prev || (items[0]?.id ?? "")));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load catalog");
+      setError(formatCatchError(e, "Failed to load catalog"));
     } finally {
       setLoading(false);
     }
@@ -178,7 +193,7 @@ export function MaintenanceTemplatesManager() {
           : await listMaintenanceTemplates(token, selectedCatalogId);
       setTemplates(items);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load templates");
+      setError(formatCatchError(e, "Failed to load templates"));
     } finally {
       setLoadingTemplates(false);
     }
@@ -264,7 +279,7 @@ export function MaintenanceTemplatesManager() {
       setDialogOpen(false);
       await loadTemplates();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      setError(formatCatchError(e, "Save failed"));
     } finally {
       setSaving(false);
     }
@@ -278,7 +293,7 @@ export function MaintenanceTemplatesManager() {
       await deleteMaintenanceTemplate(token, t.id);
       await loadTemplates();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Delete failed");
+      setError(formatCatchError(e, "Delete failed"));
     }
   };
 
@@ -291,7 +306,7 @@ export function MaintenanceTemplatesManager() {
       const r = await migrateMaintenanceFromKv(token);
       window.alert(`Migration complete: ${r.inserted} inserted, ${r.skipped} skipped (${r.scanned} scanned).`);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Migration failed");
+      setError(formatCatchError(e, "Migration failed"));
     } finally {
       setMigrating(false);
     }
