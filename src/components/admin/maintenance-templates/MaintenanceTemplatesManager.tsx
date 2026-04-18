@@ -48,6 +48,15 @@ function scheduleKindShort(k: string | undefined): string {
   return "Recurring";
 }
 
+function formatIntervalMilesDisplay(t: Pick<MaintenanceTaskTemplate, "interval_miles" | "interval_miles_max">): string {
+  const lo = t.interval_miles;
+  const hi = t.interval_miles_max;
+  if (lo == null && (hi == null || hi === undefined)) return "—";
+  if (lo != null && hi != null && hi > lo) return `${lo}–${hi}`;
+  if (lo != null) return String(lo);
+  return "—";
+}
+
 /** Prefer API / Error text; avoid useless "[object Object]" from `new Error(nonString)`. */
 function formatCatchError(e: unknown, fallback: string): string {
   if (e instanceof Error) {
@@ -96,6 +105,7 @@ export function MaintenanceTemplatesManager() {
     task_code: "",
     description: "",
     interval_miles: "",
+    interval_miles_max: "",
     interval_months: "",
     frequency_kind: "recurring" as MaintenanceFrequencyKind,
     frequency_label: "",
@@ -143,6 +153,7 @@ export function MaintenanceTemplatesManager() {
       task_code: "",
       description: preset.items.join("\n"),
       interval_miles: String(preset.interval_miles),
+      interval_miles_max: "",
       interval_months: String(preset.interval_months),
       frequency_kind: "recurring",
       frequency_label: "",
@@ -226,6 +237,7 @@ export function MaintenanceTemplatesManager() {
       task_code: "",
       description: "",
       interval_miles: "",
+      interval_miles_max: "",
       interval_months: "",
       frequency_kind: "recurring",
       frequency_label: "",
@@ -243,6 +255,12 @@ export function MaintenanceTemplatesManager() {
       task_code: t.task_code ?? "",
       description: t.description ?? "",
       interval_miles: t.interval_miles != null ? String(t.interval_miles) : "",
+      interval_miles_max:
+        t.interval_miles_max != null &&
+        t.interval_miles != null &&
+        t.interval_miles_max > t.interval_miles
+          ? String(t.interval_miles_max)
+          : "",
       interval_months: t.interval_months != null ? String(t.interval_months) : "",
       frequency_kind: t.frequency_kind ?? "recurring",
       frequency_label: t.frequency_label ?? "",
@@ -263,11 +281,31 @@ export function MaintenanceTemplatesManager() {
     setSaving(true);
     setError(null);
     try {
+      const milesLo = form.interval_miles.trim() === "" ? null : Number(form.interval_miles);
+      const milesHiRaw = form.interval_miles_max.trim() === "" ? null : Number(form.interval_miles_max);
+      if (milesHiRaw != null && Number.isFinite(milesHiRaw)) {
+        if (milesLo == null || !Number.isFinite(milesLo)) {
+          setError("Enter the lower mileage (from) before setting an upper mileage.");
+          setSaving(false);
+          return;
+        }
+        if (milesHiRaw < milesLo) {
+          setError("Upper mileage must be greater than or equal to lower mileage.");
+          setSaving(false);
+          return;
+        }
+      }
+      let interval_miles_max: number | null =
+        milesHiRaw != null && Number.isFinite(milesHiRaw) && milesLo != null && milesHiRaw > milesLo
+          ? milesHiRaw
+          : null;
+
       const payload = {
         task_name,
         task_code: form.task_code.trim() || null,
         description: form.description.trim() || undefined,
-        interval_miles: form.interval_miles.trim() === "" ? null : Number(form.interval_miles),
+        interval_miles: milesLo,
+        interval_miles_max,
         interval_months: form.interval_months.trim() === "" ? null : Number(form.interval_months),
         frequency_kind: form.frequency_kind,
         frequency_label: form.frequency_label.trim() || null,
@@ -466,7 +504,7 @@ export function MaintenanceTemplatesManager() {
                           </span>
                         ) : null}
                       </TableCell>
-                      <TableCell>{t.interval_miles ?? "—"}</TableCell>
+                      <TableCell className="tabular-nums">{formatIntervalMilesDisplay(t)}</TableCell>
                       <TableCell>{t.interval_months ?? "—"}</TableCell>
                       <TableCell className="capitalize">{t.priority}</TableCell>
                       <TableCell className="text-right">
@@ -626,16 +664,32 @@ export function MaintenanceTemplatesManager() {
                 </Button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Interval (miles)</Label>
-                <Input
-                  value={form.interval_miles}
-                  onChange={(e) => setForm((f) => ({ ...f, interval_miles: e.target.value }))}
-                  className="h-9"
-                  placeholder="5000"
-                  type="number"
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={form.interval_miles}
+                    onChange={(e) => setForm((f) => ({ ...f, interval_miles: e.target.value }))}
+                    className="h-9 w-[100px] sm:w-[110px] tabular-nums"
+                    placeholder="5000"
+                    type="number"
+                    min={0}
+                  />
+                  <span className="text-xs text-slate-500 shrink-0">to</span>
+                  <Input
+                    value={form.interval_miles_max}
+                    onChange={(e) => setForm((f) => ({ ...f, interval_miles_max: e.target.value }))}
+                    className="h-9 w-[100px] sm:w-[110px] tabular-nums"
+                    placeholder="7500"
+                    type="number"
+                    min={0}
+                    aria-label="Upper mileage (optional)"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Optional range. Leave the second box empty for a single interval. Scheduling uses the lower value for next due miles.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Interval (months)</Label>

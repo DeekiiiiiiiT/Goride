@@ -14,7 +14,10 @@ export interface MaintenanceTaskTemplate {
   task_code?: string | null;
   task_name: string;
   description: string | null;
+  /** Lower bound / nominal miles between services (used for next-due math). */
   interval_miles: number | null;
+  /** Optional upper bound for an acceptable mileage window (e.g. 7500 when lower is 5000). */
+  interval_miles_max?: number | null;
   interval_months: number | null;
   /** Defaults to `recurring` when omitted (pre-migration rows). */
   frequency_kind?: MaintenanceFrequencyKind;

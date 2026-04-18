@@ -102,6 +102,20 @@ function parseTaskCode(body: Record<string, unknown>): string | null {
   return s.length ? s.slice(0, 120) : null;
 }
 
+function parseOptionalNumberField(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Returns error message or null if OK. */
+function assertIntervalMilesRange(miles: number | null, milesMax: number | null): string | null {
+  if (milesMax == null) return null;
+  if (miles == null) return "interval_miles is required when interval_miles_max is set";
+  if (milesMax < miles) return "interval_miles_max must be greater than or equal to interval_miles";
+  return null;
+}
+
 export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; patch: unknown; delete: unknown }, supabase: SupabaseClient) {
   const route = app as {
     get: (path: string, ...handlers: unknown[]) => void;
@@ -160,15 +174,23 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           : "recurring";
         const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
         const frequency_label = fl.length ? fl.slice(0, 120) : null;
+        const interval_miles = body.interval_miles != null && body.interval_miles !== ""
+          ? Number(body.interval_miles)
+          : null;
+        let interval_miles_max = parseOptionalNumberField(body.interval_miles_max);
+        if (interval_miles != null && interval_miles_max != null && interval_miles_max === interval_miles) {
+          interval_miles_max = null;
+        }
+        const rangeErr = assertIntervalMilesRange(interval_miles, interval_miles_max);
+        if (rangeErr) return c.json({ error: rangeErr }, 400);
         const row = {
           template_scope: "catalog",
           vehicle_catalog_id: catalogId,
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
-          interval_miles: body.interval_miles != null && body.interval_miles !== ""
-            ? Number(body.interval_miles)
-            : null,
+          interval_miles,
+          interval_miles_max,
           interval_months: body.interval_months != null && body.interval_months !== ""
             ? Number(body.interval_months)
             : null,
@@ -206,6 +228,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
             ? null
             : Number(body.interval_miles);
         }
+        if (body.interval_miles_max !== undefined) {
+          patch.interval_miles_max = body.interval_miles_max === "" || body.interval_miles_max == null
+            ? null
+            : Number(body.interval_miles_max);
+        }
         if (body.interval_months !== undefined) {
           patch.interval_months = body.interval_months === "" || body.interval_months == null
             ? null
@@ -221,6 +248,27 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
           patch.frequency_label = fl.length ? fl.slice(0, 120) : null;
         }
+
+        const { data: existingRow } = await supabase
+          .from("maintenance_task_templates")
+          .select("interval_miles, interval_miles_max")
+          .eq("id", id)
+          .maybeSingle();
+        if (!existingRow) return c.json({ error: "Not found" }, 404);
+
+        const mergedMiles = patch.interval_miles !== undefined
+          ? (patch.interval_miles as number | null)
+          : (existingRow.interval_miles != null ? Number(existingRow.interval_miles) : null);
+        let mergedMax = patch.interval_miles_max !== undefined
+          ? (patch.interval_miles_max as number | null)
+          : (existingRow.interval_miles_max != null ? Number(existingRow.interval_miles_max) : null);
+        if (mergedMiles != null && mergedMax != null && mergedMax === mergedMiles) {
+          mergedMax = null;
+          patch.interval_miles_max = null;
+        }
+        const patchRangeErr = assertIntervalMilesRange(mergedMiles, mergedMax);
+        if (patchRangeErr) return c.json({ error: patchRangeErr }, 400);
+
         const { data, error } = await supabase
           .from("maintenance_task_templates")
           .update(patch)
@@ -294,15 +342,23 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           : "recurring";
         const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
         const frequency_label = fl.length ? fl.slice(0, 120) : null;
+        const interval_miles = body.interval_miles != null && body.interval_miles !== ""
+          ? Number(body.interval_miles)
+          : null;
+        let interval_miles_max = parseOptionalNumberField(body.interval_miles_max);
+        if (interval_miles != null && interval_miles_max != null && interval_miles_max === interval_miles) {
+          interval_miles_max = null;
+        }
+        const rangeErrG = assertIntervalMilesRange(interval_miles, interval_miles_max);
+        if (rangeErrG) return c.json({ error: rangeErrG }, 400);
         const row = {
           template_scope: "global",
           vehicle_catalog_id: null as string | null,
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
-          interval_miles: body.interval_miles != null && body.interval_miles !== ""
-            ? Number(body.interval_miles)
-            : null,
+          interval_miles,
+          interval_miles_max,
           interval_months: body.interval_months != null && body.interval_months !== ""
             ? Number(body.interval_months)
             : null,
