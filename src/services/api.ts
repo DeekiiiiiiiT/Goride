@@ -1289,7 +1289,15 @@ export const api = {
           body: JSON.stringify({ currentOdometer: currentOdometer ?? null }),
       });
       if (!response.ok) throw new Error("Failed to bootstrap maintenance schedule");
-      return response.json() as Promise<{ created: number; catalogId?: string; message?: string }>;
+      return response.json() as Promise<{
+        created: number;
+        catalogId?: string;
+        message?: string;
+        globalApplied?: number;
+        catalogApplied?: number;
+        skippedDuplicates?: number;
+        warnings?: string[];
+      }>;
   },
 
   async getMaintenanceFleetSummary() {

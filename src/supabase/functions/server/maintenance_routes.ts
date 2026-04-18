@@ -54,6 +54,54 @@ function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
 }
 
+function normalizeMaintenanceTaskName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Merge key: `task_code` when set, else normalized `task_name` (catalog wins on collision). */
+function maintenanceTemplateMergeKey(t: { task_code?: unknown; task_name?: unknown }): string {
+  const code = t.task_code != null ? String(t.task_code).trim() : "";
+  if (code.length > 0) return `code:${code}`;
+  return `name:${normalizeMaintenanceTaskName(String(t.task_name ?? ""))}`;
+}
+
+type MaintenanceTemplateRow = Record<string, unknown> & {
+  id: string;
+  template_scope?: string;
+};
+
+function mergeGlobalAndCatalogTemplates(
+  globalRows: MaintenanceTemplateRow[],
+  catalogRows: MaintenanceTemplateRow[],
+): { merged: MaintenanceTemplateRow[]; catalogOverridesGlobal: number } {
+  const merged = new Map<string, MaintenanceTemplateRow>();
+  let catalogOverridesGlobal = 0;
+  for (const g of globalRows) {
+    merged.set(maintenanceTemplateMergeKey(g), g);
+  }
+  for (const c of catalogRows) {
+    const k = maintenanceTemplateMergeKey(c);
+    const prev = merged.get(k);
+    if (prev && String(prev.template_scope ?? "catalog") === "global") {
+      catalogOverridesGlobal++;
+    }
+    merged.set(k, c);
+  }
+  const list = [...merged.values()];
+  list.sort((a, b) => {
+    const so = Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0);
+    if (so !== 0) return so;
+    return String(a.task_name ?? "").localeCompare(String(b.task_name ?? ""));
+  });
+  return { merged: list, catalogOverridesGlobal };
+}
+
+function parseTaskCode(body: Record<string, unknown>): string | null {
+  if (body.task_code === undefined || body.task_code === null) return null;
+  const s = String(body.task_code).trim();
+  return s.length ? s.slice(0, 120) : null;
+}
+
 export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; patch: unknown; delete: unknown }, supabase: SupabaseClient) {
   const route = app as {
     get: (path: string, ...handlers: unknown[]) => void;
@@ -79,6 +127,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           .from("maintenance_task_templates")
           .select("*")
           .eq("vehicle_catalog_id", catalogId)
+          .eq("template_scope", "catalog")
           .order("sort_order", { ascending: true })
           .order("task_name", { ascending: true });
         if (error) throw error;
@@ -112,8 +161,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
         const frequency_label = fl.length ? fl.slice(0, 120) : null;
         const row = {
+          template_scope: "catalog",
           vehicle_catalog_id: catalogId,
           task_name,
+          task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
           interval_miles: body.interval_miles != null && body.interval_miles !== ""
             ? Number(body.interval_miles)
@@ -148,6 +199,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const body = (await c.req.json()) as Record<string, unknown>;
         const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
         if (body.task_name !== undefined) patch.task_name = String(body.task_name).trim();
+        if (body.task_code !== undefined) patch.task_code = parseTaskCode(body);
         if (body.description !== undefined) patch.description = body.description;
         if (body.interval_miles !== undefined) {
           patch.interval_miles = body.interval_miles === "" || body.interval_miles == null
@@ -196,6 +248,73 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const { error } = await supabase.from("maintenance_task_templates").delete().eq("id", id);
         if (error) throw error;
         return c.json({ success: true });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/admin/maintenance-templates/global",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      try {
+        const { data, error } = await supabase
+          .from("maintenance_task_templates")
+          .select("*")
+          .eq("template_scope", "global")
+          .order("sort_order", { ascending: true })
+          .order("task_name", { ascending: true });
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[maintenance-templates-global] GET:", msg);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/make-server-37f42386/admin/maintenance-templates/global",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      try {
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const task_name = String(body.task_name ?? "").trim();
+        if (!task_name) return c.json({ error: "task_name is required" }, 400);
+        const fkRaw = String(body.frequency_kind ?? "recurring").trim();
+        const frequency_kind = ["recurring", "once_milestone", "manual_only"].includes(fkRaw)
+          ? fkRaw
+          : "recurring";
+        const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
+        const frequency_label = fl.length ? fl.slice(0, 120) : null;
+        const row = {
+          template_scope: "global",
+          vehicle_catalog_id: null as string | null,
+          task_name,
+          task_code: parseTaskCode(body),
+          description: body.description != null ? String(body.description) : null,
+          interval_miles: body.interval_miles != null && body.interval_miles !== ""
+            ? Number(body.interval_miles)
+            : null,
+          interval_months: body.interval_months != null && body.interval_months !== ""
+            ? Number(body.interval_months)
+            : null,
+          frequency_kind,
+          frequency_label,
+          priority: String(body.priority ?? "standard"),
+          sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
+          updated_at: new Date().toISOString(),
+        };
+        const { data, error } = await supabase.from("maintenance_task_templates").insert(row).select().single();
+        if (error) throw error;
+        return c.json({ item: data });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -415,12 +534,33 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           : Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
         const today = todayIso();
 
-        const { data: templates, error: tErr } = await supabase
+        const { data: globalTemplates, error: gErr } = await supabase
           .from("maintenance_task_templates")
           .select("*")
-          .eq("vehicle_catalog_id", catalogId);
-        if (tErr) throw tErr;
-        if (!templates?.length) return c.json({ created: 0, message: "No templates for this catalog row" });
+          .eq("template_scope", "global");
+        if (gErr) throw gErr;
+        const { data: catalogTemplates, error: cErr } = await supabase
+          .from("maintenance_task_templates")
+          .select("*")
+          .eq("vehicle_catalog_id", catalogId)
+          .eq("template_scope", "catalog");
+        if (cErr) throw cErr;
+        const { merged: templates, catalogOverridesGlobal } = mergeGlobalAndCatalogTemplates(
+          (globalTemplates || []) as MaintenanceTemplateRow[],
+          (catalogTemplates || []) as MaintenanceTemplateRow[],
+        );
+        const globalApplied = templates.filter((t) => String(t.template_scope ?? "") === "global").length;
+        const catalogApplied = templates.filter((t) => String(t.template_scope ?? "") === "catalog").length;
+        if (!templates.length) {
+          return c.json({
+            created: 0,
+            message: "No global or catalog templates for this vehicle",
+            catalogId,
+            globalApplied: 0,
+            catalogApplied: 0,
+            skippedDuplicates: 0,
+          });
+        }
 
         let created = 0;
         const bootstrapErrors: string[] = [];
@@ -449,7 +589,14 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         if (bootstrapErrors.length && created === 0) {
           return c.json({ error: bootstrapErrors.join("; "), catalogId, created: 0 }, 400);
         }
-        return c.json({ created, catalogId, warnings: bootstrapErrors.length ? bootstrapErrors : undefined });
+        return c.json({
+          created,
+          catalogId,
+          globalApplied,
+          catalogApplied,
+          skippedDuplicates: catalogOverridesGlobal,
+          warnings: bootstrapErrors.length ? bootstrapErrors : undefined,
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);

@@ -45,12 +45,37 @@ export async function listMaintenanceTemplates(
   return (data.items || []) as MaintenanceTaskTemplate[];
 }
 
+export async function listGlobalMaintenanceTemplates(
+  accessToken: string,
+): Promise<MaintenanceTaskTemplate[]> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-templates/global`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return (data.items || []) as MaintenanceTaskTemplate[];
+}
+
 export async function createMaintenanceTemplate(
   accessToken: string,
   catalogId: string,
   payload: Partial<MaintenanceTaskTemplate> & { task_name: string },
 ): Promise<MaintenanceTaskTemplate> {
   const res = await edgeFetch(`${base()}/admin/vehicle-catalog/${catalogId}/maintenance-templates`, {
+    method: "POST",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return data.item as MaintenanceTaskTemplate;
+}
+
+export async function createGlobalMaintenanceTemplate(
+  accessToken: string,
+  payload: Partial<MaintenanceTaskTemplate> & { task_name: string },
+): Promise<MaintenanceTaskTemplate> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-templates/global`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),

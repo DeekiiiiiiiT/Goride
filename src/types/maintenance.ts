@@ -1,10 +1,17 @@
 /** How the template translates into next-due scheduling (vendor-independent). */
 export type MaintenanceFrequencyKind = "recurring" | "once_milestone" | "manual_only";
 
+export type MaintenanceTemplateScope = "global" | "catalog";
+
 /** Row from `maintenance_task_templates` (Super Admin). */
 export interface MaintenanceTaskTemplate {
   id: string;
-  vehicle_catalog_id: string;
+  /** Null when `template_scope` is `global`. */
+  vehicle_catalog_id: string | null;
+  /** Fleet-wide defaults vs per–vehicle-catalog overlay. */
+  template_scope?: MaintenanceTemplateScope;
+  /** Optional stable slug; bootstrap merges global ∪ catalog with catalog winning on same code or normalized name. */
+  task_code?: string | null;
   task_name: string;
   description: string | null;
   interval_miles: number | null;

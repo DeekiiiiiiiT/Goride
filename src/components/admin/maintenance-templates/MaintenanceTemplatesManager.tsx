@@ -3,8 +3,10 @@ import { Loader2, Pencil, Plus, Trash2, Wrench, Database } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { listVehicleCatalog } from "../../../services/vehicleCatalogService";
 import {
+  createGlobalMaintenanceTemplate,
   createMaintenanceTemplate,
   deleteMaintenanceTemplate,
+  listGlobalMaintenanceTemplates,
   listMaintenanceTemplates,
   migrateMaintenanceFromKv,
   updateMaintenanceTemplate,
@@ -38,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../ui/table";
+import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
 
 function scheduleKindShort(k: string | undefined): string {
   if (k === "once_milestone") return "One-time";
@@ -61,6 +64,8 @@ export function MaintenanceTemplatesManager() {
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>("");
   const [templates, setTemplates] = useState<MaintenanceTaskTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  /** Fleet-wide defaults vs per–vehicle-catalog templates. */
+  const [templateScopeTab, setTemplateScopeTab] = useState<"global" | "catalog">("catalog");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MaintenanceTaskTemplate | null>(null);
   const [saving, setSaving] = useState(false);
@@ -68,6 +73,7 @@ export function MaintenanceTemplatesManager() {
 
   const [form, setForm] = useState({
     task_name: "",
+    task_code: "",
     description: "",
     interval_miles: "",
     interval_months: "",
@@ -114,6 +120,7 @@ export function MaintenanceTemplatesManager() {
       : preset.label;
     setForm({
       task_name: shortName,
+      task_code: "",
       description: preset.items.join("\n"),
       interval_miles: String(preset.interval_miles),
       interval_months: String(preset.interval_months),
@@ -154,25 +161,36 @@ export function MaintenanceTemplatesManager() {
   }, [loadCatalog]);
 
   const loadTemplates = useCallback(async () => {
-    if (!token || !selectedCatalogId) {
+    if (!token) {
+      setTemplates([]);
+      return;
+    }
+    if (templateScopeTab === "catalog" && !selectedCatalogId) {
       setTemplates([]);
       return;
     }
     setLoadingTemplates(true);
     setError(null);
     try {
-      const items = await listMaintenanceTemplates(token, selectedCatalogId);
+      const items =
+        templateScopeTab === "global"
+          ? await listGlobalMaintenanceTemplates(token)
+          : await listMaintenanceTemplates(token, selectedCatalogId);
       setTemplates(items);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load templates");
     } finally {
       setLoadingTemplates(false);
     }
-  }, [token, selectedCatalogId]);
+  }, [token, selectedCatalogId, templateScopeTab]);
 
   useEffect(() => {
     loadTemplates();
   }, [loadTemplates]);
+
+  useEffect(() => {
+    setDialogOpen(false);
+  }, [templateScopeTab]);
 
   const selectedVehicleLabel = useMemo(() => {
     const row = catalog.find((c) => c.id === selectedCatalogId);
@@ -185,6 +203,7 @@ export function MaintenanceTemplatesManager() {
     setPresetId("__none__");
     setForm({
       task_name: "",
+      task_code: "",
       description: "",
       interval_miles: "",
       interval_months: "",
@@ -201,6 +220,7 @@ export function MaintenanceTemplatesManager() {
     setPresetId("__none__");
     setForm({
       task_name: t.task_name,
+      task_code: t.task_code ?? "",
       description: t.description ?? "",
       interval_miles: t.interval_miles != null ? String(t.interval_miles) : "",
       interval_months: t.interval_months != null ? String(t.interval_months) : "",
@@ -213,7 +233,8 @@ export function MaintenanceTemplatesManager() {
   };
 
   const handleSave = async () => {
-    if (!token || !selectedCatalogId) return;
+    if (!token) return;
+    if (templateScopeTab === "catalog" && !selectedCatalogId) return;
     const task_name = form.task_name.trim();
     if (!task_name) {
       setError("Task name is required.");
@@ -224,6 +245,7 @@ export function MaintenanceTemplatesManager() {
     try {
       const payload = {
         task_name,
+        task_code: form.task_code.trim() || null,
         description: form.description.trim() || undefined,
         interval_miles: form.interval_miles.trim() === "" ? null : Number(form.interval_miles),
         interval_months: form.interval_months.trim() === "" ? null : Number(form.interval_months),
@@ -234,6 +256,8 @@ export function MaintenanceTemplatesManager() {
       };
       if (editing) {
         await updateMaintenanceTemplate(token, editing.id, payload);
+      } else if (templateScopeTab === "global") {
+        await createGlobalMaintenanceTemplate(token, payload);
       } else {
         await createMaintenanceTemplate(token, selectedCatalogId, payload);
       }
@@ -286,7 +310,7 @@ export function MaintenanceTemplatesManager() {
             Maintenance templates
           </h2>
           <p className="text-sm text-slate-500">
-            Define mileage and time intervals per motor vehicle catalog entry. Fleet schedules bootstrap from these tasks.
+            Fleet defaults apply to every vehicle; catalog tasks add or override by model/year. Schedules merge both at bootstrap.
           </p>
         </div>
         {canMigrate && (
@@ -307,27 +331,50 @@ export function MaintenanceTemplatesManager() {
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-600">Motor vehicle (catalog)</Label>
-          <Select
-            value={selectedCatalogId}
-            onValueChange={setSelectedCatalogId}
-            disabled={loading || catalog.length === 0}
+      <Tabs
+        value={templateScopeTab}
+        onValueChange={(v) => setTemplateScopeTab(v as "global" | "catalog")}
+        className="w-full max-w-2xl"
+      >
+        <TabsList className="grid w-full max-w-md grid-cols-2 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80">
+          <TabsTrigger
+            value="global"
+            className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-slate-900 text-slate-600"
           >
-            <SelectTrigger className="h-9 bg-white border-slate-300">
-              <SelectValue placeholder="Select catalog row" />
-            </SelectTrigger>
-            <SelectContent>
-              {catalog.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.make} {c.model} ({c.year})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            Fleet defaults
+          </TabsTrigger>
+          <TabsTrigger
+            value="catalog"
+            className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-slate-900 text-slate-600"
+          >
+            Per motor vehicle
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {templateScopeTab === "catalog" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-slate-600">Motor vehicle (catalog)</Label>
+            <Select
+              value={selectedCatalogId}
+              onValueChange={setSelectedCatalogId}
+              disabled={loading || catalog.length === 0}
+            >
+              <SelectTrigger className="h-9 bg-white border-slate-300">
+                <SelectValue placeholder="Select catalog row" />
+              </SelectTrigger>
+              <SelectContent>
+                {catalog.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.make} {c.model} ({c.year})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16">
@@ -337,9 +384,23 @@ export function MaintenanceTemplatesManager() {
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <p className="text-sm text-slate-600">
-              Templates for: <span className="font-medium text-slate-900">{selectedVehicleLabel || "—"}</span>
+              {templateScopeTab === "global" ? (
+                <>
+                  Fleet-wide tasks for <span className="font-medium text-slate-900">all vehicles</span>
+                </>
+              ) : (
+                <>
+                  Templates for: <span className="font-medium text-slate-900">{selectedVehicleLabel || "—"}</span>
+                </>
+              )}
             </p>
-            <Button type="button" size="sm" className="gap-1" onClick={openCreate} disabled={!selectedCatalogId}>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1"
+              onClick={openCreate}
+              disabled={templateScopeTab === "catalog" && !selectedCatalogId}
+            >
               <Plus className="w-4 h-4" />
               Add task
             </Button>
@@ -353,6 +414,7 @@ export function MaintenanceTemplatesManager() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Task</TableHead>
+                  <TableHead className="w-[120px]">Code</TableHead>
                   <TableHead>Schedule</TableHead>
                   <TableHead>Every (mi)</TableHead>
                   <TableHead>Every (mo)</TableHead>
@@ -363,14 +425,19 @@ export function MaintenanceTemplatesManager() {
               <TableBody>
                 {templates.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-slate-500 py-10">
-                      No templates yet. Add tasks that apply to this catalog entry.
+                    <TableCell colSpan={7} className="text-center text-slate-500 py-10">
+                      {templateScopeTab === "global"
+                        ? "No fleet defaults yet. Add universal tasks (oil, filters, etc.)."
+                        : "No templates yet. Add tasks that apply to this catalog entry."}
                     </TableCell>
                   </TableRow>
                 ) : (
                   templates.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium">{t.task_name}</TableCell>
+                      <TableCell className="text-xs text-slate-500 font-mono truncate max-w-[120px]" title={t.task_code ?? ""}>
+                        {t.task_code?.trim() ? t.task_code : "—"}
+                      </TableCell>
                       <TableCell className="text-sm text-slate-600">
                         {scheduleKindShort(t.frequency_kind)}
                         {t.frequency_label ? (
@@ -438,6 +505,18 @@ export function MaintenanceTemplatesManager() {
             <div className="space-y-1.5">
               <Label className="text-xs">Task name *</Label>
               <Input value={form.task_name} onChange={(e) => setForm((f) => ({ ...f, task_name: e.target.value }))} className="h-9" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-600">Task code (optional)</Label>
+              <Input
+                value={form.task_code}
+                onChange={(e) => setForm((f) => ({ ...f, task_code: e.target.value }))}
+                className="h-9 font-mono text-sm"
+                placeholder="e.g. oil_service_5k"
+              />
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Stable slug for bootstrap merge: catalog wins over fleet default when codes match.
+              </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1.5">
