@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { 
   Table, 
@@ -64,10 +65,15 @@ import {
 import { isSameDay, subDays } from "date-fns";
 import { useVocab } from '../../utils/vocabulary';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useAuth } from '../auth/AuthContext';
+import { listMyPendingCatalogRequests } from '../../services/pendingVehicleCatalogService';
+import type { VehicleCatalogPendingRequest } from '../../types/vehicleCatalogPending';
 
 export function VehiclesPage() {
   const { v } = useVocab();
   const { can } = usePermissions();
+  const { session } = useAuth();
+  const catalogToken = session?.access_token;
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
@@ -129,6 +135,21 @@ export function VehiclesPage() {
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+
+  const { data: myCatalogPending } = useQuery({
+    queryKey: ['vehicle-catalog-pending-my'],
+    queryFn: () => listMyPendingCatalogRequests(catalogToken!),
+    enabled: Boolean(catalogToken),
+    staleTime: 60 * 1000,
+  });
+
+  const catalogPendingByFleetId = useMemo(() => {
+    const m = new Map<string, VehicleCatalogPendingRequest>();
+    for (const row of myCatalogPending?.items ?? []) {
+      m.set(row.fleet_vehicle_id, row);
+    }
+    return m;
+  }, [myCatalogPending]);
 
   const loading = tripsLoading;
 
@@ -472,7 +493,8 @@ export function VehiclesPage() {
                     {filteredVehicles.map(vehicle => (
                         <VehicleCard 
                             key={vehicle.id} 
-                            vehicle={vehicle} 
+                            vehicle={vehicle}
+                            catalogPending={catalogPendingByFleetId.get(vehicle.id) ?? null}
                             onViewAnalytics={(id) => setSelectedVehicleId(id)}
                             onAssignDriver={(id) => handleOpenAssignModal(id)}
                             onLogService={handleLogService}
@@ -522,7 +544,25 @@ export function VehiclesPage() {
                                                 <img src={vehicle.image} alt={vehicle.model} className="h-full w-full object-cover" />
                                             </div>
                                             <div>
-                                                <div className="font-medium text-slate-900">{vehicle.year} {vehicle.make} {vehicle.model}</div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                  <span className="font-medium text-slate-900">{vehicle.year} {vehicle.make} {vehicle.model}</span>
+                                                  {(() => {
+                                                    const cp = catalogPendingByFleetId.get(vehicle.id);
+                                                    if (!cp || (cp.status !== 'pending' && cp.status !== 'needs_info')) return null;
+                                                    return (
+                                                      <Badge
+                                                        variant="secondary"
+                                                        className={
+                                                          cp.status === 'needs_info'
+                                                            ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                            : ''
+                                                        }
+                                                      >
+                                                        {cp.status === 'needs_info' ? 'Catalog: action' : 'Catalog: review'}
+                                                      </Badge>
+                                                    );
+                                                  })()}
+                                                </div>
                                             </div>
                                         </div>
                                     </TableCell>

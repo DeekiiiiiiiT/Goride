@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, Check, Link2, XCircle, RefreshCw } from "lucide-react";
+import { Loader2, Check, Link2, XCircle, RefreshCw, MessageSquareWarning } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import {
   approveExistingPendingVehicleCatalogRequest,
@@ -7,6 +7,7 @@ import {
   getPendingVehicleCatalogRequest,
   listPendingVehicleCatalogRequests,
   rejectPendingVehicleCatalogRequest,
+  requestInfoOnPendingVehicleCatalogRequest,
 } from "../../../services/pendingVehicleCatalogService";
 import type { VehicleCatalogPendingRequest } from "../../../types/vehicleCatalogPending";
 import { Button } from "../../ui/button";
@@ -31,6 +32,22 @@ import {
 import { Textarea } from "../../ui/textarea";
 import { toast } from "sonner@2.0.3";
 import { Badge } from "../../ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../ui/select";
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "open", label: "Open (pending + needs info)" },
+  { value: "pending", label: "Pending" },
+  { value: "needs_info", label: "Needs info" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "superseded", label: "Superseded" },
+] as const;
 
 export function PendingVehicleCatalogManager() {
   const { session } = useAuth();
@@ -38,6 +55,7 @@ export function PendingVehicleCatalogManager() {
   const [items, setItems] = useState<VehicleCatalogPendingRequest[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>("open");
   const [selected, setSelected] = useState<VehicleCatalogPendingRequest | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fleetSnap, setFleetSnap] = useState<Record<string, unknown> | null>(null);
@@ -48,13 +66,14 @@ export function PendingVehicleCatalogManager() {
   const [year, setYear] = useState("");
   const [existingId, setExistingId] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  const [requestInfoMessage, setRequestInfoMessage] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await listPendingVehicleCatalogRequests(token, { status: "pending", limit: 100 });
+      const res = await listPendingVehicleCatalogRequests(token, { status: statusFilter, limit: 100 });
       setItems(res.items);
       setTotal(res.total);
     } catch (e: unknown) {
@@ -62,7 +81,7 @@ export function PendingVehicleCatalogManager() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, statusFilter]);
 
   useEffect(() => {
     void load();
@@ -76,6 +95,7 @@ export function PendingVehicleCatalogManager() {
     setYear(String(row.proposed_year));
     setExistingId("");
     setRejectReason("");
+    setRequestInfoMessage("");
     setDetailOpen(true);
     setDetailLoading(true);
     setFleetSnap(null);
@@ -141,19 +161,57 @@ export function PendingVehicleCatalogManager() {
     }
   };
 
+  const handleRequestInfo = async () => {
+    if (!token || !selected) return;
+    const msg = requestInfoMessage.trim();
+    if (!msg) {
+      toast.error("Enter a message for the fleet");
+      return;
+    }
+    setActionBusy(true);
+    try {
+      await requestInfoOnPendingVehicleCatalogRequest(token, selected.id, msg);
+      toast.success("Fleet will be asked to align with the catalog");
+      setDetailOpen(false);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Pending motor vehicles</h1>
           <p className="text-sm text-slate-600 mt-1">
             Fleet-submitted make/model/year queued until added to the motor catalog or linked to an existing entry.
           </p>
+          <p className="text-xs text-slate-500 mt-2">
+            <span className="font-medium text-slate-700">Request changes</span> asks the customer to pick a catalog match.
+            <span className="font-medium text-slate-700"> Reject</span> closes the request without prompting them.
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTER_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -194,7 +252,16 @@ export function PendingVehicleCatalogManager() {
                       {row.proposed_make} {row.proposed_model} {row.proposed_year}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{row.status}</Badge>
+                      <Badge
+                        variant={row.status === "needs_info" ? "default" : "secondary"}
+                        className={
+                          row.status === "needs_info"
+                            ? "bg-amber-100 text-amber-900 hover:bg-amber-100 border-amber-200"
+                            : ""
+                        }
+                      >
+                        {row.status}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button size="sm" variant="outline" onClick={() => void openDetail(row)}>
@@ -209,7 +276,7 @@ export function PendingVehicleCatalogManager() {
         </div>
       )}
 
-      <p className="text-xs text-slate-500">Total pending (reported): {total}</p>
+      <p className="text-xs text-slate-500">Total matching filter (reported): {total}</p>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="flex max-h-[min(90vh,880px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
@@ -256,6 +323,12 @@ export function PendingVehicleCatalogManager() {
                           </p>
                         </div>
                       </>
+                    )}
+                    {selected.status === "needs_info" && selected.info_request_message && (
+                      <div className="space-y-0.5 sm:col-span-2 rounded-md border border-amber-200 bg-amber-50/80 p-3">
+                        <p className="text-xs font-medium text-amber-900">Message to fleet</p>
+                        <p className="text-sm text-amber-950 whitespace-pre-wrap">{selected.info_request_message}</p>
+                      </div>
                     )}
                   </div>
                 )}
@@ -308,6 +381,30 @@ export function PendingVehicleCatalogManager() {
                       Link
                     </Button>
                   </div>
+                </div>
+
+                <div className="space-y-2 border-t border-border pt-4">
+                  <Label htmlFor="pending-request-info" className="text-foreground">
+                    Request changes (message to fleet)
+                  </Label>
+                  <Textarea
+                    id="pending-request-info"
+                    value={requestInfoMessage}
+                    onChange={(e) => setRequestInfoMessage(e.target.value)}
+                    rows={3}
+                    className="min-h-[72px] resize-y"
+                    placeholder="Explain what to fix or which catalog field is wrong..."
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full sm:w-auto"
+                    onClick={() => void handleRequestInfo()}
+                    disabled={actionBusy}
+                  >
+                    <MessageSquareWarning className="h-4 w-4 mr-2" />
+                    Request changes
+                  </Button>
                 </div>
 
                 <div className="space-y-2 border-t border-border pt-4">

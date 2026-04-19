@@ -14,6 +14,7 @@ import {
   Clock // Added Clock
 } from 'lucide-react';
 import { Vehicle } from '../../types/vehicle';
+import type { VehicleCatalogPendingRequest } from '../../types/vehicleCatalogPending';
 import { Card, CardContent, CardFooter, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -30,6 +31,8 @@ import { cn } from "../ui/utils";
 
 interface VehicleCardProps {
   vehicle: Vehicle;
+  /** Open motor-catalog queue row for this fleet vehicle, if any. */
+  catalogPending?: VehicleCatalogPendingRequest | null;
   onViewAnalytics?: (id: string) => void;
   onAssignDriver?: (id: string) => void;
   onLogService?: (id: string) => void;
@@ -37,7 +40,7 @@ interface VehicleCardProps {
   onSendAlert?: (id: string) => void;
 }
 
-export function VehicleCard({ vehicle, onViewAnalytics, onAssignDriver, onLogService, onAddFuel, onSendAlert }: VehicleCardProps) {
+export function VehicleCard({ vehicle, catalogPending, onViewAnalytics, onAssignDriver, onLogService, onAddFuel, onSendAlert }: VehicleCardProps) {
   
   // Color coding helpers
   const getUtilizationColor = (rate: number) => {
@@ -65,6 +68,19 @@ export function VehicleCard({ vehicle, onViewAnalytics, onAssignDriver, onLogSer
     <Card className="overflow-hidden hover:shadow-md transition-all duration-200 group">
       {/* Header Image Section */}
       <div className="relative h-48 w-full bg-slate-100">
+        {catalogPending && (catalogPending.status === 'needs_info' || catalogPending.status === 'pending') && (
+          <div className="absolute top-2 right-2 z-10">
+            <Badge
+              className={
+                catalogPending.status === 'needs_info'
+                  ? 'border-amber-200 bg-amber-100 text-amber-900 hover:bg-amber-100'
+                  : 'border-slate-200 bg-white/95 text-slate-700'
+              }
+            >
+              {catalogPending.status === 'needs_info' ? 'Catalog: action needed' : 'Catalog: review'}
+            </Badge>
+          </div>
+        )}
         {vehicle.image?.startsWith('figma:') ? (
            <ImageWithFallback 
               src={vehicle.image} 

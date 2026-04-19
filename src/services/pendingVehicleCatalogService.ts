@@ -46,6 +46,36 @@ export async function listPendingVehicleCatalogRequests(
   return { items: data.items || [], total: data.total ?? 0 };
 }
 
+export async function listMyPendingCatalogRequests(
+  accessToken: string,
+  opts?: { fleet_vehicle_id?: string },
+): Promise<{ items: VehicleCatalogPendingRequest[] }> {
+  const sp = new URLSearchParams();
+  if (opts?.fleet_vehicle_id) sp.set("fleet_vehicle_id", opts.fleet_vehicle_id);
+  const res = await fetch(`${API_ENDPOINTS.fleet}/vehicle-catalog-pending/my?${sp.toString()}`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return { items: data.items || [] };
+}
+
+export async function requestInfoOnPendingVehicleCatalogRequest(
+  accessToken: string,
+  id: string,
+  message: string,
+): Promise<void> {
+  const res = await fetch(
+    `${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests/${id}/request-info`,
+    {
+      method: "POST",
+      headers: edgeHeaders(accessToken, "application/json"),
+      body: JSON.stringify({ message }),
+    },
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
 export async function getPendingVehicleCatalogRequest(
   accessToken: string,
   id: string,

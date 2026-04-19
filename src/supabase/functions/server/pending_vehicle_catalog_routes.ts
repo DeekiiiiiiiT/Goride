@@ -1,10 +1,11 @@
-/** Pending vehicle catalog queue — admin approval routes. */
+/** Pending vehicle catalog queue - admin approval routes. */
 import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
+import { getOrgId } from "./org_scope.ts";
 
 const KEYS = [
   "make", "model", "year", "trim_series", "generation", "model_code",
@@ -13,6 +14,8 @@ const KEYS = [
   "horsepower", "torque", "torque_unit",
   "fuel_tank_capacity", "fuel_tank_unit", "seating_capacity", "curb_weight_kg", "gross_vehicle_weight_kg", "max_payload_kg", "max_towing_kg",
 ] as const;
+
+const OPEN_STATUSES = ["pending", "needs_info"] as const;
 
 function assertPlatformVehicle(c: Context) {
   const u = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
@@ -77,17 +80,49 @@ export function registerPendingVehicleCatalogRoutes(
   );
 
   route.get(
+    "/make-server-37f42386/vehicle-catalog-pending/my",
+    requireAuth(),
+    requirePermission("vehicles.view"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) {
+          return c.json({ error: "Organization required" }, 403);
+        }
+        const fleetVid = (c.req.query("fleet_vehicle_id") ?? "").trim();
+        let q = supabase
+          .from("vehicle_catalog_pending_requests")
+          .select("*")
+          .eq("organization_id", orgId)
+          .in("status", [...OPEN_STATUSES]);
+        if (fleetVid && UUID_RE.test(fleetVid)) {
+          q = q.eq("fleet_vehicle_id", fleetVid);
+        }
+        const { data, error } = await q.order("updated_at", { ascending: false });
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      }
+    },
+  );
+
+  route.get(
     "/make-server-37f42386/admin/vehicle-catalog-pending-requests",
     requireAuth(),
     async (c) => {
       const denied = assertPlatformVehicle(c);
       if (denied) return denied;
       try {
-        const status = (c.req.query("status") ?? "pending").trim();
+        const status = (c.req.query("status") ?? "open").trim();
         const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
         const offset = Math.max(parseInt(c.req.query("offset") ?? "0", 10) || 0, 0);
         let q = supabase.from("vehicle_catalog_pending_requests").select("*", { count: "exact" });
-        if (["pending", "approved", "rejected", "superseded"].includes(status)) q = q.eq("status", status);
+        if (status === "open") {
+          q = q.in("status", [...OPEN_STATUSES]);
+        } else if (["pending", "needs_info", "approved", "rejected", "superseded"].includes(status)) {
+          q = q.eq("status", status);
+        }
         q = q.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
         const { data, error, count } = await q;
         if (error) throw error;
@@ -120,6 +155,39 @@ export function registerPendingVehicleCatalogRoutes(
   );
 
   route.post(
+    "/make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/request-info",
+    requireAuth(),
+    async (c) => {
+      const denied = assertPlatformVehicle(c);
+      if (denied) return denied;
+      try {
+        const id = c.req.param("id")?.trim() ?? "";
+        if (!UUID_RE.test(id)) return c.json({ error: "Invalid id" }, 400);
+        const body = (await c.req.json().catch(() => ({}))) as { message?: string };
+        const msg = String(body.message ?? "").trim();
+        if (!msg) return c.json({ error: "message is required" }, 400);
+        const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
+        const by = rbacUser?.id ?? rbacUser?.userId ?? null;
+        const { error } = await supabase
+          .from("vehicle_catalog_pending_requests")
+          .update({
+            status: "needs_info",
+            info_request_message: msg.slice(0, 2000),
+            info_requested_at: new Date().toISOString(),
+            info_requested_by: by,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .in("status", ["pending", "needs_info"]);
+        if (error) throw error;
+        return c.json({ success: true });
+      } catch (e: unknown) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      }
+    },
+  );
+
+  route.post(
     "/make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/reject",
     requireAuth(),
     async (c) => {
@@ -129,18 +197,19 @@ export function registerPendingVehicleCatalogRoutes(
         const id = c.req.param("id")?.trim() ?? "";
         if (!UUID_RE.test(id)) return c.json({ error: "Invalid id" }, 400);
         const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
-        const rbacUser = c.get("rbacUser") as { id?: string } | undefined;
+        const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
+        const resolvedBy = rbacUser?.id ?? rbacUser?.userId ?? null;
         const { error } = await supabase
           .from("vehicle_catalog_pending_requests")
           .update({
             status: "rejected",
             rejection_reason: body.reason != null ? String(body.reason).slice(0, 2000) : null,
             resolved_at: new Date().toISOString(),
-            resolved_by: rbacUser?.id ?? null,
+            resolved_by: resolvedBy,
             updated_at: new Date().toISOString(),
           })
           .eq("id", id)
-          .eq("status", "pending");
+          .in("status", [...OPEN_STATUSES]);
         if (error) throw error;
         return c.json({ success: true });
       } catch (e: unknown) {
@@ -166,7 +235,7 @@ export function registerPendingVehicleCatalogRoutes(
           .from("vehicle_catalog_pending_requests")
           .select("*")
           .eq("id", id)
-          .eq("status", "pending")
+          .in("status", [...OPEN_STATUSES])
           .maybeSingle();
         if (rErr) throw rErr;
         if (!reqRow) return c.json({ error: "Pending request not found" }, 404);
@@ -177,14 +246,14 @@ export function registerPendingVehicleCatalogRoutes(
         const vehicle = { ...(raw as Record<string, unknown>), vehicle_catalog_id: existingId };
         await kv.set(`vehicle:${fleetId}`, vehicle);
 
-        const rbacUser = c.get("rbacUser") as { id?: string } | undefined;
+        const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
         await supabase
           .from("vehicle_catalog_pending_requests")
           .update({
             status: "approved",
             resolved_vehicle_catalog_id: existingId,
             resolved_at: new Date().toISOString(),
-            resolved_by: rbacUser?.id ?? null,
+            resolved_by: rbacUser?.id ?? rbacUser?.userId ?? null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", id);
@@ -222,7 +291,7 @@ export function registerPendingVehicleCatalogRoutes(
           .from("vehicle_catalog_pending_requests")
           .select("*")
           .eq("id", id)
-          .eq("status", "pending")
+          .in("status", [...OPEN_STATUSES])
           .maybeSingle();
         if (rErr) throw rErr;
         if (!reqRow) return c.json({ error: "Pending request not found" }, 404);
@@ -247,14 +316,14 @@ export function registerPendingVehicleCatalogRoutes(
         const vehicle = { ...(raw as Record<string, unknown>), vehicle_catalog_id: catalogId };
         await kv.set(`vehicle:${fleetId}`, vehicle);
 
-        const rbacUser = c.get("rbacUser") as { id?: string } | undefined;
+        const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
         await supabase
           .from("vehicle_catalog_pending_requests")
           .update({
             status: "approved",
             resolved_vehicle_catalog_id: catalogId,
             resolved_at: new Date().toISOString(),
-            resolved_by: rbacUser?.id ?? null,
+            resolved_by: rbacUser?.id ?? rbacUser?.userId ?? null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", id);

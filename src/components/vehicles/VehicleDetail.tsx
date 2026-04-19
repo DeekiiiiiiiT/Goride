@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
   Clock, 
@@ -38,7 +39,8 @@ import {
   ListChecks,
   FileUp,
   History,
-  RotateCw
+  RotateCw,
+  BookMarked
 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { 
@@ -73,6 +75,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTitle as DialogTitle2,
@@ -104,6 +107,13 @@ import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
+import { useAuth } from '../auth/AuthContext';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import {
+  listMyPendingCatalogRequests,
+  listVehicleCatalogMatches,
+} from '../../services/pendingVehicleCatalogService';
+import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
@@ -131,6 +141,79 @@ interface VehicleDetailProps {
 }
 
 export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssignDriver, onUpdate }: VehicleDetailProps) {
+
+  const { session } = useAuth();
+  const token = session?.access_token;
+  const queryClient = useQueryClient();
+  const { data: myPendingCatalog } = useQuery({
+    queryKey: ['vehicle-catalog-pending-my'],
+    queryFn: () => listMyPendingCatalogRequests(token!),
+    enabled: Boolean(token),
+  });
+
+  const fleetKey = vehicle.id || vehicle.licensePlate;
+  const catalogPendingRow = useMemo(() => {
+    return (myPendingCatalog?.items ?? []).find((r) => r.fleet_vehicle_id === fleetKey) ?? null;
+  }, [myPendingCatalog, fleetKey]);
+
+  const showCatalogAlignmentBanner =
+    Boolean(catalogPendingRow) &&
+    (catalogPendingRow?.status === 'pending' || catalogPendingRow?.status === 'needs_info');
+
+  const [alignModalOpen, setAlignModalOpen] = useState(false);
+  const [alignSearchMake, setAlignSearchMake] = useState('');
+  const [alignSearchModel, setAlignSearchModel] = useState('');
+  const [alignSearchYear, setAlignSearchYear] = useState('');
+  const [alignMatches, setAlignMatches] = useState<VehicleCatalogRecord[]>([]);
+  const [alignMatchesLoading, setAlignMatchesLoading] = useState(false);
+  const [alignSaving, setAlignSaving] = useState(false);
+
+  useEffect(() => {
+    if (!alignModalOpen) return;
+    setAlignSearchMake(vehicle.make || '');
+    setAlignSearchModel(vehicle.model || '');
+    setAlignSearchYear(vehicle.year || '');
+  }, [alignModalOpen, vehicle.make, vehicle.model, vehicle.year]);
+
+  useEffect(() => {
+    if (!alignModalOpen || !token) return;
+    setAlignMatchesLoading(true);
+    const handle = window.setTimeout(() => {
+      listVehicleCatalogMatches(token, {
+        make: alignSearchMake,
+        model: alignSearchModel,
+        year: alignSearchYear,
+      })
+        .then(setAlignMatches)
+        .catch(() => setAlignMatches([]))
+        .finally(() => setAlignMatchesLoading(false));
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [alignModalOpen, token, alignSearchMake, alignSearchModel, alignSearchYear]);
+
+  const handleAlignPickCatalog = async (row: VehicleCatalogRecord) => {
+    if (!fleetKey) return;
+    setAlignSaving(true);
+    try {
+      const updatedVehicle = {
+        ...vehicle,
+        make: row.make,
+        model: row.model,
+        year: String(row.year),
+        vehicle_catalog_id: row.id,
+      };
+      await api.saveVehicle(updatedVehicle);
+      await queryClient.invalidateQueries({ queryKey: ['vehicle-catalog-pending-my'] });
+      await queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      onUpdate?.(updatedVehicle);
+      setAlignModalOpen(false);
+      toast.success('Vehicle aligned with motor catalog');
+    } catch {
+      toast.error('Could not save catalog alignment');
+    } finally {
+      setAlignSaving(false);
+    }
+  };
 
   const [isUpdateOdometerOpen, setIsUpdateOdometerOpen] = useState(false);
   const [odometerRefreshTrigger, setOdometerRefreshTrigger] = useState(0);
@@ -842,6 +925,36 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         </Button>
         <DatePickerWithRange date={dateRange} setDate={setDateRange} />
       </div>
+
+      {showCatalogAlignmentBanner && (
+        <Alert className="border-amber-200 bg-amber-50/90 text-amber-950">
+          <BookMarked className="text-amber-700" />
+          <AlertTitle>
+            {catalogPendingRow?.status === 'needs_info'
+              ? 'Catalog alignment requested'
+              : 'Motor catalog review in progress'}
+          </AlertTitle>
+          <AlertDescription className="text-amber-900/90">
+            {catalogPendingRow?.status === 'needs_info' && catalogPendingRow.info_request_message ? (
+              <p className="whitespace-pre-wrap">{catalogPendingRow.info_request_message}</p>
+            ) : (
+              <p>
+                This vehicle is queued for catalog review. Align it with an official motor catalog entry so maintenance
+                schedules stay accurate.
+              </p>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              className="mt-3 bg-amber-700 text-white hover:bg-amber-800"
+              onClick={() => setAlignModalOpen(true)}
+            >
+              <ListChecks className="h-4 w-4 mr-2" />
+              Align with catalog
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* --- Header Section --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1699,6 +1812,89 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       </Tabs>
 
       {/* --- Dialogs --- */}
+      <Dialog open={alignModalOpen} onOpenChange={setAlignModalOpen}>
+        <DialogContent className="max-h-[min(90vh,720px)] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle2>Align with motor catalog</DialogTitle2>
+            <DialogDescription>
+              Search the official catalog and select the row that matches this vehicle. Your make, model, year, and
+              catalog link will be updated.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="align-make">Make</Label>
+                <Input
+                  id="align-make"
+                  value={alignSearchMake}
+                  onChange={(e) => setAlignSearchMake(e.target.value)}
+                  placeholder="Toyota"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="align-model">Model</Label>
+                <Input
+                  id="align-model"
+                  value={alignSearchModel}
+                  onChange={(e) => setAlignSearchModel(e.target.value)}
+                  placeholder="Corolla"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="align-year">Year</Label>
+                <Input
+                  id="align-year"
+                  value={alignSearchYear}
+                  onChange={(e) => setAlignSearchYear(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="2020"
+                />
+              </div>
+            </div>
+            <div className="rounded-md border bg-slate-50/80">
+              <div className="border-b px-3 py-2 text-xs font-medium text-slate-600">Matching catalog rows</div>
+              <div className="max-h-[min(40vh,280px)] overflow-y-auto p-2">
+                {alignMatchesLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                ) : alignMatches.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-sm text-slate-500">
+                    Type at least two characters in make or model to search.
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {alignMatches.map((m) => (
+                      <li key={m.id}>
+                        <button
+                          type="button"
+                          disabled={alignSaving}
+                          className="flex w-full flex-col rounded-md border border-transparent px-3 py-2 text-left text-sm transition hover:border-indigo-200 hover:bg-white disabled:opacity-60"
+                          onClick={() => void handleAlignPickCatalog(m)}
+                        >
+                          <span className="font-medium text-slate-900">
+                            {m.year} {m.make} {m.model}
+                          </span>
+                          {m.trim_series ? (
+                            <span className="text-xs text-slate-500">{m.trim_series}</span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAlignModalOpen(false)} disabled={alignSaving}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isUpdateOdometerOpen} onOpenChange={setIsUpdateOdometerOpen}>
           <DialogContent>
               <DialogHeader>
