@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, ListChecks, Wrench } from "lucide-react";
+import { Loader2, ListChecks, Plus, Wrench } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -10,6 +10,29 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Label } from "../ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import { LogMaintenanceServiceDialog } from "./LogMaintenanceServiceDialog";
+import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
+import type {
+  CatalogMaintenanceTaskOption,
+  VehicleMaintenanceScheduleRowApi,
+} from "../../types/maintenance";
+import { toast } from "sonner@2.0.3";
 
 export interface FleetMaintenanceHubProps {
   onNavigate?: (page: string) => void;
@@ -42,6 +65,21 @@ function formatServicesAttentionLine(
   return { line, title };
 }
 
+function vehicleLabel(row: {
+  vehicleId: string;
+  licensePlate?: string;
+  make?: string;
+  model?: string;
+  year?: string;
+}): string {
+  const name = [row.make, row.model, row.year ? `(${row.year})` : ""].filter(Boolean).join(" ").trim();
+  const plate = row.licensePlate?.trim();
+  if (name && plate) return `${name} · ${plate}`;
+  if (plate) return plate;
+  if (name) return name;
+  return row.vehicleId;
+}
+
 export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [loading, setLoading] = useState(true);
   const [fleetBootstrapping, setFleetBootstrapping] = useState(false);
@@ -64,6 +102,15 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       servicesAttentionTruncated: boolean;
     }>
   >([]);
+
+  const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
+  const [pickerVehicleId, setPickerVehicleId] = useState<string>("");
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+
+  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logVehicleId, setLogVehicleId] = useState<string>("");
+  const [catalogForLog, setCatalogForLog] = useState<CatalogMaintenanceTaskOption[]>([]);
+  const [defaultOdoForLog, setDefaultOdoForLog] = useState<number | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,6 +155,53 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     load();
   }, [load]);
 
+  const prepareLogForVehicle = useCallback(
+    async (vehicleId: string) => {
+      if (!vehicleId) return;
+      setScheduleLoading(true);
+      try {
+        const sch = await api.getMaintenanceSchedule(vehicleId);
+        const rows = Array.isArray(sch.schedule)
+          ? (sch.schedule as VehicleMaintenanceScheduleRowApi[])
+          : [];
+        setCatalogForLog(catalogOptionsFromScheduleRows(rows));
+        const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
+        setDefaultOdoForLog(Number.isFinite(odo) ? odo : undefined);
+        setLogVehicleId(vehicleId);
+        setLogDialogOpen(true);
+      } catch (e: unknown) {
+        console.error(e);
+        toast.error("Could not load maintenance schedule; using default checklists.");
+        setCatalogForLog([]);
+        const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
+        setDefaultOdoForLog(Number.isFinite(odo) ? odo : undefined);
+        setLogVehicleId(vehicleId);
+        setLogDialogOpen(true);
+      } finally {
+        setScheduleLoading(false);
+      }
+    },
+    [items],
+  );
+
+  const handleOpenVehiclePicker = useCallback(() => {
+    setPickerVehicleId(items[0]?.vehicleId ?? "");
+    setVehiclePickerOpen(true);
+  }, [items]);
+
+  const handleContinueFromPicker = useCallback(async () => {
+    if (!pickerVehicleId) {
+      toast.error("Select a vehicle");
+      return;
+    }
+    setVehiclePickerOpen(false);
+    await prepareLogForVehicle(pickerVehicleId);
+  }, [pickerVehicleId, prepareLogForVehicle]);
+
+  const handleLogSaved = useCallback(() => {
+    void load();
+  }, [load]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -117,10 +211,22 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             Fleet maintenance
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Overview of service status by vehicle. Open a vehicle from <strong>Vehicles</strong> to log services or view history.
+            Overview of service status by vehicle. Log new services here; open a vehicle from{" "}
+            <strong>Vehicles</strong> to view full profile and history.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
+          <Button
+            type="button"
+            variant="default"
+            onClick={handleOpenVehiclePicker}
+            disabled={loading || items.length === 0}
+            className="shrink-0 gap-2"
+            title={items.length === 0 ? "No vehicles in fleet" : undefined}
+          >
+            <Plus className="w-4 h-4" />
+            Log new service
+          </Button>
           <Button
             type="button"
             variant="secondary"
@@ -150,6 +256,52 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         </div>
       )}
 
+      <Dialog open={vehiclePickerOpen} onOpenChange={setVehiclePickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log new service</DialogTitle>
+            <DialogDescription>Choose which vehicle this service is for.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="fleet-log-vehicle">Vehicle</Label>
+            <Select value={pickerVehicleId} onValueChange={setPickerVehicleId}>
+              <SelectTrigger id="fleet-log-vehicle" className="w-full">
+                <SelectValue placeholder="Select vehicle" />
+              </SelectTrigger>
+              <SelectContent>
+                {items.map((row) => (
+                  <SelectItem key={row.vehicleId} value={row.vehicleId}>
+                    {vehicleLabel(row)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setVehiclePickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void handleContinueFromPicker()} disabled={!pickerVehicleId || scheduleLoading}>
+              {scheduleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {logVehicleId ? (
+        <LogMaintenanceServiceDialog
+          open={logDialogOpen}
+          onOpenChange={(o) => {
+            setLogDialogOpen(o);
+            if (!o) setLogVehicleId("");
+          }}
+          vehicleId={logVehicleId}
+          catalogTemplates={catalogForLog}
+          defaultOdo={defaultOdoForLog}
+          onSaved={handleLogSaved}
+        />
+      ) : null}
+
       {loading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="w-10 h-10 text-slate-400 animate-spin" />
@@ -167,12 +319,13 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 <TableHead>Services due</TableHead>
                 <TableHead className="text-right">Next due (km)</TableHead>
                 <TableHead className="text-right">Schedule rows</TableHead>
+                <TableHead className="w-[100px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-slate-500 py-12">
+                  <TableCell colSpan={9} className="text-center text-slate-500 py-12">
                     No vehicles or no schedule data yet. Match vehicles to the motor catalog and bootstrap schedules from the vehicle profile.
                   </TableCell>
                 </TableRow>
@@ -183,43 +336,55 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                     row.servicesAttentionTruncated,
                   );
                   return (
-                  <TableRow key={row.vehicleId}>
-                    <TableCell className="font-medium">
-                      {row.make} {row.model} {row.year ? `(${row.year})` : ""}
-                    </TableCell>
-                    <TableCell>{row.licensePlate ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.odometer.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <span
-                        className={
-                          row.fleetStatus === "Overdue"
-                            ? "text-red-600 font-medium"
-                            : row.fleetStatus === "Due Soon"
-                              ? "text-amber-600 font-medium"
-                              : row.fleetStatus === "No schedule"
-                                ? "text-slate-500 dark:text-slate-400"
-                                : "text-emerald-600"
-                        }
-                      >
-                        {row.fleetStatus}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-sm text-slate-700 dark:text-slate-300">
-                      {formatFleetOverdueLine(row.maxCalendarDaysOverdue, row.maxKmOverdue)}
-                    </TableCell>
-                    <TableCell className="max-w-[min(28rem,55vw)]">
-                      <span
-                        className="line-clamp-2 text-sm text-slate-700 dark:text-slate-300"
-                        title={svc.title || undefined}
-                      >
-                        {svc.line}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.nextDueOdometer != null ? row.nextDueOdometer.toLocaleString() : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">{row.scheduleRowCount}</TableCell>
-                  </TableRow>
+                    <TableRow key={row.vehicleId}>
+                      <TableCell className="font-medium">
+                        {row.make} {row.model} {row.year ? `(${row.year})` : ""}
+                      </TableCell>
+                      <TableCell>{row.licensePlate ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.odometer.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            row.fleetStatus === "Overdue"
+                              ? "text-red-600 font-medium"
+                              : row.fleetStatus === "Due Soon"
+                                ? "text-amber-600 font-medium"
+                                : row.fleetStatus === "No schedule"
+                                  ? "text-slate-500 dark:text-slate-400"
+                                  : "text-emerald-600"
+                          }
+                        >
+                          {row.fleetStatus}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm text-slate-700 dark:text-slate-300">
+                        {formatFleetOverdueLine(row.maxCalendarDaysOverdue, row.maxKmOverdue)}
+                      </TableCell>
+                      <TableCell className="max-w-[min(28rem,55vw)]">
+                        <span
+                          className="line-clamp-2 text-sm text-slate-700 dark:text-slate-300"
+                          title={svc.title || undefined}
+                        >
+                          {svc.line}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.nextDueOdometer != null ? row.nextDueOdometer.toLocaleString() : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">{row.scheduleRowCount}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => void prepareLogForVehicle(row.vehicleId)}
+                          disabled={scheduleLoading}
+                        >
+                          Log
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}

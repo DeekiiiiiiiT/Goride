@@ -119,6 +119,7 @@ import type {
   CatalogMaintenanceTaskOption,
   VehicleMaintenanceScheduleRowApi,
 } from '../../types/maintenance';
+import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -162,26 +163,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   >([]);
 
   const catalogMaintenanceOptions = useMemo((): CatalogMaintenanceTaskOption[] => {
-    const seen = new Set<string>();
-    const out: CatalogMaintenanceTaskOption[] = [];
-    for (const row of maintenanceScheduleRows) {
-      if (!row.template_id || !row.template) continue;
-      const tid = String(row.template_id);
-      if (seen.has(tid)) continue;
-      seen.add(tid);
-      const tpl = row.template;
-      const taskName = tpl.task_name || "Service";
-      const desc = tpl.description?.trim();
-      const lines = desc
-        ? desc.split(/\n+/).map((s) => s.trim()).filter(Boolean)
-        : [];
-      out.push({
-        templateId: tid,
-        label: taskName,
-        checklistLines: lines.length ? lines : [taskName],
-      });
-    }
-    return out;
+    return catalogOptionsFromScheduleRows(maintenanceScheduleRows);
   }, [maintenanceScheduleRows]);
 
   const [maintenanceStatus, setMaintenanceStatus] = useState({

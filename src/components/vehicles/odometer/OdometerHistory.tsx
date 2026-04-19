@@ -238,10 +238,21 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
     }
   };
 
+  /** Unified history uses canonical sources (fuel, service, checkin, manual); legacy rows may use API labels. */
+  const canonicalSource = useCallback((source: string): string => {
+    const map: Record<string, string> = {
+      "Fuel Log": "fuel",
+      "Service Log": "service",
+      "Weekly Check-in": "checkin",
+      "Manual Update": "manual",
+    };
+    return map[source] || source;
+  }, []);
+
   const filteredHistory = useMemo(() => {
-    return history.filter(item => {
-      // Source filter
-      if (filters.source !== 'all' && item.source !== filters.source) return false;
+    return history.filter((item) => {
+      // Source filter (must match UnifiedOdometerEntry.source: fuel | service | checkin | manual)
+      if (filters.source !== "all" && canonicalSource(item.source) !== filters.source) return false;
       
       // Search (notes)
       if (filters.search && !item.notes?.toLowerCase().includes(filters.search.toLowerCase())) return false;
@@ -258,7 +269,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
 
       return true;
     });
-  }, [history, filters]);
+  }, [history, filters, canonicalSource]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -316,10 +327,10 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="Fuel Log">Fuel Logs</SelectItem>
-                  <SelectItem value="Service Log">Service Records</SelectItem>
-                  <SelectItem value="Weekly Check-in">Check-ins</SelectItem>
-                  <SelectItem value="Manual Update">Manual Entries</SelectItem>
+                  <SelectItem value="fuel">Fuel Logs</SelectItem>
+                  <SelectItem value="service">Service Records</SelectItem>
+                  <SelectItem value="checkin">Check-ins</SelectItem>
+                  <SelectItem value="manual">Manual Entries</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -47,3 +47,28 @@ export interface CatalogMaintenanceTaskOption {
   label: string;
   checklistLines: string[];
 }
+
+/** Saved maintenance record shape (UI + API payload). */
+export interface MaintenanceLog {
+  id: string;
+  vehicleId: string;
+  date: string;
+  type: string;
+  /** When set, server advances `vehicle_maintenance_schedule` for this template. */
+  templateId?: string;
+  serviceInterval?: "A" | "B" | "C" | "D";
+  cost: number;
+  odo: number;
+  provider: string;
+  providerLocationUrl?: string;
+  notes: string;
+  checklist?: string[];
+  itemCosts?: Record<string, { material: number; labor: number }>;
+  inspectionFee?: number;
+  inspectionResults?: {
+    issues: string[];
+    notes: string;
+  };
+  invoiceUrl?: string;
+  status?: "Scheduled" | "Completed" | "In Progress";
+}
