@@ -205,6 +205,13 @@ html {
 
   /* --- Background Colors --- */
   .bg-white { background-color: #0f172a; }           /* → slate-900 */
+  /* Opacity variants: without these, panels stay “paper white” while text-slate-* remaps to light grays → invisible text */
+  .bg-white\/90 { background-color: rgb(15 23 42 / 0.9); }
+  .bg-white\/95 { background-color: rgb(15 23 42 / 0.95); }
+  .bg-white\/80 { background-color: rgb(15 23 42 / 0.8); }
+  .bg-white\/60 { background-color: rgb(15 23 42 / 0.6); }
+  .bg-white\/70 { background-color: rgb(15 23 42 / 0.7); }
+  .bg-white\/50 { background-color: rgb(15 23 42 / 0.5); }
   .bg-slate-50 { background-color: rgb(30 41 59 / 0.5); } /* → slate-800/50 */
   .bg-slate-100 { background-color: #1e293b; }        /* → slate-800 */
   .bg-slate-200 { background-color: #334155; }        /* → slate-700 */
