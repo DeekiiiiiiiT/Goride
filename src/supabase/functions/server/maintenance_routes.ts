@@ -22,20 +22,49 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Valid upper window bound: must be strictly greater than next_due_miles. */
+function normalizeNextMilesMax(
+  nextMiles: number | null,
+  nextMilesMaxRaw: number | null | undefined,
+): number | null {
+  if (nextMiles == null || nextMilesMaxRaw == null) return null;
+  const lo = Number(nextMiles);
+  const hi = Number(nextMilesMaxRaw);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+  if (hi <= lo) return null;
+  return hi;
+}
+
 function computeScheduleRowStatus(
   currentOdo: number,
   today: string,
   nextMiles: number | null,
+  nextMilesMax: number | null,
   nextDate: string | null,
   scheduleRowStatus?: string | null,
 ): "ok" | "pending" | "overdue" | "fulfilled" {
   if (scheduleRowStatus === "fulfilled") return "fulfilled";
-  const dueMiles = nextMiles != null && currentOdo >= nextMiles;
-  const overdueMiles = nextMiles != null && currentOdo > nextMiles;
-  const dueDate = nextDate != null && today >= nextDate;
+
+  const maxM = normalizeNextMilesMax(nextMiles, nextMilesMax);
+
+  let overdueMiles = false;
+  let milesDueOrInWindow = false;
+  if (nextMiles != null && Number.isFinite(Number(nextMiles))) {
+    const nm = Number(nextMiles);
+    if (maxM != null) {
+      overdueMiles = currentOdo > maxM;
+      milesDueOrInWindow = currentOdo >= nm && currentOdo <= maxM;
+    } else {
+      overdueMiles = currentOdo > nm;
+      milesDueOrInWindow = currentOdo >= nm;
+    }
+  }
+
   const overdueDate = nextDate != null && today > nextDate;
+  const dueDate = nextDate != null && today >= nextDate;
+
   if (overdueMiles || overdueDate) return "overdue";
-  if (dueMiles || dueDate) return "pending";
+  if (milesDueOrInWindow || dueDate) return "pending";
   return "ok";
 }
 
@@ -475,6 +504,90 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
     return scoped[0] ?? null;
   }
 
+  type BootstrapRunResult =
+    | { ok: true; emptyTemplates: true; catalogId: string }
+    | {
+      ok: true;
+      emptyTemplates: false;
+      created: number;
+      globalApplied: number;
+      catalogApplied: number;
+      skippedDuplicates: number;
+      warnings?: string[];
+    }
+    | { ok: false; error: string; catalogId: string };
+
+  async function executeMaintenanceBootstrap(args: {
+    organizationId: string;
+    vehicleId: string;
+    currentOdo: number;
+    catalogId: string;
+  }): Promise<BootstrapRunResult> {
+    const { data: globalTemplates, error: gErr } = await supabase
+      .from("maintenance_task_templates")
+      .select("*")
+      .eq("template_scope", "global");
+    if (gErr) throw gErr;
+    const { data: catalogTemplates, error: cErr } = await supabase
+      .from("maintenance_task_templates")
+      .select("*")
+      .eq("vehicle_catalog_id", args.catalogId)
+      .eq("template_scope", "catalog");
+    if (cErr) throw cErr;
+    const { merged: templates, catalogOverridesGlobal } = mergeGlobalAndCatalogTemplates(
+      (globalTemplates || []) as MaintenanceTemplateRow[],
+      (catalogTemplates || []) as MaintenanceTemplateRow[],
+    );
+    const globalApplied = templates.filter((t) => String(t.template_scope ?? "") === "global").length;
+    const catalogApplied = templates.filter((t) => String(t.template_scope ?? "") === "catalog").length;
+    if (!templates.length) {
+      return {
+        ok: true,
+        emptyTemplates: true,
+        catalogId: args.catalogId,
+      };
+    }
+
+    const today = todayIso();
+    let created = 0;
+    const bootstrapErrors: string[] = [];
+    for (const t of templates) {
+      const computed = computeInitialScheduleRow(t as Record<string, unknown>, args.currentOdo, today);
+      if (!computed.ok) {
+        bootstrapErrors.push(`${(t as { task_name?: string }).task_name ?? t.id}: ${computed.reason}`);
+        continue;
+      }
+      const row = {
+        organization_id: args.organizationId,
+        vehicle_id: args.vehicleId,
+        template_id: t.id,
+        last_performed_miles: args.currentOdo,
+        last_performed_date: today,
+        next_due_miles: computed.next_due_miles,
+        next_due_miles_max: computed.next_due_miles_max,
+        next_due_date: computed.next_due_date,
+        schedule_status: computed.schedule_status,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from("vehicle_maintenance_schedule").upsert(row, {
+        onConflict: "organization_id,vehicle_id,template_id",
+      });
+      if (!error) created++;
+    }
+    if (bootstrapErrors.length && created === 0) {
+      return { ok: false, error: bootstrapErrors.join("; "), catalogId: args.catalogId };
+    }
+    return {
+      ok: true,
+      emptyTemplates: false,
+      created,
+      globalApplied,
+      catalogApplied,
+      skippedDuplicates: catalogOverridesGlobal,
+      warnings: bootstrapErrors.length ? bootstrapErrors : undefined,
+    };
+  }
+
   // -------------------------------------------------------------------------
   // Tenant — schedule
   // -------------------------------------------------------------------------
@@ -513,9 +626,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const today = todayIso();
         const enriched = (scheduleRows || []).map((row: Record<string, unknown>) => {
           const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
+          const nextMilesMaxRaw = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
+          const nextMilesMax = normalizeNextMilesMax(nextMiles, nextMilesMaxRaw);
           const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
           const schRowStatus = row.schedule_status != null ? String(row.schedule_status) : "active";
-          const st = computeScheduleRowStatus(currentOdo, today, nextMiles, nextDate, schRowStatus);
+          const st = computeScheduleRowStatus(currentOdo, today, nextMiles, nextMilesMax, nextDate, schRowStatus);
           const tid = String(row.template_id ?? "");
           return { ...row, template: tplById[tid] || null, computed_status: st };
         });
@@ -588,70 +703,33 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const currentOdo = body.currentOdometer != null
           ? Number(body.currentOdometer)
           : Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
-        const today = todayIso();
 
-        const { data: globalTemplates, error: gErr } = await supabase
-          .from("maintenance_task_templates")
-          .select("*")
-          .eq("template_scope", "global");
-        if (gErr) throw gErr;
-        const { data: catalogTemplates, error: cErr } = await supabase
-          .from("maintenance_task_templates")
-          .select("*")
-          .eq("vehicle_catalog_id", catalogId)
-          .eq("template_scope", "catalog");
-        if (cErr) throw cErr;
-        const { merged: templates, catalogOverridesGlobal } = mergeGlobalAndCatalogTemplates(
-          (globalTemplates || []) as MaintenanceTemplateRow[],
-          (catalogTemplates || []) as MaintenanceTemplateRow[],
-        );
-        const globalApplied = templates.filter((t) => String(t.template_scope ?? "") === "global").length;
-        const catalogApplied = templates.filter((t) => String(t.template_scope ?? "") === "catalog").length;
-        if (!templates.length) {
+        const run = await executeMaintenanceBootstrap({
+          organizationId: orgId,
+          vehicleId,
+          currentOdo,
+          catalogId,
+        });
+        if (!run.ok) {
+          return c.json({ error: run.error, catalogId: run.catalogId, created: 0 }, 400);
+        }
+        if (run.emptyTemplates) {
           return c.json({
             created: 0,
             message: "No global or catalog templates for this vehicle",
-            catalogId,
+            catalogId: run.catalogId,
             globalApplied: 0,
             catalogApplied: 0,
             skippedDuplicates: 0,
           });
         }
-
-        let created = 0;
-        const bootstrapErrors: string[] = [];
-        for (const t of templates) {
-          const computed = computeInitialScheduleRow(t as Record<string, unknown>, currentOdo, today);
-          if (!computed.ok) {
-            bootstrapErrors.push(`${(t as { task_name?: string }).task_name ?? t.id}: ${computed.reason}`);
-            continue;
-          }
-          const row = {
-            organization_id: orgId,
-            vehicle_id: vehicleId,
-            template_id: t.id,
-            last_performed_miles: currentOdo,
-            last_performed_date: today,
-            next_due_miles: computed.next_due_miles,
-            next_due_date: computed.next_due_date,
-            schedule_status: computed.schedule_status,
-            updated_at: new Date().toISOString(),
-          };
-          const { error } = await supabase.from("vehicle_maintenance_schedule").upsert(row, {
-            onConflict: "organization_id,vehicle_id,template_id",
-          });
-          if (!error) created++;
-        }
-        if (bootstrapErrors.length && created === 0) {
-          return c.json({ error: bootstrapErrors.join("; "), catalogId, created: 0 }, 400);
-        }
         return c.json({
-          created,
-          catalogId,
-          globalApplied,
-          catalogApplied,
-          skippedDuplicates: catalogOverridesGlobal,
-          warnings: bootstrapErrors.length ? bootstrapErrors : undefined,
+          created: run.created,
+          catalogId: run.catalogId,
+          globalApplied: run.globalApplied,
+          catalogApplied: run.catalogApplied,
+          skippedDuplicates: run.skippedDuplicates,
+          warnings: run.warnings,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -787,6 +865,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
                 last_performed_miles: performed_at_miles,
                 last_performed_date: performed_at_date,
                 next_due_miles: adv.next_due_miles,
+                next_due_miles_max: adv.next_due_miles_max,
                 next_due_date: adv.next_due_date,
                 schedule_status: adv.schedule_status,
                 updated_at: new Date().toISOString(),
@@ -830,6 +909,100 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
     },
   );
 
+  /** Bootstrap merged templates for every org vehicle that has no schedule rows yet (catalog match required). */
+  route.post(
+    "/make-server-37f42386/maintenance-fleet-bootstrap",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+
+        const { data: kvRows, error: kvErr } = await supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "vehicle:%");
+        if (kvErr) throw kvErr;
+        const vehicles = filterByOrg(
+          (kvRows || []).map((r: { value: unknown }) => r.value as Record<string, unknown>).filter(Boolean),
+          c,
+        );
+
+        const results: Array<{
+          vehicleId: string;
+          created: number;
+          skippedReason?: string;
+          catalogId?: string | null;
+        }> = [];
+        let totalCreated = 0;
+
+        for (const v of vehicles) {
+          const vehicleId = String(v.id ?? "");
+          if (!vehicleId) continue;
+
+          const { data: existingRows } = await supabase
+            .from("vehicle_maintenance_schedule")
+            .select("id")
+            .eq("organization_id", orgId)
+            .eq("vehicle_id", vehicleId)
+            .limit(1);
+          if (existingRows && existingRows.length > 0) {
+            results.push({ vehicleId, created: 0, skippedReason: "already_has_schedule" });
+            continue;
+          }
+
+          const make = String(v.make ?? "");
+          const model = String(v.model ?? "");
+          const year = String(v.year ?? "");
+          const catalogId = await resolveVehicleCatalogId(make, model, year);
+          if (!catalogId) {
+            results.push({ vehicleId, created: 0, skippedReason: "no_catalog_match" });
+            continue;
+          }
+
+          const currentOdo = Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
+          const run = await executeMaintenanceBootstrap({
+            organizationId: orgId,
+            vehicleId,
+            currentOdo,
+            catalogId,
+          });
+
+          if (!run.ok) {
+            results.push({
+              vehicleId,
+              created: 0,
+              skippedReason: run.error,
+              catalogId: run.catalogId,
+            });
+            continue;
+          }
+          if (run.emptyTemplates) {
+            results.push({
+              vehicleId,
+              created: 0,
+              skippedReason: "no_templates",
+              catalogId: run.catalogId,
+            });
+            continue;
+          }
+          totalCreated += run.created;
+          results.push({
+            vehicleId,
+            created: run.created,
+            catalogId: run.catalogId,
+          });
+        }
+
+        return c.json({ totalCreated, results });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
   // Fleet summary for Maintenance hub (all vehicles in org with odometer + status)
   route.get(
     "/make-server-37f42386/maintenance-fleet-summary",
@@ -850,7 +1023,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
 
         const { data: schedules } = await supabase
           .from("vehicle_maintenance_schedule")
-          .select("vehicle_id, next_due_miles, next_due_date, template_id, schedule_status")
+          .select("vehicle_id, next_due_miles, next_due_miles_max, next_due_date, template_id, schedule_status")
           .eq("organization_id", orgId);
 
         const byVehicle: Record<string, Record<string, unknown>[]> = {};
@@ -867,9 +1040,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           const today = todayIso();
           const statuses = sch.map((row) => {
             const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
+            const nextMilesMaxRaw = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
+            const nextMilesMax = normalizeNextMilesMax(nextMiles, nextMilesMaxRaw);
             const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
             const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
-            return computeScheduleRowStatus(odo, today, nextMiles, nextDate, schSt);
+            return computeScheduleRowStatus(odo, today, nextMiles, nextMilesMax, nextDate, schSt);
           });
           const st = sch.length ? aggregateFleetStatus(statuses.map((s) => ({ status: s }))) : "Healthy";
           const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");

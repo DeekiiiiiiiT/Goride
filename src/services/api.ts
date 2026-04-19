@@ -1320,6 +1320,24 @@ export const api = {
       }>;
   },
 
+  async bootstrapMaintenanceFleet() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-fleet-bootstrap`, {
+          method: "POST",
+          headers: await getHeaders(),
+          body: JSON.stringify({}),
+      });
+      if (!response.ok) throw new Error("Failed to bootstrap fleet maintenance schedules");
+      return response.json() as Promise<{
+        totalCreated: number;
+        results: Array<{
+          vehicleId: string;
+          created: number;
+          skippedReason?: string;
+          catalogId?: string | null;
+        }>;
+      }>;
+  },
+
   async getTollTags() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }

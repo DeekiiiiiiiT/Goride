@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Pencil, Plus, Trash2, Wrench, Database } from "lucide-react";
+import { Eye, Loader2, MoreVertical, Pencil, Plus, Trash2, Wrench, Database } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { listVehicleCatalog } from "../../../services/vehicleCatalogService";
 import {
@@ -41,11 +41,24 @@ import {
   TableRow,
 } from "../../ui/table";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../ui/dropdown-menu";
 
 function scheduleKindShort(k: string | undefined): string {
   if (k === "once_milestone") return "One-time";
   if (k === "manual_only") return "Manual";
   return "Recurring";
+}
+
+function scheduleKindFull(k: string | undefined): string {
+  if (k === "once_milestone") return "One-time milestone";
+  if (k === "manual_only") return "Manual (no auto next due)";
+  return "Recurring (repeat by interval)";
 }
 
 function formatIntervalMilesDisplay(t: Pick<MaintenanceTaskTemplate, "interval_miles" | "interval_miles_max">): string {
@@ -99,6 +112,7 @@ export function MaintenanceTemplatesManager() {
   const [editing, setEditing] = useState<MaintenanceTaskTemplate | null>(null);
   const [saving, setSaving] = useState(false);
   const [migrating, setMigrating] = useState(false);
+  const [viewing, setViewing] = useState<MaintenanceTaskTemplate | null>(null);
 
   const [form, setForm] = useState({
     task_name: "",
@@ -474,10 +488,10 @@ export function MaintenanceTemplatesManager() {
                   <TableHead>Task</TableHead>
                   <TableHead className="w-[120px]">Code</TableHead>
                   <TableHead>Schedule</TableHead>
-                  <TableHead>Every (mi)</TableHead>
+                  <TableHead>Every (km)</TableHead>
                   <TableHead>Every (mo)</TableHead>
                   <TableHead>Priority</TableHead>
-                  <TableHead className="text-right w-[100px]">Actions</TableHead>
+                  <TableHead className="text-right w-[72px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -508,21 +522,31 @@ export function MaintenanceTemplatesManager() {
                       <TableCell>{t.interval_months ?? "—"}</TableCell>
                       <TableCell className="capitalize">{t.priority}</TableCell>
                       <TableCell className="text-right">
-                        <div className="inline-flex gap-1">
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(t)} title="Edit">
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-600"
-                            onClick={() => handleDelete(t)}
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="Open row actions">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem className="gap-2" onClick={() => setViewing(t)}>
+                              <Eye className="w-4 h-4" />
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2" onClick={() => openEdit(t)}>
+                              <Pencil className="w-4 h-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="gap-2 text-red-600 focus:text-red-600"
+                              onClick={() => handleDelete(t)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))
@@ -556,7 +580,7 @@ export function MaintenanceTemplatesManager() {
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-slate-500 leading-snug">
-                  Fills task name, checklist lines, mileage/month intervals, and sort order. Edit anything before saving.
+                  Fills task name, checklist lines, km/month intervals, and sort order. Edit anything before saving.
                 </p>
               </div>
             )}
@@ -666,7 +690,7 @@ export function MaintenanceTemplatesManager() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs">Interval (miles)</Label>
+                <Label className="text-xs">Interval (km)</Label>
                 <div className="flex flex-wrap items-center gap-2">
                   <Input
                     value={form.interval_miles}
@@ -684,11 +708,11 @@ export function MaintenanceTemplatesManager() {
                     placeholder="7500"
                     type="number"
                     min={0}
-                    aria-label="Upper mileage (optional)"
+                    aria-label="Upper km (optional)"
                   />
                 </div>
                 <p className="text-[11px] text-slate-500 leading-snug">
-                  Optional range. Leave the second box empty for a single interval. Scheduling uses the lower value for next due miles.
+                  Optional range. Leave the second box empty for a single interval. Next due starts at the lower km; overdue is after the upper km when set.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -709,7 +733,7 @@ export function MaintenanceTemplatesManager() {
             )}
             {form.frequency_kind === "once_milestone" && (
               <p className="text-[11px] text-amber-800/90 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 leading-snug">
-                Set at least one interval (miles or months) so the first milestone can be scheduled. After this service is logged once, the task is marked fulfilled.
+                Set at least one interval (km or months) so the first milestone can be scheduled. After this service is logged once, the task is marked fulfilled.
               </p>
             )}
             <div className="grid grid-cols-2 gap-2">
@@ -748,6 +772,65 @@ export function MaintenanceTemplatesManager() {
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               Save
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
+        <DialogContent className="sm:max-w-lg bg-white max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewing?.task_name ?? "Task"}</DialogTitle>
+          </DialogHeader>
+          {viewing ? (
+            <div className="grid gap-3 py-1 text-sm text-slate-800">
+              <div className="grid grid-cols-[120px_1fr] gap-x-2 gap-y-1">
+                <span className="text-slate-500">Task code</span>
+                <span className="font-mono text-xs">{viewing.task_code?.trim() || "—"}</span>
+                <span className="text-slate-500">Scope</span>
+                <span className="capitalize">{viewing.template_scope ?? "catalog"}</span>
+                <span className="text-slate-500">Schedule type</span>
+                <span>{scheduleKindFull(viewing.frequency_kind)}</span>
+                <span className="text-slate-500">Service label</span>
+                <span>{viewing.frequency_label?.trim() || "—"}</span>
+                <span className="text-slate-500">Every (km)</span>
+                <span className="tabular-nums">{formatIntervalMilesDisplay(viewing)}</span>
+                <span className="text-slate-500">Every (mo)</span>
+                <span className="tabular-nums">{viewing.interval_months ?? "—"}</span>
+                <span className="text-slate-500">Priority</span>
+                <span className="capitalize">{viewing.priority}</span>
+                <span className="text-slate-500">Sort order</span>
+                <span className="tabular-nums">{viewing.sort_order}</span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-slate-500">Checklist</span>
+                {viewing.description?.trim() ? (
+                  <ul className="list-disc pl-5 space-y-1 text-slate-700">
+                    {viewing.description.split("\n").filter((line) => line.trim()).map((line, i) => (
+                      <li key={i}>{line.trim()}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-slate-400">—</p>
+                )}
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setViewing(null)}>
+              Close
+            </Button>
+            {viewing ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  const row = viewing;
+                  setViewing(null);
+                  openEdit(row);
+                }}
+              >
+                Edit
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -14,9 +14,9 @@ export interface MaintenanceTaskTemplate {
   task_code?: string | null;
   task_name: string;
   description: string | null;
-  /** Lower bound / nominal miles between services (used for next-due math). */
+  /** Lower bound / nominal odometer delta between services (km in Roam; same unit as vehicle odometer). */
   interval_miles: number | null;
-  /** Optional upper bound for an acceptable mileage window (e.g. 7500 when lower is 5000). */
+  /** Optional upper bound for an acceptable odometer window (e.g. 7500 when lower is 5000). */
   interval_miles_max?: number | null;
   interval_months: number | null;
   /** Defaults to `recurring` when omitted (pre-migration rows). */
@@ -35,6 +35,8 @@ export interface VehicleMaintenanceScheduleRowApi {
   schedule_status?: "active" | "fulfilled";
   computed_status?: string;
   next_due_miles?: number | null;
+  /** Upper end of due window when template uses interval_miles_max. */
+  next_due_miles_max?: number | null;
   next_due_date?: string | null;
   [key: string]: unknown;
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, Wrench } from "lucide-react";
+import { Loader2, ListChecks, Wrench } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -17,6 +17,8 @@ export interface FleetMaintenanceHubProps {
 
 export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [loading, setLoading] = useState(true);
+  const [fleetBootstrapping, setFleetBootstrapping] = useState(false);
+  const [fleetMessage, setFleetMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<
     Array<{
@@ -45,6 +47,24 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     }
   }, []);
 
+  const handleBootstrapFleet = useCallback(async () => {
+    setFleetBootstrapping(true);
+    setFleetMessage(null);
+    setError(null);
+    try {
+      const res = await api.bootstrapMaintenanceFleet();
+      const touched = res.results.filter((r) => r.created > 0).length;
+      setFleetMessage(
+        `Bootstrap complete: ${res.totalCreated} schedule row(s) created across ${touched} vehicle(s).`,
+      );
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Fleet bootstrap failed");
+    } finally {
+      setFleetBootstrapping(false);
+    }
+  }, [load]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -61,10 +81,29 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             Overview of service status by vehicle. Open a vehicle from <strong>Vehicles</strong> to log services or view history.
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={load} disabled={loading} className="shrink-0">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh"}
-        </Button>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleBootstrapFleet}
+            disabled={loading || fleetBootstrapping}
+            className="shrink-0 gap-2"
+            title="Create schedule rows from Super Admin templates for vehicles with a catalog match and no schedule yet"
+          >
+            {fleetBootstrapping ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
+            Bootstrap schedules
+          </Button>
+          <Button type="button" variant="outline" onClick={load} disabled={loading} className="shrink-0">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh"}
+          </Button>
+        </div>
       </div>
+
+      {fleetMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-sm text-emerald-900 dark:text-emerald-100">
+          {fleetMessage}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-800 dark:text-red-200">
