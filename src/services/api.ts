@@ -1316,6 +1316,10 @@ export const api = {
           fleetStatus: string;
           nextDueOdometer: number | null;
           scheduleRowCount: number;
+          maxCalendarDaysOverdue: number | null;
+          maxKmOverdue: number | null;
+          servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
+          servicesAttentionTruncated: boolean;
         }>;
       }>;
   },

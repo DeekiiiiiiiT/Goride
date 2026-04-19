@@ -13,6 +13,12 @@ import {
   canonicalOdometerFromMaps,
   loadOdometerSupplementMaps,
 } from "./canonical_vehicle_odometer.ts";
+import {
+  analyzeMaintenanceScheduleRow,
+  FLEET_SERVICES_ATTENTION_CAP,
+  sortFleetServiceAttention,
+  type FleetServiceAttentionItem,
+} from "../../../utils/maintenanceOverdueDetails.ts";
 
 function assertVehicleCatalogPlatformAccess(c: Context) {
   const rbacUser = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
@@ -25,52 +31,6 @@ function assertVehicleCatalogPlatformAccess(c: Context) {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-/** Valid upper window bound: must be strictly greater than next_due_miles. */
-function normalizeNextMilesMax(
-  nextMiles: number | null,
-  nextMilesMaxRaw: number | null | undefined,
-): number | null {
-  if (nextMiles == null || nextMilesMaxRaw == null) return null;
-  const lo = Number(nextMiles);
-  const hi = Number(nextMilesMaxRaw);
-  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
-  if (hi <= lo) return null;
-  return hi;
-}
-
-function computeScheduleRowStatus(
-  currentOdo: number,
-  today: string,
-  nextMiles: number | null,
-  nextMilesMax: number | null,
-  nextDate: string | null,
-  scheduleRowStatus?: string | null,
-): "ok" | "pending" | "overdue" | "fulfilled" {
-  if (scheduleRowStatus === "fulfilled") return "fulfilled";
-
-  const maxM = normalizeNextMilesMax(nextMiles, nextMilesMax);
-
-  let overdueMiles = false;
-  let milesDueOrInWindow = false;
-  if (nextMiles != null && Number.isFinite(Number(nextMiles))) {
-    const nm = Number(nextMiles);
-    if (maxM != null) {
-      overdueMiles = currentOdo > maxM;
-      milesDueOrInWindow = currentOdo >= nm && currentOdo <= maxM;
-    } else {
-      overdueMiles = currentOdo > nm;
-      milesDueOrInWindow = currentOdo >= nm;
-    }
-  }
-
-  const overdueDate = nextDate != null && today > nextDate;
-  const dueDate = nextDate != null && today >= nextDate;
-
-  if (overdueMiles || overdueDate) return "overdue";
-  if (milesDueOrInWindow || dueDate) return "pending";
-  return "ok";
 }
 
 function aggregateFleetStatus(
@@ -633,10 +593,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const enriched = (scheduleRows || []).map((row: Record<string, unknown>) => {
           const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
           const nextMilesMaxRaw = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
-          const nextMilesMax = normalizeNextMilesMax(nextMiles, nextMilesMaxRaw);
           const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
           const schRowStatus = row.schedule_status != null ? String(row.schedule_status) : "active";
-          const st = computeScheduleRowStatus(currentOdo, today, nextMiles, nextMilesMax, nextDate, schRowStatus);
+          const st = analyzeMaintenanceScheduleRow(
+            currentOdo,
+            today,
+            nextMiles,
+            nextMilesMaxRaw,
+            nextDate,
+            schRowStatus,
+          ).status;
           const tid = String(row.template_id ?? "");
           return { ...row, template: tplById[tid] || null, computed_status: st };
         });
@@ -1045,19 +1011,45 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           byVehicle[vid].push(s as Record<string, unknown>);
         }
 
+        const templateIds = [...new Set((schedules || []).map((s) => s.template_id).filter(Boolean))] as string[];
+        const { data: fleetTplRows } = templateIds.length
+          ? await supabase.from("maintenance_task_templates").select("id, task_name").in("id", templateIds)
+          : { data: [] as { id: string; task_name?: string | null }[] };
+        const fleetTplById: Record<string, string> = {};
+        for (const t of fleetTplRows || []) {
+          const id = String((t as { id: string }).id);
+          fleetTplById[id] = String((t as { task_name?: string | null }).task_name ?? "").trim() || "Service";
+        }
+
+        const today = todayIso();
         const items = vehicles.map((v: Record<string, unknown>) => {
           const vid = String(v.id ?? "");
           const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0);
           const odo = canonicalOdometerFromMaps(vid, metricsBase, odoMaps);
           const sch = byVehicle[vid] || [];
-          const today = todayIso();
+          const attention: FleetServiceAttentionItem[] = [];
+          let maxCalendarDaysOverdue: number | null = null;
+          let maxKmOverdue: number | null = null;
+
           const statuses = sch.map((row) => {
             const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
             const nextMilesMaxRaw = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
-            const nextMilesMax = normalizeNextMilesMax(nextMiles, nextMilesMaxRaw);
             const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
             const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
-            return computeScheduleRowStatus(odo, today, nextMiles, nextMilesMax, nextDate, schSt);
+            const a = analyzeMaintenanceScheduleRow(odo, today, nextMiles, nextMilesMaxRaw, nextDate, schSt);
+            if (a.calendarDaysOverdue != null) {
+              maxCalendarDaysOverdue = maxCalendarDaysOverdue == null
+                ? a.calendarDaysOverdue
+                : Math.max(maxCalendarDaysOverdue, a.calendarDaysOverdue);
+            }
+            if (a.kmOverdue != null) {
+              maxKmOverdue = maxKmOverdue == null ? a.kmOverdue : Math.max(maxKmOverdue, a.kmOverdue);
+            }
+            const tid = String(row.template_id ?? "");
+            const taskName = fleetTplById[tid] ?? "Service";
+            if (a.status === "overdue") attention.push({ kind: "overdue", taskName });
+            else if (a.status === "pending") attention.push({ kind: "due_soon", taskName });
+            return a.status;
           });
           const st = sch.length ? aggregateFleetStatus(statuses.map((s) => ({ status: s }))) : "No schedule";
           const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");
@@ -1067,6 +1059,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
               .reduce((a, b) => Math.min(a, b), Infinity)
             : Infinity;
           const nextOdo = minM === Infinity ? null : minM;
+          const sortedAttention = sortFleetServiceAttention(attention);
+          const servicesAttentionTruncated = sortedAttention.length > FLEET_SERVICES_ATTENTION_CAP;
+          const servicesAttention = sortedAttention.slice(0, FLEET_SERVICES_ATTENTION_CAP);
           return {
             vehicleId: vid,
             licensePlate: v.licensePlate,
@@ -1077,6 +1072,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
             fleetStatus: st,
             nextDueOdometer: nextOdo,
             scheduleRowCount: sch.length,
+            maxCalendarDaysOverdue,
+            maxKmOverdue,
+            servicesAttention,
+            servicesAttentionTruncated,
           };
         });
 

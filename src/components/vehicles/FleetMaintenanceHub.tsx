@@ -15,6 +15,33 @@ export interface FleetMaintenanceHubProps {
   onNavigate?: (page: string) => void;
 }
 
+function formatFleetOverdueLine(
+  maxCal: number | null | undefined,
+  maxKm: number | null | undefined,
+): string {
+  const c = maxCal ?? null;
+  const k = maxKm ?? null;
+  if (c != null && k != null) return `${c.toLocaleString()} d · ${k.toLocaleString()} km`;
+  if (c != null) return `${c.toLocaleString()} d`;
+  if (k != null) return `${k.toLocaleString()} km`;
+  return "—";
+}
+
+function formatServicesAttentionLine(
+  rows: Array<{ taskName: string; kind: "overdue" | "due_soon" }> | undefined,
+  truncated?: boolean,
+): { line: string; title: string } {
+  const list = rows ?? [];
+  if (list.length === 0) return { line: "—", title: "" };
+  const parts = list.map(
+    (r) => `${r.taskName} (${r.kind === "overdue" ? "overdue" : "due soon"})`,
+  );
+  const line = parts.join(", ") + (truncated ? "…" : "");
+  const title =
+    parts.join("\n") + (truncated ? "\n(Additional items not listed.)" : "");
+  return { line, title };
+}
+
 export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [loading, setLoading] = useState(true);
   const [fleetBootstrapping, setFleetBootstrapping] = useState(false);
@@ -31,6 +58,10 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       fleetStatus: string;
       nextDueOdometer: number | null;
       scheduleRowCount: number;
+      maxCalendarDaysOverdue: number | null;
+      maxKmOverdue: number | null;
+      servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
+      servicesAttentionTruncated: boolean;
     }>
   >([]);
 
@@ -39,7 +70,15 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     setError(null);
     try {
       const res = await api.getMaintenanceFleetSummary();
-      setItems(res.items || []);
+      setItems(
+        (res.items || []).map((row) => ({
+          ...row,
+          maxCalendarDaysOverdue: row.maxCalendarDaysOverdue ?? null,
+          maxKmOverdue: row.maxKmOverdue ?? null,
+          servicesAttention: row.servicesAttention ?? [],
+          servicesAttentionTruncated: Boolean(row.servicesAttentionTruncated),
+        })),
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -124,6 +163,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 <TableHead>Plate</TableHead>
                 <TableHead className="text-right">Odometer</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Overdue</TableHead>
+                <TableHead>Services due</TableHead>
                 <TableHead className="text-right">Next due (km)</TableHead>
                 <TableHead className="text-right">Schedule rows</TableHead>
               </TableRow>
@@ -131,12 +172,17 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-slate-500 py-12">
+                  <TableCell colSpan={8} className="text-center text-slate-500 py-12">
                     No vehicles or no schedule data yet. Match vehicles to the motor catalog and bootstrap schedules from the vehicle profile.
                   </TableCell>
                 </TableRow>
               ) : (
-                items.map((row) => (
+                items.map((row) => {
+                  const svc = formatServicesAttentionLine(
+                    row.servicesAttention,
+                    row.servicesAttentionTruncated,
+                  );
+                  return (
                   <TableRow key={row.vehicleId}>
                     <TableCell className="font-medium">
                       {row.make} {row.model} {row.year ? `(${row.year})` : ""}
@@ -158,12 +204,24 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                         {row.fleetStatus}
                       </span>
                     </TableCell>
+                    <TableCell className="text-right tabular-nums text-sm text-slate-700 dark:text-slate-300">
+                      {formatFleetOverdueLine(row.maxCalendarDaysOverdue, row.maxKmOverdue)}
+                    </TableCell>
+                    <TableCell className="max-w-[min(28rem,55vw)]">
+                      <span
+                        className="line-clamp-2 text-sm text-slate-700 dark:text-slate-300"
+                        title={svc.title || undefined}
+                      >
+                        {svc.line}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.nextDueOdometer != null ? row.nextDueOdometer.toLocaleString() : "—"}
                     </TableCell>
                     <TableCell className="text-right">{row.scheduleRowCount}</TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
