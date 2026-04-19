@@ -650,7 +650,7 @@ export const api = {
 
   async getVehicles() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch vehicles");
     return response.json();
@@ -659,20 +659,17 @@ export const api = {
   async saveVehicle(vehicle: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(vehicle)
     });
     if (!response.ok) throw new Error("Failed to save vehicle");
-    return response.json();
+    return response.json() as Promise<{ success?: boolean; data?: unknown; catalogMatched?: boolean }>;
   },
 
   async deleteVehicle(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to delete vehicle");
     return response.json();

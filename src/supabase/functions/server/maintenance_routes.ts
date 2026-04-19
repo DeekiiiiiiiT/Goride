@@ -19,6 +19,8 @@ import {
   sortFleetServiceAttention,
   type FleetServiceAttentionItem,
 } from "../../../utils/maintenanceOverdueDetails.ts";
+import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
+import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 
 function assertVehicleCatalogPlatformAccess(c: Context) {
   const rbacUser = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
@@ -46,48 +48,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
-}
-
-function normalizeMaintenanceTaskName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-/** Merge key: `task_code` when set, else normalized `task_name` (catalog wins on collision). */
-function maintenanceTemplateMergeKey(t: { task_code?: unknown; task_name?: unknown }): string {
-  const code = t.task_code != null ? String(t.task_code).trim() : "";
-  if (code.length > 0) return `code:${code}`;
-  return `name:${normalizeMaintenanceTaskName(String(t.task_name ?? ""))}`;
-}
-
-type MaintenanceTemplateRow = Record<string, unknown> & {
-  id: string;
-  template_scope?: string;
-};
-
-function mergeGlobalAndCatalogTemplates(
-  globalRows: MaintenanceTemplateRow[],
-  catalogRows: MaintenanceTemplateRow[],
-): { merged: MaintenanceTemplateRow[]; catalogOverridesGlobal: number } {
-  const merged = new Map<string, MaintenanceTemplateRow>();
-  let catalogOverridesGlobal = 0;
-  for (const g of globalRows) {
-    merged.set(maintenanceTemplateMergeKey(g), g);
-  }
-  for (const c of catalogRows) {
-    const k = maintenanceTemplateMergeKey(c);
-    const prev = merged.get(k);
-    if (prev && String(prev.template_scope ?? "catalog") === "global") {
-      catalogOverridesGlobal++;
-    }
-    merged.set(k, c);
-  }
-  const list = [...merged.values()];
-  list.sort((a, b) => {
-    const so = Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0);
-    if (so !== 0) return so;
-    return String(a.task_name ?? "").localeCompare(String(b.task_name ?? ""));
-  });
-  return { merged: list, catalogOverridesGlobal };
 }
 
 function parseTaskCode(body: Record<string, unknown>): string | null {
@@ -440,117 +400,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
     },
   );
 
-  async function resolveVehicleCatalogId(
-    make: string,
-    model: string,
-    yearStr: string,
-  ): Promise<string | null> {
-    const year = parseInt(yearStr, 10);
-    if (!Number.isFinite(year)) return null;
-    const m = make.trim().toLowerCase();
-    const mo = model.trim().toLowerCase();
-    const { data, error } = await supabase
-      .from("vehicle_catalog")
-      .select("id, make, model, year")
-      .eq("year", year);
-    if (error || !data?.length) return null;
-    const row = data.find(
-      (r: { make?: string; model?: string }) =>
-        String(r.make ?? "").trim().toLowerCase() === m &&
-        String(r.model ?? "").trim().toLowerCase() === mo,
-    );
-    return row ? (row as { id: string }).id : null;
-  }
-
   async function getVehicleFromKv(c: Context, vehicleId: string): Promise<Record<string, unknown> | null> {
     const raw = await kv.get(`vehicle:${vehicleId}`);
     if (!raw || typeof raw !== "object") return null;
     const scoped = filterByOrg([raw as Record<string, unknown>], c);
     return scoped[0] ?? null;
-  }
-
-  type BootstrapRunResult =
-    | { ok: true; emptyTemplates: true; catalogId: string }
-    | {
-      ok: true;
-      emptyTemplates: false;
-      created: number;
-      globalApplied: number;
-      catalogApplied: number;
-      skippedDuplicates: number;
-      warnings?: string[];
-    }
-    | { ok: false; error: string; catalogId: string };
-
-  async function executeMaintenanceBootstrap(args: {
-    organizationId: string;
-    vehicleId: string;
-    currentOdo: number;
-    catalogId: string;
-  }): Promise<BootstrapRunResult> {
-    const { data: globalTemplates, error: gErr } = await supabase
-      .from("maintenance_task_templates")
-      .select("*")
-      .eq("template_scope", "global");
-    if (gErr) throw gErr;
-    const { data: catalogTemplates, error: cErr } = await supabase
-      .from("maintenance_task_templates")
-      .select("*")
-      .eq("vehicle_catalog_id", args.catalogId)
-      .eq("template_scope", "catalog");
-    if (cErr) throw cErr;
-    const { merged: templates, catalogOverridesGlobal } = mergeGlobalAndCatalogTemplates(
-      (globalTemplates || []) as MaintenanceTemplateRow[],
-      (catalogTemplates || []) as MaintenanceTemplateRow[],
-    );
-    const globalApplied = templates.filter((t) => String(t.template_scope ?? "") === "global").length;
-    const catalogApplied = templates.filter((t) => String(t.template_scope ?? "") === "catalog").length;
-    if (!templates.length) {
-      return {
-        ok: true,
-        emptyTemplates: true,
-        catalogId: args.catalogId,
-      };
-    }
-
-    const today = todayIso();
-    let created = 0;
-    const bootstrapErrors: string[] = [];
-    for (const t of templates) {
-      const computed = computeInitialScheduleRow(t as Record<string, unknown>, args.currentOdo, today);
-      if (!computed.ok) {
-        bootstrapErrors.push(`${(t as { task_name?: string }).task_name ?? t.id}: ${computed.reason}`);
-        continue;
-      }
-      const row = {
-        organization_id: args.organizationId,
-        vehicle_id: args.vehicleId,
-        template_id: t.id,
-        last_performed_miles: args.currentOdo,
-        last_performed_date: today,
-        next_due_miles: computed.next_due_miles,
-        next_due_miles_max: computed.next_due_miles_max,
-        next_due_date: computed.next_due_date,
-        schedule_status: computed.schedule_status,
-        updated_at: new Date().toISOString(),
-      };
-      const { error } = await supabase.from("vehicle_maintenance_schedule").upsert(row, {
-        onConflict: "organization_id,vehicle_id,template_id",
-      });
-      if (!error) created++;
-    }
-    if (bootstrapErrors.length && created === 0) {
-      return { ok: false, error: bootstrapErrors.join("; "), catalogId: args.catalogId };
-    }
-    return {
-      ok: true,
-      emptyTemplates: false,
-      created,
-      globalApplied,
-      catalogApplied,
-      skippedDuplicates: catalogOverridesGlobal,
-      warnings: bootstrapErrors.length ? bootstrapErrors : undefined,
-    };
   }
 
   // -------------------------------------------------------------------------
@@ -564,14 +418,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const vehicleId = c.req.param("vehicleId");
         const v = await getVehicleFromKv(c, vehicleId);
         if (!v) return c.json({ error: "Vehicle not found" }, 404);
-        const make = String(v.make ?? "");
-        const model = String(v.model ?? "");
-        const year = String(v.year ?? "");
         const metricsBase = Number(v.metrics && typeof v.metrics === "object"
           ? (v.metrics as { odometer?: number }).odometer
           : 0) || 0;
         const currentOdo = await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
-        const catalogId = await resolveVehicleCatalogId(make, model, year);
+        const catalogId = await resolveCatalogIdForKvVehicle(supabase, v);
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
 
@@ -665,10 +516,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const body = await c.req.json().catch(() => ({})) as { currentOdometer?: number };
         const v = await getVehicleFromKv(c, vehicleId);
         if (!v) return c.json({ error: "Vehicle not found" }, 404);
-        const make = String(v.make ?? "");
-        const model = String(v.model ?? "");
-        const year = String(v.year ?? "");
-        const catalogId = await resolveVehicleCatalogId(make, model, year);
+        const catalogId = await resolveCatalogIdForKvVehicle(supabase, v);
         if (!catalogId) return c.json({ error: "No vehicle catalog match for make/model/year", catalogMatched: false }, 400);
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
@@ -678,6 +526,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           : await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
 
         const run = await executeMaintenanceBootstrap({
+          supabase,
           organizationId: orgId,
           vehicleId,
           currentOdo,
@@ -927,10 +776,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
             continue;
           }
 
-          const make = String(v.make ?? "");
-          const model = String(v.model ?? "");
-          const year = String(v.year ?? "");
-          const catalogId = await resolveVehicleCatalogId(make, model, year);
+          const catalogId = await resolveCatalogIdForKvVehicle(supabase, v);
           if (!catalogId) {
             results.push({ vehicleId, created: 0, skippedReason: "no_catalog_match" });
             continue;
@@ -939,6 +785,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
           const currentOdo = canonicalOdometerFromMaps(vehicleId, metricsBase, odoMaps);
           const run = await executeMaintenanceBootstrap({
+            supabase,
             organizationId: orgId,
             vehicleId,
             currentOdo,

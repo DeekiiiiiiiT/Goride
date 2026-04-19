@@ -16,6 +16,7 @@ import { CustomerLedgerView } from '../database/CustomerLedgerView';
 import { LedgerColumnSettings } from '../database/LedgerColumnSettings';
 import { BusinessType } from '../../types/data';
 import { VehicleCatalogManager } from './vehicle-catalog/VehicleCatalogManager';
+import { PendingVehicleCatalogManager } from './vehicle-catalog/PendingVehicleCatalogManager';
 import { MaintenanceTemplatesManager } from './maintenance-templates/MaintenanceTemplatesManager';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
@@ -137,6 +138,11 @@ export function AdminPortal() {
       {currentPage === 'motor-vehicles' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
           <VehicleCatalogManager />
+        </div>
+      )}
+      {currentPage === 'pending-motor-vehicles' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
+          <PendingVehicleCatalogManager />
         </div>
       )}
       {currentPage === 'maintenance-templates' && (

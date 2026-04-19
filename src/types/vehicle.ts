@@ -55,6 +55,8 @@ export interface Vehicle {
   make: string;
   model: string;
   year: string;
+  /** Linked platform motor catalog row (KV); set after admin approval or auto match. */
+  vehicle_catalog_id?: string;
   color?: string;
   image?: string;
   

@@ -432,9 +432,18 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
           };
       }
 
-      await api.saveVehicle(finalVehicle);
-      onVehicleAdded(finalVehicle);
+      const saveRes = await api.saveVehicle(finalVehicle);
+      const merged = saveRes?.data && typeof saveRes.data === "object"
+        ? { ...finalVehicle, ...(saveRes.data as object) }
+        : finalVehicle;
+      onVehicleAdded(merged);
       toast.success(existingVehicle ? "Vehicle updated" : "Vehicle added");
+      if (saveRes?.catalogMatched === false) {
+        toast.info(
+          "This make/model is queued for platform verification. Maintenance templates may update once it is added to the motor catalog.",
+          { duration: 8000 },
+        );
+      }
       handleClose();
       
     } catch (error) {

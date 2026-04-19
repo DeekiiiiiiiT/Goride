@@ -67,6 +67,12 @@ import * as unverifiedVendor from './unverified_vendor_controller.tsx';
 import { suggestStationMatches } from './vendor_matcher.ts';
 import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRateLimitStats } from './rate_limiter.ts';
 import { registerMaintenanceRoutes } from "./maintenance_routes.ts";
+import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
+import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
+import {
+  supersedePendingRequestsForVehicle,
+  upsertPendingFromKvVehicle,
+} from "./vehicle_catalog_pending_queries.ts";
 
 // ---------------------------------------------------------------------------
 // Future-Date Guardrail
@@ -181,6 +187,7 @@ const supabase = createClient(
 );
 
 registerMaintenanceRoutes(app, supabase);
+registerPendingVehicleCatalogRoutes(app, supabase);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).
@@ -2218,13 +2225,38 @@ app.get("/make-server-37f42386/vehicles", requireAuth(), async (c) => {
 
 app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('vehicles.create'), async (c) => {
   try {
-    const vehicle = await c.req.json();
+    let vehicle = await c.req.json();
     if (!vehicle.id) {
-        return c.json({ error: "Vehicle ID (License Plate) is required" }, 400);
+      return c.json({ error: "Vehicle ID (License Plate) is required" }, 400);
     }
-    // Use plate as ID
-    await kv.set(`vehicle:${vehicle.id}`, stampOrg(vehicle, c));
-    return c.json({ success: true, data: vehicle });
+    vehicle = stampOrg(vehicle, c);
+    const orgId = (vehicle as { organizationId?: string }).organizationId ?? null;
+
+    const catalogId = await resolveCatalogIdForKvVehicle(supabase, vehicle as Record<string, unknown>);
+    if (catalogId) {
+      vehicle = { ...vehicle, vehicle_catalog_id: catalogId };
+    }
+
+    await kv.set(`vehicle:${vehicle.id}`, vehicle);
+
+    if (orgId) {
+      try {
+        if (catalogId) {
+          await supersedePendingRequestsForVehicle(supabase, orgId, String(vehicle.id));
+        } else {
+          await upsertPendingFromKvVehicle(supabase, {
+            organizationId: orgId,
+            fleetVehicleId: String(vehicle.id),
+            vehicle: vehicle as Record<string, unknown>,
+            source: "manual",
+          });
+        }
+      } catch (pendErr: unknown) {
+        console.error("[vehicles] pending catalog queue:", pendErr);
+      }
+    }
+
+    return c.json({ success: true, data: vehicle, catalogMatched: !!catalogId });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
