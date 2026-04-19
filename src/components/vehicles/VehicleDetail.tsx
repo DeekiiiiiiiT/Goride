@@ -193,7 +193,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   });
   const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
   const [odometerHistory, setOdometerHistory] = useState<any[]>([]);
-  const [isOdometerLoading, setIsOdometerLoading] = useState(false);
+  /** Start true when a vehicle is shown so maintenance bootstrap waits for unified odometer fetch. */
+  const [isOdometerLoading, setIsOdometerLoading] = useState(() => Boolean(vehicle.id || vehicle.licensePlate));
 
   const fetchOdometerHistory = useCallback(async () => {
     if (!vehicle.id && !vehicle.licensePlate) return;
@@ -393,12 +394,17 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   useEffect(() => {
     const vId = vehicle.id || vehicle.licensePlate;
     if (!vId) return;
+    if (isOdometerLoading) return;
+    const baselineOdo =
+      odometerHistory[0]?.value != null && Number.isFinite(Number(odometerHistory[0].value))
+        ? Number(odometerHistory[0].value)
+        : vehicle.metrics.odometer ?? 0;
     let cancelled = false;
     (async () => {
       try {
         let sch = await api.getMaintenanceSchedule(vId);
         if (!cancelled && sch.catalogMatched && (!sch.schedule || sch.schedule.length === 0)) {
-          await api.bootstrapMaintenanceSchedule(vId, vehicle.metrics.odometer);
+          await api.bootstrapMaintenanceSchedule(vId, baselineOdo);
           sch = await api.getMaintenanceSchedule(vId);
         }
         if (!cancelled) {
@@ -422,7 +428,13 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     return () => {
       cancelled = true;
     };
-  }, [vehicle.id, vehicle.licensePlate, vehicle.metrics.odometer]);
+  }, [
+    vehicle.id,
+    vehicle.licensePlate,
+    vehicle.metrics.odometer,
+    isOdometerLoading,
+    odometerHistory,
+  ]);
 
   // Analytics Logic
   const analytics = useMemo(() => {

@@ -344,15 +344,24 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
                             <div className={
                                 maintenanceStatus.status === 'Due Soon' ? "bg-amber-100 p-2 rounded-full text-amber-600" :
                                 maintenanceStatus.status === 'Overdue' ? "bg-red-100 p-2 rounded-full text-red-600" :
+                                maintenanceStatus.status === 'No schedule' ? "bg-slate-100 p-2 rounded-full text-slate-600" :
                                 "bg-emerald-100 p-2 rounded-full text-emerald-600"
                             }>
-                                {maintenanceStatus.status === 'Overdue' ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                                {maintenanceStatus.status === 'Overdue' ? <AlertTriangle className="h-5 w-5" /> :
+                                  maintenanceStatus.status === 'No schedule' ? <Clock className="h-5 w-5" /> :
+                                  <CheckCircle2 className="h-5 w-5" />}
                             </div>
                             <h4 className="text-2xl font-bold text-slate-900">{maintenanceStatus.status}</h4>
                         </div>
+                        {maintenanceStatus.status === 'No schedule' ? (
+                          <p className="text-sm text-slate-600">
+                            No maintenance schedule yet. Bootstrap from Fleet maintenance or ensure this vehicle matches the motor catalog.
+                          </p>
+                        ) : (
                         <p className="text-sm text-slate-600">
                             Due in <span className="font-semibold">{maintenanceStatus.daysToService} days</span> ({maintenanceStatus.remainingKm.toLocaleString()} km)
                         </p>
+                        )}
                     </CardContent>
                 </Card>
 

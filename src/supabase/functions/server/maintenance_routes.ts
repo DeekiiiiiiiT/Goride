@@ -8,6 +8,11 @@ import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { advanceAfterService, computeInitialScheduleRow } from "./maintenance_schedule_engine.ts";
+import {
+  canonicalOdometerForVehicle,
+  canonicalOdometerFromMaps,
+  loadOdometerSupplementMaps,
+} from "./canonical_vehicle_odometer.ts";
 
 function assertVehicleCatalogPlatformAccess(c: Context) {
   const rbacUser = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
@@ -602,9 +607,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const make = String(v.make ?? "");
         const model = String(v.model ?? "");
         const year = String(v.year ?? "");
-        const currentOdo = Number(v.metrics && typeof v.metrics === "object"
+        const metricsBase = Number(v.metrics && typeof v.metrics === "object"
           ? (v.metrics as { odometer?: number }).odometer
           : 0) || 0;
+        const currentOdo = await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
         const catalogId = await resolveVehicleCatalogId(make, model, year);
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
@@ -639,7 +645,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           ? aggregateFleetStatus(enriched.map((r: { computed_status: string }) => ({
             status: r.computed_status as "ok" | "pending" | "overdue" | "fulfilled",
           })))
-          : "Healthy";
+          : "No schedule";
 
         const dueSoonRows = enriched.filter((r: Record<string, unknown>) => {
           const st = r.computed_status as string;
@@ -700,9 +706,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         if (!catalogId) return c.json({ error: "No vehicle catalog match for make/model/year", catalogMatched: false }, 400);
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
-        const currentOdo = body.currentOdometer != null
+        const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
+        const currentOdo = body.currentOdometer != null && Number.isFinite(Number(body.currentOdometer))
           ? Number(body.currentOdometer)
-          : Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
+          : await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
 
         const run = await executeMaintenanceBootstrap({
           organizationId: orgId,
@@ -929,6 +936,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           c,
         );
 
+        const odoMaps = await loadOdometerSupplementMaps(supabase, c);
+
         const results: Array<{
           vehicleId: string;
           created: number;
@@ -961,7 +970,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
             continue;
           }
 
-          const currentOdo = Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
+          const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
+          const currentOdo = canonicalOdometerFromMaps(vehicleId, metricsBase, odoMaps);
           const run = await executeMaintenanceBootstrap({
             organizationId: orgId,
             vehicleId,
@@ -1021,6 +1031,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           c,
         );
 
+        const odoMaps = await loadOdometerSupplementMaps(supabase, c);
+
         const { data: schedules } = await supabase
           .from("vehicle_maintenance_schedule")
           .select("vehicle_id, next_due_miles, next_due_miles_max, next_due_date, template_id, schedule_status")
@@ -1035,7 +1047,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
 
         const items = vehicles.map((v: Record<string, unknown>) => {
           const vid = String(v.id ?? "");
-          const odo = Number((v.metrics as { odometer?: number })?.odometer ?? 0);
+          const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0);
+          const odo = canonicalOdometerFromMaps(vid, metricsBase, odoMaps);
           const sch = byVehicle[vid] || [];
           const today = todayIso();
           const statuses = sch.map((row) => {
@@ -1046,7 +1059,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
             const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
             return computeScheduleRowStatus(odo, today, nextMiles, nextMilesMax, nextDate, schSt);
           });
-          const st = sch.length ? aggregateFleetStatus(statuses.map((s) => ({ status: s }))) : "Healthy";
+          const st = sch.length ? aggregateFleetStatus(statuses.map((s) => ({ status: s }))) : "No schedule";
           const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");
           const minM = eligibleForNext.length
             ? eligibleForNext

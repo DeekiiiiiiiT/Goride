@@ -150,7 +150,9 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                             ? "text-red-600 font-medium"
                             : row.fleetStatus === "Due Soon"
                               ? "text-amber-600 font-medium"
-                              : "text-emerald-600"
+                              : row.fleetStatus === "No schedule"
+                                ? "text-slate-500 dark:text-slate-400"
+                                : "text-emerald-600"
                         }
                       >
                         {row.fleetStatus}
