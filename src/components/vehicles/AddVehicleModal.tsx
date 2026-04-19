@@ -129,7 +129,11 @@ const FileUploadZone = ({
 };
 
 export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehicles = [] }: AddVehicleModalProps) {
-  const [step, setStep] = useState(1); // 1 = Upload, 2 = Verify Details
+  const [step, setStep] = useState(1); // 1 = Upload docs, 2 = Verify Details
+  /** Step 1: fitness upload → parse review → registration upload → combined verify. */
+  const [uploadSubStep, setUploadSubStep] = useState<"fitness" | "fitness_review" | "registration">("fitness");
+  /** Step 2: switch between registration and fitness field editors. */
+  const [verifyDocTab, setVerifyDocTab] = useState<"registration" | "fitness">("registration");
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [fitnessFile, setFitnessFile] = useState<File | null>(null);
@@ -227,71 +231,73 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       }
   };
 
-  const handleScanClick = async () => {
-      if (!registrationFile && !fitnessFile) {
-          toast.error("Please upload a document to scan.");
+  /** Parse fitness only; then show fitness_review before registration. */
+  const handleParseFitnessClick = async () => {
+      if (!fitnessFile) {
+          toast.error("Please upload your Certificate of Fitness.");
           return;
       }
-
       setIsScanning(true);
       let newData = { ...formData };
-      let attemptedScan = false;
+      const data = await scanDocument(fitnessFile, "fitness_certificate");
+      console.log("Fitness Scan Result:", data);
+      if (data) {
+          newData = {
+              ...newData,
+              make: data.make != null ? String(data.make) : newData.make,
+              model: data.model != null ? String(data.model) : newData.model,
+              year: data.year != null ? String(data.year) : newData.year,
+              color: data.color != null ? String(data.color) : newData.color,
+              bodyType: data.bodyType != null ? String(data.bodyType) : newData.bodyType,
+              engineNumber: data.engineNumber != null ? String(data.engineNumber) : newData.engineNumber,
+              ccRating: data.ccRating != null ? String(data.ccRating) : newData.ccRating,
+              fitnessIssueDate: formatDateForInput(data.issueDate) || newData.fitnessIssueDate,
+              fitnessExpiryDate: formatDateForInput(data.expirationDate) || newData.fitnessExpiryDate,
+          };
+          toast.success("Certificate of Fitness processed. Review the details below.");
+      } else {
+          toast.warning("Could not read all details from this certificate. You can fix them after registration is scanned.");
+      }
+      setFormData(newData);
+      setIsScanning(false);
+      setUploadSubStep("fitness_review");
+  };
+
+  /** After registration file is added: parse registration only (fitness already in formData). */
+  const handleScanClick = async () => {
+      if (!registrationFile) {
+          toast.error("Please add your Motor Vehicle Registration.");
+          return;
+      }
+      setIsScanning(true);
+      let newData = { ...formData };
       let scanSuccess = false;
 
-      // 1. Scan Registration
-      if (registrationFile) {
-          attemptedScan = true;
-          const data = await scanDocument(registrationFile, 'vehicle_registration');
-          console.log("Registration Scan Result:", data);
-          if (data) {
-              newData = {
-                  ...newData,
-                  licensePlate: (data.plate || data.plateNumber || newData.licensePlate || '').toUpperCase(),
-                  vin: (data.vin || newData.vin || '').toUpperCase(),
-                  mvid: data.mvid || newData.mvid,
-                  laNumber: data.laNumber || newData.laNumber,
-                  controlNumber: data.controlNumber || newData.controlNumber,
-                  registrationIssueDate: formatDateForInput(data.issueDate) || newData.registrationIssueDate,
-                  registrationExpiryDate: formatDateForInput(data.expirationDate) || newData.registrationExpiryDate,
-              };
-              scanSuccess = true;
-          }
-      }
-
-      // 2. Scan Fitness
-      if (fitnessFile) {
-          attemptedScan = true;
-          const data = await scanDocument(fitnessFile, 'fitness_certificate');
-          console.log("Fitness Scan Result:", data);
-          if (data) {
-              newData = {
-                  ...newData,
-                  make: data.make || newData.make,
-                  model: data.model || newData.model,
-                  year: data.year || newData.year,
-                  color: data.color || newData.color,
-                  bodyType: data.bodyType || newData.bodyType,
-                  engineNumber: data.engineNumber || newData.engineNumber,
-                  ccRating: data.ccRating || newData.ccRating,
-                  fitnessIssueDate: formatDateForInput(data.issueDate) || newData.fitnessIssueDate,
-                  fitnessExpiryDate: formatDateForInput(data.expirationDate) || newData.fitnessExpiryDate,
-              };
-              scanSuccess = true;
-          }
+      const data = await scanDocument(registrationFile, "vehicle_registration");
+      console.log("Registration Scan Result:", data);
+      if (data) {
+          newData = {
+              ...newData,
+              licensePlate: (data.plate || data.plateNumber || newData.licensePlate || "").toUpperCase(),
+              vin: (data.vin || newData.vin || "").toUpperCase(),
+              mvid: data.mvid != null ? String(data.mvid) : newData.mvid,
+              laNumber: data.laNumber != null ? String(data.laNumber) : newData.laNumber,
+              controlNumber: data.controlNumber != null ? String(data.controlNumber) : newData.controlNumber,
+              registrationIssueDate: formatDateForInput(data.issueDate) || newData.registrationIssueDate,
+              registrationExpiryDate: formatDateForInput(data.expirationDate) || newData.registrationExpiryDate,
+          };
+          scanSuccess = true;
       }
 
       setFormData(newData);
       setIsScanning(false);
-      
-      // Always proceed to step 2 to allow manual entry
+      setVerifyDocTab("registration");
       setStep(2);
 
-      if (attemptedScan) {
-          if (scanSuccess) {
-              toast.success("Documents scanned successfully!");
-          } else {
-              toast.warning("Could not automatically extract all details. Please verify manually.");
-          }
+      if (scanSuccess) {
+          toast.success("Registration processed. Review and submit when ready.");
+      } else {
+          toast.warning("Could not read all registration details. Please verify manually.");
       }
   };
 
@@ -463,9 +469,56 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     });
     setFitnessFile(null);
     setRegistrationFile(null);
+    setUploadSubStep("fitness");
+    setVerifyDocTab("registration");
     setStep(1);
     onClose();
   };
+
+  const fitnessCertificateFieldEditors = (
+    <div className="space-y-3 pt-1">
+      <div>
+        <Label className="text-xs text-slate-500">Make</Label>
+        <Input value={formData.make} onChange={(e) => setFormData({ ...formData, make: e.target.value })} placeholder="Toyota" />
+      </div>
+      <div>
+        <Label className="text-xs text-slate-500">Model</Label>
+        <Input value={formData.model} onChange={(e) => setFormData({ ...formData, model: e.target.value })} placeholder="Camry" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs text-slate-500">Year</Label>
+          <Input value={formData.year} onChange={(e) => setFormData({ ...formData, year: e.target.value })} placeholder="2019" />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-500">Colour</Label>
+          <Input value={formData.color} onChange={(e) => setFormData({ ...formData, color: e.target.value })} placeholder="White" />
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs text-slate-500">Body type</Label>
+        <Input value={formData.bodyType} onChange={(e) => setFormData({ ...formData, bodyType: e.target.value })} placeholder="Sedan" />
+      </div>
+      <div>
+        <Label className="text-xs text-slate-500">Motor or engine no.</Label>
+        <Input value={formData.engineNumber} onChange={(e) => setFormData({ ...formData, engineNumber: e.target.value })} />
+      </div>
+      <div>
+        <Label className="text-xs text-slate-500">CC rating</Label>
+        <Input value={formData.ccRating} onChange={(e) => setFormData({ ...formData, ccRating: e.target.value })} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs text-slate-500">Fitness issue</Label>
+          <Input type="date" value={formData.fitnessIssueDate} onChange={(e) => setFormData({ ...formData, fitnessIssueDate: e.target.value })} />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-500">Fitness expiry</Label>
+          <Input type="date" value={formData.fitnessExpiryDate} onChange={(e) => setFormData({ ...formData, fitnessExpiryDate: e.target.value })} />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -473,132 +526,140 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         <DialogHeader>
           <DialogTitle>Add New Vehicle</DialogTitle>
           <DialogDescription>
-            {step === 1 
-                ? "Upload registration documents to autofill details."
-                : "Verify the extracted details and add vehicle."}
+            {step === 1 && uploadSubStep === "fitness"
+                ? "Step 1 of 3 — Add your Certificate of Fitness (scan or upload)."
+                : step === 1 && uploadSubStep === "fitness_review"
+                  ? "Step 2 of 3 — Review what we extracted from your fitness certificate."
+                  : step === 1 && uploadSubStep === "registration"
+                    ? "Step 3 of 3 — Add your Motor Vehicle Registration (scan or upload)."
+                    : "Review registration details and submit. Fitness was confirmed in an earlier step."}
           </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="py-4">
           {/* Documents Section - Always visible in Step 1, minimized in Step 2? No, just keep simple logic */}
-          {step === 1 && (
-             <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
-                    <FileUploadZone 
-                        label="Motor Vehicle Registration" 
-                        file={registrationFile} 
-                        onFileSelect={setRegistrationFile} 
-                        accept="image/*,.pdf"
-                        icon={Car}
-                        uploadLabel="Upload Registration"
-                        scanLabel="Scan Registration"
-                    />
-                    <FileUploadZone 
-                        label="Certificate of Fitness" 
-                        file={fitnessFile} 
-                        onFileSelect={setFitnessFile} 
-                        accept="image/*,.pdf"
-                        icon={FileCheck}
-                        uploadLabel="Upload Fitness"
-                        scanLabel="Scan Fitness"
-                    />
-                </div>
+          {step === 1 && uploadSubStep === "fitness" && (
+            <div className="space-y-3 max-w-md mx-auto">
+              <FileUploadZone
+                label="Certificate of Fitness"
+                file={fitnessFile}
+                onFileSelect={setFitnessFile}
+                accept="image/*,.pdf"
+                icon={FileCheck}
+                uploadLabel="Upload Fitness"
+                scanLabel="Scan Fitness"
+              />
+            </div>
+          )}
+          {step === 1 && uploadSubStep === "fitness_review" && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3 max-w-lg mx-auto">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <FileCheck className="h-4 w-4 text-emerald-600" />
+                Extracted from Certificate of Fitness
+              </div>
+              <p className="text-xs text-slate-600">
+                Confirm or correct the values below, then continue to add your registration.
+              </p>
+              {fitnessCertificateFieldEditors}
+            </div>
+          )}
+          {step === 1 && uploadSubStep === "registration" && (
+            <div className="space-y-3 max-w-md mx-auto">
+              <FileUploadZone
+                label="Motor Vehicle Registration"
+                file={registrationFile}
+                onFileSelect={setRegistrationFile}
+                accept="image/*,.pdf"
+                icon={Car}
+                uploadLabel="Upload Registration"
+                scanLabel="Scan Registration"
+              />
             </div>
           )}
           
-          {/* Step 2: Form Fields */}
+          {/* Step 2: Tabs between registration and fitness editors */}
           {step === 2 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border">
-                    <div className="flex gap-4">
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
-                             <Car className="h-4 w-4" /> 
-                             {registrationFile ? "Registration Uploaded" : "No Registration"}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
-                             <FileCheck className="h-4 w-4" /> 
-                             {fitnessFile ? "Fitness Uploaded" : "No Fitness"}
-                        </div>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-slate-50 p-2 sm:p-3 rounded-lg border">
+                    <div
+                      className="flex rounded-lg bg-slate-200/60 p-1 gap-1 flex-1 min-w-0"
+                      role="tablist"
+                      aria-label="Document details"
+                    >
+                      <button
+                        type="button"
+                        id="verify-tab-registration"
+                        role="tab"
+                        aria-selected={verifyDocTab === "registration"}
+                        onClick={() => setVerifyDocTab("registration")}
+                        className={cn(
+                          "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[2.5rem]",
+                          verifyDocTab === "registration"
+                            ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80",
+                        )}
+                      >
+                        <Car className="h-4 w-4 shrink-0 text-blue-600" />
+                        <span className="truncate">Registration</span>
+                      </button>
+                      <button
+                        type="button"
+                        id="verify-tab-fitness"
+                        role="tab"
+                        aria-selected={verifyDocTab === "fitness"}
+                        onClick={() => setVerifyDocTab("fitness")}
+                        className={cn(
+                          "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[2.5rem]",
+                          verifyDocTab === "fitness"
+                            ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80",
+                        )}
+                      >
+                        <FileCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                        <span className="truncate">Fitness</span>
+                      </button>
                     </div>
-                    <Button variant="link" size="sm" onClick={() => setStep(1)} className="text-xs h-auto p-0 text-emerald-600">
-                        Re-upload documents
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => {
+                        setStep(1);
+                        setUploadSubStep("fitness");
+                      }}
+                      className="text-xs h-auto p-0 text-emerald-600 shrink-0 self-end sm:self-auto"
+                    >
+                      Re-upload documents
                     </Button>
                 </div>
 
-                {/* Identity Match Alert (Phase 4) */}
                 {matchedVehicle && (
-                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 mb-6 flex items-start gap-3 animate-in zoom-in-95 duration-300">
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start gap-3 animate-in zoom-in-95 duration-300">
                         <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                         <div>
                             <h4 className="text-sm font-bold text-amber-900">Identity Match Detected</h4>
                             <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                A vehicle with license plate <span className="font-bold underline">{matchedVehicle.licensePlate}</span> already exists in the system. 
+                                A vehicle with license plate <span className="font-bold underline">{matchedVehicle.licensePlate}</span> already exists in the system.
                                 Submitting will update the existing asset profile instead of creating a duplicate.
                             </p>
                         </div>
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Column 1: Certificate of Fitness */}
-                    <div className="space-y-4">
-                         <h4 className="text-sm font-semibold text-slate-900 border-b pb-2 flex items-center gap-2">
-                            <FileCheck className="h-4 w-4 text-emerald-600" />
-                            Certificate of Fitness
-                        </h4>
-                        
-                        <div className="space-y-3">
-                            <div>
-                                <Label className="text-xs text-slate-500">Make</Label>
-                                <Input value={formData.make} onChange={(e) => setFormData({...formData, make: e.target.value})} placeholder="Toyota" />
-                            </div>
-                            <div>
-                                <Label className="text-xs text-slate-500">Model</Label>
-                                <Input value={formData.model} onChange={(e) => setFormData({...formData, model: e.target.value})} placeholder="Camry" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <Label className="text-xs text-slate-500">Year</Label>
-                                    <Input value={formData.year} onChange={(e) => setFormData({...formData, year: e.target.value})} placeholder="2019" />
-                                </div>
-                                <div>
-                                    <Label className="text-xs text-slate-500">Colour</Label>
-                                    <Input value={formData.color} onChange={(e) => setFormData({...formData, color: e.target.value})} placeholder="White" />
-                                </div>
-                            </div>
-                            <div>
-                                <Label className="text-xs text-slate-500">Body Type</Label>
-                                <Input value={formData.bodyType} onChange={(e) => setFormData({...formData, bodyType: e.target.value})} placeholder="Sedan" />
-                            </div>
-                            <div>
-                                <Label className="text-xs text-slate-500">Motor Or Engine No.</Label>
-                                <Input value={formData.engineNumber} onChange={(e) => setFormData({...formData, engineNumber: e.target.value})} />
-                            </div>
-                            <div>
-                                <Label className="text-xs text-slate-500">CC Rating</Label>
-                                <Input value={formData.ccRating} onChange={(e) => setFormData({...formData, ccRating: e.target.value})} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <Label className="text-xs text-slate-500">Issue Date</Label>
-                                    <Input type="date" value={formData.fitnessIssueDate} onChange={(e) => setFormData({...formData, fitnessIssueDate: e.target.value})} />
-                                </div>
-                                <div>
-                                    <Label className="text-xs text-slate-500">Expiry Date</Label>
-                                    <Input type="date" value={formData.fitnessExpiryDate} onChange={(e) => setFormData({...formData, fitnessExpiryDate: e.target.value})} />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Column 2: Vehicle Registration */}
-                    <div className="space-y-4">
-                         <h4 className="text-sm font-semibold text-slate-900 border-b pb-2 flex items-center gap-2">
-                            <Car className="h-4 w-4 text-blue-600" />
-                            Motor Vehicle Registration
-                        </h4>
-                        
-                        <div className="space-y-3">
+                {verifyDocTab === "registration" && (
+                <div
+                  className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3 max-w-lg mx-auto"
+                  role="tabpanel"
+                  id="verify-panel-registration"
+                  aria-labelledby="verify-tab-registration"
+                >
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <Car className="h-4 w-4 text-blue-600" />
+                    Motor Vehicle Registration
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Edit the fields parsed from your registration document. Switch to the Fitness tab to review or edit certificate details.
+                  </p>
+                  <div className="space-y-3 pt-1">
                             <div>
                                 <Label className="text-xs text-slate-500">LA Number</Label>
                                 <Input value={formData.laNumber} onChange={(e) => setFormData({...formData, laNumber: e.target.value})} />
@@ -629,11 +690,29 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                                     <Input type="date" value={formData.registrationExpiryDate} onChange={(e) => setFormData({...formData, registrationExpiryDate: e.target.value})} />
                                 </div>
                             </div>
-                        </div>
-                    </div>
+                  </div>
                 </div>
+                )}
 
-                <div className="border-t pt-4 mt-4">
+                {verifyDocTab === "fitness" && (
+                <div
+                  className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3 max-w-lg mx-auto"
+                  role="tabpanel"
+                  id="verify-panel-fitness"
+                  aria-labelledby="verify-tab-fitness"
+                >
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <FileCheck className="h-4 w-4 text-emerald-600" />
+                    Certificate of Fitness
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Edit any values parsed from your fitness certificate before submitting.
+                  </p>
+                  {fitnessCertificateFieldEditors}
+                </div>
+                )}
+
+                <div className="max-w-lg mx-auto border-t pt-4">
                     <Label className="text-xs text-slate-500 mb-1.5 block">Vehicle Status</Label>
                     <Select 
                         value={formData.status} 
@@ -657,17 +736,45 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
               Cancel
             </Button>
             
-            {step === 1 ? (
-                <Button 
-                    type="button" 
-                    onClick={handleScanClick}
-                    disabled={(!registrationFile && !fitnessFile) || isScanning}
-                    className="bg-slate-900 text-white hover:bg-slate-800"
-                >
-                    {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                    {isScanning ? "Scanning..." : "Scan Documents"}
+            {step === 1 && uploadSubStep === "fitness" ? (
+              <Button
+                type="button"
+                onClick={() => void handleParseFitnessClick()}
+                disabled={!fitnessFile || isScanning}
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {isScanning ? "Processing..." : "Parse certificate"}
+              </Button>
+            ) : step === 1 && uploadSubStep === "fitness_review" ? (
+              <>
+                <Button type="button" variant="ghost" onClick={() => setUploadSubStep("fitness")}>
+                  Back
                 </Button>
-            ) : (
+                <Button
+                  type="button"
+                  onClick={() => setUploadSubStep("registration")}
+                  className="bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  Continue to registration
+                </Button>
+              </>
+            ) : step === 1 && uploadSubStep === "registration" ? (
+              <>
+                <Button type="button" variant="ghost" onClick={() => setUploadSubStep("fitness_review")}>
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleScanClick()}
+                  disabled={!registrationFile || isScanning}
+                  className="bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  {isScanning ? "Processing..." : "Parse registration"}
+                </Button>
+              </>
+            ) : step === 1 ? null : (
                 <Button type="submit" disabled={isLoading}>
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Add Vehicle
