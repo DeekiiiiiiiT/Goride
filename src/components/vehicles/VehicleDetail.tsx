@@ -110,6 +110,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { useAuth } from '../auth/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import {
+  getFleetVehicleCatalog,
   listMyPendingCatalogRequests,
   listVehicleCatalogMatches,
 } from '../../services/pendingVehicleCatalogService';
@@ -151,6 +152,13 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     enabled: Boolean(token),
   });
 
+  const { data: linkedCatalog } = useQuery({
+    queryKey: ['fleet-vehicle-catalog', vehicle.vehicle_catalog_id, token],
+    queryFn: () => getFleetVehicleCatalog(token!, vehicle.vehicle_catalog_id!),
+    enabled: Boolean(token && vehicle.vehicle_catalog_id),
+    retry: false,
+  });
+
   const fleetKey = vehicle.id || vehicle.licensePlate;
   const catalogPendingRow = useMemo(() => {
     return (myPendingCatalog?.items ?? []).find((r) => r.fleet_vehicle_id === fleetKey) ?? null;
@@ -164,6 +172,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const [alignSearchMake, setAlignSearchMake] = useState('');
   const [alignSearchModel, setAlignSearchModel] = useState('');
   const [alignSearchYear, setAlignSearchYear] = useState('');
+  const [alignSearchTrim, setAlignSearchTrim] = useState('');
+  const [alignSearchGen, setAlignSearchGen] = useState('');
   const [alignMatches, setAlignMatches] = useState<VehicleCatalogRecord[]>([]);
   const [alignMatchesLoading, setAlignMatchesLoading] = useState(false);
   const [alignSaving, setAlignSaving] = useState(false);
@@ -173,7 +183,16 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     setAlignSearchMake(vehicle.make || '');
     setAlignSearchModel(vehicle.model || '');
     setAlignSearchYear(vehicle.year || '');
-  }, [alignModalOpen, vehicle.make, vehicle.model, vehicle.year]);
+    setAlignSearchTrim(vehicle.vehicle_catalog_trim_hint?.trim() || '');
+    setAlignSearchGen(vehicle.vehicle_catalog_generation_hint?.trim() || '');
+  }, [
+    alignModalOpen,
+    vehicle.make,
+    vehicle.model,
+    vehicle.year,
+    vehicle.vehicle_catalog_trim_hint,
+    vehicle.vehicle_catalog_generation_hint,
+  ]);
 
   useEffect(() => {
     if (!alignModalOpen || !token) return;
@@ -183,13 +202,25 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         make: alignSearchMake,
         model: alignSearchModel,
         year: alignSearchYear,
+        trim_series: alignSearchTrim,
+        generation_code: alignSearchGen,
+        body_type: vehicle.bodyType || undefined,
       })
         .then(setAlignMatches)
         .catch(() => setAlignMatches([]))
         .finally(() => setAlignMatchesLoading(false));
     }, 350);
     return () => window.clearTimeout(handle);
-  }, [alignModalOpen, token, alignSearchMake, alignSearchModel, alignSearchYear]);
+  }, [
+    alignModalOpen,
+    token,
+    alignSearchMake,
+    alignSearchModel,
+    alignSearchYear,
+    alignSearchTrim,
+    alignSearchGen,
+    vehicle.bodyType,
+  ]);
 
   const handleAlignPickCatalog = async (row: VehicleCatalogRecord) => {
     if (!fleetKey) return;
@@ -201,10 +232,13 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         model: row.model,
         year: String(row.year),
         vehicle_catalog_id: row.id,
+        vehicle_catalog_trim_hint: row.trim_series ?? undefined,
+        vehicle_catalog_generation_hint: row.generation_code ?? row.model_code ?? undefined,
       };
       await api.saveVehicle(updatedVehicle);
       await queryClient.invalidateQueries({ queryKey: ['vehicle-catalog-pending-my'] });
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      await queryClient.invalidateQueries({ queryKey: ['fleet-vehicle-catalog'] });
       onUpdate?.(updatedVehicle);
       setAlignModalOpen(false);
       toast.success('Vehicle aligned with motor catalog');
@@ -954,6 +988,47 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             </Button>
           </AlertDescription>
         </Alert>
+      )}
+
+      {vehicle.vehicle_catalog_id && linkedCatalog && (
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-slate-900">Motor catalog reference</CardTitle>
+            <CardDescription className="text-slate-600">
+              Platform specs for maintenance and parts. Fleet-specific details (color, plate, VIN) stay on this vehicle
+              record.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm text-slate-800 sm:grid-cols-2">
+            <div>
+              <span className="text-slate-500">Variant</span>
+              <p className="font-medium">
+                {linkedCatalog.year} {linkedCatalog.make} {linkedCatalog.model}
+                {linkedCatalog.trim_series ? ` · ${linkedCatalog.trim_series}` : ''}
+              </p>
+              {(linkedCatalog.generation_code || linkedCatalog.model_code) && (
+                <p className="text-xs text-slate-500">
+                  Code: {linkedCatalog.generation_code || linkedCatalog.model_code}
+                </p>
+              )}
+            </div>
+            <div>
+              <span className="text-slate-500">Key specs</span>
+              <p className="text-slate-800">
+                {[linkedCatalog.engine_displacement_cc ? `${linkedCatalog.engine_displacement_cc} cc` : null, linkedCatalog.transmission, linkedCatalog.drivetrain]
+                  .filter(Boolean)
+                  .join(' · ') || '—'}
+              </p>
+              {(linkedCatalog.tire_size || linkedCatalog.engine_oil_capacity_l != null) && (
+                <p className="text-xs text-slate-500 mt-1">
+                  {[linkedCatalog.tire_size ? `Tires ${linkedCatalog.tire_size}` : null, linkedCatalog.engine_oil_capacity_l != null ? `Oil ${linkedCatalog.engine_oil_capacity_l} L` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* --- Header Section --- */}
@@ -1817,8 +1892,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
           <DialogHeader>
             <DialogTitle2>Align with motor catalog</DialogTitle2>
             <DialogDescription>
-              Search the official catalog and select the row that matches this vehicle. Your make, model, year, and
-              catalog link will be updated.
+              Search the official catalog and select the row that matches this vehicle. Use trim or generation code
+              to narrow results when several variants share the same make, model, and year.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -1851,6 +1926,24 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                   placeholder="2020"
                 />
               </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="align-trim">Trim (optional filter)</Label>
+                <Input
+                  id="align-trim"
+                  value={alignSearchTrim}
+                  onChange={(e) => setAlignSearchTrim(e.target.value)}
+                  placeholder="e.g. Base, XLE"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="align-gen">Generation code (optional)</Label>
+                <Input
+                  id="align-gen"
+                  value={alignSearchGen}
+                  onChange={(e) => setAlignSearchGen(e.target.value)}
+                  placeholder="e.g. M900A"
+                />
+              </div>
             </div>
             <div className="rounded-md border bg-slate-50/80">
               <div className="border-b px-3 py-2 text-xs font-medium text-slate-600">Matching catalog rows</div>
@@ -1876,9 +1969,11 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           <span className="font-medium text-slate-900">
                             {m.year} {m.make} {m.model}
                           </span>
-                          {m.trim_series ? (
-                            <span className="text-xs text-slate-500">{m.trim_series}</span>
-                          ) : null}
+                          <span className="text-xs text-slate-500">
+                            {[m.trim_series, m.generation_code || m.model_code, m.body_type]
+                              .filter(Boolean)
+                              .join(' · ') || '—'}
+                          </span>
                         </button>
                       </li>
                     ))}

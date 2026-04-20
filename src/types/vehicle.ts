@@ -57,6 +57,10 @@ export interface Vehicle {
   year: string;
   /** Linked platform motor catalog row (KV); set after admin approval or auto match. */
   vehicle_catalog_id?: string;
+  /** Optional hints for resolving catalog when multiple variants share make/model/year */
+  vehicle_catalog_trim_hint?: string;
+  vehicle_catalog_generation_hint?: string;
+  vehicle_catalog_model_code_hint?: string;
   color?: string;
   image?: string;
   

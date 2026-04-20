@@ -12,14 +12,26 @@ function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
   return h;
 }
 
+export type VehicleCatalogMatchParams = {
+  make?: string;
+  model?: string;
+  year?: string;
+  trim_series?: string;
+  generation_code?: string;
+  body_type?: string;
+};
+
 export async function listVehicleCatalogMatches(
   accessToken: string,
-  params: { make?: string; model?: string; year?: string },
+  params: VehicleCatalogMatchParams,
 ): Promise<VehicleCatalogRecord[]> {
   const sp = new URLSearchParams();
   if (params.make) sp.set("make", params.make);
   if (params.model) sp.set("model", params.model);
   if (params.year) sp.set("year", params.year);
+  if (params.trim_series) sp.set("trim_series", params.trim_series);
+  if (params.generation_code) sp.set("generation_code", params.generation_code);
+  if (params.body_type) sp.set("body_type", params.body_type);
   const res = await fetch(
     `${API_ENDPOINTS.fleet}/vehicle-catalog-matches?${sp.toString()}`,
     { headers: edgeHeaders(accessToken) },
@@ -27,6 +39,19 @@ export async function listVehicleCatalogMatches(
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   return (data.items || []) as VehicleCatalogRecord[];
+}
+
+/** Tenant-safe: only returns catalog row if org has a vehicle linked to this id (or platform role). */
+export async function getFleetVehicleCatalog(
+  accessToken: string,
+  catalogId: string,
+): Promise<VehicleCatalogRecord> {
+  const res = await fetch(`${API_ENDPOINTS.fleet}/fleet/vehicle-catalog/${encodeURIComponent(catalogId)}`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.item as VehicleCatalogRecord;
 }
 
 export async function listPendingVehicleCatalogRequests(
@@ -46,6 +71,7 @@ export async function listPendingVehicleCatalogRequests(
   return { items: data.items || [], total: data.total ?? 0 };
 }
 
+/** Fleet-scoped open catalog requests for the current organization (banner / align flow). */
 export async function listMyPendingCatalogRequests(
   accessToken: string,
   opts?: { fleet_vehicle_id?: string },

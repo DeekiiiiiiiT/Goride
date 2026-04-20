@@ -7,9 +7,10 @@ export interface VehicleCatalogRecord {
   trim_series: string | null;
   generation: number | null;
   model_code: string | null;
+  /** OEM generation / chassis code (e.g. M900A) */
+  generation_code?: string | null;
   body_type: string | null;
   doors: number | null;
-  exterior_color: string | null;
   length_mm: number | null;
   width_mm: number | null;
   height_mm: number | null;
@@ -31,6 +32,16 @@ export interface VehicleCatalogRecord {
   gross_vehicle_weight_kg: number | null;
   max_payload_kg: number | null;
   max_towing_kg: number | null;
+  /** @deprecated Instance data; column may exist on legacy rows — do not set for new catalog entries */
+  exterior_color?: string | null;
+  front_brake_type?: string | null;
+  rear_brake_type?: string | null;
+  brake_size_mm?: number | null;
+  tire_size?: string | null;
+  bolt_pattern?: string | null;
+  wheel_offset_mm?: number | null;
+  engine_oil_capacity_l?: number | null;
+  coolant_capacity_l?: number | null;
   created_at: string;
   updated_at: string;
 }

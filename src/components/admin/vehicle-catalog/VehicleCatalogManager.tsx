@@ -100,9 +100,9 @@ type FormState = {
   trim_series: string;
   generation: string;
   model_code: string;
+  generation_code: string;
   body_type: string;
   doors: string;
-  exterior_color: string;
   length_mm: string;
   width_mm: string;
   height_mm: string;
@@ -124,6 +124,14 @@ type FormState = {
   gross_vehicle_weight_kg: string;
   max_payload_kg: string;
   max_towing_kg: string;
+  front_brake_type: string;
+  rear_brake_type: string;
+  brake_size_mm: string;
+  tire_size: string;
+  bolt_pattern: string;
+  wheel_offset_mm: string;
+  engine_oil_capacity_l: string;
+  coolant_capacity_l: string;
 };
 
 function resolveMake(form: FormState): string {
@@ -139,9 +147,10 @@ function emptyForm(): FormState {
     year: String(new Date().getFullYear()),
     trim_series: "",
     generation: "",
+    model_code: "",
+    generation_code: "",
     body_type: "",
     doors: "",
-    exterior_color: "",
     length_mm: "",
     width_mm: "",
     height_mm: "",
@@ -163,6 +172,14 @@ function emptyForm(): FormState {
     gross_vehicle_weight_kg: "",
     max_payload_kg: "",
     max_towing_kg: "",
+    front_brake_type: "",
+    rear_brake_type: "",
+    brake_size_mm: "",
+    tire_size: "",
+    bolt_pattern: "",
+    wheel_offset_mm: "",
+    engine_oil_capacity_l: "",
+    coolant_capacity_l: "",
   };
 }
 
@@ -178,9 +195,9 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     trim_series: t(r.trim_series),
     generation: s(r.generation),
     model_code: t(r.model_code),
+    generation_code: t(r.generation_code),
     body_type: t(r.body_type),
     doors: s(r.doors),
-    exterior_color: t(r.exterior_color),
     length_mm: s(r.length_mm),
     width_mm: s(r.width_mm),
     height_mm: s(r.height_mm),
@@ -202,6 +219,14 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     gross_vehicle_weight_kg: s(r.gross_vehicle_weight_kg),
     max_payload_kg: s(r.max_payload_kg),
     max_towing_kg: s(r.max_towing_kg),
+    front_brake_type: t(r.front_brake_type),
+    rear_brake_type: t(r.rear_brake_type),
+    brake_size_mm: s(r.brake_size_mm),
+    tire_size: t(r.tire_size),
+    bolt_pattern: t(r.bolt_pattern),
+    wheel_offset_mm: s(r.wheel_offset_mm),
+    engine_oil_capacity_l: s(r.engine_oil_capacity_l),
+    coolant_capacity_l: s(r.coolant_capacity_l),
   };
 }
 
@@ -233,9 +258,9 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   assign("trim_series", form.trim_series.trim() || null);
   assign("generation", optInt(form.generation));
   assign("model_code", form.model_code.trim() || null);
+  assign("generation_code", form.generation_code.trim() || null);
   assign("body_type", form.body_type.trim() || null);
   assign("doors", optInt(form.doors));
-  assign("exterior_color", form.exterior_color.trim() || null);
   assign("length_mm", optNum(form.length_mm));
   assign("width_mm", optNum(form.width_mm));
   assign("height_mm", optNum(form.height_mm));
@@ -257,6 +282,14 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   assign("gross_vehicle_weight_kg", optNum(form.gross_vehicle_weight_kg));
   assign("max_payload_kg", optNum(form.max_payload_kg));
   assign("max_towing_kg", optNum(form.max_towing_kg));
+  assign("front_brake_type", form.front_brake_type.trim() || null);
+  assign("rear_brake_type", form.rear_brake_type.trim() || null);
+  assign("brake_size_mm", optNum(form.brake_size_mm));
+  assign("tire_size", form.tire_size.trim() || null);
+  assign("bolt_pattern", form.bolt_pattern.trim() || null);
+  assign("wheel_offset_mm", optNum(form.wheel_offset_mm));
+  assign("engine_oil_capacity_l", optNum(form.engine_oil_capacity_l));
+  assign("coolant_capacity_l", optNum(form.coolant_capacity_l));
   return base;
 }
 
@@ -270,9 +303,9 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     trim_series: form.trim_series.trim() || null,
     generation: optInt(form.generation),
     model_code: form.model_code.trim() || null,
+    generation_code: form.generation_code.trim() || null,
     body_type: form.body_type.trim() || null,
     doors: optInt(form.doors),
-    exterior_color: form.exterior_color.trim() || null,
     length_mm: optNum(form.length_mm),
     width_mm: optNum(form.width_mm),
     height_mm: optNum(form.height_mm),
@@ -294,6 +327,14 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     gross_vehicle_weight_kg: optNum(form.gross_vehicle_weight_kg),
     max_payload_kg: optNum(form.max_payload_kg),
     max_towing_kg: optNum(form.max_towing_kg),
+    front_brake_type: form.front_brake_type.trim() || null,
+    rear_brake_type: form.rear_brake_type.trim() || null,
+    brake_size_mm: optNum(form.brake_size_mm),
+    tire_size: form.tire_size.trim() || null,
+    bolt_pattern: form.bolt_pattern.trim() || null,
+    wheel_offset_mm: optNum(form.wheel_offset_mm),
+    engine_oil_capacity_l: optNum(form.engine_oil_capacity_l),
+    coolant_capacity_l: optNum(form.coolant_capacity_l),
   };
 }
 
@@ -458,6 +499,7 @@ export function VehicleCatalogManager() {
               <TableHead className="bg-slate-50/90">Model</TableHead>
               <TableHead className="bg-slate-50/90">Year</TableHead>
               <TableHead className="hidden md:table-cell bg-slate-50/90">Trim</TableHead>
+              <TableHead className="hidden lg:table-cell bg-slate-50/90">Gen</TableHead>
               <TableHead className="hidden lg:table-cell bg-slate-50/90">Body</TableHead>
               <TableHead className="w-[140px] text-right bg-slate-50/90">Actions</TableHead>
             </TableRow>
@@ -465,7 +507,7 @@ export function VehicleCatalogManager() {
           <TableBody>
             {items.length === 0 ? (
               <TableRow className="hover:bg-transparent border-slate-200">
-                <TableCell colSpan={6} className="text-center text-slate-600 py-12">
+                <TableCell colSpan={7} className="text-center text-slate-600 py-12">
                   No vehicles yet. Add one to get started.
                 </TableCell>
               </TableRow>
@@ -477,6 +519,9 @@ export function VehicleCatalogManager() {
                   <TableCell className="text-slate-900">{row.year}</TableCell>
                   <TableCell className="hidden md:table-cell text-slate-700">
                     {row.trim_series ?? "—"}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell text-slate-700">
+                    {row.generation_code ?? row.model_code ?? (row.generation != null ? String(row.generation) : "—")}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-slate-700">
                     {row.body_type ?? "—"}
@@ -564,6 +609,9 @@ export function VehicleCatalogManager() {
               </TabsTrigger>
               <TabsTrigger value="engine" className="text-xs sm:text-sm">
                 Engine
+              </TabsTrigger>
+              <TabsTrigger value="brakes" className="text-xs sm:text-sm">
+                Brakes & wheels
               </TabsTrigger>
               <TabsTrigger value="capacity" className="text-xs sm:text-sm">
                 Capacity
@@ -655,7 +703,7 @@ export function VehicleCatalogManager() {
                 </div>
                 <Field label="Trim / series" value={form.trim_series} onChange={update("trim_series")} />
                 <Field
-                  label="Generation"
+                  label="Generation index"
                   value={form.generation}
                   onChange={update("generation")}
                   type="number"
@@ -665,6 +713,12 @@ export function VehicleCatalogManager() {
                   value={form.model_code}
                   onChange={update("model_code")}
                   placeholder="e.g. OEM / platform code"
+                />
+                <Field
+                  label="Generation code"
+                  value={form.generation_code}
+                  onChange={update("generation_code")}
+                  placeholder="e.g. M900A"
                 />
               </div>
             </TabsContent>
@@ -685,7 +739,6 @@ export function VehicleCatalogManager() {
                   options={VEHICLE_DOOR_COUNT_OPTIONS}
                   placeholder="Select doors"
                 />
-                <Field label="Exterior color" value={form.exterior_color} onChange={update("exterior_color")} />
                 <Field label="Length (mm)" value={form.length_mm} onChange={update("length_mm")} />
                 <Field label="Width (mm)" value={form.width_mm} onChange={update("width_mm")} />
                 <Field label="Height (mm)" value={form.height_mm} onChange={update("height_mm")} />
@@ -735,8 +788,31 @@ export function VehicleCatalogManager() {
               </div>
             </TabsContent>
 
+            <TabsContent value="brakes" className="mt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field
+                  label="Front brakes"
+                  value={form.front_brake_type}
+                  onChange={update("front_brake_type")}
+                  placeholder="disc / drum"
+                />
+                <Field
+                  label="Rear brakes"
+                  value={form.rear_brake_type}
+                  onChange={update("rear_brake_type")}
+                  placeholder="disc / drum"
+                />
+                <Field label="Brake size (mm)" value={form.brake_size_mm} onChange={update("brake_size_mm")} />
+                <Field label="Tire size" value={form.tire_size} onChange={update("tire_size")} placeholder="185/60R15" />
+                <Field label="Bolt pattern" value={form.bolt_pattern} onChange={update("bolt_pattern")} placeholder="5x114.3" />
+                <Field label="Wheel offset (mm)" value={form.wheel_offset_mm} onChange={update("wheel_offset_mm")} />
+              </div>
+            </TabsContent>
+
             <TabsContent value="capacity" className="mt-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Engine oil (L)" value={form.engine_oil_capacity_l} onChange={update("engine_oil_capacity_l")} />
+                <Field label="Coolant (L)" value={form.coolant_capacity_l} onChange={update("coolant_capacity_l")} />
                 <Field label="Fuel tank capacity" value={form.fuel_tank_capacity} onChange={update("fuel_tank_capacity")} />
                 <Field label="Fuel tank unit" value={form.fuel_tank_unit} onChange={update("fuel_tank_unit")} placeholder="L" />
                 <Field label="Seating" value={form.seating_capacity} onChange={update("seating_capacity")} type="number" />
@@ -836,11 +912,26 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
                   <VehicleSpecItem icon={Tag} label="Trim / series" value={viewText(r.trim_series)} />
-                  <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
+                  <VehicleSpecItem icon={Tag} label="Generation index" value={viewText(r.generation)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={Tag} label="Model code" value={viewText(r.model_code)} />
-                  <VehicleSpecItem icon={CarFront} label="Exterior color" value={viewText(r.exterior_color)} />
+                  <VehicleSpecItem icon={Tag} label="Generation code" value={viewText(r.generation_code)} />
+                </div>
+              </div>
+            </ViewSpecSection>
+
+            <ViewSpecSection title="Brakes & wheels">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
+                <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={CircleDot} label="Front brakes" value={viewText(r.front_brake_type)} />
+                  <VehicleSpecItem icon={CircleDot} label="Rear brakes" value={viewText(r.rear_brake_type)} />
+                  <VehicleSpecItem icon={Ruler} label="Brake size (mm)" value={viewText(r.brake_size_mm)} />
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
+                  <VehicleSpecItem icon={CarFront} label="Tire size" value={viewText(r.tire_size)} />
+                  <VehicleSpecItem icon={Settings2} label="Bolt pattern" value={viewText(r.bolt_pattern)} />
+                  <VehicleSpecItem icon={Ruler} label="Wheel offset (mm)" value={viewText(r.wheel_offset_mm)} />
                 </div>
               </div>
             </ViewSpecSection>
@@ -877,6 +968,8 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
             <ViewSpecSection title="Fuel & weight">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={Gauge} label="Engine oil (L)" value={viewText(r.engine_oil_capacity_l)} />
+                  <VehicleSpecItem icon={Gauge} label="Coolant (L)" value={viewText(r.coolant_capacity_l)} />
                   <VehicleSpecItem icon={Fuel} label="Fuel tank capacity" value={viewText(r.fuel_tank_capacity)} />
                   <VehicleSpecItem icon={Fuel} label="Fuel tank unit" value={viewText(r.fuel_tank_unit)} />
                 </div>
