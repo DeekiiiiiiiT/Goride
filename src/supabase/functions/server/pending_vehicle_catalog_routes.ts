@@ -6,6 +6,11 @@ import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
+import {
+  catalogRowForApi,
+  insertRowForLegacyDb,
+  isVehicleCatalogSchemaMismatchError,
+} from "./vehicle_catalog_schema_fallback.ts";
 
 const KEYS = [
   "make", "model", "production_start_year", "production_end_year", "trim_series", "generation", "model_code", "generation_code",
@@ -84,23 +89,36 @@ export function registerPendingVehicleCatalogRoutes(
         const trimQ = (c.req.query("trim_series") ?? "").trim();
         const genQ = (c.req.query("generation_code") ?? "").trim();
         const bodyQ = (c.req.query("body_type") ?? "").trim();
-        let q = supabase.from("vehicle_catalog").select("*").limit(40);
-        if (yearQ != null && yearQ !== "") {
-          const y = parseInt(yearQ, 10);
-          if (Number.isFinite(y)) {
-            q = q.lte("production_start_year", y).or(`production_end_year.is.null,production_end_year.gte.${y}`);
+
+        const buildMatchesQuery = (useLegacyYear: boolean) => {
+          let q = supabase.from("vehicle_catalog").select("*").limit(40);
+          if (yearQ != null && yearQ !== "") {
+            const y = parseInt(yearQ, 10);
+            if (Number.isFinite(y)) {
+              if (useLegacyYear) q = q.eq("year", y);
+              else q = q.lte("production_start_year", y).or(`production_end_year.is.null,production_end_year.gte.${y}`);
+            }
           }
+          if (make.length >= 2) q = q.ilike("make", `%${make}%`);
+          if (model.length >= 2) q = q.ilike("model", `%${model}%`);
+          if (trimQ.length >= 1) q = q.ilike("trim_series", `%${trimQ}%`);
+          if (genQ.length >= 1) {
+            if (useLegacyYear) q = q.ilike("generation_code", `%${genQ}%`);
+            else q = q.or(`chassis_code.ilike.%${genQ}%,generation_code.ilike.%${genQ}%`);
+          }
+          if (bodyQ.length >= 1) q = q.ilike("body_type", `%${bodyQ}%`);
+          return q.order("make").order("model");
+        };
+
+        let { data, error } = await buildMatchesQuery(false);
+        if (error && isVehicleCatalogSchemaMismatchError(error)) {
+          const r2 = await buildMatchesQuery(true);
+          data = r2.data;
+          error = r2.error;
         }
-        if (make.length >= 2) q = q.ilike("make", `%${make}%`);
-        if (model.length >= 2) q = q.ilike("model", `%${model}%`);
-        if (trimQ.length >= 1) q = q.ilike("trim_series", `%${trimQ}%`);
-        if (genQ.length >= 1) {
-          q = q.or(`chassis_code.ilike.%${genQ}%,generation_code.ilike.%${genQ}%`);
-        }
-        if (bodyQ.length >= 1) q = q.ilike("body_type", `%${bodyQ}%`);
-        const { data, error } = await q.order("make").order("model");
         if (error) throw error;
-        return c.json({ items: data || [] });
+        const items = (data || []).map((row) => catalogRowForApi(row as Record<string, unknown>));
+        return c.json({ items });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
@@ -137,7 +155,7 @@ export function registerPendingVehicleCatalogRoutes(
         const { data, error } = await supabase.from("vehicle_catalog").select("*").eq("id", catalogId).maybeSingle();
         if (error) throw error;
         if (!data) return c.json({ error: "Not found" }, 404);
-        return c.json({ item: data });
+        return c.json({ item: catalogRowForApi(data as Record<string, unknown>) });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
@@ -401,8 +419,14 @@ export function registerPendingVehicleCatalogRoutes(
           false,
         );
         row.updated_at = new Date().toISOString();
-        const { data: catRow, error: cErr } = await supabase.from("vehicle_catalog").insert(row).select().single();
-        if (cErr) throw cErr;
+        let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
+        if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+          const legacyRow = insertRowForLegacyDb(row as Record<string, unknown>);
+          legacyRow.updated_at = row.updated_at;
+          ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
+        }
+        if (ins.error) throw ins.error;
+        const catRow = ins.data;
         const catalogId = String((catRow as { id: string }).id);
 
         const fleetId = pr.fleet_vehicle_id;
@@ -434,7 +458,11 @@ export function registerPendingVehicleCatalogRoutes(
           catalogId,
         });
 
-        return c.json({ success: true, item: catRow, bootstrap: run });
+        return c.json({
+          success: true,
+          item: catalogRowForApi((catRow ?? {}) as Record<string, unknown>),
+          bootstrap: run,
+        });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }

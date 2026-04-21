@@ -7,6 +7,7 @@ import {
   type CatalogMatchHints,
   type CatalogVariantRow,
 } from "../../../utils/vehicleCatalogResolution.ts";
+import { isVehicleCatalogSchemaMismatchError } from "./vehicle_catalog_schema_fallback.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -42,14 +43,29 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   const m = make.trim().toLowerCase();
   const mo = model.trim().toLowerCase();
 
-  const { data, error } = await supabase
+  const selModern =
+    "id, make, model, trim_series, generation_code, model_code, chassis_code, drivetrain, fuel_type, transmission";
+  const selLegacy =
+    "id, make, model, trim_series, generation_code, model_code, drivetrain, fuel_type, transmission";
+
+  let data: unknown[] | null = null;
+
+  const modern = await supabase
     .from("vehicle_catalog")
-    .select(
-      "id, make, model, trim_series, generation_code, model_code, chassis_code, drivetrain, fuel_type, transmission",
-    )
+    .select(selModern)
     .lte("production_start_year", year)
     .or(`production_end_year.is.null,production_end_year.gte.${year}`);
-  if (error || !data?.length) return null;
+  if (!modern.error) {
+    data = modern.data as unknown[] | null;
+  } else if (isVehicleCatalogSchemaMismatchError(modern.error)) {
+    const leg = await supabase.from("vehicle_catalog").select(selLegacy).eq("year", year);
+    if (leg.error) return null;
+    data = leg.data as unknown[] | null;
+  } else {
+    return null;
+  }
+  if (!data?.length) return null;
+
   const candidates = (data as Array<CatalogVariantRow & { make?: string; model?: string }>).filter(
     (r) =>
       String(r.make ?? "")

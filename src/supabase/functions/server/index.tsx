@@ -73,6 +73,13 @@ import {
   supersedePendingRequestsForVehicle,
   upsertPendingFromKvVehicle,
 } from "./vehicle_catalog_pending_queries.ts";
+import {
+  catalogRowForApi,
+  insertRowForLegacyDb,
+  isVehicleCatalogSchemaMismatchError,
+  listVehicleCatalogWithFallback,
+  patchRowForLegacyDb,
+} from "./vehicle_catalog_schema_fallback.ts";
 
 // ---------------------------------------------------------------------------
 // Future-Date Guardrail
@@ -12578,14 +12585,8 @@ app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) 
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
   try {
-    const { data, error } = await supabase
-      .from("vehicle_catalog")
-      .select("*")
-      .order("make", { ascending: true })
-      .order("model", { ascending: true })
-      .order("production_start_year", { ascending: false });
-    if (error) throw error;
-    return c.json({ items: data || [] });
+    const { items } = await listVehicleCatalogWithFallback(supabase);
+    return c.json({ items });
   } catch (e: any) {
     console.error("[vehicle-catalog] list:", e);
     return c.json({ error: e.message || "Failed to list vehicle catalog" }, 500);
@@ -12630,9 +12631,15 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       false,
     );
     row.updated_at = new Date().toISOString();
-    const { data, error } = await supabase.from("vehicle_catalog").insert(row).select().single();
-    if (error) throw error;
-    return c.json({ item: data });
+    let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
+    if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+      const legacyRow = insertRowForLegacyDb(row);
+      legacyRow.updated_at = row.updated_at;
+      ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
+    }
+    if (ins.error) throw ins.error;
+    const item = catalogRowForApi((ins.data ?? {}) as Record<string, unknown>);
+    return c.json({ item });
   } catch (e: any) {
     console.error("[vehicle-catalog] create:", e);
     return c.json({ error: e.message || "Failed to create vehicle catalog entry" }, 500);
@@ -12695,10 +12702,14 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
     if (keys.length === 0) {
       return c.json({ error: "No fields to update" }, 400);
     }
-    const { data, error } = await supabase.from("vehicle_catalog").update(row).eq("id", id).select().single();
-    if (error) throw error;
-    if (!data) return c.json({ error: "Not found" }, 404);
-    return c.json({ item: data });
+    let upd = await supabase.from("vehicle_catalog").update(row).eq("id", id).select().single();
+    if (upd.error && isVehicleCatalogSchemaMismatchError(upd.error)) {
+      const legacyRow = patchRowForLegacyDb(row);
+      upd = await supabase.from("vehicle_catalog").update(legacyRow).eq("id", id).select().single();
+    }
+    if (upd.error) throw upd.error;
+    if (!upd.data) return c.json({ error: "Not found" }, 404);
+    return c.json({ item: catalogRowForApi(upd.data as Record<string, unknown>) });
   } catch (e: any) {
     console.error("[vehicle-catalog] patch:", e);
     return c.json({ error: e.message || "Failed to update vehicle catalog entry" }, 500);
