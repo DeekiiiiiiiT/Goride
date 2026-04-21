@@ -20,7 +20,9 @@ export async function upsertPendingFromKvVehicle(
 ): Promise<void> {
   const proposed_make = String(args.vehicle.make ?? "").trim() || "Unknown";
   const proposed_model = String(args.vehicle.model ?? "").trim() || "Unknown";
-  const proposed_year = parseYear(args.vehicle.year);
+  const y = parseYear(args.vehicle.year);
+  const proposed_production_start_year = y;
+  const proposed_production_end_year = y;
   const proposed_trim = null;
   const proposed_body_type = args.vehicle.bodyType != null
     ? String(args.vehicle.bodyType).trim() || null
@@ -40,7 +42,8 @@ export async function upsertPendingFromKvVehicle(
     fleet_vehicle_id: args.fleetVehicleId,
     proposed_make,
     proposed_model,
-    proposed_year,
+    proposed_production_start_year,
+    proposed_production_end_year,
     proposed_trim_series: proposed_trim,
     proposed_body_type,
     source: args.source,

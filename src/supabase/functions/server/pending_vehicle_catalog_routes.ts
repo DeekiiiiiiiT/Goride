@@ -8,7 +8,8 @@ import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 
 const KEYS = [
-  "make", "model", "year", "trim_series", "generation", "model_code", "generation_code",
+  "make", "model", "production_start_year", "production_end_year", "trim_series", "generation", "model_code", "generation_code",
+  "chassis_code", "engine_induction",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
   "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_type", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
@@ -17,6 +18,20 @@ const KEYS = [
   "tire_size", "bolt_pattern", "wheel_offset_mm",
   "engine_oil_capacity_l", "coolant_capacity_l",
 ] as const;
+
+function assertCatalogSpan(start: number, end: number | null): string | null {
+  if (end != null && end < start) return "production_end_year must be >= production_start_year";
+  return null;
+}
+
+function validateEngineInduction(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const s = String(raw).trim().toLowerCase();
+  if (!["na", "turbo", "supercharged", "other"].includes(s)) {
+    return "engine_induction must be na, turbo, supercharged, other, or empty";
+  }
+  return null;
+}
 
 const OPEN_STATUSES = ["pending", "needs_info"] as const;
 
@@ -72,12 +87,16 @@ export function registerPendingVehicleCatalogRoutes(
         let q = supabase.from("vehicle_catalog").select("*").limit(40);
         if (yearQ != null && yearQ !== "") {
           const y = parseInt(yearQ, 10);
-          if (Number.isFinite(y)) q = q.eq("year", y);
+          if (Number.isFinite(y)) {
+            q = q.lte("production_start_year", y).or(`production_end_year.is.null,production_end_year.gte.${y}`);
+          }
         }
         if (make.length >= 2) q = q.ilike("make", `%${make}%`);
         if (model.length >= 2) q = q.ilike("model", `%${model}%`);
         if (trimQ.length >= 1) q = q.ilike("trim_series", `%${trimQ}%`);
-        if (genQ.length >= 1) q = q.ilike("generation_code", `%${genQ}%`);
+        if (genQ.length >= 1) {
+          q = q.or(`chassis_code.ilike.%${genQ}%,generation_code.ilike.%${genQ}%`);
+        }
         if (bodyQ.length >= 1) q = q.ilike("body_type", `%${bodyQ}%`);
         const { data, error } = await q.order("make").order("model");
         if (error) throw error;
@@ -342,15 +361,45 @@ export function registerPendingVehicleCatalogRoutes(
         if (rErr) throw rErr;
         if (!reqRow) return c.json({ error: "Pending request not found" }, 404);
 
-        const pr = reqRow as { fleet_vehicle_id: string; proposed_make: string; proposed_model: string; proposed_year: number };
+        const pr = reqRow as {
+          fleet_vehicle_id: string;
+          proposed_make: string;
+          proposed_model: string;
+          proposed_production_start_year: number;
+          proposed_production_end_year: number | null;
+        };
         const make = String(body.make ?? pr.proposed_make).trim();
         const model = String(body.model ?? pr.proposed_model).trim();
-        const yearNum = body.year !== undefined && body.year !== null ? Number(body.year) : pr.proposed_year;
-        if (!make || !model || !Number.isFinite(yearNum) || yearNum < 1900 || yearNum > 2100) {
-          return c.json({ error: "make, model, valid year required" }, 400);
+        const startNum =
+          body.production_start_year !== undefined && body.production_start_year !== null
+            ? Number(body.production_start_year)
+            : pr.proposed_production_start_year;
+        let endNum: number | null;
+        if ("production_end_year" in body) {
+          if (body.production_end_year === null || body.production_end_year === "") {
+            endNum = null;
+          } else {
+            const e = Number(body.production_end_year);
+            if (!Number.isFinite(e) || e < 1900 || e > 2100) {
+              return c.json({ error: "production_end_year must be between 1900 and 2100, or empty for ongoing" }, 400);
+            }
+            endNum = e;
+          }
+        } else {
+          endNum = pr.proposed_production_end_year ?? null;
         }
+        if (!make || !model || !Number.isFinite(startNum) || startNum < 1900 || startNum > 2100) {
+          return c.json({ error: "make, model, and valid production_start_year required" }, 400);
+        }
+        const spanErr = assertCatalogSpan(startNum, endNum);
+        if (spanErr) return c.json({ error: spanErr }, 400);
+        const eiErr = validateEngineInduction(body.engine_induction);
+        if (eiErr) return c.json({ error: eiErr }, 400);
 
-        const row = pickRow({ ...body, make, model, year: yearNum }, false);
+        const row = pickRow(
+          { ...body, make, model, production_start_year: startNum, production_end_year: endNum },
+          false,
+        );
         row.updated_at = new Date().toISOString();
         const { data: catRow, error: cErr } = await supabase.from("vehicle_catalog").insert(row).select().single();
         if (cErr) throw cErr;

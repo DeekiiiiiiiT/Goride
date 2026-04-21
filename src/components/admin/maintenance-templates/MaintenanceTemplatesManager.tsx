@@ -11,7 +11,7 @@ import {
   migrateMaintenanceFromKv,
   updateMaintenanceTemplate,
 } from "../../../services/maintenanceTemplateService";
-import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
+import { formatCatalogProductionSpan, type VehicleCatalogRecord } from "../../../types/vehicleCatalog";
 import type { MaintenanceFrequencyKind, MaintenanceTaskTemplate } from "../../../types/maintenance";
 import { MAINTENANCE_SCHEDULE_PRESETS } from "../../../constants/maintenanceSchedulePresets";
 import { Button } from "../../ui/button";
@@ -240,7 +240,7 @@ export function MaintenanceTemplatesManager() {
   const selectedVehicleLabel = useMemo(() => {
     const row = catalog.find((c) => c.id === selectedCatalogId);
     if (!row) return "";
-    return `${row.make} ${row.model} (${row.year})`;
+    return `${row.make} ${row.model} (${formatCatalogProductionSpan(row)})`;
   }, [catalog, selectedCatalogId]);
 
   const openCreate = () => {
@@ -439,7 +439,7 @@ export function MaintenanceTemplatesManager() {
               <SelectContent>
                 {catalog.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.make} {c.model} ({c.year})
+                    {c.make} {c.model} ({formatCatalogProductionSpan(c)})
                   </SelectItem>
                 ))}
               </SelectContent>

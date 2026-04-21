@@ -9,6 +9,7 @@ import {
   rejectPendingVehicleCatalogRequest,
   requestInfoOnPendingVehicleCatalogRequest,
 } from "../../../services/pendingVehicleCatalogService";
+import { formatCatalogProductionSpan } from "../../../types/vehicleCatalog";
 import type { VehicleCatalogPendingRequest } from "../../../types/vehicleCatalogPending";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -63,7 +64,8 @@ export function PendingVehicleCatalogManager() {
 
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
-  const [year, setYear] = useState("");
+  const [productionStartYear, setProductionStartYear] = useState("");
+  const [productionEndYear, setProductionEndYear] = useState("");
   const [existingId, setExistingId] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [requestInfoMessage, setRequestInfoMessage] = useState("");
@@ -92,7 +94,10 @@ export function PendingVehicleCatalogManager() {
     setSelected(row);
     setMake(row.proposed_make);
     setModel(row.proposed_model);
-    setYear(String(row.proposed_year));
+    setProductionStartYear(String(row.proposed_production_start_year));
+    setProductionEndYear(
+      row.proposed_production_end_year == null ? "" : String(row.proposed_production_end_year),
+    );
     setExistingId("");
     setRejectReason("");
     setRequestInfoMessage("");
@@ -113,11 +118,16 @@ export function PendingVehicleCatalogManager() {
     if (!token || !selected) return;
     setActionBusy(true);
     try {
-      await approvePendingVehicleCatalogRequest(token, selected.id, {
+      const ps = parseInt(productionStartYear, 10);
+      const peTrim = productionEndYear.trim();
+      const payload: Record<string, unknown> = {
         make,
         model,
-        year: parseInt(year, 10),
-      });
+        production_start_year: ps,
+      };
+      if (peTrim === "") payload.production_end_year = null;
+      else payload.production_end_year = parseInt(peTrim, 10);
+      await approvePendingVehicleCatalogRequest(token, selected.id, payload);
       toast.success("Created catalog entry and linked vehicle");
       setDetailOpen(false);
       await load();
@@ -187,7 +197,7 @@ export function PendingVehicleCatalogManager() {
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Pending motor vehicles</h1>
           <p className="text-sm text-slate-600 mt-1">
-            Fleet-submitted make/model/year queued until added to the motor catalog or linked to an existing entry.
+            Fleet-submitted make/model and production years queued until added to the motor catalog or linked to an existing entry.
           </p>
           <p className="text-xs text-slate-500 mt-2">
             <span className="font-medium text-slate-700">Request changes</span> asks the customer to pick a catalog match.
@@ -249,7 +259,11 @@ export function PendingVehicleCatalogManager() {
                     </TableCell>
                     <TableCell className="font-mono text-sm">{row.fleet_vehicle_id}</TableCell>
                     <TableCell>
-                      {row.proposed_make} {row.proposed_model} {row.proposed_year}
+                      {row.proposed_make} {row.proposed_model}{" "}
+                      {formatCatalogProductionSpan({
+                        production_start_year: row.proposed_production_start_year,
+                        production_end_year: row.proposed_production_end_year,
+                      })}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -352,8 +366,23 @@ export function PendingVehicleCatalogManager() {
                       <Input id="pending-model" value={model} onChange={(e) => setModel(e.target.value)} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="pending-year">Year</Label>
-                      <Input id="pending-year" value={year} onChange={(e) => setYear(e.target.value)} inputMode="numeric" />
+                      <Label htmlFor="pending-prod-start">Production start year</Label>
+                      <Input
+                        id="pending-prod-start"
+                        value={productionStartYear}
+                        onChange={(e) => setProductionStartYear(e.target.value)}
+                        inputMode="numeric"
+                      />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="pending-prod-end">Production end year (empty = ongoing)</Label>
+                      <Input
+                        id="pending-prod-end"
+                        value={productionEndYear}
+                        onChange={(e) => setProductionEndYear(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="e.g. 2024 or leave blank"
+                      />
                     </div>
                   </div>
                 </div>

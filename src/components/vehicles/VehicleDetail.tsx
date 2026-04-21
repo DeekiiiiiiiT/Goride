@@ -114,7 +114,7 @@ import {
   listMyPendingCatalogRequests,
   listVehicleCatalogMatches,
 } from '../../services/pendingVehicleCatalogService';
-import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
+import { formatCatalogProductionSpan, type VehicleCatalogRecord } from '../../types/vehicleCatalog';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
@@ -228,12 +228,13 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     try {
       const updatedVehicle = {
         ...vehicle,
-        make: row.make,
-        model: row.model,
-        year: String(row.year),
         vehicle_catalog_id: row.id,
         vehicle_catalog_trim_hint: row.trim_series ?? undefined,
         vehicle_catalog_generation_hint: row.generation_code ?? row.model_code ?? undefined,
+        vehicle_catalog_chassis_hint: row.chassis_code ?? row.generation_code ?? undefined,
+        vehicle_catalog_drivetrain_hint: row.drivetrain ?? undefined,
+        vehicle_catalog_fuel_type_hint: row.fuel_type ?? undefined,
+        vehicle_catalog_transmission_hint: row.transmission ?? undefined,
       };
       await api.saveVehicle(updatedVehicle);
       await queryClient.invalidateQueries({ queryKey: ['vehicle-catalog-pending-my'] });
@@ -1003,12 +1004,13 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             <div>
               <span className="text-slate-500">Variant</span>
               <p className="font-medium">
-                {linkedCatalog.year} {linkedCatalog.make} {linkedCatalog.model}
+                {formatCatalogProductionSpan(linkedCatalog)} {linkedCatalog.make} {linkedCatalog.model}
                 {linkedCatalog.trim_series ? ` · ${linkedCatalog.trim_series}` : ''}
               </p>
-              {(linkedCatalog.generation_code || linkedCatalog.model_code) && (
+              {(linkedCatalog.chassis_code || linkedCatalog.generation_code || linkedCatalog.model_code) && (
                 <p className="text-xs text-slate-500">
-                  Code: {linkedCatalog.generation_code || linkedCatalog.model_code}
+                  Code:{' '}
+                  {linkedCatalog.chassis_code || linkedCatalog.generation_code || linkedCatalog.model_code}
                 </p>
               )}
             </div>
@@ -1967,10 +1969,10 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           onClick={() => void handleAlignPickCatalog(m)}
                         >
                           <span className="font-medium text-slate-900">
-                            {m.year} {m.make} {m.model}
+                            {formatCatalogProductionSpan(m)} {m.make} {m.model}
                           </span>
                           <span className="text-xs text-slate-500">
-                            {[m.trim_series, m.generation_code || m.model_code, m.body_type]
+                            {[m.trim_series, m.chassis_code || m.generation_code || m.model_code, m.body_type]
                               .filter(Boolean)
                               .join(' · ') || '—'}
                           </span>

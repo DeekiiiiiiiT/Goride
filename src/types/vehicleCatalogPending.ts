@@ -12,7 +12,8 @@ export interface VehicleCatalogPendingRequest {
   fleet_vehicle_id: string;
   proposed_make: string;
   proposed_model: string;
-  proposed_year: number;
+  proposed_production_start_year: number;
+  proposed_production_end_year: number | null;
   proposed_trim_series: string | null;
   proposed_body_type: string | null;
   source: "scan" | "manual";

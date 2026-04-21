@@ -3,12 +3,19 @@ export interface VehicleCatalogRecord {
   id: string;
   make: string;
   model: string;
-  year: number;
+  /** First calendar year this variant was produced */
+  production_start_year: number;
+  /** Last calendar year inclusive; null = still in production */
+  production_end_year: number | null;
   trim_series: string | null;
   generation: number | null;
   model_code: string | null;
-  /** OEM generation / chassis code (e.g. M900A) */
+  /** OEM / platform code (legacy); prefer chassis_code for new rows */
   generation_code?: string | null;
+  /** Primary technical index (e.g. M900A) */
+  chassis_code?: string | null;
+  /** na | turbo | supercharged | other */
+  engine_induction?: string | null;
   body_type: string | null;
   doors: number | null;
   length_mm: number | null;
@@ -46,6 +53,17 @@ export interface VehicleCatalogRecord {
   updated_at: string;
 }
 
-/** Payload for create (required: make, model, year). */
+/** Payload for create (required: make, model, production_start_year). */
 export type VehicleCatalogCreatePayload = Partial<VehicleCatalogRecord> &
-  Pick<VehicleCatalogRecord, "make" | "model" | "year">;
+  Pick<VehicleCatalogRecord, "make" | "model" | "production_start_year">;
+
+/** Display label for catalog production span (e.g. `2020–Present`, `2018–2022`). */
+export function formatCatalogProductionSpan(
+  r: Pick<VehicleCatalogRecord, "production_start_year" | "production_end_year">,
+): string {
+  const a = r.production_start_year;
+  const b = r.production_end_year;
+  if (b == null) return `${a}–Present`;
+  if (a === b) return String(a);
+  return `${a}–${b}`;
+}

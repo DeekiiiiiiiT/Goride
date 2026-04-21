@@ -23,6 +23,10 @@ function hintsFromKvVehicle(v: Record<string, unknown>): CatalogMatchHints {
     trim_series: pickStr(v, ["vehicle_catalog_trim_hint", "catalog_trim_hint", "trim_series"]),
     generation_code: pickStr(v, ["vehicle_catalog_generation_hint", "generation_code"]),
     model_code: pickStr(v, ["vehicle_catalog_model_code_hint", "model_code"]),
+    chassis_code: pickStr(v, ["vehicle_catalog_chassis_hint", "chassis_code"]),
+    drivetrain: pickStr(v, ["vehicle_catalog_drivetrain_hint", "drivetrain"]),
+    fuel_type: pickStr(v, ["vehicle_catalog_fuel_type_hint", "fuel_type"]),
+    transmission: pickStr(v, ["vehicle_catalog_transmission_hint", "transmission"]),
   };
 }
 
@@ -37,10 +41,14 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   if (!Number.isFinite(year)) return null;
   const m = make.trim().toLowerCase();
   const mo = model.trim().toLowerCase();
+
   const { data, error } = await supabase
     .from("vehicle_catalog")
-    .select("id, make, model, trim_series, generation_code, model_code")
-    .eq("year", year);
+    .select(
+      "id, make, model, trim_series, generation_code, model_code, chassis_code, drivetrain, fuel_type, transmission",
+    )
+    .lte("production_start_year", year)
+    .or(`production_end_year.is.null,production_end_year.gte.${year}`);
   if (error || !data?.length) return null;
   const candidates = (data as Array<CatalogVariantRow & { make?: string; model?: string }>).filter(
     (r) =>

@@ -12515,7 +12515,8 @@ app.get("/make-server-37f42386/admin-stats", async (c) => {
 // ---------------------------------------------------------------------------
 
 const VEHICLE_CATALOG_WRITABLE_KEYS = [
-  "make", "model", "year", "trim_series", "generation", "model_code", "generation_code",
+  "make", "model", "production_start_year", "production_end_year", "trim_series", "generation", "model_code", "generation_code",
+  "chassis_code", "engine_induction",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
   "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_type", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
@@ -12524,6 +12525,27 @@ const VEHICLE_CATALOG_WRITABLE_KEYS = [
   "tire_size", "bolt_pattern", "wheel_offset_mm",
   "engine_oil_capacity_l", "coolant_capacity_l",
 ] as const;
+
+function parseCatalogProductionEndYear(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1900 || n > 2100) return null;
+  return n;
+}
+
+function assertCatalogProductionSpan(start: number, end: number | null): string | null {
+  if (end != null && end < start) return "production_end_year must be >= production_start_year";
+  return null;
+}
+
+function validateEngineInduction(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const s = String(raw).trim().toLowerCase();
+  if (!["na", "turbo", "supercharged", "other"].includes(s)) {
+    return "engine_induction must be na, turbo, supercharged, other, or empty";
+  }
+  return null;
+}
 
 function assertVehicleCatalogAccess(c: any) {
   const rbacUser = c.get("rbacUser") as any;
@@ -12561,7 +12583,7 @@ app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) 
       .select("*")
       .order("make", { ascending: true })
       .order("model", { ascending: true })
-      .order("year", { ascending: false });
+      .order("production_start_year", { ascending: false });
     if (error) throw error;
     return c.json({ items: data || [] });
   } catch (e: any) {
@@ -12578,14 +12600,35 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
     const body = (await c.req.json()) as Record<string, unknown>;
     const make = String(body.make ?? "").trim();
     const model = String(body.model ?? "").trim();
-    const yearNum = Number(body.year);
-    if (!make || !model || body.year === undefined || body.year === null || body.year === "") {
-      return c.json({ error: "make, model, and year are required" }, 400);
+    const startNum = Number(body.production_start_year);
+    let endNum: number | null = null;
+    if (body.production_end_year !== undefined && body.production_end_year !== null && body.production_end_year !== "") {
+      const e = Number(body.production_end_year);
+      if (!Number.isFinite(e) || e < 1900 || e > 2100) {
+        return c.json({ error: "production_end_year must be between 1900 and 2100, or omitted for ongoing" }, 400);
+      }
+      endNum = e;
     }
-    if (!Number.isFinite(yearNum) || yearNum < 1900 || yearNum > 2100) {
-      return c.json({ error: "year must be between 1900 and 2100" }, 400);
+    if (
+      !make ||
+      !model ||
+      body.production_start_year === undefined ||
+      body.production_start_year === null ||
+      body.production_start_year === ""
+    ) {
+      return c.json({ error: "make, model, and production_start_year are required" }, 400);
     }
-    const row = pickVehicleCatalogRow({ ...body, make, model, year: yearNum }, false);
+    if (!Number.isFinite(startNum) || startNum < 1900 || startNum > 2100) {
+      return c.json({ error: "production_start_year must be between 1900 and 2100" }, 400);
+    }
+    const spanErr = assertCatalogProductionSpan(startNum, endNum);
+    if (spanErr) return c.json({ error: spanErr }, 400);
+    const eiErr = validateEngineInduction(body.engine_induction);
+    if (eiErr) return c.json({ error: eiErr }, 400);
+    const row = pickVehicleCatalogRow(
+      { ...body, make, model, production_start_year: startNum, production_end_year: endNum },
+      false,
+    );
     row.updated_at = new Date().toISOString();
     const { data, error } = await supabase.from("vehicle_catalog").insert(row).select().single();
     if (error) throw error;
@@ -12603,13 +12646,47 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
   try {
     const id = c.req.param("id");
     const body = (await c.req.json()) as Record<string, unknown>;
+    if (body.production_end_year === "") body.production_end_year = null;
+    if (body.engine_induction === "") body.engine_induction = null;
     const row = pickVehicleCatalogRow(body, true);
-    if (row.year !== undefined) {
-      const y = Number(row.year);
+    if (row.production_start_year !== undefined) {
+      const y = Number(row.production_start_year);
       if (!Number.isFinite(y) || y < 1900 || y > 2100) {
-        return c.json({ error: "year must be between 1900 and 2100" }, 400);
+        return c.json({ error: "production_start_year must be between 1900 and 2100" }, 400);
       }
-      row.year = y;
+      row.production_start_year = y;
+    }
+    if (row.production_end_year !== undefined) {
+      if (row.production_end_year === null) {
+        row.production_end_year = null;
+      } else {
+        const e = parseCatalogProductionEndYear(row.production_end_year);
+        if (e === null) {
+          return c.json({ error: "production_end_year must be between 1900 and 2100, or empty for ongoing" }, 400);
+        }
+        row.production_end_year = e;
+      }
+    }
+    const startForCheck =
+      row.production_start_year !== undefined
+        ? Number(row.production_start_year)
+        : undefined;
+    const endForCheck =
+      row.production_end_year === undefined
+        ? undefined
+        : row.production_end_year === null
+          ? null
+          : Number(row.production_end_year);
+    if (startForCheck !== undefined && endForCheck !== undefined) {
+      const spanErr = assertCatalogProductionSpan(startForCheck, endForCheck);
+      if (spanErr) return c.json({ error: spanErr }, 400);
+    }
+    if (body.engine_induction !== undefined) {
+      const eiErr = validateEngineInduction(body.engine_induction);
+      if (eiErr) return c.json({ error: eiErr }, 400);
+    }
+    if (row.engine_induction !== undefined && row.engine_induction !== null && row.engine_induction !== "") {
+      row.engine_induction = String(row.engine_induction).trim().toLowerCase();
     }
     if (row.make !== undefined) row.make = String(row.make).trim();
     if (row.model !== undefined) row.model = String(row.model).trim();
