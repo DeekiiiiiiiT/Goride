@@ -4,6 +4,7 @@ import {
   Armchair,
   Calendar,
   CarFront,
+  CheckCircle2,
   ChevronDown,
   CircleDot,
   DoorOpen,
@@ -20,6 +21,7 @@ import {
   Tag,
   Trash2,
   Weight,
+  XCircle,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -47,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../ui/dialog";
+import { Progress } from "../../ui/progress";
 import { ScrollArea } from "../../ui/scroll-area";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
@@ -530,7 +533,14 @@ export function VehicleCatalogManager() {
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<ParsedCatalogImportRow[] | null>(null);
-  const [importRunning, setImportRunning] = useState(false);
+  /** preview → importing → result */
+  const [importStep, setImportStep] = useState<"preview" | "importing" | "result">("preview");
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [importOutcome, setImportOutcome] = useState<{
+    imported: number;
+    failed: number;
+    errors: string[];
+  } | null>(null);
 
   const handleImportPick = () => importFileRef.current?.click();
 
@@ -544,6 +554,9 @@ export function VehicleCatalogManager() {
         const text = String(reader.result ?? "");
         const rows = parseVehicleCatalogCsvWithPapa(text);
         setImportPreview(rows);
+        setImportStep("preview");
+        setImportProgress(null);
+        setImportOutcome(null);
         setImportDialogOpen(true);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Could not parse CSV");
@@ -554,9 +567,12 @@ export function VehicleCatalogManager() {
   };
 
   const handleCloseImportDialog = () => {
-    if (importRunning) return;
+    if (importStep === "importing") return;
     setImportDialogOpen(false);
     setImportPreview(null);
+    setImportStep("preview");
+    setImportProgress(null);
+    setImportOutcome(null);
   };
 
   const handleRunCatalogImport = async () => {
@@ -575,28 +591,26 @@ export function VehicleCatalogManager() {
       toast.error("No valid rows to import — fix the parse issues listed in the dialog, then try again.");
       return;
     }
-    setImportRunning(true);
-    let ok = 0;
+    setImportStep("importing");
+    setImportProgress({ current: 0, total: ready.length });
+    setImportOutcome(null);
+    let imported = 0;
     const apiErrors: string[] = [];
-    for (const r of ready) {
+    for (let i = 0; i < ready.length; i++) {
+      const r = ready[i];
       try {
         await createVehicleCatalog(token, r.payload);
-        ok++;
+        imported++;
       } catch (err) {
         apiErrors.push(`Row ${r.rowIndex}: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setImportProgress({ current: i + 1, total: ready.length });
       }
     }
-    setImportRunning(false);
-    setImportDialogOpen(false);
-    setImportPreview(null);
-    if (ok > 0) {
-      toast.success(`Imported ${ok} vehicle${ok === 1 ? "" : "s"}`);
+    setImportOutcome({ imported, failed: apiErrors.length, errors: apiErrors });
+    setImportStep("result");
+    if (imported > 0) {
       await load();
-    }
-    if (apiErrors.length > 0) {
-      toast.error(`${apiErrors.length} row(s) failed to save`, {
-        description: apiErrors.slice(0, 8).join("\n"),
-      });
     }
   };
 
@@ -628,7 +642,7 @@ export function VehicleCatalogManager() {
             variant="outline"
             className="gap-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
             onClick={handleImportPick}
-            disabled={loading || importRunning}
+            disabled={loading || importStep === "importing"}
             title="Import rows from CSV (export first to use as a template)"
           >
             <Upload className="w-4 h-4" />
@@ -1133,21 +1147,48 @@ export function VehicleCatalogManager() {
           if (!open) handleCloseImportDialog();
         }}
       >
-        <DialogContent className="sm:max-w-lg bg-white border-slate-200">
+        <DialogContent
+          className="sm:max-w-lg bg-white border-slate-200"
+          hideCloseButton={importStep === "importing"}
+          aria-busy={importStep === "importing"}
+          onPointerDownOutside={(e) => {
+            if (importStep === "importing") e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (importStep === "importing") e.preventDefault();
+          }}
+        >
           <DialogHeader>
-            <DialogTitle>Import motor catalog</DialogTitle>
-            <DialogDescription className="text-slate-600 text-sm leading-relaxed">
-              Required columns: <span className="font-medium text-slate-800">Make</span>,{" "}
-              <span className="font-medium text-slate-800">Model</span>,{" "}
-              <span className="font-medium text-slate-800">Production start year</span>. Use{" "}
-              <span className="font-medium text-slate-800">Export CSV</span> for a compatible template. End year{" "}
-              <span className="font-medium text-slate-800">9999</span> or empty means ongoing. Engine type:{" "}
-              <code className="text-xs bg-slate-100 px-1 rounded">na</code>,{" "}
-              <code className="text-xs bg-slate-100 px-1 rounded">turbo</code>, or{" "}
-              <code className="text-xs bg-slate-100 px-1 rounded">N/A</code> / Turbo as labels.
-            </DialogDescription>
+            <DialogTitle>
+              {importStep === "importing"
+                ? "Importing…"
+                : importStep === "result"
+                  ? "Import finished"
+                  : "Import motor catalog"}
+            </DialogTitle>
+            {importStep === "preview" && (
+              <DialogDescription className="text-slate-600 text-sm leading-relaxed">
+                Required columns: <span className="font-medium text-slate-800">Make</span>,{" "}
+                <span className="font-medium text-slate-800">Model</span>,{" "}
+                <span className="font-medium text-slate-800">Production start year</span>. Use{" "}
+                <span className="font-medium text-slate-800">Export CSV</span> for a compatible template. End year{" "}
+                <span className="font-medium text-slate-800">9999</span> or empty means ongoing.{" "}
+                <span className="font-medium text-slate-800">Engine type</span> is free text (e.g. N/A, Turbo, Hybrid).
+              </DialogDescription>
+            )}
+            {importStep === "importing" && (
+              <DialogDescription className="text-slate-600 text-sm">
+                Uploading rows to the catalog. Please keep this window open.
+              </DialogDescription>
+            )}
+            {importStep === "result" && importOutcome && (
+              <DialogDescription className="sr-only">
+                Import completed with {importOutcome.imported} imported and {importOutcome.failed} failed.
+              </DialogDescription>
+            )}
           </DialogHeader>
-          {importPreview && (
+
+          {importStep === "preview" && importPreview && (
             <div className="space-y-3 py-1">
               <p className="text-sm text-slate-700">
                 <span className="font-semibold text-slate-900">{importPreview.filter((r) => r.payload).length}</span>{" "}
@@ -1181,22 +1222,112 @@ export function VehicleCatalogManager() {
               )}
             </div>
           )}
+
+          {importStep === "importing" && importProgress && importProgress.total > 0 && (
+            <div className="space-y-3 py-2">
+              <div className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                <span className="tabular-nums">
+                  Row {importProgress.current} of {importProgress.total}
+                </span>
+                <span className="text-slate-500 tabular-nums">
+                  {Math.min(
+                    100,
+                    Math.round((importProgress.current / importProgress.total) * 100),
+                  )}
+                  %
+                </span>
+              </div>
+              <Progress
+                value={Math.min(
+                  100,
+                  Math.round((importProgress.current / importProgress.total) * 100),
+                )}
+                className="h-2.5 bg-slate-200"
+                indicatorClassName="bg-slate-900"
+              />
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                Saving to server…
+              </div>
+            </div>
+          )}
+
+          {importStep === "result" && importOutcome && (
+            <div className="space-y-4 py-1">
+              {importOutcome.failed === 0 && importOutcome.imported > 0 && (
+                <div className="flex gap-3 rounded-xl border border-emerald-200/80 bg-emerald-50/90 p-4">
+                  <CheckCircle2 className="h-10 w-10 shrink-0 text-emerald-600" strokeWidth={1.75} aria-hidden />
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-semibold text-emerald-950">Import successful</p>
+                    <p className="text-sm text-emerald-900/90">
+                      {importOutcome.imported} vehicle{importOutcome.imported === 1 ? "" : "s"} added to the catalog.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {importOutcome.imported === 0 && importOutcome.failed > 0 && (
+                <div className="flex gap-3 rounded-xl border border-red-200/80 bg-red-50/90 p-4">
+                  <XCircle className="h-10 w-10 shrink-0 text-red-600" strokeWidth={1.75} aria-hidden />
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-semibold text-red-950">Import failed</p>
+                    <p className="text-sm text-red-900/90">
+                      None of the {importOutcome.failed} row{importOutcome.failed === 1 ? "" : "s"} could be saved. See
+                      details below.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {importOutcome.imported > 0 && importOutcome.failed > 0 && (
+                <div className="flex gap-3 rounded-xl border border-amber-200/80 bg-amber-50/90 p-4">
+                  <CheckCircle2 className="h-10 w-10 shrink-0 text-amber-600" strokeWidth={1.75} aria-hidden />
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-semibold text-amber-950">Partially imported</p>
+                    <p className="text-sm text-amber-950/90">
+                      <span className="font-medium tabular-nums">{importOutcome.imported}</span> saved,{" "}
+                      <span className="font-medium tabular-nums">{importOutcome.failed}</span> failed.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {importOutcome.errors.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-slate-600">Error details</p>
+                  <ScrollArea className="h-[min(220px,45vh)] rounded-md border border-slate-200 bg-slate-50/80 p-2">
+                    <ul className="space-y-1.5 text-xs text-slate-800 font-mono leading-relaxed">
+                      {importOutcome.errors.map((line, idx) => (
+                        <li key={`${idx}-${line.slice(0, 24)}`}>{line}</li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+          )}
+
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={handleCloseImportDialog} disabled={importRunning}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleRunCatalogImport()}
-              disabled={
-                importRunning ||
-                !importPreview?.some((r) => r.payload)
-              }
-              className="gap-2"
-            >
-              {importRunning && <Loader2 className="w-4 h-4 animate-spin" />}
-              Import
-            </Button>
+            {importStep === "preview" && (
+              <>
+                <Button type="button" variant="outline" onClick={handleCloseImportDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleRunCatalogImport()}
+                  disabled={!importPreview?.some((r) => r.payload)}
+                  className="gap-2"
+                >
+                  Import
+                </Button>
+              </>
+            )}
+            {importStep === "result" && (
+              <Button type="button" onClick={handleCloseImportDialog} className="w-full sm:w-auto">
+                Done
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
