@@ -9,6 +9,7 @@ import { filterByOrg, getOrgId } from "./org_scope.ts";
 import {
   catalogRowForApi,
   insertRowForLegacyDb,
+  isLegacyVehicleCatalogYearNotNullError,
   isVehicleCatalogSchemaMismatchError,
   stripVehicleCatalogSpecPackColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
@@ -495,7 +496,11 @@ export function registerPendingVehicleCatalogRoutes(
         }
         row.updated_at = new Date().toISOString();
         let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
-        if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+        if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
+          const legacyRow = insertRowForLegacyDb(stripVehicleCatalogSpecPackColumns(row as Record<string, unknown>));
+          legacyRow.updated_at = row.updated_at;
+          ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
+        } else if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
           const withoutSpecs = stripVehicleCatalogSpecPackColumns(row as Record<string, unknown>);
           withoutSpecs.updated_at = row.updated_at;
           ins = await supabase.from("vehicle_catalog").insert(withoutSpecs).select().single();

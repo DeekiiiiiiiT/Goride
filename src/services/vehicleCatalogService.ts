@@ -61,7 +61,24 @@ export async function createVehicleCatalog(
     headers: edgeHeaders(accessToken, "application/json"),
     body: jsonBodyOmitNullish(payload),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) {
+    // #region agent log
+    const errText = await parseError(res);
+    fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
+      body: JSON.stringify({
+        sessionId: "4a340e",
+        hypothesisId: "H1_year_legacy_mismatch",
+        location: "vehicleCatalogService.ts:createVehicleCatalog",
+        message: "catalog create failed",
+        data: { status: res.status, errPreview: errText.slice(0, 280), hasYear: errText.includes("year") },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    throw new Error(errText);
+    // #endregion
+  }
   const data = await res.json();
   return data.item as VehicleCatalogRecord;
 }

@@ -3,11 +3,22 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
+/** True when DB still requires legacy `year NOT NULL` but payload only has `production_start_year`. */
+export function isLegacyVehicleCatalogYearNotNullError(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false;
+  const msg = String(err.message ?? "");
+  const code = String(err.code ?? "");
+  if (code === "23502" && (msg.includes('"year"') || msg.includes("'year'"))) return true;
+  if (msg.includes("null value in column") && (msg.includes('"year"') || msg.includes("'year'"))) return true;
+  return false;
+}
+
 export function isVehicleCatalogSchemaMismatchError(err: { message?: string; code?: string } | null): boolean {
   if (!err) return false;
   const msg = String(err.message ?? "");
   const code = String(err.code ?? "");
   if (code === "42703") return true;
+  if (isLegacyVehicleCatalogYearNotNullError(err)) return true;
   /** PostgREST: column not in schema cache / not exposed */
   if (msg.includes("schema cache")) return true;
   if (msg.includes("Could not find") && msg.includes("column")) return true;
