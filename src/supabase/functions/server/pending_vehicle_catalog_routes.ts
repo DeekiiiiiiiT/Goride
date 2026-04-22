@@ -11,10 +11,12 @@ import {
   insertRowForLegacyDb,
   isVehicleCatalogSchemaMismatchError,
 } from "./vehicle_catalog_schema_fallback.ts";
+import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../utils/vehicleCatalogResolution.ts";
 
 const KEYS = [
-  "make", "model", "production_start_year", "production_end_year", "trim_series", "generation", "model_code", "generation_code",
-  "chassis_code", "engine_induction",
+  "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
+  "trim_series", "generation", "model_code", "generation_code",
+  "chassis_code", "engine_code", "engine_type",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
   "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_type", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
@@ -29,13 +31,22 @@ function assertCatalogSpan(start: number, end: number | null): string | null {
   return null;
 }
 
-function validateEngineInduction(raw: unknown): string | null {
+function validateEngineType(raw: unknown): string | null {
   if (raw === undefined || raw === null || raw === "") return null;
   const s = String(raw).trim().toLowerCase();
   if (!["na", "turbo", "supercharged", "other"].includes(s)) {
-    return "engine_induction must be na, turbo, supercharged, other, or empty";
+    return "engine_type must be na, turbo, supercharged, other, or empty";
   }
   return null;
+}
+
+function parseOptionalProductionMonth(raw: unknown, label: string): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (raw === undefined || raw === null || raw === "") return { ok: true, value: null };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1 || n > 12) {
+    return { ok: false, error: `${label} must be between 1 and 12, or empty` };
+  }
+  return { ok: true, value: n };
 }
 
 const OPEN_STATUSES = ["pending", "needs_info"] as const;
@@ -89,6 +100,12 @@ export function registerPendingVehicleCatalogRoutes(
         const trimQ = (c.req.query("trim_series") ?? "").trim();
         const genQ = (c.req.query("generation_code") ?? "").trim();
         const bodyQ = (c.req.query("body_type") ?? "").trim();
+        const monthQ = (c.req.query("month") ?? "").trim();
+        const fleetMonth = monthQ === "" ? null : parseInt(monthQ, 10);
+        const monthFilter =
+          fleetMonth != null && Number.isFinite(fleetMonth) && fleetMonth >= 1 && fleetMonth <= 12
+            ? fleetMonth
+            : null;
 
         const buildMatchesQuery = (useLegacyYear: boolean) => {
           let q = supabase.from("vehicle_catalog").select("*").limit(40);
@@ -117,7 +134,28 @@ export function registerPendingVehicleCatalogRoutes(
           error = r2.error;
         }
         if (error) throw error;
-        const items = (data || []).map((row) => catalogRowForApi(row as Record<string, unknown>));
+        let rows = data || [];
+        if (monthFilter != null && yearQ != null && yearQ !== "") {
+          const y = parseInt(yearQ, 10);
+          if (Number.isFinite(y)) {
+            const mapped = rows.map((raw) => {
+              const row = raw as Record<string, unknown>;
+              if (row.production_start_year != null) return row as CatalogVariantRow;
+              const yn = Number(row.year);
+              if (!Number.isFinite(yn)) return row as CatalogVariantRow;
+              return {
+                ...row,
+                production_start_year: yn,
+                production_start_month: null,
+                production_end_year: yn,
+                production_end_month: null,
+              } as CatalogVariantRow;
+            });
+            const filtered = filterCatalogRowsByFleetMonth(mapped, y, monthFilter);
+            rows = filtered.length > 0 ? filtered : mapped;
+          }
+        }
+        const items = rows.map((row) => catalogRowForApi(row as Record<string, unknown>));
         return c.json({ items });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
@@ -385,6 +423,8 @@ export function registerPendingVehicleCatalogRoutes(
           proposed_model: string;
           proposed_production_start_year: number;
           proposed_production_end_year: number | null;
+          proposed_production_start_month?: number | null;
+          proposed_production_end_month?: number | null;
         };
         const make = String(body.make ?? pr.proposed_make).trim();
         const model = String(body.model ?? pr.proposed_model).trim();
@@ -411,11 +451,39 @@ export function registerPendingVehicleCatalogRoutes(
         }
         const spanErr = assertCatalogSpan(startNum, endNum);
         if (spanErr) return c.json({ error: spanErr }, 400);
-        const eiErr = validateEngineInduction(body.engine_induction);
+
+        let startMonth: number | null;
+        if ("production_start_month" in body) {
+          const p = parseOptionalProductionMonth(body.production_start_month, "production_start_month");
+          if (!p.ok) return c.json({ error: p.error }, 400);
+          startMonth = p.value;
+        } else {
+          startMonth = pr.proposed_production_start_month ?? null;
+        }
+        let endMonth: number | null;
+        if ("production_end_month" in body) {
+          const p = parseOptionalProductionMonth(body.production_end_month, "production_end_month");
+          if (!p.ok) return c.json({ error: p.error }, 400);
+          endMonth = p.value;
+        } else {
+          endMonth = pr.proposed_production_end_month ?? null;
+        }
+        if (endNum == null && endMonth != null) {
+          return c.json({ error: "production_end_month must be empty when production is ongoing" }, 400);
+        }
+        const eiErr = validateEngineType(body.engine_type);
         if (eiErr) return c.json({ error: eiErr }, 400);
 
         const row = pickRow(
-          { ...body, make, model, production_start_year: startNum, production_end_year: endNum },
+          {
+            ...body,
+            make,
+            model,
+            production_start_year: startNum,
+            production_end_year: endNum,
+            production_start_month: startMonth,
+            production_end_month: endMonth,
+          },
           false,
         );
         row.updated_at = new Date().toISOString();

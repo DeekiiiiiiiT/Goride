@@ -9,7 +9,7 @@ import {
   rejectPendingVehicleCatalogRequest,
   requestInfoOnPendingVehicleCatalogRequest,
 } from "../../../services/pendingVehicleCatalogService";
-import { formatCatalogProductionSpan } from "../../../types/vehicleCatalog";
+import { formatCatalogProductionWindow } from "../../../types/vehicleCatalog";
 import type { VehicleCatalogPendingRequest } from "../../../types/vehicleCatalogPending";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -260,9 +260,11 @@ export function PendingVehicleCatalogManager() {
                     <TableCell className="font-mono text-sm">{row.fleet_vehicle_id}</TableCell>
                     <TableCell>
                       {row.proposed_make} {row.proposed_model}{" "}
-                      {formatCatalogProductionSpan({
+                      {formatCatalogProductionWindow({
                         production_start_year: row.proposed_production_start_year,
                         production_end_year: row.proposed_production_end_year,
+                        production_start_month: row.proposed_production_start_month ?? undefined,
+                        production_end_month: row.proposed_production_end_month ?? undefined,
                       })}
                     </TableCell>
                     <TableCell>

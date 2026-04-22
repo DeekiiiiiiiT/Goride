@@ -16,6 +16,8 @@ export type VehicleCatalogMatchParams = {
   make?: string;
   model?: string;
   year?: string;
+  /** 1–12; narrows catalog rows by production month when model year is ambiguous */
+  month?: string;
   trim_series?: string;
   generation_code?: string;
   body_type?: string;
@@ -29,6 +31,7 @@ export async function listVehicleCatalogMatches(
   if (params.make) sp.set("make", params.make);
   if (params.model) sp.set("model", params.model);
   if (params.year) sp.set("year", params.year);
+  if (params.month) sp.set("month", params.month);
   if (params.trim_series) sp.set("trim_series", params.trim_series);
   if (params.generation_code) sp.set("generation_code", params.generation_code);
   if (params.body_type) sp.set("body_type", params.body_type);

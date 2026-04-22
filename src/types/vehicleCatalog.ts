@@ -7,15 +7,27 @@ export interface VehicleCatalogRecord {
   production_start_year: number;
   /** Last calendar year inclusive; null = still in production */
   production_end_year: number | null;
+  /** 1–12; null = January for uniqueness (see DB index coalesce) */
+  production_start_month?: number | null;
+  /** 1–12; null when production_end_year is null (ongoing) */
+  production_end_month?: number | null;
+  /**
+   * Trim grade, market series, and/or **facelift phase** (mid-cycle update). Stored in one field per v1.
+   * For a major MC (e.g. pre- vs post-facelift), use **separate catalog rows** with distinct year ranges
+   * and values like `Pre-Facelift` / `Facelift` (optional: align with frame prefixes DBA vs 5BA/4BA where applicable).
+   */
   trim_series: string | null;
-  generation: number | null;
+  /** Free-text generation label (e.g. Mk2, E210). */
+  generation: string | null;
   model_code: string | null;
   /** OEM / platform code (legacy); prefer chassis_code for new rows */
   generation_code?: string | null;
   /** Primary technical index (e.g. M900A) */
   chassis_code?: string | null;
+  /** OEM engine code (e.g. 1KR-FE) */
+  engine_code?: string | null;
   /** na | turbo | supercharged | other */
-  engine_induction?: string | null;
+  engine_type?: string | null;
   body_type: string | null;
   doors: number | null;
   length_mm: number | null;
@@ -66,4 +78,35 @@ export function formatCatalogProductionSpan(
   if (b == null) return `${a}–Present`;
   if (a === b) return String(a);
   return `${a}–${b}`;
+}
+
+/** Year + optional month precision, or year-only when no month fields are set. */
+export function formatCatalogProductionWindow(
+  r: Pick<
+    VehicleCatalogRecord,
+    | "production_start_year"
+    | "production_end_year"
+    | "production_start_month"
+    | "production_end_month"
+  >,
+): string {
+  const hasMonth =
+    (r.production_start_month != null && r.production_start_month >= 1 && r.production_start_month <= 12) ||
+    (r.production_end_month != null && r.production_end_month >= 1 && r.production_end_month <= 12);
+  if (!hasMonth) return formatCatalogProductionSpan(r);
+
+  const y0 = r.production_start_year;
+  const m0 =
+    r.production_start_month != null && r.production_start_month >= 1 && r.production_start_month <= 12
+      ? r.production_start_month
+      : 1;
+  const start = `${y0}-${String(m0).padStart(2, "0")}`;
+  const y1 = r.production_end_year;
+  if (y1 == null) return `${start}–Present`;
+  const m1 =
+    r.production_end_month != null && r.production_end_month >= 1 && r.production_end_month <= 12
+      ? r.production_end_month
+      : 12;
+  const end = `${y1}-${String(m1).padStart(2, "0")}`;
+  return start === end ? start : `${start}–${end}`;
 }

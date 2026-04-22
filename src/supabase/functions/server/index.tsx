@@ -12522,8 +12522,9 @@ app.get("/make-server-37f42386/admin-stats", async (c) => {
 // ---------------------------------------------------------------------------
 
 const VEHICLE_CATALOG_WRITABLE_KEYS = [
-  "make", "model", "production_start_year", "production_end_year", "trim_series", "generation", "model_code", "generation_code",
-  "chassis_code", "engine_induction",
+  "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
+  "trim_series", "generation", "model_code", "generation_code",
+  "chassis_code", "engine_code", "engine_type",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
   "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_type", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
@@ -12545,13 +12546,22 @@ function assertCatalogProductionSpan(start: number, end: number | null): string 
   return null;
 }
 
-function validateEngineInduction(raw: unknown): string | null {
+function validateEngineType(raw: unknown): string | null {
   if (raw === undefined || raw === null || raw === "") return null;
   const s = String(raw).trim().toLowerCase();
   if (!["na", "turbo", "supercharged", "other"].includes(s)) {
-    return "engine_induction must be na, turbo, supercharged, other, or empty";
+    return "engine_type must be na, turbo, supercharged, other, or empty";
   }
   return null;
+}
+
+function parseOptionalProductionMonth(raw: unknown, label: string): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (raw === undefined || raw === null || raw === "") return { ok: true, value: null };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1 || n > 12) {
+    return { ok: false, error: `${label} must be between 1 and 12, or empty` };
+  }
+  return { ok: true, value: n };
 }
 
 function assertVehicleCatalogAccess(c: any) {
@@ -12624,10 +12634,25 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
     }
     const spanErr = assertCatalogProductionSpan(startNum, endNum);
     if (spanErr) return c.json({ error: spanErr }, 400);
-    const eiErr = validateEngineInduction(body.engine_induction);
+    const psm = parseOptionalProductionMonth(body.production_start_month, "production_start_month");
+    if (!psm.ok) return c.json({ error: psm.error }, 400);
+    const pem = parseOptionalProductionMonth(body.production_end_month, "production_end_month");
+    if (!pem.ok) return c.json({ error: pem.error }, 400);
+    if (endNum == null && pem.value != null) {
+      return c.json({ error: "production_end_month must be empty when production is ongoing" }, 400);
+    }
+    const eiErr = validateEngineType(body.engine_type);
     if (eiErr) return c.json({ error: eiErr }, 400);
     const row = pickVehicleCatalogRow(
-      { ...body, make, model, production_start_year: startNum, production_end_year: endNum },
+      {
+        ...body,
+        make,
+        model,
+        production_start_year: startNum,
+        production_end_year: endNum,
+        production_start_month: psm.value,
+        production_end_month: pem.value,
+      },
       false,
     );
     row.updated_at = new Date().toISOString();
@@ -12654,7 +12679,12 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
     const id = c.req.param("id");
     const body = (await c.req.json()) as Record<string, unknown>;
     if (body.production_end_year === "") body.production_end_year = null;
-    if (body.engine_induction === "") body.engine_induction = null;
+    if (body.engine_type === "") body.engine_type = null;
+    if (body.production_end_year === null || body.production_end_year === undefined) {
+      if (body.production_end_month === "" || body.production_end_month === undefined) {
+        body.production_end_month = null;
+      }
+    }
     const row = pickVehicleCatalogRow(body, true);
     if (row.production_start_year !== undefined) {
       const y = Number(row.production_start_year);
@@ -12688,12 +12718,28 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
       const spanErr = assertCatalogProductionSpan(startForCheck, endForCheck);
       if (spanErr) return c.json({ error: spanErr }, 400);
     }
-    if (body.engine_induction !== undefined) {
-      const eiErr = validateEngineInduction(body.engine_induction);
+    if (row.production_start_month !== undefined && row.production_start_month !== null) {
+      const p = parseOptionalProductionMonth(row.production_start_month, "production_start_month");
+      if (!p.ok) return c.json({ error: p.error }, 400);
+      row.production_start_month = p.value;
+    }
+    if (row.production_end_month !== undefined && row.production_end_month !== null) {
+      const p = parseOptionalProductionMonth(row.production_end_month, "production_end_month");
+      if (!p.ok) return c.json({ error: p.error }, 400);
+      row.production_end_month = p.value;
+    }
+    if (endForCheck === null && row.production_end_month !== undefined && row.production_end_month !== null) {
+      return c.json({ error: "production_end_month must be empty when production is ongoing" }, 400);
+    }
+    if (body.engine_type !== undefined) {
+      const eiErr = validateEngineType(body.engine_type);
       if (eiErr) return c.json({ error: eiErr }, 400);
     }
-    if (row.engine_induction !== undefined && row.engine_induction !== null && row.engine_induction !== "") {
-      row.engine_induction = String(row.engine_induction).trim().toLowerCase();
+    if (row.engine_type !== undefined && row.engine_type !== null && row.engine_type !== "") {
+      row.engine_type = String(row.engine_type).trim().toLowerCase();
+    }
+    if (row.engine_code !== undefined && row.engine_code !== null) {
+      row.engine_code = String(row.engine_code).trim() || null;
     }
     if (row.make !== undefined) row.make = String(row.make).trim();
     if (row.model !== undefined) row.model = String(row.model).trim();

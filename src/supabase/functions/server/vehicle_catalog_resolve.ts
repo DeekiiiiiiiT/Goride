@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   pickCatalogIdFromCandidates,
+  filterCatalogRowsByFleetMonth,
   type CatalogMatchHints,
   type CatalogVariantRow,
 } from "../../../utils/vehicleCatalogResolution.ts";
@@ -19,12 +20,24 @@ function pickStr(v: Record<string, unknown>, keys: string[]): string | null {
   return null;
 }
 
+function parseFleetProductionMonth(v: Record<string, unknown>): number | null {
+  for (const k of ["vehicle_catalog_production_month_hint", "vehicle_manufacture_month"]) {
+    const x = v[k];
+    if (x === undefined || x === null || x === "") continue;
+    const n = typeof x === "number" ? x : parseInt(String(x).trim(), 10);
+    if (Number.isFinite(n) && n >= 1 && n <= 12) return n;
+  }
+  return null;
+}
+
 function hintsFromKvVehicle(v: Record<string, unknown>): CatalogMatchHints {
   return {
     trim_series: pickStr(v, ["vehicle_catalog_trim_hint", "catalog_trim_hint", "trim_series"]),
     generation_code: pickStr(v, ["vehicle_catalog_generation_hint", "generation_code"]),
     model_code: pickStr(v, ["vehicle_catalog_model_code_hint", "model_code"]),
     chassis_code: pickStr(v, ["vehicle_catalog_chassis_hint", "chassis_code"]),
+    engine_code: pickStr(v, ["vehicle_catalog_engine_code_hint", "engine_code"]),
+    engine_type: pickStr(v, ["vehicle_catalog_engine_type_hint", "engine_type"]),
     drivetrain: pickStr(v, ["vehicle_catalog_drivetrain_hint", "drivetrain"]),
     fuel_type: pickStr(v, ["vehicle_catalog_fuel_type_hint", "fuel_type"]),
     transmission: pickStr(v, ["vehicle_catalog_transmission_hint", "transmission"]),
@@ -37,6 +50,7 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   model: string,
   yearStr: string,
   hints?: CatalogMatchHints,
+  fleetProductionMonth?: number | null,
 ): Promise<string | null> {
   const year = parseInt(String(yearStr).trim(), 10);
   if (!Number.isFinite(year)) return null;
@@ -44,7 +58,7 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   const mo = model.trim().toLowerCase();
 
   const selModern =
-    "id, make, model, trim_series, generation_code, model_code, chassis_code, drivetrain, fuel_type, transmission";
+    "id, make, model, production_start_year, production_start_month, production_end_year, production_end_month, trim_series, generation_code, model_code, chassis_code, engine_code, engine_type, drivetrain, fuel_type, transmission";
   const selLegacy =
     "id, make, model, trim_series, generation_code, model_code, drivetrain, fuel_type, transmission";
 
@@ -66,7 +80,7 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   }
   if (!data?.length) return null;
 
-  const candidates = (data as Array<CatalogVariantRow & { make?: string; model?: string }>).filter(
+  let candidates = (data as Array<CatalogVariantRow & { make?: string; model?: string }>).filter(
     (r) =>
       String(r.make ?? "")
         .trim()
@@ -76,6 +90,22 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
         .toLowerCase() === mo,
   );
   if (candidates.length === 0) return null;
+
+  const withMonth = candidates.map((r) => {
+    if ("production_start_year" in r && r.production_start_year != null) return r as CatalogVariantRow;
+    const y = year;
+    return {
+      ...r,
+      production_start_year: y,
+      production_start_month: null,
+      production_end_year: y,
+      production_end_month: null,
+    } as CatalogVariantRow;
+  });
+
+  const narrowed = filterCatalogRowsByFleetMonth(withMonth, year, fleetProductionMonth ?? null);
+  candidates = narrowed.length > 0 ? narrowed : withMonth;
+
   return pickCatalogIdFromCandidates(candidates, hints ?? {});
 }
 
@@ -93,11 +123,13 @@ export async function resolveCatalogIdForKvVehicle(
     if (data && (data as { id: string }).id) return (data as { id: string }).id;
   }
   const hints = hintsFromKvVehicle(v);
+  const month = parseFleetProductionMonth(v);
   return resolveVehicleCatalogIdFromMakeModelYear(
     supabase,
     String(v.make ?? ""),
     String(v.model ?? ""),
     String(v.year ?? ""),
     hints,
+    month,
   );
 }

@@ -9,6 +9,8 @@ export function isVehicleCatalogSchemaMismatchError(err: { message?: string; cod
   const code = String(err.code ?? "");
   if (code === "42703") return true;
   if (msg.includes("production_start_year") || msg.includes("production_end_year")) return true;
+  if (msg.includes("production_start_month") || msg.includes("production_end_month")) return true;
+  if (msg.includes("engine_type") || msg.includes("engine_code")) return true;
   if (msg.includes("chassis_code") && (msg.includes("schema") || msg.includes("exist") || msg.includes("find"))) {
     return true;
   }
@@ -18,18 +20,24 @@ export function isVehicleCatalogSchemaMismatchError(err: { message?: string; cod
 
 /** Ensure API responses match VehicleCatalogRecord after migration or on legacy rows. */
 export function catalogRowForApi(row: Record<string, unknown>): Record<string, unknown> {
-  if (row.production_start_year != null && row.production_start_year !== "") {
-    return row;
+  const out: Record<string, unknown> = { ...row };
+  if ((out.engine_type === null || out.engine_type === "") && out.engine_induction != null && out.engine_induction !== "") {
+    out.engine_type = out.engine_induction;
   }
-  const y = row.year;
-  if (y == null || y === "") return row;
+  delete out.engine_induction;
+
+  if (out.production_start_year != null && out.production_start_year !== "") {
+    return out;
+  }
+  const y = out.year;
+  if (y == null || y === "") return out;
   const yn = Number(y);
-  if (!Number.isFinite(yn)) return row;
+  if (!Number.isFinite(yn)) return out;
   return {
-    ...row,
+    ...out,
     production_start_year: yn,
-    production_end_year: row.production_end_year ?? yn,
-    chassis_code: row.chassis_code ?? row.generation_code ?? null,
+    production_end_year: out.production_end_year ?? yn,
+    chassis_code: out.chassis_code ?? out.generation_code ?? null,
   };
 }
 
@@ -41,7 +49,8 @@ export async function listVehicleCatalogWithFallback(
     .select("*")
     .order("make", { ascending: true })
     .order("model", { ascending: true })
-    .order("production_start_year", { ascending: false });
+    .order("production_start_year", { ascending: false })
+    .order("production_start_month", { ascending: false });
   if (!modern.error) {
     return { items: (modern.data || []).map((r) => catalogRowForApi(r as Record<string, unknown>)) };
   }
@@ -63,12 +72,16 @@ export function insertRowForLegacyDb(row: Record<string, unknown>): Record<strin
   const ps = out.production_start_year;
   delete out.production_start_year;
   delete out.production_end_year;
+  delete out.production_start_month;
+  delete out.production_end_month;
   if (ps != null && ps !== "") out.year = ps;
   const ch = out.chassis_code;
   if (ch != null && ch !== "") {
     if (!out.generation_code || out.generation_code === "") out.generation_code = ch;
   }
   delete out.chassis_code;
+  delete out.engine_type;
+  delete out.engine_code;
   delete out.engine_induction;
   return out;
 }
@@ -83,12 +96,24 @@ export function patchRowForLegacyDb(row: Record<string, unknown>): Record<string
   if ("production_end_year" in out) {
     delete out.production_end_year;
   }
+  if ("production_start_month" in out) {
+    delete out.production_start_month;
+  }
+  if ("production_end_month" in out) {
+    delete out.production_end_month;
+  }
   if ("chassis_code" in out) {
     const ch = out.chassis_code;
     if (ch != null && ch !== "" && (out.generation_code === undefined || out.generation_code === "")) {
       out.generation_code = ch;
     }
     delete out.chassis_code;
+  }
+  if ("engine_type" in out) {
+    delete out.engine_type;
+  }
+  if ("engine_code" in out) {
+    delete out.engine_code;
   }
   if ("engine_induction" in out) {
     delete out.engine_induction;

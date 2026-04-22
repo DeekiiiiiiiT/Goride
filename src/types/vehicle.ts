@@ -65,6 +65,12 @@ export interface Vehicle {
   vehicle_catalog_drivetrain_hint?: string;
   vehicle_catalog_fuel_type_hint?: string;
   vehicle_catalog_transmission_hint?: string;
+  /** 1–12; narrows catalog resolution when multiple variants share the same model year */
+  vehicle_catalog_production_month_hint?: number;
+  /** @deprecated Prefer vehicle_catalog_production_month_hint */
+  vehicle_manufacture_month?: number;
+  vehicle_catalog_engine_code_hint?: string;
+  vehicle_catalog_engine_type_hint?: string;
   color?: string;
   image?: string;
   

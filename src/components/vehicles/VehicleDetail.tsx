@@ -114,7 +114,7 @@ import {
   listMyPendingCatalogRequests,
   listVehicleCatalogMatches,
 } from '../../services/pendingVehicleCatalogService';
-import { formatCatalogProductionSpan, type VehicleCatalogRecord } from '../../types/vehicleCatalog';
+import { formatCatalogProductionWindow, type VehicleCatalogRecord } from '../../types/vehicleCatalog';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
@@ -174,6 +174,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const [alignSearchYear, setAlignSearchYear] = useState('');
   const [alignSearchTrim, setAlignSearchTrim] = useState('');
   const [alignSearchGen, setAlignSearchGen] = useState('');
+  const [alignSearchMonth, setAlignSearchMonth] = useState('');
   const [alignMatches, setAlignMatches] = useState<VehicleCatalogRecord[]>([]);
   const [alignMatchesLoading, setAlignMatchesLoading] = useState(false);
   const [alignSaving, setAlignSaving] = useState(false);
@@ -185,6 +186,10 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     setAlignSearchYear(vehicle.year || '');
     setAlignSearchTrim(vehicle.vehicle_catalog_trim_hint?.trim() || '');
     setAlignSearchGen(vehicle.vehicle_catalog_generation_hint?.trim() || '');
+    const mh = vehicle.vehicle_catalog_production_month_hint ?? vehicle.vehicle_manufacture_month;
+    setAlignSearchMonth(
+      mh != null && Number.isFinite(Number(mh)) ? String(Number(mh)) : '',
+    );
   }, [
     alignModalOpen,
     vehicle.make,
@@ -192,6 +197,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     vehicle.year,
     vehicle.vehicle_catalog_trim_hint,
     vehicle.vehicle_catalog_generation_hint,
+    vehicle.vehicle_catalog_production_month_hint,
+    vehicle.vehicle_manufacture_month,
   ]);
 
   useEffect(() => {
@@ -202,6 +209,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         make: alignSearchMake,
         model: alignSearchModel,
         year: alignSearchYear,
+        month: alignSearchMonth.trim() || undefined,
         trim_series: alignSearchTrim,
         generation_code: alignSearchGen,
         body_type: vehicle.bodyType || undefined,
@@ -219,6 +227,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     alignSearchYear,
     alignSearchTrim,
     alignSearchGen,
+    alignSearchMonth,
     vehicle.bodyType,
   ]);
 
@@ -226,6 +235,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     if (!fleetKey) return;
     setAlignSaving(true);
     try {
+      const monthNum = parseInt(alignSearchMonth.trim(), 10);
       const updatedVehicle = {
         ...vehicle,
         vehicle_catalog_id: row.id,
@@ -235,6 +245,10 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         vehicle_catalog_drivetrain_hint: row.drivetrain ?? undefined,
         vehicle_catalog_fuel_type_hint: row.fuel_type ?? undefined,
         vehicle_catalog_transmission_hint: row.transmission ?? undefined,
+        vehicle_catalog_production_month_hint:
+          Number.isFinite(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : undefined,
+        vehicle_catalog_engine_code_hint: row.engine_code ?? undefined,
+        vehicle_catalog_engine_type_hint: row.engine_type ?? undefined,
       };
       await api.saveVehicle(updatedVehicle);
       await queryClient.invalidateQueries({ queryKey: ['vehicle-catalog-pending-my'] });
@@ -1004,7 +1018,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             <div>
               <span className="text-slate-500">Variant</span>
               <p className="font-medium">
-                {formatCatalogProductionSpan(linkedCatalog)} {linkedCatalog.make} {linkedCatalog.model}
+                {formatCatalogProductionWindow(linkedCatalog)} {linkedCatalog.make} {linkedCatalog.model}
                 {linkedCatalog.trim_series ? ` · ${linkedCatalog.trim_series}` : ''}
               </p>
               {(linkedCatalog.chassis_code || linkedCatalog.generation_code || linkedCatalog.model_code) && (
@@ -1928,8 +1942,18 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                   placeholder="2020"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="align-month">Month (optional)</Label>
+                <Input
+                  id="align-month"
+                  value={alignSearchMonth}
+                  onChange={(e) => setAlignSearchMonth(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="1–12"
+                />
+              </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="align-trim">Trim (optional filter)</Label>
+                <Label htmlFor="align-trim">Series / facelift / trim (optional)</Label>
                 <Input
                   id="align-trim"
                   value={alignSearchTrim}
@@ -1969,7 +1993,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           onClick={() => void handleAlignPickCatalog(m)}
                         >
                           <span className="font-medium text-slate-900">
-                            {formatCatalogProductionSpan(m)} {m.make} {m.model}
+                            {formatCatalogProductionWindow(m)} {m.make} {m.model}
                           </span>
                           <span className="text-xs text-slate-500">
                             {[m.trim_series, m.chassis_code || m.generation_code || m.model_code, m.body_type]

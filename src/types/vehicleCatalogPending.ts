@@ -14,6 +14,10 @@ export interface VehicleCatalogPendingRequest {
   proposed_model: string;
   proposed_production_start_year: number;
   proposed_production_end_year: number | null;
+  proposed_production_start_month?: number | null;
+  proposed_production_end_month?: number | null;
+  proposed_engine_code?: string | null;
+  /** Trim / series / facelift hint (same meaning as `vehicle_catalog.trim_series`). */
   proposed_trim_series: string | null;
   proposed_body_type: string | null;
   source: "scan" | "manual";

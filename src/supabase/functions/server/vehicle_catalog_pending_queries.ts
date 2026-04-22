@@ -9,6 +9,16 @@ function parseYear(v: unknown): number {
   return new Date().getFullYear();
 }
 
+function parseFleetProductionMonth(v: Record<string, unknown>): number | null {
+  for (const k of ["vehicle_catalog_production_month_hint", "vehicle_manufacture_month"]) {
+    const x = v[k];
+    if (x === undefined || x === null || x === "") continue;
+    const n = typeof x === "number" ? x : parseInt(String(x).trim(), 10);
+    if (Number.isFinite(n) && n >= 1 && n <= 12) return n;
+  }
+  return null;
+}
+
 export async function upsertPendingFromKvVehicle(
   supabase: SupabaseClient,
   args: {
@@ -27,6 +37,19 @@ export async function upsertPendingFromKvVehicle(
   const proposed_body_type = args.vehicle.bodyType != null
     ? String(args.vehicle.bodyType).trim() || null
     : null;
+  const month = parseFleetProductionMonth(args.vehicle);
+  let proposed_production_start_month: number;
+  let proposed_production_end_month: number | null;
+  if (proposed_production_end_year == null) {
+    proposed_production_start_month = month ?? 1;
+    proposed_production_end_month = null;
+  } else if (proposed_production_start_year === proposed_production_end_year) {
+    proposed_production_start_month = month ?? 1;
+    proposed_production_end_month = month ?? 12;
+  } else {
+    proposed_production_start_month = month ?? 1;
+    proposed_production_end_month = 12;
+  }
 
   const { data: existing, error: selErr } = await supabase
     .from("vehicle_catalog_pending_requests")
@@ -44,6 +67,8 @@ export async function upsertPendingFromKvVehicle(
     proposed_model,
     proposed_production_start_year,
     proposed_production_end_year,
+    proposed_production_start_month,
+    proposed_production_end_month,
     proposed_trim_series: proposed_trim,
     proposed_body_type,
     source: args.source,

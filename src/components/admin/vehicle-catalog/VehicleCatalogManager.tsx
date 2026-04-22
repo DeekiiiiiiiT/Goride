@@ -27,7 +27,11 @@ import {
   listVehicleCatalog,
   updateVehicleCatalog,
 } from "../../../services/vehicleCatalogService";
-import { formatCatalogProductionSpan, type VehicleCatalogCreatePayload, type VehicleCatalogRecord } from "../../../types/vehicleCatalog";
+import {
+  formatCatalogProductionWindow,
+  type VehicleCatalogCreatePayload,
+  type VehicleCatalogRecord,
+} from "../../../types/vehicleCatalog";
 import { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../types/csv-schemas";
 import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
 import { Button } from "../../ui/button";
@@ -91,13 +95,25 @@ function modelYearsForForm(selectedYearStr: string, standard: number[]): number[
 
 type MakeSelection = CatalogReferenceMake | "Other";
 
-const ENGINE_INDUCTION_OPTIONS = [
+const ENGINE_TYPE_OPTIONS = [
   { value: "", label: "—" },
   { value: "na", label: "Naturally aspirated" },
   { value: "turbo", label: "Turbo" },
   { value: "supercharged", label: "Supercharged" },
   { value: "other", label: "Other" },
 ] as const;
+
+const MONTH_OPTIONS = [
+  { value: "", label: "—" },
+  ...Array.from({ length: 12 }, (_, i) => {
+    const n = i + 1;
+    return { value: String(n), label: String(n) };
+  }),
+] as const;
+
+const TRIM_SERIES_DATALIST_ID = "vehicle-catalog-trim-series-suggestions";
+/** Common values; free text is allowed for trim grades and other markets. */
+const TRIM_SERIES_SUGGESTIONS = ["Pre-Facelift", "Facelift", "Base", "XLE", "G", "Z"] as const;
 
 type FormState = {
   makeSelection: MakeSelection;
@@ -107,12 +123,15 @@ type FormState = {
   production_start_year: string;
   /** Empty string = ongoing (null in API) */
   production_end_year: string;
+  production_start_month: string;
+  production_end_month: string;
   trim_series: string;
   generation: string;
   model_code: string;
   chassis_code: string;
   generation_code: string;
-  engine_induction: string;
+  engine_code: string;
+  engine_type: string;
   body_type: string;
   doors: string;
   length_mm: string;
@@ -159,12 +178,15 @@ function emptyForm(): FormState {
     model: "",
     production_start_year: y,
     production_end_year: "",
+    production_start_month: "",
+    production_end_month: "",
     trim_series: "",
     generation: "",
     model_code: "",
     chassis_code: "",
     generation_code: "",
-    engine_induction: "",
+    engine_code: "",
+    engine_type: "",
     body_type: "",
     doors: "",
     length_mm: "",
@@ -210,12 +232,15 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     model: r.model,
     production_start_year: String(r.production_start_year),
     production_end_year: r.production_end_year == null ? "" : String(r.production_end_year),
+    production_start_month: r.production_start_month == null ? "" : String(r.production_start_month),
+    production_end_month: r.production_end_month == null ? "" : String(r.production_end_month),
     trim_series: t(r.trim_series),
-    generation: s(r.generation),
+    generation: t(r.generation),
     model_code: t(r.model_code),
     chassis_code: chassis,
     generation_code: t(r.generation_code),
-    engine_induction: t(r.engine_induction),
+    engine_code: t(r.engine_code),
+    engine_type: t(r.engine_type),
     body_type: t(r.body_type),
     doors: s(r.doors),
     length_mm: s(r.length_mm),
@@ -264,6 +289,13 @@ function optNum(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function optMonth(s: string): number | null {
+  const t = s.trim();
+  if (t === "") return null;
+  const n = parseInt(t, 10);
+  return Number.isFinite(n) && n >= 1 && n <= 12 ? n : null;
+}
+
 function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   const ps = parseInt(form.production_start_year, 10);
   const peStr = form.production_end_year.trim();
@@ -279,11 +311,14 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
     if (v !== undefined && v !== null) (base as Record<string, unknown>)[k as string] = v;
   };
   assign("trim_series", form.trim_series.trim() || null);
-  assign("generation", optInt(form.generation));
+  assign("generation", form.generation.trim() || null);
   assign("model_code", form.model_code.trim() || null);
   assign("generation_code", form.generation_code.trim() || null);
   assign("chassis_code", form.chassis_code.trim() || null);
-  assign("engine_induction", form.engine_induction.trim() || null);
+  assign("engine_code", form.engine_code.trim() || null);
+  assign("engine_type", form.engine_type.trim() || null);
+  assign("production_start_month", optMonth(form.production_start_month));
+  assign("production_end_month", pe == null ? null : optMonth(form.production_end_month));
   assign("body_type", form.body_type.trim() || null);
   assign("doors", optInt(form.doors));
   assign("length_mm", optNum(form.length_mm));
@@ -329,11 +364,14 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     production_start_year: Number.isFinite(ps) ? ps : 0,
     production_end_year: pe,
     trim_series: form.trim_series.trim() || null,
-    generation: optInt(form.generation),
+    generation: form.generation.trim() || null,
     model_code: form.model_code.trim() || null,
     generation_code: form.generation_code.trim() || null,
     chassis_code: form.chassis_code.trim() || null,
-    engine_induction: form.engine_induction.trim() || null,
+    engine_code: form.engine_code.trim() || null,
+    engine_type: form.engine_type.trim() || null,
+    production_start_month: optMonth(form.production_start_month),
+    production_end_month: pe == null ? null : optMonth(form.production_end_month),
     body_type: form.body_type.trim() || null,
     doors: optInt(form.doors),
     length_mm: optNum(form.length_mm),
@@ -471,7 +509,7 @@ export function VehicleCatalogManager() {
 
   const handleDelete = async (row: VehicleCatalogRecord) => {
     if (!token) return;
-    if (!window.confirm(`Delete ${row.make} ${row.model} (${formatCatalogProductionSpan(row)})?`)) return;
+    if (!window.confirm(`Delete ${row.make} ${row.model} (${formatCatalogProductionWindow(row)})?`)) return;
     setError(null);
     try {
       await deleteVehicleCatalog(token, row.id);
@@ -502,7 +540,8 @@ export function VehicleCatalogManager() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Motor vehicles</h2>
           <p className="text-sm text-slate-500">
-            Platform-wide vehicle specifications. Used as reference data for fleets.
+            Platform-wide reference variants—use separate rows and year ranges for major facelifts (e.g.
+            Pre-Facelift vs Facelift). Used as reference data for fleets.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
@@ -542,7 +581,12 @@ export function VehicleCatalogManager() {
               <TableHead className="bg-slate-50/90">Make</TableHead>
               <TableHead className="bg-slate-50/90">Model</TableHead>
               <TableHead className="bg-slate-50/90">Years</TableHead>
-              <TableHead className="hidden md:table-cell bg-slate-50/90">Trim</TableHead>
+              <TableHead
+                className="hidden md:table-cell bg-slate-50/90"
+                title="Series, facelift phase, or trim grade"
+              >
+                Series / facelift
+              </TableHead>
               <TableHead className="hidden lg:table-cell bg-slate-50/90">Gen</TableHead>
               <TableHead className="hidden lg:table-cell bg-slate-50/90">Body</TableHead>
               <TableHead className="w-[140px] text-right bg-slate-50/90">Actions</TableHead>
@@ -561,13 +605,13 @@ export function VehicleCatalogManager() {
                   <TableCell className="font-medium text-slate-900">{row.make}</TableCell>
                   <TableCell className="text-slate-900">{row.model}</TableCell>
                   <TableCell className="text-slate-900 tabular-nums">
-                    {formatCatalogProductionSpan(row)}
+                    {formatCatalogProductionWindow(row)}
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-slate-700">
                     {row.trim_series ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-slate-700">
-                    {row.chassis_code ?? row.generation_code ?? row.model_code ?? (row.generation != null ? String(row.generation) : "—")}
+                    {row.chassis_code ?? row.generation_code ?? row.model_code ?? row.generation ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-slate-700">
                     {row.body_type ?? "—"}
@@ -624,7 +668,7 @@ export function VehicleCatalogManager() {
                     {viewRecord.make} {viewRecord.model}
                   </DialogTitle>
                   <p className="text-sm font-normal text-slate-500">
-                    {formatCatalogProductionSpan(viewRecord)} production
+                    {formatCatalogProductionWindow(viewRecord)} production
                   </p>
                 </DialogHeader>
               </div>
@@ -760,6 +804,26 @@ export function VehicleCatalogManager() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-600">Production start month</Label>
+                  <Select
+                    value={form.production_start_month || "__none__"}
+                    onValueChange={(v) =>
+                      setForm((f) => ({ ...f, production_start_month: v === "__none__" ? "" : v }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                      <SelectValue placeholder="Optional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS.map((o) => (
+                        <SelectItem key={o.value || "none"} value={o.value || "__none__"}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
                   <Label className="text-xs text-slate-600">Production end (empty = ongoing)</Label>
                   <Select
                     value={form.production_end_year === "" ? "__ongoing__" : form.production_end_year}
@@ -767,6 +831,7 @@ export function VehicleCatalogManager() {
                       setForm((f) => ({
                         ...f,
                         production_end_year: v === "__ongoing__" ? "" : v,
+                        production_end_month: v === "__ongoing__" ? "" : f.production_end_month,
                       }))
                     }
                   >
@@ -783,13 +848,52 @@ export function VehicleCatalogManager() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Field label="Trim / series / facelift" value={form.trim_series} onChange={update("trim_series")} />
-                <Field
-                  label="Generation index"
-                  value={form.generation}
-                  onChange={update("generation")}
-                  type="number"
-                />
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-600">Production end month</Label>
+                  <Select
+                    value={form.production_end_month || "__none__"}
+                    onValueChange={(v) =>
+                      setForm((f) => ({ ...f, production_end_month: v === "__none__" ? "" : v }))
+                    }
+                    disabled={form.production_end_year === ""}
+                  >
+                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                      <SelectValue placeholder={form.production_end_year === "" ? "Ongoing" : "Optional"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS.map((o) => (
+                        <SelectItem key={o.value || "none-m"} value={o.value || "__none__"}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs text-slate-600" htmlFor="catalog-trim-series">
+                    Series / facelift · trim
+                  </Label>
+                  <Input
+                    id="catalog-trim-series"
+                    list={TRIM_SERIES_DATALIST_ID}
+                    value={form.trim_series}
+                    onChange={(e) => setForm((f) => ({ ...f, trim_series: e.target.value }))}
+                    className="h-9 bg-white border-slate-300"
+                    placeholder="e.g. Pre-Facelift, Facelift, Base, XLE"
+                    autoComplete="off"
+                  />
+                  <datalist id={TRIM_SERIES_DATALIST_ID}>
+                    {TRIM_SERIES_SUGGESTIONS.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                  <p className="text-[11px] leading-relaxed text-slate-500">
+                    After a mid-cycle update, add another catalog row with a new production span and label
+                    (e.g. Pre-Facelift 2016–2020 vs Facelift 2020–Present). For JDM imports, frame prefixes
+                    (DBA vs 5BA/4BA) can help confirm the phase.
+                  </p>
+                </div>
+                <Field label="Generation" value={form.generation} onChange={update("generation")} placeholder="e.g. Mk2" />
                 <Field
                   label="Model code"
                   value={form.model_code}
@@ -837,19 +941,25 @@ export function VehicleCatalogManager() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Displacement (L)" value={form.engine_displacement_l} onChange={update("engine_displacement_l")} />
                 <Field label="Displacement (cc)" value={form.engine_displacement_cc} onChange={update("engine_displacement_cc")} />
+                <Field
+                  label="Engine code"
+                  value={form.engine_code}
+                  onChange={update("engine_code")}
+                  placeholder="e.g. 1KR-FE"
+                />
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Engine induction</Label>
+                  <Label className="text-xs text-slate-600">Engine type</Label>
                   <Select
-                    value={form.engine_induction || "__none__"}
+                    value={form.engine_type || "__none__"}
                     onValueChange={(v) =>
-                      setForm((f) => ({ ...f, engine_induction: v === "__none__" ? "" : v }))
+                      setForm((f) => ({ ...f, engine_type: v === "__none__" ? "" : v }))
                     }
                   >
                     <SelectTrigger className="h-9 bg-white border-slate-300">
                       <SelectValue placeholder="Select" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ENGINE_INDUCTION_OPTIONS.map((o) => (
+                      {ENGINE_TYPE_OPTIONS.map((o) => (
                         <SelectItem key={o.value || "none"} value={o.value || "__none__"}>
                           {o.label}
                         </SelectItem>
@@ -972,7 +1082,7 @@ function VehicleSpecItem({ icon: Icon, label, value }: { icon: LucideIcon; label
 function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
   const colA = (
     <>
-      <VehicleSpecItem icon={Calendar} label="Production" value={formatCatalogProductionSpan(r)} />
+      <VehicleSpecItem icon={Calendar} label="Production" value={formatCatalogProductionWindow(r)} />
       <VehicleSpecItem icon={Settings2} label="Transmission" value={viewText(r.transmission)} />
       <VehicleSpecItem icon={CarFront} label="Body type" value={viewText(r.body_type)} />
       <VehicleSpecItem icon={DoorOpen} label="Doors" value={viewText(r.doors)} />
@@ -1014,8 +1124,8 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
                   <VehicleSpecItem icon={Tag} label="Chassis code" value={viewText(r.chassis_code ?? r.generation_code)} />
-                  <VehicleSpecItem icon={Tag} label="Trim / series" value={viewText(r.trim_series)} />
-                  <VehicleSpecItem icon={Tag} label="Generation index" value={viewText(r.generation)} />
+                  <VehicleSpecItem icon={Tag} label="Series / facelift · trim" value={viewText(r.trim_series)} />
+                  <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={Tag} label="Model code" value={viewText(r.model_code)} />
@@ -1059,7 +1169,8 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
                   <VehicleSpecItem icon={Gauge} label="Displacement (L)" value={viewText(r.engine_displacement_l)} />
                   <VehicleSpecItem icon={Gauge} label="Displacement (cc)" value={viewText(r.engine_displacement_cc)} />
                   <VehicleSpecItem icon={Settings2} label="Configuration" value={viewText(r.engine_configuration)} />
-                  <VehicleSpecItem icon={Gauge} label="Induction" value={viewText(r.engine_induction)} />
+                  <VehicleSpecItem icon={Gauge} label="Engine code" value={viewText(r.engine_code)} />
+                  <VehicleSpecItem icon={Gauge} label="Engine type" value={viewText(r.engine_type)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={Gauge} label="Horsepower" value={viewText(r.horsepower)} />
