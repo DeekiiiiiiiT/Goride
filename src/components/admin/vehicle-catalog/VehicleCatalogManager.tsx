@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type LucideIcon,
   Armchair,
@@ -8,6 +8,7 @@ import {
   CircleDot,
   DoorOpen,
   Download,
+  Upload,
   Eye,
   Fuel,
   Gauge,
@@ -34,15 +35,19 @@ import {
 } from "../../../types/vehicleCatalog";
 import { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../types/csv-schemas";
 import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
+import { parseVehicleCatalogCsvWithPapa, type ParsedCatalogImportRow } from "../../../utils/vehicleCatalogCsvImport";
+import { toast } from "sonner@2.0.3";
 import { Button } from "../../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "../../ui/dialog";
+import { ScrollArea } from "../../ui/scroll-area";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import {
@@ -530,6 +535,72 @@ export function VehicleCatalogManager() {
     downloadBlob(csv, `motor_vehicle_catalog_${today}.csv`);
   };
 
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<ParsedCatalogImportRow[] | null>(null);
+  const [importRunning, setImportRunning] = useState(false);
+
+  const handleImportPick = () => importFileRef.current?.click();
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result ?? "");
+        const rows = parseVehicleCatalogCsvWithPapa(text);
+        setImportPreview(rows);
+        setImportDialogOpen(true);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not parse CSV");
+      }
+    };
+    reader.onerror = () => toast.error("Could not read file");
+    reader.readAsText(file);
+  };
+
+  const handleCloseImportDialog = () => {
+    if (importRunning) return;
+    setImportDialogOpen(false);
+    setImportPreview(null);
+  };
+
+  const handleRunCatalogImport = async () => {
+    if (!token || !importPreview?.length) return;
+    const ready = importPreview.filter((r): r is ParsedCatalogImportRow & { payload: NonNullable<ParsedCatalogImportRow["payload"]> } =>
+      Boolean(r.payload),
+    );
+    if (ready.length === 0) {
+      toast.error("No valid rows to import");
+      return;
+    }
+    setImportRunning(true);
+    let ok = 0;
+    const apiErrors: string[] = [];
+    for (const r of ready) {
+      try {
+        await createVehicleCatalog(token, r.payload);
+        ok++;
+      } catch (err) {
+        apiErrors.push(`Row ${r.rowIndex}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    setImportRunning(false);
+    setImportDialogOpen(false);
+    setImportPreview(null);
+    if (ok > 0) {
+      toast.success(`Imported ${ok} vehicle${ok === 1 ? "" : "s"}`);
+      await load();
+    }
+    if (apiErrors.length > 0) {
+      toast.error(`${apiErrors.length} row(s) failed to save`, {
+        description: apiErrors.slice(0, 8).join("\n"),
+      });
+    }
+  };
+
   if (!token) {
     return <p className="text-sm text-slate-500">Sign in to manage the vehicle catalog.</p>;
   }
@@ -545,13 +616,36 @@ export function VehicleCatalogManager() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            aria-hidden
+            onChange={handleImportFileChange}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            onClick={handleImportPick}
+            disabled={loading || importRunning}
+            title="Import rows from CSV (export first to use as a template)"
+          >
+            <Upload className="w-4 h-4" />
+            Import CSV
+          </Button>
           <Button
             type="button"
             variant="outline"
             className="gap-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
             onClick={handleExportCsv}
             disabled={loading}
-            title={items.length === 0 ? "Exports column headers only until you add vehicles" : undefined}
+            title={
+              items.length === 0
+                ? "Exports headers and column guide; add vehicles or import to fill rows"
+                : "Download catalog with production months, engine code, and engine type columns"
+            }
           >
             <Download className="w-4 h-4" />
             Export CSV
@@ -1043,6 +1137,80 @@ export function VehicleCatalogManager() {
             <Button type="button" onClick={handleSave} disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {editingId ? "Save changes" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={importDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) handleCloseImportDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle>Import motor catalog</DialogTitle>
+            <DialogDescription className="text-slate-600 text-sm leading-relaxed">
+              Required columns: <span className="font-medium text-slate-800">Make</span>,{" "}
+              <span className="font-medium text-slate-800">Model</span>,{" "}
+              <span className="font-medium text-slate-800">Production start year</span>. Use{" "}
+              <span className="font-medium text-slate-800">Export CSV</span> for a compatible template. End year{" "}
+              <span className="font-medium text-slate-800">9999</span> or empty means ongoing. Engine type:{" "}
+              <code className="text-xs bg-slate-100 px-1 rounded">na</code>,{" "}
+              <code className="text-xs bg-slate-100 px-1 rounded">turbo</code>, or{" "}
+              <code className="text-xs bg-slate-100 px-1 rounded">N/A</code> / Turbo as labels.
+            </DialogDescription>
+          </DialogHeader>
+          {importPreview && (
+            <div className="space-y-3 py-1">
+              <p className="text-sm text-slate-700">
+                <span className="font-semibold text-slate-900">{importPreview.filter((r) => r.payload).length}</span>{" "}
+                row(s) ready to import
+                {importPreview.some((r) => r.parseError) && (
+                  <>
+                    {" "}
+                    ·{" "}
+                    <span className="text-amber-800">
+                      {importPreview.filter((r) => r.parseError).length} row(s) skipped (see below)
+                    </span>
+                  </>
+                )}
+                .
+              </p>
+              {importPreview.some((r) => r.parseError) && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-slate-600">Parse issues</p>
+                  <ScrollArea className="h-[min(200px,40vh)] rounded-md border border-slate-200 bg-slate-50/80 p-2">
+                    <ul className="space-y-1 text-xs text-slate-700 font-mono">
+                      {importPreview
+                        .filter((r) => r.parseError)
+                        .map((r) => (
+                          <li key={r.rowIndex}>
+                            Line {r.rowIndex}: {r.parseError}
+                          </li>
+                        ))}
+                    </ul>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={handleCloseImportDialog} disabled={importRunning}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleRunCatalogImport()}
+              disabled={
+                importRunning ||
+                !importPreview?.some((r) => r.payload)
+              }
+              className="gap-2"
+            >
+              {importRunning && <Loader2 className="w-4 h-4 animate-spin" />}
+              Import
             </Button>
           </DialogFooter>
         </DialogContent>
