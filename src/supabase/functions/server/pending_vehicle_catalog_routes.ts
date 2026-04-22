@@ -10,6 +10,7 @@ import {
   catalogRowForApi,
   insertRowForLegacyDb,
   isVehicleCatalogSchemaMismatchError,
+  stripVehicleCatalogSpecPackColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
 import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../utils/vehicleCatalogResolution.ts";
 
@@ -72,6 +73,7 @@ function pickRow(raw: Record<string, unknown>, partial: boolean): Record<string,
       if (v === "") continue;
       out[k] = v;
     } else {
+      if (v === null) continue;
       if (v === "" && k !== "make" && k !== "model") continue;
       out[k] = v;
     }
@@ -494,7 +496,12 @@ export function registerPendingVehicleCatalogRoutes(
         row.updated_at = new Date().toISOString();
         let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
         if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-          const legacyRow = insertRowForLegacyDb(row as Record<string, unknown>);
+          const withoutSpecs = stripVehicleCatalogSpecPackColumns(row as Record<string, unknown>);
+          withoutSpecs.updated_at = row.updated_at;
+          ins = await supabase.from("vehicle_catalog").insert(withoutSpecs).select().single();
+        }
+        if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+          const legacyRow = insertRowForLegacyDb(stripVehicleCatalogSpecPackColumns(row as Record<string, unknown>));
           legacyRow.updated_at = row.updated_at;
           ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
         }

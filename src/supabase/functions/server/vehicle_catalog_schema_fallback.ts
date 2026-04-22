@@ -8,6 +8,9 @@ export function isVehicleCatalogSchemaMismatchError(err: { message?: string; cod
   const msg = String(err.message ?? "");
   const code = String(err.code ?? "");
   if (code === "42703") return true;
+  /** PostgREST: column not in schema cache / not exposed */
+  if (msg.includes("schema cache")) return true;
+  if (msg.includes("Could not find") && msg.includes("column")) return true;
   if (msg.includes("production_start_year") || msg.includes("production_end_year")) return true;
   if (msg.includes("production_start_month") || msg.includes("production_end_month")) return true;
   if (msg.includes("engine_type") || msg.includes("engine_code")) return true;
@@ -16,6 +19,26 @@ export function isVehicleCatalogSchemaMismatchError(err: { message?: string; cod
   }
   if (msg.includes("does not exist") && msg.includes("vehicle_catalog")) return true;
   return false;
+}
+
+/** Columns from specs-enhancement migration; strip when DB is behind migrations but core catalog exists. */
+const VEHICLE_CATALOG_SPEC_PACK_KEYS = [
+  "front_brake_type",
+  "rear_brake_type",
+  "brake_size_mm",
+  "tire_size",
+  "bolt_pattern",
+  "wheel_offset_mm",
+  "engine_oil_capacity_l",
+  "coolant_capacity_l",
+] as const;
+
+export function stripVehicleCatalogSpecPackColumns(row: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...row };
+  for (const k of VEHICLE_CATALOG_SPEC_PACK_KEYS) {
+    delete out[k];
+  }
+  return out;
 }
 
 /** Ensure API responses match VehicleCatalogRecord after migration or on legacy rows. */

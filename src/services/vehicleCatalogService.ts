@@ -43,6 +43,15 @@ export async function listVehicleCatalog(accessToken: string): Promise<VehicleCa
   return (data.items || []) as VehicleCatalogRecord[];
 }
 
+/** Omit null/undefined so PostgREST does not validate columns absent on older DBs. */
+function jsonBodyOmitNullish(payload: VehicleCatalogCreatePayload): string {
+  const o: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
+    if (v !== null && v !== undefined) o[k] = v;
+  }
+  return JSON.stringify(o);
+}
+
 export async function createVehicleCatalog(
   accessToken: string,
   payload: VehicleCatalogCreatePayload,
@@ -50,7 +59,7 @@ export async function createVehicleCatalog(
   const res = await fetch(url(), {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
-    body: JSON.stringify(payload),
+    body: jsonBodyOmitNullish(payload),
   });
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();

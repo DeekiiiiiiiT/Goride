@@ -79,6 +79,7 @@ import {
   isVehicleCatalogSchemaMismatchError,
   listVehicleCatalogWithFallback,
   patchRowForLegacyDb,
+  stripVehicleCatalogSpecPackColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
 
 // ---------------------------------------------------------------------------
@@ -12585,6 +12586,8 @@ function pickVehicleCatalogRow(raw: Record<string, unknown>, partial: boolean): 
       if (v === "") continue;
       out[k] = v;
     } else {
+      /** Omit nulls on create so PostgREST does not require columns that are absent on older DBs. */
+      if (v === null) continue;
       if (v === "" && k !== "make" && k !== "model") continue;
       out[k] = v;
     }
@@ -12663,7 +12666,12 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
     row.updated_at = new Date().toISOString();
     let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
     if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-      const legacyRow = insertRowForLegacyDb(row);
+      const withoutSpecs = stripVehicleCatalogSpecPackColumns(row);
+      withoutSpecs.updated_at = row.updated_at;
+      ins = await supabase.from("vehicle_catalog").insert(withoutSpecs).select().single();
+    }
+    if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+      const legacyRow = insertRowForLegacyDb(stripVehicleCatalogSpecPackColumns(row));
       legacyRow.updated_at = row.updated_at;
       ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
     }
