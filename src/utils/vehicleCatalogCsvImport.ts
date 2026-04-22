@@ -141,19 +141,14 @@ function parseOptionalNum(s: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Maps display labels (N/A, Turbo) to DB engine_type enum. */
+/** Max length aligned with API validation (`validateEngineType`). */
+export const MAX_ENGINE_TYPE_LEN = 200;
+
+/** Trim spreadsheet value for optional engine / induction label. */
 export function normalizeEngineType(raw: string | undefined): string | null {
   if (raw == null) return null;
-  const t = String(raw).trim().toLowerCase();
-  if (!t) return null;
-  if (t === "n/a" || t === "na" || t === "n.a" || t === "n.a." || t === "natural" || t.includes("naturally aspirated")) {
-    return "na";
-  }
-  if (t === "turbo") return "turbo";
-  if (t === "supercharged") return "supercharged";
-  if (t === "other") return "other";
-  if (["na", "turbo", "supercharged", "other"].includes(t)) return t;
-  return null;
+  const s = String(raw).trim();
+  return s === "" ? null : s;
 }
 
 /** Ongoing production: empty, 9999+, or keywords. */
@@ -221,13 +216,11 @@ export function buildVehicleCatalogCreatePayload(canon: Record<string, string>):
     return { ok: false, message: "production_end_month must be empty when production is ongoing" };
   }
 
-  const engineType = normalizeEngineType(pickStr(canon, "engine_type"));
-  if (pickStr(canon, "engine_type") !== "" && engineType == null) {
-    return {
-      ok: false,
-      message: 'engine_type must be na, turbo, supercharged, other, N/A, or empty',
-    };
+  const engineTypeRaw = pickStr(canon, "engine_type");
+  if (engineTypeRaw.length > MAX_ENGINE_TYPE_LEN) {
+    return { ok: false, message: `engine_type must be at most ${MAX_ENGINE_TYPE_LEN} characters` };
   }
+  const engineType = normalizeEngineType(engineTypeRaw || undefined);
 
   const payload: VehicleCatalogCreatePayload = {
     make,

@@ -100,14 +100,6 @@ function modelYearsForForm(selectedYearStr: string, standard: number[]): number[
 
 type MakeSelection = CatalogReferenceMake | "Other";
 
-const ENGINE_TYPE_OPTIONS = [
-  { value: "", label: "—" },
-  { value: "na", label: "Naturally aspirated" },
-  { value: "turbo", label: "Turbo" },
-  { value: "supercharged", label: "Supercharged" },
-  { value: "other", label: "Other" },
-] as const;
-
 const MONTH_OPTIONS = [
   { value: "", label: "—" },
   ...Array.from({ length: 12 }, (_, i) => {
@@ -568,12 +560,19 @@ export function VehicleCatalogManager() {
   };
 
   const handleRunCatalogImport = async () => {
-    if (!token || !importPreview?.length) return;
+    if (!token) return;
+    if (importPreview == null) return;
+    if (importPreview.length === 0) {
+      toast.error(
+        "No data rows found in this file. Use a comma-separated CSV with a header row (export from here for a template).",
+      );
+      return;
+    }
     const ready = importPreview.filter((r): r is ParsedCatalogImportRow & { payload: NonNullable<ParsedCatalogImportRow["payload"]> } =>
       Boolean(r.payload),
     );
     if (ready.length === 0) {
-      toast.error("No valid rows to import");
+      toast.error("No valid rows to import — fix the parse issues listed in the dialog, then try again.");
       return;
     }
     setImportRunning(true);
@@ -1041,26 +1040,12 @@ export function VehicleCatalogManager() {
                   onChange={update("engine_code")}
                   placeholder="e.g. 1KR-FE"
                 />
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Engine type</Label>
-                  <Select
-                    value={form.engine_type || "__none__"}
-                    onValueChange={(v) =>
-                      setForm((f) => ({ ...f, engine_type: v === "__none__" ? "" : v }))
-                    }
-                  >
-                    <SelectTrigger className="h-9 bg-white border-slate-300">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ENGINE_TYPE_OPTIONS.map((o) => (
-                        <SelectItem key={o.value || "none"} value={o.value || "__none__"}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Field
+                  label="Engine type"
+                  value={form.engine_type}
+                  onChange={update("engine_type")}
+                  placeholder="e.g. N/A, Turbo, Hybrid, Hybrid (2.0L)"
+                />
                 <Field
                   label="Configuration"
                   value={form.engine_configuration}

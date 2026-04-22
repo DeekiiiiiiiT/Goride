@@ -6,12 +6,14 @@ import {
 } from "./vehicleCatalogCsvImport";
 
 describe("normalizeEngineType", () => {
-  it("maps N/A to na", () => {
-    expect(normalizeEngineType("N/A")).toBe("na");
-    expect(normalizeEngineType("naturally aspirated")).toBe("na");
+  it("trims and preserves labels", () => {
+    expect(normalizeEngineType("N/A")).toBe("N/A");
+    expect(normalizeEngineType("  Turbo  ")).toBe("Turbo");
+    expect(normalizeEngineType("Hybrid (2.0L)")).toBe("Hybrid (2.0L)");
   });
-  it("maps Turbo", () => {
-    expect(normalizeEngineType("Turbo")).toBe("turbo");
+  it("returns null for empty", () => {
+    expect(normalizeEngineType("")).toBeNull();
+    expect(normalizeEngineType(undefined)).toBeNull();
   });
 });
 

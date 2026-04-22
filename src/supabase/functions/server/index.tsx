@@ -12546,11 +12546,13 @@ function assertCatalogProductionSpan(start: number, end: number | null): string 
   return null;
 }
 
+const MAX_ENGINE_TYPE_LEN = 200;
+
 function validateEngineType(raw: unknown): string | null {
   if (raw === undefined || raw === null || raw === "") return null;
-  const s = String(raw).trim().toLowerCase();
-  if (!["na", "turbo", "supercharged", "other"].includes(s)) {
-    return "engine_type must be na, turbo, supercharged, other, or empty";
+  const s = String(raw).trim();
+  if (s.length > MAX_ENGINE_TYPE_LEN) {
+    return `engine_type must be at most ${MAX_ENGINE_TYPE_LEN} characters`;
   }
   return null;
 }
@@ -12655,6 +12657,9 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       },
       false,
     );
+    if (row.engine_type !== undefined && row.engine_type !== null && row.engine_type !== "") {
+      row.engine_type = String(row.engine_type).trim();
+    }
     row.updated_at = new Date().toISOString();
     let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
     if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
@@ -12736,7 +12741,7 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
       if (eiErr) return c.json({ error: eiErr }, 400);
     }
     if (row.engine_type !== undefined && row.engine_type !== null && row.engine_type !== "") {
-      row.engine_type = String(row.engine_type).trim().toLowerCase();
+      row.engine_type = String(row.engine_type).trim();
     }
     if (row.engine_code !== undefined && row.engine_code !== null) {
       row.engine_code = String(row.engine_code).trim() || null;

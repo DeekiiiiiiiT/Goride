@@ -26,7 +26,7 @@ export interface VehicleCatalogRecord {
   chassis_code?: string | null;
   /** OEM engine code (e.g. 1KR-FE) */
   engine_code?: string | null;
-  /** na | turbo | supercharged | other */
+  /** Free-text engine / induction label (e.g. N/A, Turbo, Hybrid). */
   engine_type?: string | null;
   body_type: string | null;
   doors: number | null;

@@ -74,7 +74,7 @@ export type CatalogMatchHints = {
   model_code?: string | null;
   chassis_code?: string | null;
   engine_code?: string | null;
-  /** na | turbo | supercharged | other */
+  /** Free-text hint (trimmed/lowercased when matching catalog rows). */
   engine_type?: string | null;
   drivetrain?: string | null;
   fuel_type?: string | null;
