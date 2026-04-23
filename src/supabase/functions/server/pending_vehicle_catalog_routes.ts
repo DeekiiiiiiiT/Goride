@@ -11,7 +11,7 @@ import {
   insertRowForLegacyDb,
   isLegacyVehicleCatalogYearNotNullError,
   isVehicleCatalogSchemaMismatchError,
-  stripVehicleCatalogSpecPackColumns,
+  stripVehicleCatalogOptionalMigrationColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
 import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../utils/vehicleCatalogResolution.ts";
 import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
@@ -520,16 +520,20 @@ export function registerPendingVehicleCatalogRoutes(
         row.updated_at = new Date().toISOString();
         let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
         if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
-          const legacyRow = insertRowForLegacyDb(stripVehicleCatalogSpecPackColumns(row as Record<string, unknown>));
+          const legacyRow = insertRowForLegacyDb(
+            stripVehicleCatalogOptionalMigrationColumns(row as Record<string, unknown>),
+          );
           legacyRow.updated_at = row.updated_at;
           ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
         } else if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-          const withoutSpecs = stripVehicleCatalogSpecPackColumns(row as Record<string, unknown>);
-          withoutSpecs.updated_at = row.updated_at;
-          ins = await supabase.from("vehicle_catalog").insert(withoutSpecs).select().single();
+          const trimmed = stripVehicleCatalogOptionalMigrationColumns(row as Record<string, unknown>);
+          trimmed.updated_at = row.updated_at;
+          ins = await supabase.from("vehicle_catalog").insert(trimmed).select().single();
         }
         if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-          const legacyRow = insertRowForLegacyDb(stripVehicleCatalogSpecPackColumns(row as Record<string, unknown>));
+          const legacyRow = insertRowForLegacyDb(
+            stripVehicleCatalogOptionalMigrationColumns(row as Record<string, unknown>),
+          );
           legacyRow.updated_at = row.updated_at;
           ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
         }

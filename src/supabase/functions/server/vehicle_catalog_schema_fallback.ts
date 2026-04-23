@@ -52,6 +52,42 @@ export function stripVehicleCatalogSpecPackColumns(row: Record<string, unknown>)
   return out;
 }
 
+/** CSV-alignment migration (`20260427120000_*`); strip when PostgREST schema cache / DB is behind. */
+const VEHICLE_CATALOG_CSV_ALIGNMENT_KEYS = [
+  "full_model_code",
+  "catalog_trim",
+  "emissions_prefix",
+  "trim_suffix_code",
+  "fuel_category",
+  "fuel_grade",
+] as const;
+
+/**
+ * Removes PIM-only columns not present on older `vehicle_catalog` rows.
+ * Preserves CSV "Trim" / full model hints on legacy columns where possible.
+ */
+export function stripVehicleCatalogCsvAlignmentColumns(row: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...row };
+  const ct = typeof out.catalog_trim === "string" ? out.catalog_trim.trim() : "";
+  const ts = out.trim_series != null && out.trim_series !== "" ? String(out.trim_series).trim() : "";
+  if (ct) {
+    if (!ts) out.trim_series = ct;
+    else if (ts !== ct) out.trim_series = `${ts} · ${ct}`;
+  }
+  const fmc = typeof out.full_model_code === "string" ? out.full_model_code.trim() : "";
+  const mc = out.model_code != null && out.model_code !== "" ? String(out.model_code).trim() : "";
+  if (fmc && !mc) out.model_code = fmc;
+  for (const k of VEHICLE_CATALOG_CSV_ALIGNMENT_KEYS) {
+    delete out[k];
+  }
+  return out;
+}
+
+/** Spec-pack + CSV-alignment columns removed (insert/update fallback for aged schemas). */
+export function stripVehicleCatalogOptionalMigrationColumns(row: Record<string, unknown>): Record<string, unknown> {
+  return stripVehicleCatalogSpecPackColumns(stripVehicleCatalogCsvAlignmentColumns(row));
+}
+
 /** Ensure API responses match VehicleCatalogRecord after migration or on legacy rows. */
 export function catalogRowForApi(row: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...row };
