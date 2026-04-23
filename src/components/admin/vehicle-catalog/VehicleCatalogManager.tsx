@@ -1004,9 +1004,13 @@ export function VehicleCatalogManager() {
                   </TabsTrigger>
                   <TabsTrigger
                     value="production"
-                    className="rounded-lg px-3 py-2 text-xs font-medium text-slate-600 shadow-none data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:text-sm"
+                    className="h-auto max-w-[10.5rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-none sm:px-3 sm:text-xs md:text-sm"
                   >
-                    Production
+                    <span className="md:hidden">
+                      <span className="block">Production</span>
+                      <span className="block">Lifecycle</span>
+                    </span>
+                    <span className="hidden md:inline">Production Lifecycle</span>
                   </TabsTrigger>
                   <TabsTrigger
                     value="body"
