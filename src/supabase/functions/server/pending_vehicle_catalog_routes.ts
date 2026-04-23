@@ -14,13 +14,16 @@ import {
   stripVehicleCatalogSpecPackColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
 import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../utils/vehicleCatalogResolution.ts";
+import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
 
 const KEYS = [
   "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
-  "trim_series", "generation", "model_code", "generation_code",
+  "trim_series", "generation",
+  "full_model_code", "catalog_trim", "emissions_prefix", "trim_suffix_code",
+  "model_code", "generation_code",
   "chassis_code", "engine_code", "engine_type",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
-  "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_type", "transmission", "drivetrain",
+  "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_category", "fuel_type", "fuel_grade", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
   "fuel_tank_capacity", "fuel_tank_unit", "seating_capacity", "curb_weight_kg", "gross_vehicle_weight_kg", "max_payload_kg", "max_towing_kg",
   "front_brake_type", "rear_brake_type", "brake_size_mm",
@@ -44,13 +47,11 @@ function validateEngineType(raw: unknown): string | null {
   return null;
 }
 
-function parseOptionalProductionMonth(raw: unknown, label: string): { ok: true; value: number | null } | { ok: false; error: string } {
-  if (raw === undefined || raw === null || raw === "") return { ok: true, value: null };
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1 || n > 12) {
-    return { ok: false, error: `${label} must be between 1 and 12, or empty` };
-  }
-  return { ok: true, value: n };
+function parseOptionalProductionMonth(
+  raw: unknown,
+  label: string,
+): { ok: true; value: number | null } | { ok: false; error: string } {
+  return parseCatalogMonthFromUnknown(raw, label);
 }
 
 const OPEN_STATUSES = ["pending", "needs_info"] as const;
@@ -78,6 +79,27 @@ function pickRow(raw: Record<string, unknown>, partial: boolean): Record<string,
       if (v === "" && k !== "make" && k !== "model") continue;
       out[k] = v;
     }
+  }
+  return out;
+}
+
+/** Catalog columns seeded from pending row when approve body omits them. */
+function pendingCatalogFieldDefaults(pr: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const pairs: [string, string][] = [
+    ["trim_series", "proposed_trim_series"],
+    ["body_type", "proposed_body_type"],
+    ["engine_code", "proposed_engine_code"],
+    ["full_model_code", "proposed_full_model_code"],
+    ["catalog_trim", "proposed_catalog_trim"],
+    ["emissions_prefix", "proposed_emissions_prefix"],
+    ["trim_suffix_code", "proposed_trim_suffix_code"],
+    ["fuel_category", "proposed_fuel_category"],
+    ["fuel_grade", "proposed_fuel_grade"],
+  ];
+  for (const [k, pk] of pairs) {
+    const v = pr[pk];
+    if (v !== undefined && v !== null && String(v).trim() !== "") out[k] = v;
   }
   return out;
 }
@@ -481,6 +503,7 @@ export function registerPendingVehicleCatalogRoutes(
 
         const row = pickRow(
           {
+            ...pendingCatalogFieldDefaults(reqRow as Record<string, unknown>),
             ...body,
             make,
             model,

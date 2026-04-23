@@ -4,6 +4,7 @@
  */
 import Papa from "papaparse";
 import type { VehicleCatalogCreatePayload } from "../types/vehicleCatalog";
+import { parseCatalogMonthFromString } from "./catalogMonthParse";
 
 /** Normalized header → API field name */
 const ALIAS_TO_CANONICAL: Record<string, string> = {
@@ -34,6 +35,19 @@ const ALIAS_TO_CANONICAL: Record<string, string> = {
   "generation code": "generation_code",
   chassis_code: "chassis_code",
   "chassis code": "chassis_code",
+  full_model_code: "full_model_code",
+  "full model code": "full_model_code",
+  catalog_trim: "catalog_trim",
+  /** CSV column "Trim" — market trim / grade (not `trim_series`). */
+  trim: "catalog_trim",
+  emissions_prefix: "emissions_prefix",
+  "emissions prefix": "emissions_prefix",
+  trim_suffix_code: "trim_suffix_code",
+  "trim suffix code": "trim_suffix_code",
+  fuel_category: "fuel_category",
+  "fuel category": "fuel_category",
+  fuel_grade: "fuel_grade",
+  "fuel grade": "fuel_grade",
   engine_code: "engine_code",
   "engine code": "engine_code",
   engine_type: "engine_type",
@@ -202,15 +216,19 @@ export function buildVehicleCatalogCreatePayload(canon: Record<string, string>):
     return { ok: false, message: "production_end_year must be >= production_start_year" };
   }
 
-  const psm = parseOptionalInt(pickStr(canon, "production_start_month"));
-  if (psm != null && (psm < 1 || psm > 12)) {
-    return { ok: false, message: "production_start_month must be 1–12 or empty" };
+  const psmRaw = pickStr(canon, "production_start_month");
+  const psmParsed = parseCatalogMonthFromString(psmRaw);
+  if (!psmParsed.ok) {
+    return { ok: false, message: `production_start_month ${psmParsed.error}` };
   }
+  const psm = psmParsed.value;
 
-  let pem = parseOptionalInt(pickStr(canon, "production_end_month"));
-  if (pem != null && (pem < 1 || pem > 12)) {
-    return { ok: false, message: "production_end_month must be 1–12 or empty" };
+  const pemRaw = pickStr(canon, "production_end_month");
+  const pemParsed = parseCatalogMonthFromString(pemRaw);
+  if (!pemParsed.ok) {
+    return { ok: false, message: `production_end_month ${pemParsed.error}` };
   }
+  let pem = pemParsed.value;
   if (pey == null) pem = null;
   if (pey == null && pickStr(canon, "production_end_month") !== "" && pem !== null) {
     return { ok: false, message: "production_end_month must be empty when production is ongoing" };
@@ -231,6 +249,10 @@ export function buildVehicleCatalogCreatePayload(canon: Record<string, string>):
     production_end_month: pem,
     trim_series: pickStr(canon, "trim_series") || null,
     generation: pickStr(canon, "generation") || null,
+    full_model_code: pickStr(canon, "full_model_code") || null,
+    catalog_trim: pickStr(canon, "catalog_trim") || null,
+    emissions_prefix: pickStr(canon, "emissions_prefix") || null,
+    trim_suffix_code: pickStr(canon, "trim_suffix_code") || null,
     model_code: pickStr(canon, "model_code") || null,
     generation_code: pickStr(canon, "generation_code") || null,
     chassis_code: pickStr(canon, "chassis_code") || null,
@@ -246,7 +268,9 @@ export function buildVehicleCatalogCreatePayload(canon: Record<string, string>):
     engine_displacement_l: parseOptionalNum(pickStr(canon, "engine_displacement_l")),
     engine_displacement_cc: parseOptionalNum(pickStr(canon, "engine_displacement_cc")),
     engine_configuration: pickStr(canon, "engine_configuration") || null,
+    fuel_category: pickStr(canon, "fuel_category") || null,
     fuel_type: pickStr(canon, "fuel_type") || null,
+    fuel_grade: pickStr(canon, "fuel_grade") || null,
     transmission: pickStr(canon, "transmission") || null,
     drivetrain: pickStr(canon, "drivetrain") || null,
     horsepower: parseOptionalNum(pickStr(canon, "horsepower")),

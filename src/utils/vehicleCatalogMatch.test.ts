@@ -126,6 +126,32 @@ describe("pickCatalogIdFromCandidates", () => {
     expect(pickCatalogIdFromCandidates([x, y], { model_code: "ABC" })).toBe("x");
   });
 
+  it("narrows by full_model_code hint", () => {
+    const base = {
+      production_start_year: 2018,
+      production_end_year: 2018,
+      production_start_month: null,
+      production_end_month: null,
+      trim_series: null,
+      generation: null,
+      full_model_code: null as string | null,
+      catalog_trim: null as string | null,
+      emissions_prefix: null as string | null,
+      trim_suffix_code: null as string | null,
+      generation_code: null,
+      model_code: null,
+      chassis_code: null,
+      engine_code: null as string | null,
+      engine_type: null as string | null,
+      drivetrain: null as string | null,
+      fuel_type: null as string | null,
+      transmission: null as string | null,
+    };
+    const x = { ...base, id: "x", full_model_code: "DBA-M900A" };
+    const y = { ...base, id: "y", full_model_code: "5BA-M900A" };
+    expect(pickCatalogIdFromCandidates([x, y], { full_model_code: "DBA-M900A" })).toBe("x");
+  });
+
   it("narrows by chassis_code hint", () => {
     const x = {
       id: "x",

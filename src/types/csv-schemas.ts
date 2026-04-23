@@ -3,6 +3,7 @@ import { FuelEntry } from "./fuel";
 import { ServiceRequest, Trip } from "./data";
 import { OdometerReading } from "./vehicle";
 import type { VehicleCatalogRecord } from "./vehicleCatalog";
+import { formatCatalogMonthEnglish } from "./vehicleCatalog";
 
 export const FUEL_CSV_COLUMNS: CsvColumn<FuelEntry>[] = [
     { key: 'date', label: 'date', formatter: formatDateJM },
@@ -294,20 +295,29 @@ export const TOLL_TRANSACTION_CSV_COLUMNS: CsvColumn<any>[] = [
     { key: 'suggestionCount', label: 'suggestionCount' },
 ];
 
-/** Super Admin motor vehicle master catalog export (headers match CSV import aliases). */
+/** Motor vehicle catalog export — column order and labels match `Vehicle database - new.csv` (+ system timestamps). */
 export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
-    { key: "id", label: "ID" },
     { key: "make", label: "Make" },
     { key: "model", label: "Model" },
     { key: "production_start_year", label: "Production start year" },
     { key: "production_end_year", label: "Production end year" },
-    { key: "production_start_month", label: "Production start month" },
-    { key: "production_end_month", label: "Production end month" },
+    {
+        key: "production_start_month",
+        label: "Production start month",
+        formatter: (v) => formatCatalogMonthEnglish(v as number | null | undefined),
+    },
+    {
+        key: "production_end_month",
+        label: "Production end month",
+        formatter: (v) => formatCatalogMonthEnglish(v as number | null | undefined),
+    },
     { key: "trim_series", label: "Series / facelift" },
     { key: "generation", label: "Generation" },
-    { key: "model_code", label: "Model code" },
-    { key: "generation_code", label: "Generation code" },
-    { key: "chassis_code", label: "Chassis code" },
+    { key: "full_model_code", label: "Full Model Code" },
+    { key: "chassis_code", label: "Chassis Code" },
+    { key: "catalog_trim", label: "Trim" },
+    { key: "emissions_prefix", label: "Emissions Prefix" },
+    { key: "trim_suffix_code", label: "Trim Suffix Code" },
     { key: "engine_code", label: "Engine code" },
     { key: "engine_type", label: "Engine type" },
     { key: "body_type", label: "Body type" },
@@ -320,7 +330,9 @@ export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
     { key: "engine_displacement_l", label: "Engine displacement L" },
     { key: "engine_displacement_cc", label: "Engine displacement cc" },
     { key: "engine_configuration", label: "Engine configuration" },
+    { key: "fuel_category", label: "Fuel Category" },
     { key: "fuel_type", label: "Fuel type" },
+    { key: "fuel_grade", label: "Fuel Grade" },
     { key: "transmission", label: "Transmission" },
     { key: "drivetrain", label: "Drivetrain" },
     { key: "horsepower", label: "Horsepower" },
@@ -341,6 +353,7 @@ export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
     { key: "wheel_offset_mm", label: "Wheel offset mm" },
     { key: "engine_oil_capacity_l", label: "Engine oil capacity L" },
     { key: "coolant_capacity_l", label: "Coolant capacity L" },
+    { key: "id", label: "ID" },
     { key: "created_at", label: "Created at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },
     { key: "updated_at", label: "Updated at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },
 ];

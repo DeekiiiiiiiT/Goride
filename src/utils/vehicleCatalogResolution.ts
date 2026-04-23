@@ -10,6 +10,11 @@ export type CatalogVariantRow = {
   production_end_year: number | null;
   production_end_month?: number | null;
   trim_series?: string | null;
+  generation?: string | null;
+  full_model_code?: string | null;
+  catalog_trim?: string | null;
+  emissions_prefix?: string | null;
+  trim_suffix_code?: string | null;
   generation_code?: string | null;
   model_code?: string | null;
   chassis_code?: string | null;
@@ -69,6 +74,11 @@ export function filterCatalogRowsByFleetMonth<T extends CatalogVariantRow>(
 export type CatalogMatchHints = {
   /** Matches `vehicle_catalog.trim_series` (trim, series, or facelift phase). */
   trim_series?: string | null;
+  /** Market trim / grade (`vehicle_catalog.catalog_trim`); also matches `trim_series` when catalog_trim is empty on row. */
+  catalog_trim?: string | null;
+  full_model_code?: string | null;
+  emissions_prefix?: string | null;
+  trim_suffix_code?: string | null;
   generation_code?: string | null;
   /** Legacy OEM code; treated like generation_code for narrowing when generation_code is empty */
   model_code?: string | null;
@@ -97,6 +107,42 @@ export function pickCatalogIdFromCandidates(
   const tr = norm(hints.trim_series);
   if (tr) {
     const filtered = pool.filter((r) => norm(r.trim_series) === tr);
+    if (filtered.length === 0) return null;
+    pool = filtered;
+    if (pool.length === 1) return pool[0].id;
+  }
+
+  const ctr = norm(hints.catalog_trim);
+  if (ctr) {
+    const filtered = pool.filter(
+      (r) => norm(r.catalog_trim) === ctr || (norm(r.catalog_trim) === "" && norm(r.trim_series) === ctr),
+    );
+    if (filtered.length === 0) return null;
+    pool = filtered;
+    if (pool.length === 1) return pool[0].id;
+  }
+
+  const fmc = norm(hints.full_model_code);
+  if (fmc) {
+    const filtered = pool.filter(
+      (r) => norm(r.full_model_code) === fmc || norm(r.model_code) === fmc,
+    );
+    if (filtered.length === 0) return null;
+    pool = filtered;
+    if (pool.length === 1) return pool[0].id;
+  }
+
+  const ep = norm(hints.emissions_prefix);
+  if (ep) {
+    const filtered = pool.filter((r) => norm(r.emissions_prefix) === ep);
+    if (filtered.length === 0) return null;
+    pool = filtered;
+    if (pool.length === 1) return pool[0].id;
+  }
+
+  const tsc = norm(hints.trim_suffix_code);
+  if (tsc) {
+    const filtered = pool.filter((r) => norm(r.trim_suffix_code) === tsc);
     if (filtered.length === 0) return null;
     pool = filtered;
     if (pool.length === 1) return pool[0].id;

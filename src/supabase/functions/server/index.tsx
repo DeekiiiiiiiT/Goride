@@ -46,6 +46,7 @@ import {
 } from "./ledger_money_aggregate.ts";
 import { CANONICAL_LEDGER_KEY_LIKE } from "../../../utils/ledgerKvSource.ts";
 import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriveWalletMetrics.ts";
+import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
 import fuelApp from "./fuel_controller.tsx";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -12525,10 +12526,12 @@ app.get("/make-server-37f42386/admin-stats", async (c) => {
 
 const VEHICLE_CATALOG_WRITABLE_KEYS = [
   "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
-  "trim_series", "generation", "model_code", "generation_code",
+  "trim_series", "generation",
+  "full_model_code", "catalog_trim", "emissions_prefix", "trim_suffix_code",
+  "model_code", "generation_code",
   "chassis_code", "engine_code", "engine_type",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
-  "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_type", "transmission", "drivetrain",
+  "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_category", "fuel_type", "fuel_grade", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
   "fuel_tank_capacity", "fuel_tank_unit", "seating_capacity", "curb_weight_kg", "gross_vehicle_weight_kg", "max_payload_kg", "max_towing_kg",
   "front_brake_type", "rear_brake_type", "brake_size_mm",
@@ -12559,13 +12562,11 @@ function validateEngineType(raw: unknown): string | null {
   return null;
 }
 
-function parseOptionalProductionMonth(raw: unknown, label: string): { ok: true; value: number | null } | { ok: false; error: string } {
-  if (raw === undefined || raw === null || raw === "") return { ok: true, value: null };
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1 || n > 12) {
-    return { ok: false, error: `${label} must be between 1 and 12, or empty` };
-  }
-  return { ok: true, value: n };
+function parseOptionalProductionMonth(
+  raw: unknown,
+  label: string,
+): { ok: true; value: number | null } | { ok: false; error: string } {
+  return parseCatalogMonthFromUnknown(raw, label);
 }
 
 function assertVehicleCatalogAccess(c: any) {

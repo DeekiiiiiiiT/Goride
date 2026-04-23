@@ -59,11 +59,18 @@ export interface Vehicle {
   vehicle_catalog_id?: string;
   /** Optional hints for resolving catalog when multiple variants share make/model/year */
   vehicle_catalog_trim_hint?: string;
+  /** Market trim / grade; matches `vehicle_catalog.catalog_trim`. */
+  vehicle_catalog_catalog_trim_hint?: string;
+  vehicle_catalog_full_model_code_hint?: string;
+  vehicle_catalog_emissions_prefix_hint?: string;
+  vehicle_catalog_trim_suffix_hint?: string;
   vehicle_catalog_generation_hint?: string;
   vehicle_catalog_model_code_hint?: string;
   vehicle_catalog_chassis_hint?: string;
   vehicle_catalog_drivetrain_hint?: string;
   vehicle_catalog_fuel_type_hint?: string;
+  vehicle_catalog_fuel_category_hint?: string;
+  vehicle_catalog_fuel_grade_hint?: string;
   vehicle_catalog_transmission_hint?: string;
   /** 1–12; narrows catalog resolution when multiple variants share the same model year */
   vehicle_catalog_production_month_hint?: number;

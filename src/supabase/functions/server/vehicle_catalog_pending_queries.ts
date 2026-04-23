@@ -9,6 +9,14 @@ function parseYear(v: unknown): number {
   return new Date().getFullYear();
 }
 
+function pickStrVehicle(v: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const x = v[k];
+    if (typeof x === "string" && x.trim() !== "") return x.trim();
+  }
+  return null;
+}
+
 function parseFleetProductionMonth(v: Record<string, unknown>): number | null {
   for (const k of ["vehicle_catalog_production_month_hint", "vehicle_manufacture_month"]) {
     const x = v[k];
@@ -70,6 +78,21 @@ export async function upsertPendingFromKvVehicle(
     proposed_production_start_month,
     proposed_production_end_month,
     proposed_trim_series: proposed_trim,
+    proposed_full_model_code: pickStrVehicle(args.vehicle, [
+      "vehicle_catalog_full_model_code_hint",
+      "full_model_code",
+    ]),
+    proposed_catalog_trim: pickStrVehicle(args.vehicle, ["vehicle_catalog_catalog_trim_hint", "catalog_trim"]),
+    proposed_emissions_prefix: pickStrVehicle(args.vehicle, [
+      "vehicle_catalog_emissions_prefix_hint",
+      "emissions_prefix",
+    ]),
+    proposed_trim_suffix_code: pickStrVehicle(args.vehicle, [
+      "vehicle_catalog_trim_suffix_hint",
+      "trim_suffix_code",
+    ]),
+    proposed_fuel_category: pickStrVehicle(args.vehicle, ["vehicle_catalog_fuel_category_hint"]),
+    proposed_fuel_grade: pickStrVehicle(args.vehicle, ["vehicle_catalog_fuel_grade_hint"]),
     proposed_body_type,
     source: args.source,
     updated_at: new Date().toISOString(),

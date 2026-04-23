@@ -129,6 +129,10 @@ type FormState = {
   production_end_month: string;
   trim_series: string;
   generation: string;
+  full_model_code: string;
+  catalog_trim: string;
+  emissions_prefix: string;
+  trim_suffix_code: string;
   model_code: string;
   chassis_code: string;
   generation_code: string;
@@ -144,7 +148,9 @@ type FormState = {
   engine_displacement_l: string;
   engine_displacement_cc: string;
   engine_configuration: string;
+  fuel_category: string;
   fuel_type: string;
+  fuel_grade: string;
   transmission: string;
   drivetrain: string;
   horsepower: string;
@@ -184,6 +190,10 @@ function emptyForm(): FormState {
     production_end_month: "",
     trim_series: "",
     generation: "",
+    full_model_code: "",
+    catalog_trim: "",
+    emissions_prefix: "",
+    trim_suffix_code: "",
     model_code: "",
     chassis_code: "",
     generation_code: "",
@@ -199,7 +209,9 @@ function emptyForm(): FormState {
     engine_displacement_l: "",
     engine_displacement_cc: "",
     engine_configuration: "",
+    fuel_category: "",
     fuel_type: "",
+    fuel_grade: "",
     transmission: "",
     drivetrain: "",
     horsepower: "",
@@ -238,6 +250,10 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     production_end_month: r.production_end_month == null ? "" : String(r.production_end_month),
     trim_series: t(r.trim_series),
     generation: t(r.generation),
+    full_model_code: t(r.full_model_code),
+    catalog_trim: t(r.catalog_trim),
+    emissions_prefix: t(r.emissions_prefix),
+    trim_suffix_code: t(r.trim_suffix_code),
     model_code: t(r.model_code),
     chassis_code: chassis,
     generation_code: t(r.generation_code),
@@ -314,6 +330,10 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   };
   assign("trim_series", form.trim_series.trim() || null);
   assign("generation", form.generation.trim() || null);
+  assign("full_model_code", form.full_model_code.trim() || null);
+  assign("catalog_trim", form.catalog_trim.trim() || null);
+  assign("emissions_prefix", form.emissions_prefix.trim() || null);
+  assign("trim_suffix_code", form.trim_suffix_code.trim() || null);
   assign("model_code", form.model_code.trim() || null);
   assign("generation_code", form.generation_code.trim() || null);
   assign("chassis_code", form.chassis_code.trim() || null);
@@ -331,7 +351,9 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   assign("engine_displacement_l", optNum(form.engine_displacement_l));
   assign("engine_displacement_cc", optNum(form.engine_displacement_cc));
   assign("engine_configuration", form.engine_configuration.trim() || null);
+  assign("fuel_category", form.fuel_category.trim() || null);
   assign("fuel_type", form.fuel_type.trim() || null);
+  assign("fuel_grade", form.fuel_grade.trim() || null);
   assign("transmission", form.transmission.trim() || null);
   assign("drivetrain", form.drivetrain.trim() || null);
   assign("horsepower", optNum(form.horsepower));
@@ -367,6 +389,10 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     production_end_year: pe,
     trim_series: form.trim_series.trim() || null,
     generation: form.generation.trim() || null,
+    full_model_code: form.full_model_code.trim() || null,
+    catalog_trim: form.catalog_trim.trim() || null,
+    emissions_prefix: form.emissions_prefix.trim() || null,
+    trim_suffix_code: form.trim_suffix_code.trim() || null,
     model_code: form.model_code.trim() || null,
     generation_code: form.generation_code.trim() || null,
     chassis_code: form.chassis_code.trim() || null,
@@ -384,7 +410,9 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     engine_displacement_l: optNum(form.engine_displacement_l),
     engine_displacement_cc: optNum(form.engine_displacement_cc),
     engine_configuration: form.engine_configuration.trim() || null,
+    fuel_category: form.fuel_category.trim() || null,
     fuel_type: form.fuel_type.trim() || null,
+    fuel_grade: form.fuel_grade.trim() || null,
     transmission: form.transmission.trim() || null,
     drivetrain: form.drivetrain.trim() || null,
     horsepower: optNum(form.horsepower),
@@ -739,7 +767,12 @@ export function VehicleCatalogManager() {
               >
                 Series / facelift
               </TableHead>
-              <TableHead className="hidden lg:table-cell bg-slate-50/90">Gen</TableHead>
+              <TableHead
+                className="hidden lg:table-cell bg-slate-50/90"
+                title="Full model code, chassis, or legacy codes"
+              >
+                Code
+              </TableHead>
               <TableHead className="hidden lg:table-cell bg-slate-50/90">Body</TableHead>
               <TableHead className="w-[140px] text-right bg-slate-50/90">Actions</TableHead>
             </TableRow>
@@ -763,7 +796,12 @@ export function VehicleCatalogManager() {
                     {row.trim_series ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-slate-700">
-                    {row.chassis_code ?? row.generation_code ?? row.model_code ?? row.generation ?? "—"}
+                    {row.full_model_code ??
+                      row.chassis_code ??
+                      row.generation_code ??
+                      row.model_code ??
+                      row.generation ??
+                      "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-slate-700">
                     {row.body_type ?? "—"}
@@ -843,10 +881,13 @@ export function VehicleCatalogManager() {
             <DialogTitle>{editingId ? "Edit vehicle" : "Add vehicle"}</DialogTitle>
           </DialogHeader>
 
-          <Tabs defaultValue="primary" className="w-full">
+          <Tabs defaultValue="identity" className="w-full">
             <TabsList className="flex flex-wrap h-auto gap-1 p-1 w-full justify-start">
-              <TabsTrigger value="primary" className="text-xs sm:text-sm">
-                Primary ID
+              <TabsTrigger value="identity" className="text-xs sm:text-sm">
+                Identity
+              </TabsTrigger>
+              <TabsTrigger value="variant" className="text-xs sm:text-sm">
+                Variant
               </TabsTrigger>
               <TabsTrigger value="body" className="text-xs sm:text-sm">
                 Body
@@ -854,15 +895,18 @@ export function VehicleCatalogManager() {
               <TabsTrigger value="engine" className="text-xs sm:text-sm">
                 Engine
               </TabsTrigger>
+              <TabsTrigger value="fueldrive" className="text-xs sm:text-sm">
+                Fuel & drive
+              </TabsTrigger>
               <TabsTrigger value="brakes" className="text-xs sm:text-sm">
-                Brakes & wheels
+                Brakes
               </TabsTrigger>
               <TabsTrigger value="capacity" className="text-xs sm:text-sm">
                 Capacity
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="primary" className="mt-3">
+            <TabsContent value="identity" className="mt-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-600">Make *</Label>
@@ -927,16 +971,6 @@ export function VehicleCatalogManager() {
                   </>
                 )}
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Chassis code</Label>
-                  <Input
-                    value={form.chassis_code}
-                    onChange={(e) => setForm((f) => ({ ...f, chassis_code: e.target.value }))}
-                    className="h-9 bg-white border-slate-300"
-                    placeholder="e.g. M900A"
-                    autoComplete="off"
-                  />
-                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-600">Production start year *</Label>
                   <Select
@@ -1021,9 +1055,39 @@ export function VehicleCatalogManager() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="variant" className="mt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field
+                  label="Chassis code"
+                  value={form.chassis_code}
+                  onChange={update("chassis_code")}
+                  placeholder="e.g. M900A"
+                />
+                <Field
+                  label="Full model code"
+                  value={form.full_model_code}
+                  onChange={update("full_model_code")}
+                  placeholder="e.g. DBA-M900A-GBME"
+                />
+                <Field label="Trim (catalog)" value={form.catalog_trim} onChange={update("catalog_trim")} placeholder="e.g. Custom G" />
+                <Field
+                  label="Emissions prefix"
+                  value={form.emissions_prefix}
+                  onChange={update("emissions_prefix")}
+                  placeholder="e.g. DBA"
+                />
+                <Field
+                  label="Trim suffix code"
+                  value={form.trim_suffix_code}
+                  onChange={update("trim_suffix_code")}
+                  placeholder="e.g. GBME"
+                />
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label className="text-xs text-slate-600" htmlFor="catalog-trim-series">
-                    Series / facelift · trim
+                    Series / facelift
                   </Label>
                   <Input
                     id="catalog-trim-series"
@@ -1040,17 +1104,15 @@ export function VehicleCatalogManager() {
                     ))}
                   </datalist>
                   <p className="text-[11px] leading-relaxed text-slate-500">
-                    After a mid-cycle update, add another catalog row with a new production span and label
-                    (e.g. Pre-Facelift 2016–2020 vs Facelift 2020–Present). For JDM imports, frame prefixes
-                    (DBA vs 5BA/4BA) can help confirm the phase.
+                    Use separate catalog rows for major facelifts. Frame prefixes (DBA vs 5BA) can distinguish JDM phases.
                   </p>
                 </div>
                 <Field label="Generation" value={form.generation} onChange={update("generation")} placeholder="e.g. Mk2" />
                 <Field
-                  label="Model code"
+                  label="Model code (legacy)"
                   value={form.model_code}
                   onChange={update("model_code")}
-                  placeholder="e.g. OEM / platform code"
+                  placeholder="Legacy OEM field"
                 />
                 <Field
                   label="Generation code (legacy)"
@@ -1111,6 +1173,21 @@ export function VehicleCatalogManager() {
                   onChange={update("engine_configuration")}
                   placeholder="e.g. I4, V6"
                 />
+                <Field label="Horsepower" value={form.horsepower} onChange={update("horsepower")} />
+                <Field label="Torque" value={form.torque} onChange={update("torque")} />
+                <Field label="Torque unit" value={form.torque_unit} onChange={update("torque_unit")} placeholder="Nm" />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="fueldrive" className="mt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field
+                  label="Fuel category"
+                  value={form.fuel_category}
+                  onChange={update("fuel_category")}
+                  placeholder="e.g. Gas, Hybrid"
+                />
+                <Field label="Fuel grade" value={form.fuel_grade} onChange={update("fuel_grade")} placeholder="e.g. 87" />
                 <EngineCatalogSelect
                   label="Fuel type"
                   value={form.fuel_type}
@@ -1132,9 +1209,6 @@ export function VehicleCatalogManager() {
                   options={VEHICLE_DRIVETRAIN_OPTIONS}
                   placeholder="Select a Drivetrain"
                 />
-                <Field label="Horsepower" value={form.horsepower} onChange={update("horsepower")} />
-                <Field label="Torque" value={form.torque} onChange={update("torque")} />
-                <Field label="Torque unit" value={form.torque_unit} onChange={update("torque_unit")} placeholder="Nm" />
               </div>
             </TabsContent>
 
@@ -1446,6 +1520,13 @@ function viewText(v: string | number | null | undefined): string {
   return String(v);
 }
 
+function fuelSummaryLine(r: VehicleCatalogRecord): string {
+  const parts = [r.fuel_category, r.fuel_type, r.fuel_grade].filter(
+    (x) => x != null && String(x).trim() !== "",
+  );
+  return parts.length ? parts.map((x) => String(x).trim()).join(" · ") : "—";
+}
+
 function formatEngineDisplacement(r: VehicleCatalogRecord): string {
   if (r.engine_displacement_cc != null && Number.isFinite(Number(r.engine_displacement_cc))) {
     return `${Math.round(Number(r.engine_displacement_cc)).toLocaleString()}cc`;
@@ -1481,7 +1562,7 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
     <>
       <VehicleSpecItem icon={Gauge} label="Engine" value={formatEngineDisplacement(r)} />
       <VehicleSpecItem icon={CircleDot} label="Drive" value={viewText(r.drivetrain)} />
-      <VehicleSpecItem icon={Fuel} label="Fuel" value={viewText(r.fuel_type)} />
+      <VehicleSpecItem icon={Fuel} label="Fuel" value={fuelSummaryLine(r)} />
       <VehicleSpecItem icon={Armchair} label="Seats" value={viewText(r.seating_capacity)} />
     </>
   );
@@ -1512,13 +1593,17 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
             <ViewSpecSection title="Identifiers">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={Tag} label="Full model code" value={viewText(r.full_model_code)} />
                   <VehicleSpecItem icon={Tag} label="Chassis code" value={viewText(r.chassis_code ?? r.generation_code)} />
-                  <VehicleSpecItem icon={Tag} label="Series / facelift · trim" value={viewText(r.trim_series)} />
-                  <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
+                  <VehicleSpecItem icon={Tag} label="Trim (catalog)" value={viewText(r.catalog_trim)} />
+                  <VehicleSpecItem icon={Tag} label="Emissions prefix" value={viewText(r.emissions_prefix)} />
+                  <VehicleSpecItem icon={Tag} label="Trim suffix code" value={viewText(r.trim_suffix_code)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Tag} label="Model code" value={viewText(r.model_code)} />
-                  <VehicleSpecItem icon={Tag} label="Generation code" value={viewText(r.generation_code)} />
+                  <VehicleSpecItem icon={Tag} label="Series / facelift" value={viewText(r.trim_series)} />
+                  <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
+                  <VehicleSpecItem icon={Tag} label="Model code (legacy)" value={viewText(r.model_code)} />
+                  <VehicleSpecItem icon={Tag} label="Generation code (legacy)" value={viewText(r.generation_code)} />
                 </div>
               </div>
             </ViewSpecSection>
@@ -1560,6 +1645,8 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
                   <VehicleSpecItem icon={Settings2} label="Configuration" value={viewText(r.engine_configuration)} />
                   <VehicleSpecItem icon={Gauge} label="Engine code" value={viewText(r.engine_code)} />
                   <VehicleSpecItem icon={Gauge} label="Engine type" value={viewText(r.engine_type)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel category" value={viewText(r.fuel_category)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel grade" value={viewText(r.fuel_grade)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={Gauge} label="Horsepower" value={viewText(r.horsepower)} />

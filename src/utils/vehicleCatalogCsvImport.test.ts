@@ -64,4 +64,45 @@ describe("buildVehicleCatalogCreatePayload", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.payload.production_end_year).toBeNull();
   });
+
+  it("parses English month names for production months", () => {
+    const canon = remapCsvRowToCanonical({
+      Make: "Toyota",
+      Model: "Roomy",
+      "Production start year": "2020",
+      "Production start month": "November",
+      "Production end year": "2021",
+      "Production end month": "mar",
+    });
+    const r = buildVehicleCatalogCreatePayload(canon);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.production_start_month).toBe(11);
+      expect(r.payload.production_end_month).toBe(3);
+    }
+  });
+
+  it("maps CSV PIM headers to new fields", () => {
+    const canon = remapCsvRowToCanonical({
+      Make: "Toyota",
+      Model: "Roomy",
+      "Production start year": "2020",
+      "Full Model Code": "X-1",
+      Trim: "G",
+      "Emissions Prefix": "DBA",
+      "Trim Suffix Code": "ZZ",
+      "Fuel Category": "Gas",
+      "Fuel Grade": "87",
+    });
+    const r = buildVehicleCatalogCreatePayload(canon);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.full_model_code).toBe("X-1");
+      expect(r.payload.catalog_trim).toBe("G");
+      expect(r.payload.emissions_prefix).toBe("DBA");
+      expect(r.payload.trim_suffix_code).toBe("ZZ");
+      expect(r.payload.fuel_category).toBe("Gas");
+      expect(r.payload.fuel_grade).toBe("87");
+    }
+  });
 });

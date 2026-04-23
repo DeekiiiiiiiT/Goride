@@ -19,8 +19,16 @@ export interface VehicleCatalogRecord {
   trim_series: string | null;
   /** Free-text generation label (e.g. Mk2, E210). */
   generation: string | null;
+  /** OEM full model / frame code (e.g. DBA-M900A-GBME); CSV "Full Model Code". */
+  full_model_code?: string | null;
+  /** Market trim / grade (e.g. Custom G); CSV "Trim". */
+  catalog_trim?: string | null;
+  /** Emissions / frame prefix (e.g. DBA); CSV "Emissions Prefix". */
+  emissions_prefix?: string | null;
+  /** Trim suffix / package code (e.g. GBME); CSV "Trim Suffix Code". */
+  trim_suffix_code?: string | null;
   model_code: string | null;
-  /** OEM / platform code (legacy); prefer chassis_code for new rows */
+  /** OEM / platform code (legacy); prefer chassis_code + full_model_code for new rows */
   generation_code?: string | null;
   /** Primary technical index (e.g. M900A) */
   chassis_code?: string | null;
@@ -38,7 +46,11 @@ export interface VehicleCatalogRecord {
   engine_displacement_l: number | null;
   engine_displacement_cc: number | null;
   engine_configuration: string | null;
+  /** CSV "Fuel Category" (e.g. Gas, Hybrid). */
+  fuel_category?: string | null;
   fuel_type: string | null;
+  /** CSV "Fuel Grade" (e.g. 87). */
+  fuel_grade?: string | null;
   transmission: string | null;
   drivetrain: string | null;
   horsepower: number | null;
@@ -51,8 +63,6 @@ export interface VehicleCatalogRecord {
   gross_vehicle_weight_kg: number | null;
   max_payload_kg: number | null;
   max_towing_kg: number | null;
-  /** @deprecated Instance data; column may exist on legacy rows — do not set for new catalog entries */
-  exterior_color?: string | null;
   front_brake_type?: string | null;
   rear_brake_type?: string | null;
   brake_size_mm?: number | null;
@@ -109,4 +119,25 @@ export function formatCatalogProductionWindow(
       : 12;
   const end = `${y1}-${String(m1).padStart(2, "0")}`;
   return start === end ? start : `${start}–${end}`;
+}
+
+const MONTH_NAMES_EN = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+/** Export production month as English name to match CSV round-trip. */
+export function formatCatalogMonthEnglish(m: number | null | undefined): string {
+  if (m == null || m < 1 || m > 12) return "";
+  return MONTH_NAMES_EN[m - 1];
 }
