@@ -4,6 +4,9 @@ import { publicAnonKey } from "../utils/supabase/info";
 
 const url = () => `${API_ENDPOINTS.admin}/admin/vehicle-catalog`;
 
+/** Must match edge `VEHICLE_CATALOG_PURGE_CONFIRM` in `index.tsx` (purge route). */
+export const VEHICLE_CATALOG_PURGE_CONFIRM_PHRASE = "DELETE ALL";
+
 function apiErrorBodyToString(raw: unknown, fallback: string): string {
   if (raw == null || raw === "") return fallback;
   if (typeof raw === "string") return raw;
@@ -87,4 +90,19 @@ export async function deleteVehicleCatalog(accessToken: string, id: string): Pro
     headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
+}
+
+/** Removes every motor catalog row. Requires exact `confirm` phrase (see UI). */
+export async function purgeAllVehicleCatalog(
+  accessToken: string,
+  confirm: string,
+): Promise<{ deleted: number }> {
+  const res = await fetch(`${url()}/purge`, {
+    method: "POST",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ confirm }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = (await res.json()) as { deleted?: number };
+  return { deleted: Number(data.deleted ?? 0) };
 }

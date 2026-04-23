@@ -12609,6 +12609,40 @@ app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) 
   }
 });
 
+/** Bulk-delete every row in motor vehicle catalog (maintenance templates CASCADE). */
+const VEHICLE_CATALOG_PURGE_CONFIRM = "DELETE ALL";
+
+// POST /admin/vehicle-catalog/purge — must be registered before POST /admin/vehicle-catalog (create)
+app.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as { confirm?: string };
+    if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_PURGE_CONFIRM) {
+      return c.json(
+        { error: `Confirmation required: send JSON { "confirm": "${VEHICLE_CATALOG_PURGE_CONFIRM}" }` },
+        400,
+      );
+    }
+    const CHUNK = 500;
+    let deleted = 0;
+    for (;;) {
+      const { data: batch, error: qErr } = await supabase.from("vehicle_catalog").select("id").limit(CHUNK);
+      if (qErr) throw qErr;
+      if (!batch?.length) break;
+      const ids = (batch as { id: string }[]).map((r) => r.id);
+      const { error: dErr } = await supabase.from("vehicle_catalog").delete().in("id", ids);
+      if (dErr) throw dErr;
+      deleted += ids.length;
+      if (batch.length < CHUNK) break;
+    }
+    return c.json({ deleted });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] purge:", e);
+    return c.json({ error: e.message || "Failed to purge vehicle catalog" }, 500);
+  }
+});
+
 // POST /admin/vehicle-catalog
 app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) => {
   const denied = assertVehicleCatalogAccess(c);
