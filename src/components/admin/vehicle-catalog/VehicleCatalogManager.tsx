@@ -1869,6 +1869,20 @@ function viewText(v: string | number | null | undefined): string {
   return String(v);
 }
 
+function formatCatalogMonthField(m: string | number | null | undefined): string {
+  if (m === null || m === undefined || m === "") return "—";
+  const s = String(m).trim();
+  if (!s) return "—";
+  const opt = MONTH_OPTIONS.find((o) => o.value === s);
+  if (opt && opt.value !== "") return opt.label === "—" ? s : opt.label;
+  return s;
+}
+
+function viewProductionEndYear(y: number | null | undefined): string {
+  if (y === null || y === undefined) return "Ongoing";
+  return viewText(y);
+}
+
 function fuelSummaryLine(r: VehicleCatalogRecord): string {
   const parts = [r.fuel_category, r.fuel_type, r.fuel_grade].filter(
     (x) => x != null && String(x).trim() !== "",
@@ -1939,40 +1953,52 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 space-y-6 rounded-2xl border border-slate-200/60 bg-white p-5 sm:p-6">
-            <ViewSpecSection title="Identifiers">
+            <ViewSpecSection title="Identification & Core Details">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
                   <VehicleSpecItem icon={Tag} label="Full model code" value={viewText(r.full_model_code)} />
                   <VehicleSpecItem icon={Tag} label="Chassis code" value={viewText(r.chassis_code)} />
-                  <VehicleSpecItem icon={Tag} label="Trim (catalog)" value={viewText(r.catalog_trim)} />
-                  <VehicleSpecItem icon={Tag} label="Emissions prefix" value={viewText(r.emissions_prefix)} />
+                  <VehicleSpecItem icon={Tag} label="Trim" value={viewText(r.catalog_trim)} />
                   <VehicleSpecItem icon={Tag} label="Trim suffix code" value={viewText(r.trim_suffix_code)} />
+                  <VehicleSpecItem icon={Tag} label="Emissions prefix" value={viewText(r.emissions_prefix)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Tag} label="Series / facelift" value={viewText(r.trim_series)} />
                   <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
+                  <VehicleSpecItem icon={Tag} label="Series / facelift" value={viewText(r.trim_series)} />
                 </div>
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Wheels & brakes">
+            <ViewSpecSection title="Production Lifecycle">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={CircleDot} label="Front brake type" value={viewText(r.front_brake_type)} />
-                  <VehicleSpecItem icon={CircleDot} label="Rear brake type" value={viewText(r.rear_brake_type)} />
-                  <VehicleSpecItem icon={Ruler} label="Brake size mm" value={viewText(r.brake_size_mm)} />
+                  <VehicleSpecItem icon={Calendar} label="Production start year" value={viewText(r.production_start_year)} />
+                  <VehicleSpecItem icon={Calendar} label="Production start month" value={formatCatalogMonthField(r.production_start_month)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={CarFront} label="Tire size" value={viewText(r.tire_size)} />
-                  <VehicleSpecItem icon={Settings2} label="Bolt pattern" value={viewText(r.bolt_pattern)} />
-                  <VehicleSpecItem icon={Ruler} label="Wheel offset mm" value={viewText(r.wheel_offset_mm)} />
+                  <VehicleSpecItem
+                    icon={Calendar}
+                    label="Production end year (empty = ongoing)"
+                    value={viewProductionEndYear(r.production_end_year)}
+                  />
+                  <VehicleSpecItem
+                    icon={Calendar}
+                    label="Production end month"
+                    value={
+                      r.production_end_year === null || r.production_end_year === undefined
+                        ? "—"
+                        : formatCatalogMonthField(r.production_end_month)
+                    }
+                  />
                 </div>
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Dimensions">
+            <ViewSpecSection title="Dimensions & Body">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={CarFront} label="Body type" value={viewText(r.body_type)} />
+                  <VehicleSpecItem icon={DoorOpen} label="Doors" value={viewText(r.doors)} />
                   <VehicleSpecItem icon={Ruler} label="Length (mm)" value={viewText(r.length_mm)} />
                   <VehicleSpecItem icon={Ruler} label="Width (mm)" value={viewText(r.width_mm)} />
                   <VehicleSpecItem icon={Ruler} label="Height (mm)" value={viewText(r.height_mm)} />
@@ -1984,7 +2010,7 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Engine & transmission">
+            <ViewSpecSection title="Engine & Transmission">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
                   <VehicleSpecItem icon={Gauge} label="Engine code" value={viewText(r.engine_code)} />
@@ -2003,7 +2029,7 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Fuel system & fluids">
+            <ViewSpecSection title="Fuel System & Fluids">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
                   <VehicleSpecItem icon={Fuel} label="Fuel category" value={viewText(r.fuel_category)} />
@@ -2019,7 +2045,22 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Weights & payload">
+            <ViewSpecSection title="Wheels & Brakes">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
+                <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={CircleDot} label="Front brake type" value={viewText(r.front_brake_type)} />
+                  <VehicleSpecItem icon={CircleDot} label="Rear brake type" value={viewText(r.rear_brake_type)} />
+                  <VehicleSpecItem icon={Ruler} label="Brake size mm" value={viewText(r.brake_size_mm)} />
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
+                  <VehicleSpecItem icon={CarFront} label="Tire size" value={viewText(r.tire_size)} />
+                  <VehicleSpecItem icon={Settings2} label="Bolt pattern" value={viewText(r.bolt_pattern)} />
+                  <VehicleSpecItem icon={Ruler} label="Wheel offset mm" value={viewText(r.wheel_offset_mm)} />
+                </div>
+              </div>
+            </ViewSpecSection>
+
+            <ViewSpecSection title="Weights & Payload">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
                   <VehicleSpecItem icon={Armchair} label="Seating capacity" value={viewText(r.seating_capacity)} />

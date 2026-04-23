@@ -13,22 +13,33 @@ export function isLegacyVehicleCatalogYearNotNullError(err: { message?: string; 
   return false;
 }
 
+/**
+ * True when the failure is almost certainly "this column/table is not on the exposed schema"
+ * (safe to retry with fewer columns or legacy mapping).
+ *
+ * Important: do NOT match generic messages that merely name a column (e.g. check-constraint text),
+ * or inserts will incorrectly use `stripVehicleCatalogOptionalMigrationColumns` and silently drop data.
+ */
 export function isVehicleCatalogSchemaMismatchError(err: { message?: string; code?: string } | null): boolean {
   if (!err) return false;
-  const msg = String(err.message ?? "");
+  const raw = String(err.message ?? "");
+  const lower = raw.toLowerCase();
   const code = String(err.code ?? "");
-  if (code === "42703") return true;
+
   if (isLegacyVehicleCatalogYearNotNullError(err)) return true;
-  /** PostgREST: column not in schema cache / not exposed */
-  if (msg.includes("schema cache")) return true;
-  if (msg.includes("Could not find") && msg.includes("column")) return true;
-  if (msg.includes("production_start_year") || msg.includes("production_end_year")) return true;
-  if (msg.includes("production_start_month") || msg.includes("production_end_month")) return true;
-  if (msg.includes("engine_type") || msg.includes("engine_code")) return true;
-  if (msg.includes("chassis_code") && (msg.includes("schema") || msg.includes("exist") || msg.includes("find"))) {
-    return true;
-  }
-  if (msg.includes("does not exist") && msg.includes("vehicle_catalog")) return true;
+
+  // PostgreSQL: undefined_column
+  if (code === "42703") return true;
+
+  // PostgREST: missing column / stale schema cache (codes vary by version)
+  if (code === "PGRST204" || code === "PGRST205") return true;
+  if (code.startsWith("PGRST") && (lower.includes("schema cache") || lower.includes("could not find"))) return true;
+
+  if (lower.includes("schema cache")) return true;
+  if (lower.includes("could not find") && lower.includes("column")) return true;
+  if (lower.includes("undefined column")) return true;
+  if (lower.includes("column") && lower.includes("does not exist")) return true;
+
   return false;
 }
 
