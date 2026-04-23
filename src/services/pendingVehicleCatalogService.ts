@@ -19,7 +19,8 @@ export type VehicleCatalogMatchParams = {
   /** 1–12; narrows catalog rows by production month when model year is ambiguous */
   month?: string;
   trim_series?: string;
-  generation_code?: string;
+  /** OEM chassis / frame index (e.g. M900A) */
+  chassis_code?: string;
   body_type?: string;
 };
 
@@ -33,7 +34,7 @@ export async function listVehicleCatalogMatches(
   if (params.year) sp.set("year", params.year);
   if (params.month) sp.set("month", params.month);
   if (params.trim_series) sp.set("trim_series", params.trim_series);
-  if (params.generation_code) sp.set("generation_code", params.generation_code);
+  if (params.chassis_code) sp.set("chassis_code", params.chassis_code);
   if (params.body_type) sp.set("body_type", params.body_type);
   const res = await fetch(
     `${API_ENDPOINTS.fleet}/vehicle-catalog-matches?${sp.toString()}`,

@@ -27,9 +27,6 @@ export interface VehicleCatalogRecord {
   emissions_prefix?: string | null;
   /** Trim suffix / package code (e.g. GBME); CSV "Trim Suffix Code". */
   trim_suffix_code?: string | null;
-  model_code: string | null;
-  /** OEM / platform code (legacy); prefer chassis_code + full_model_code for new rows */
-  generation_code?: string | null;
   /** Primary technical index (e.g. M900A) */
   chassis_code?: string | null;
   /** OEM engine code (e.g. 1KR-FE) */

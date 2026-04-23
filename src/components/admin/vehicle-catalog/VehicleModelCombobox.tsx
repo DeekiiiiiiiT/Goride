@@ -49,7 +49,7 @@ export function VehicleModelCombobox({ models, value, onChange, disabled, id }: 
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            "w-full justify-between font-normal h-9 px-3 bg-white border-slate-300 text-slate-900",
+            "w-full justify-between font-normal h-10 px-3 bg-white border-slate-200 text-slate-900 shadow-sm",
             !value && "text-muted-foreground",
           )}
         >

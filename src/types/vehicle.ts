@@ -65,7 +65,6 @@ export interface Vehicle {
   vehicle_catalog_emissions_prefix_hint?: string;
   vehicle_catalog_trim_suffix_hint?: string;
   vehicle_catalog_generation_hint?: string;
-  vehicle_catalog_model_code_hint?: string;
   vehicle_catalog_chassis_hint?: string;
   vehicle_catalog_drivetrain_hint?: string;
   vehicle_catalog_fuel_type_hint?: string;

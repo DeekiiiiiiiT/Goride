@@ -173,7 +173,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const [alignSearchModel, setAlignSearchModel] = useState('');
   const [alignSearchYear, setAlignSearchYear] = useState('');
   const [alignSearchTrim, setAlignSearchTrim] = useState('');
-  const [alignSearchGen, setAlignSearchGen] = useState('');
+  const [alignSearchChassis, setAlignSearchChassis] = useState('');
   const [alignSearchMonth, setAlignSearchMonth] = useState('');
   const [alignMatches, setAlignMatches] = useState<VehicleCatalogRecord[]>([]);
   const [alignMatchesLoading, setAlignMatchesLoading] = useState(false);
@@ -185,7 +185,9 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     setAlignSearchModel(vehicle.model || '');
     setAlignSearchYear(vehicle.year || '');
     setAlignSearchTrim(vehicle.vehicle_catalog_trim_hint?.trim() || '');
-    setAlignSearchGen(vehicle.vehicle_catalog_generation_hint?.trim() || '');
+    setAlignSearchChassis(
+      vehicle.vehicle_catalog_chassis_hint?.trim() || vehicle.vehicle_catalog_generation_hint?.trim() || '',
+    );
     const mh = vehicle.vehicle_catalog_production_month_hint ?? vehicle.vehicle_manufacture_month;
     setAlignSearchMonth(
       mh != null && Number.isFinite(Number(mh)) ? String(Number(mh)) : '',
@@ -196,6 +198,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     vehicle.model,
     vehicle.year,
     vehicle.vehicle_catalog_trim_hint,
+    vehicle.vehicle_catalog_chassis_hint,
     vehicle.vehicle_catalog_generation_hint,
     vehicle.vehicle_catalog_production_month_hint,
     vehicle.vehicle_manufacture_month,
@@ -211,7 +214,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         year: alignSearchYear,
         month: alignSearchMonth.trim() || undefined,
         trim_series: alignSearchTrim,
-        generation_code: alignSearchGen,
+        chassis_code: alignSearchChassis,
         body_type: vehicle.bodyType || undefined,
       })
         .then(setAlignMatches)
@@ -226,7 +229,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     alignSearchModel,
     alignSearchYear,
     alignSearchTrim,
-    alignSearchGen,
+    alignSearchChassis,
     alignSearchMonth,
     vehicle.bodyType,
   ]);
@@ -240,8 +243,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         ...vehicle,
         vehicle_catalog_id: row.id,
         vehicle_catalog_trim_hint: row.trim_series ?? undefined,
-        vehicle_catalog_generation_hint: row.generation_code ?? row.model_code ?? undefined,
-        vehicle_catalog_chassis_hint: row.chassis_code ?? row.generation_code ?? undefined,
+        vehicle_catalog_generation_hint: row.generation?.trim() || undefined,
+        vehicle_catalog_chassis_hint: row.chassis_code ?? undefined,
         vehicle_catalog_drivetrain_hint: row.drivetrain ?? undefined,
         vehicle_catalog_fuel_type_hint: row.fuel_type ?? undefined,
         vehicle_catalog_transmission_hint: row.transmission ?? undefined,
@@ -1021,10 +1024,9 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                 {formatCatalogProductionWindow(linkedCatalog)} {linkedCatalog.make} {linkedCatalog.model}
                 {linkedCatalog.trim_series ? ` · ${linkedCatalog.trim_series}` : ''}
               </p>
-              {(linkedCatalog.chassis_code || linkedCatalog.generation_code || linkedCatalog.model_code) && (
+              {linkedCatalog.chassis_code && (
                 <p className="text-xs text-slate-500">
-                  Code:{' '}
-                  {linkedCatalog.chassis_code || linkedCatalog.generation_code || linkedCatalog.model_code}
+                  Chassis: {linkedCatalog.chassis_code}
                 </p>
               )}
             </div>
@@ -1962,11 +1964,11 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="align-gen">Generation code (optional)</Label>
+                <Label htmlFor="align-chassis">Chassis code (optional)</Label>
                 <Input
-                  id="align-gen"
-                  value={alignSearchGen}
-                  onChange={(e) => setAlignSearchGen(e.target.value)}
+                  id="align-chassis"
+                  value={alignSearchChassis}
+                  onChange={(e) => setAlignSearchChassis(e.target.value)}
                   placeholder="e.g. M900A"
                 />
               </div>
@@ -1996,7 +1998,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                             {formatCatalogProductionWindow(m)} {m.make} {m.model}
                           </span>
                           <span className="text-xs text-slate-500">
-                            {[m.trim_series, m.chassis_code || m.generation_code || m.model_code, m.body_type]
+                            {[m.trim_series, m.chassis_code, m.body_type]
                               .filter(Boolean)
                               .join(' · ') || '—'}
                           </span>

@@ -13,6 +13,7 @@ import {
   Eye,
   Fuel,
   Gauge,
+  Info,
   Loader2,
   Pencil,
   Plus,
@@ -64,6 +65,7 @@ import {
   TableRow,
 } from "../../ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -117,6 +119,125 @@ const TRIM_SERIES_DATALIST_ID = "vehicle-catalog-trim-series-suggestions";
 /** Common values; free text is allowed for trim grades and other markets. */
 const TRIM_SERIES_SUGGESTIONS = ["Pre-Facelift", "Facelift", "Base", "XLE", "G", "Z"] as const;
 
+const IDENTIFICATION_TAB_DESCRIPTION =
+  "This group contains the absolute essentials for identifying what the car actually is, which is critical for looking up VINs and sourcing trim-specific interior/exterior parts.";
+
+const IDENTIFICATION_FIELD_HINTS = {
+  make: "The manufacturer or brand of the vehicle (e.g., Toyota, Honda).",
+  model: "The specific product name under the manufacturer's brand (e.g., Roomy, Fit).",
+  fullModelCode:
+    "The complete factory string identifying the exact build, including emissions, chassis, and trim (e.g., DBA-M900A-GBME).",
+  chassisCode:
+    "The factory identifier for the vehicle's frame and engine combination; commonly used as the primary ID for sourcing JDM parts.",
+  trim: "The specific equipment level, package, or grade of the vehicle (e.g., Custom G, RS).",
+  emissionsPrefix:
+    "A 3-character Japanese factory code indicating the vehicle's emission standard and era (e.g., DBA, 6AA).",
+  trimSuffix:
+    "The 4-to-5 letter factory code that dictates the exact interior features, wiring, and exterior accessories.",
+  generation: "The chronological iteration of the vehicle model (e.g., 1st Gen, 3rd Gen).",
+  seriesFacelift:
+    "Indicates if the vehicle is the original design or a mid-cycle refresh with updated body parts and styling.",
+} as const;
+
+const PRODUCTION_LIFECYCLE_TAB_DESCRIPTION =
+  "Production start year is required to save. Use these dates to record when this chassis and facelift were manufactured, including mid-year changeovers and models still in production.";
+
+const PRODUCTION_LIFECYCLE_FIELD_HINTS = {
+  productionStartYear:
+    "The year manufacturing officially began for this specific chassis and facelift.",
+  productionEndYear:
+    "The year manufacturing ceased. (Often marked as 9999 for vehicles currently in active production).",
+  productionStartMonth:
+    "The specific month manufacturing began, crucial for identifying mid-year part changeovers.",
+  productionEndMonth: "The specific month manufacturing ceased.",
+} as const;
+
+const DIMENSIONS_BODY_TAB_DESCRIPTION =
+  "Classifies the vehicle's body style and records exterior dimensions in millimeters—used for parts fitment, garage clearance, and loading limits.";
+
+const DIMENSIONS_BODY_FIELD_HINTS = {
+  bodyType: "The general structural classification of the vehicle (e.g., Sedan, Hatchback, SUV).",
+  doors: "The total number of doors, including the rear hatch or trunk.",
+  lengthMm: "The total bumper-to-bumper length of the vehicle in millimeters.",
+  widthMm: "The maximum width of the vehicle in millimeters, excluding side mirrors.",
+  heightMm: "The total height of the vehicle from the ground to the highest point of the roof in millimeters.",
+  wheelbaseMm:
+    "The exact distance between the centers of the front and rear wheels, affecting interior space and handling.",
+  groundClearanceMm:
+    "The distance between the lowest point of the vehicle's undercarriage and the ground.",
+} as const;
+
+const ENGINE_TRANSMISSION_TAB_DESCRIPTION =
+  "Factory engine identifiers, displacement, output figures, and how torque is quoted—plus gearbox and driven wheels for maintenance and parts lookup.";
+
+const ENGINE_TRANSMISSION_FIELD_HINTS = {
+  engineCode: "The factory designation for the specific engine block (e.g., 1KR-FE, K20C1).",
+  engineType:
+    "Indicates if the engine has forced induction or special performance characteristics (e.g., Turbo, N/A).",
+  engineDisplacementL:
+    "The total volume of all engine cylinders rounded to the nearest tenth of a liter (e.g., 1.5L).",
+  engineDisplacementCc: "The exact factory cubic capacity of the engine (e.g., 1496 cc).",
+  engineConfiguration:
+    "The physical layout and number of the engine's cylinders (e.g., Inline-4, V6).",
+  horsepower: "The maximum factory-rated metric horsepower output of the engine.",
+  torque: "The maximum factory-rated rotational pulling force the engine produces.",
+  torqueUnit:
+    "The standard unit used for measuring the engine's torque (typically Nm for Newton-meters).",
+  transmission:
+    "The type of gearbox equipped in the vehicle (e.g., CVT, 5AT, 6MT).",
+  drivetrain: "Indicates which wheels receive power from the engine (e.g., 2WD, 4WD, AWD).",
+} as const;
+
+const FUEL_SYSTEM_FLUIDS_TAB_DESCRIPTION =
+  "Fuel classification, tank size, and routine service fluid volumes—used for compliance, range estimates, and maintenance intervals.";
+
+const FUEL_SYSTEM_FLUIDS_FIELD_HINTS = {
+  fuelCategory: "The broad classification of the vehicle's power source (e.g., Gas, Diesel, Hybrid).",
+  fuelType:
+    "The specific fuel format required, mapped for system filtering (e.g., Petrol, Hybrid(petrol)).",
+  fuelGrade:
+    "The minimum recommended octane rating or specific grade required at the pump (e.g., 87, 90, ULSD).",
+  fuelTankCapacity: "The maximum volume the fuel tank can hold from empty to full.",
+  fuelTankUnit: "The unit of measurement for the fuel tank capacity (typically L for Liters).",
+  engineOilCapacityL: "The estimated amount of engine oil required for a standard oil and filter change.",
+  coolantCapacityL: "The estimated total fluid volume of the engine's cooling system.",
+} as const;
+
+const WEIGHTS_PAYLOAD_TAB_DESCRIPTION =
+  "Passenger capacity and certified mass ratings—used for compliance, loading, and towing limits.";
+
+const WEIGHTS_PAYLOAD_FIELD_HINTS = {
+  seatingCapacity:
+    "The maximum legal number of passengers the vehicle is designed to carry with seatbelts.",
+  curbWeightKg:
+    "The total weight of the vehicle with all standard equipment and full fluids, but without passengers or cargo.",
+  grossVehicleWeightKg:
+    "The maximum allowable total weight of the fully loaded vehicle, including curb weight, passengers, and payload.",
+  maxPayloadKg:
+    "The maximum combined weight of passengers and cargo the vehicle is rated to safely carry inside the cabin.",
+  maxTowingKg:
+    "The maximum braked trailer weight the vehicle is officially rated to tow.",
+} as const;
+
+const WHEELS_BRAKES_TAB_DESCRIPTION =
+  "OEM wheel and brake specifications for pads, rotors, tires, and fitment—critical for safe replacement parts.";
+
+const WHEELS_BRAKES_FIELD_HINTS = {
+  frontBrakeType:
+    "The mechanical design of the front braking system (typically Ventilated Disc).",
+  rearBrakeType: "The mechanical design of the rear braking system (e.g., Drum, Solid Disc).",
+  brakeSizeMm: "The approximate diameter of the brake rotors or drums.",
+  tireSize:
+    "The factory-standard OEM tire dimensions formatted as Width/Ratio/Rim (e.g., 195/65R15).",
+  boltPattern:
+    "The number of wheel studs and the diameter of the circle they form, also known as PCD (e.g., 4x100, 5x114.3).",
+  wheelOffsetMm:
+    "The distance from the hub mounting surface to the centerline of the wheel (e.g., 45, 50).",
+} as const;
+
+const CATALOG_FORM_TOOLTIP_CLASS =
+  "z-[300] max-w-[min(22rem,calc(100vw-2rem))] border border-slate-600/90 bg-slate-900 px-3 py-2.5 text-left text-xs font-normal leading-relaxed text-slate-50 shadow-xl";
+
 type FormState = {
   makeSelection: MakeSelection;
   /** Used when makeSelection is Other */
@@ -133,9 +254,7 @@ type FormState = {
   catalog_trim: string;
   emissions_prefix: string;
   trim_suffix_code: string;
-  model_code: string;
   chassis_code: string;
-  generation_code: string;
   engine_code: string;
   engine_type: string;
   body_type: string;
@@ -194,9 +313,7 @@ function emptyForm(): FormState {
     catalog_trim: "",
     emissions_prefix: "",
     trim_suffix_code: "",
-    model_code: "",
     chassis_code: "",
-    generation_code: "",
     engine_code: "",
     engine_type: "",
     body_type: "",
@@ -239,7 +356,7 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
   const s = (n: number | null | undefined) => (n == null ? "" : String(n));
   const t = (v: string | null | undefined) => v ?? "";
   const ref = isCatalogReferenceMake(r.make) ? r.make : "Other";
-  const chassis = t(r.chassis_code ?? r.generation_code);
+  const chassis = t(r.chassis_code);
   return {
     makeSelection: ref,
     makeOther: ref === "Other" ? r.make : "",
@@ -254,9 +371,7 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     catalog_trim: t(r.catalog_trim),
     emissions_prefix: t(r.emissions_prefix),
     trim_suffix_code: t(r.trim_suffix_code),
-    model_code: t(r.model_code),
     chassis_code: chassis,
-    generation_code: t(r.generation_code),
     engine_code: t(r.engine_code),
     engine_type: t(r.engine_type),
     body_type: t(r.body_type),
@@ -334,8 +449,6 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   assign("catalog_trim", form.catalog_trim.trim() || null);
   assign("emissions_prefix", form.emissions_prefix.trim() || null);
   assign("trim_suffix_code", form.trim_suffix_code.trim() || null);
-  assign("model_code", form.model_code.trim() || null);
-  assign("generation_code", form.generation_code.trim() || null);
   assign("chassis_code", form.chassis_code.trim() || null);
   assign("engine_code", form.engine_code.trim() || null);
   assign("engine_type", form.engine_type.trim() || null);
@@ -393,8 +506,6 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     catalog_trim: form.catalog_trim.trim() || null,
     emissions_prefix: form.emissions_prefix.trim() || null,
     trim_suffix_code: form.trim_suffix_code.trim() || null,
-    model_code: form.model_code.trim() || null,
-    generation_code: form.generation_code.trim() || null,
     chassis_code: form.chassis_code.trim() || null,
     engine_code: form.engine_code.trim() || null,
     engine_type: form.engine_type.trim() || null,
@@ -769,7 +880,7 @@ export function VehicleCatalogManager() {
               </TableHead>
               <TableHead
                 className="hidden lg:table-cell bg-slate-50/90"
-                title="Full model code, chassis, or legacy codes"
+                title="Full model code or chassis"
               >
                 Code
               </TableHead>
@@ -796,12 +907,7 @@ export function VehicleCatalogManager() {
                     {row.trim_series ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-slate-700">
-                    {row.full_model_code ??
-                      row.chassis_code ??
-                      row.generation_code ??
-                      row.model_code ??
-                      row.generation ??
-                      "—"}
+                    {row.full_model_code ?? row.chassis_code ?? row.generation ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-slate-700">
                     {row.body_type ?? "—"}
@@ -876,108 +982,242 @@ export function VehicleCatalogManager() {
       </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto bg-white">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit vehicle" : "Add vehicle"}</DialogTitle>
+        <DialogContent className="flex h-[min(92vh,56rem)] w-[calc(100vw-1rem)] max-w-[min(100vw-1rem,56rem)] flex-col gap-0 overflow-hidden rounded-2xl border-slate-200/90 bg-white p-0 shadow-2xl sm:max-w-3xl lg:max-w-5xl">
+          <DialogHeader className="shrink-0 space-y-1 border-b border-slate-100 px-5 py-4 sm:px-8 sm:py-5">
+            <DialogTitle className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
+              {editingId ? "Edit vehicle" : "Add vehicle"}
+            </DialogTitle>
           </DialogHeader>
 
-          <Tabs defaultValue="identity" className="w-full">
-            <TabsList className="flex flex-wrap h-auto gap-1 p-1 w-full justify-start">
-              <TabsTrigger value="identity" className="text-xs sm:text-sm">
-                Identity
-              </TabsTrigger>
-              <TabsTrigger value="variant" className="text-xs sm:text-sm">
-                Variant
-              </TabsTrigger>
-              <TabsTrigger value="body" className="text-xs sm:text-sm">
-                Body
-              </TabsTrigger>
-              <TabsTrigger value="engine" className="text-xs sm:text-sm">
-                Engine
-              </TabsTrigger>
-              <TabsTrigger value="fueldrive" className="text-xs sm:text-sm">
-                Fuel & drive
-              </TabsTrigger>
-              <TabsTrigger value="brakes" className="text-xs sm:text-sm">
-                Brakes
-              </TabsTrigger>
-              <TabsTrigger value="capacity" className="text-xs sm:text-sm">
-                Capacity
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="identity" className="mt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Make *</Label>
-                  <Select
-                    value={form.makeSelection}
-                    onValueChange={(v) =>
-                      setForm((f) => ({
-                        ...f,
-                        makeSelection: v as MakeSelection,
-                        makeOther: v === "Other" ? f.makeOther : "",
-                        model: v === f.makeSelection ? f.model : "",
-                      }))
-                    }
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-8 sm:py-5">
+            <Tabs defaultValue="identity" className="w-full">
+                <TabsList className="mb-1 flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-slate-200/70 bg-slate-100/70 p-1">
+                  <TabsTrigger
+                    value="identity"
+                    className="h-auto max-w-[11rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-[13rem] sm:px-3 sm:text-xs lg:max-w-none lg:px-4 lg:text-sm"
                   >
-                    <SelectTrigger className="h-9 bg-white border-slate-300">
-                      <SelectValue placeholder="Select make" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[min(320px,50vh)]">
-                      {CATALOG_REFERENCE_MAKES.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="Other">Other (custom make)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <span className="lg:hidden">
+                      <span className="block">Identification &amp; Core</span>
+                      <span className="block">Details</span>
+                    </span>
+                    <span className="hidden lg:inline">Identification &amp; Core Details</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="production"
+                    className="rounded-lg px-3 py-2 text-xs font-medium text-slate-600 shadow-none data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:text-sm"
+                  >
+                    Production
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="body"
+                    className="h-auto max-w-[10.5rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-none sm:px-3 sm:text-xs md:text-sm"
+                  >
+                    <span className="md:hidden">
+                      <span className="block">Dimensions &amp;</span>
+                      <span className="block">Body</span>
+                    </span>
+                    <span className="hidden md:inline">Dimensions &amp; Body</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="engine"
+                    className="h-auto max-w-[11rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-none sm:px-3 sm:text-xs lg:text-sm"
+                  >
+                    <span className="lg:hidden">
+                      <span className="block">Engine &amp;</span>
+                      <span className="block">Transmission</span>
+                    </span>
+                    <span className="hidden lg:inline">Engine &amp; Transmission</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="fueldrive"
+                    className="h-auto max-w-[11rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-none sm:px-3 sm:text-xs lg:text-sm"
+                  >
+                    <span className="lg:hidden">
+                      <span className="block">Fuel System &amp;</span>
+                      <span className="block">Fluids</span>
+                    </span>
+                    <span className="hidden lg:inline">Fuel System &amp; Fluids</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="brakes"
+                    className="h-auto max-w-[10rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-none sm:px-3 sm:text-xs lg:text-sm"
+                  >
+                    <span className="lg:hidden">
+                      <span className="block">Wheels &amp;</span>
+                      <span className="block">Brakes</span>
+                    </span>
+                    <span className="hidden lg:inline">Wheels &amp; Brakes</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="capacity"
+                    className="h-auto max-w-[10.5rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-none sm:px-3 sm:text-xs lg:text-sm"
+                  >
+                    <span className="lg:hidden">
+                      <span className="block">Weights &amp;</span>
+                      <span className="block">Payload</span>
+                    </span>
+                    <span className="hidden lg:inline">Weights &amp; Payload</span>
+                  </TabsTrigger>
+                </TabsList>
 
-                {form.makeSelection !== "Other" ? (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-600">Model *</Label>
-                    <VehicleModelCombobox
-                      models={MODELS_BY_MAKE[form.makeSelection]}
-                      value={form.model}
-                      onChange={(v) => setForm((f) => ({ ...f, model: v }))}
-                    />
+                <TabsContent value="identity" className="mt-4 outline-none">
+                  <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                    <p className="text-sm leading-relaxed text-slate-600">{IDENTIFICATION_TAB_DESCRIPTION}</p>
                   </div>
-                ) : null}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+                    <div className="space-y-1.5">
+                      <LabelWithHint label="Make" hint={IDENTIFICATION_FIELD_HINTS.make} required />
+                      <Select
+                        value={form.makeSelection}
+                        onValueChange={(v) =>
+                          setForm((f) => ({
+                            ...f,
+                            makeSelection: v as MakeSelection,
+                            makeOther: v === "Other" ? f.makeOther : "",
+                            model: v === f.makeSelection ? f.model : "",
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-10 bg-white border-slate-200 shadow-sm focus:ring-slate-200/80">
+                          <SelectValue placeholder="Select make" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[min(320px,50vh)]">
+                          {CATALOG_REFERENCE_MAKES.map((m) => (
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="Other">Other (custom make)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                {form.makeSelection === "Other" && (
-                  <>
+                    {form.makeSelection !== "Other" ? (
+                      <div className="space-y-1.5">
+                        <LabelWithHint
+                          label="Model"
+                          hint={IDENTIFICATION_FIELD_HINTS.model}
+                          required
+                          htmlFor="vehicle-catalog-model"
+                        />
+                        <VehicleModelCombobox
+                          id="vehicle-catalog-model"
+                          models={MODELS_BY_MAKE[form.makeSelection]}
+                          value={form.model}
+                          onChange={(v) => setForm((f) => ({ ...f, model: v }))}
+                        />
+                      </div>
+                    ) : null}
+
+                    {form.makeSelection === "Other" && (
+                      <>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label className="text-xs font-medium text-slate-700">Custom make *</Label>
+                          <Input
+                            value={form.makeOther}
+                            onChange={(e) => setForm((f) => ({ ...f, makeOther: e.target.value }))}
+                            className="h-10 border-slate-200 bg-white shadow-sm"
+                            placeholder="e.g. Lexus, BMW"
+                            autoComplete="off"
+                          />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <LabelWithHint label="Model" hint={IDENTIFICATION_FIELD_HINTS.model} required />
+                          <Input
+                            value={form.model}
+                            onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                            className="h-10 border-slate-200 bg-white shadow-sm"
+                            placeholder="Vehicle model"
+                            autoComplete="off"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <FieldWithHint
+                      label="Full Model Code"
+                      hint={IDENTIFICATION_FIELD_HINTS.fullModelCode}
+                      value={form.full_model_code}
+                      onChange={update("full_model_code")}
+                      placeholder="e.g. DBA-M900A-GBME"
+                    />
+                    <FieldWithHint
+                      label="Chassis Code"
+                      hint={IDENTIFICATION_FIELD_HINTS.chassisCode}
+                      value={form.chassis_code}
+                      onChange={update("chassis_code")}
+                      placeholder="e.g. M900A"
+                    />
+                    <FieldWithHint
+                      label="Trim"
+                      hint={IDENTIFICATION_FIELD_HINTS.trim}
+                      value={form.catalog_trim}
+                      onChange={update("catalog_trim")}
+                      placeholder="e.g. Custom G"
+                    />
+                    <FieldWithHint
+                      label="Trim Suffix Code"
+                      hint={IDENTIFICATION_FIELD_HINTS.trimSuffix}
+                      value={form.trim_suffix_code}
+                      onChange={update("trim_suffix_code")}
+                      placeholder="e.g. GBME"
+                    />
+                    <FieldWithHint
+                      label="Emissions Prefix"
+                      hint={IDENTIFICATION_FIELD_HINTS.emissionsPrefix}
+                      value={form.emissions_prefix}
+                      onChange={update("emissions_prefix")}
+                      placeholder="e.g. DBA"
+                    />
+                    <FieldWithHint
+                      label="Generation"
+                      hint={IDENTIFICATION_FIELD_HINTS.generation}
+                      value={form.generation}
+                      onChange={update("generation")}
+                      placeholder="e.g. Mk2"
+                    />
                     <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-xs text-slate-600">Custom make *</Label>
+                      <div className="flex items-center gap-1">
+                        <Label className="text-xs font-medium text-slate-700" htmlFor="catalog-trim-series">
+                          Series / facelift
+                        </Label>
+                        <HintIcon label="Series / facelift" hint={IDENTIFICATION_FIELD_HINTS.seriesFacelift} />
+                      </div>
                       <Input
-                        value={form.makeOther}
-                        onChange={(e) => setForm((f) => ({ ...f, makeOther: e.target.value }))}
-                        className="h-9 bg-white"
-                        placeholder="e.g. Lexus, BMW"
+                        id="catalog-trim-series"
+                        list={TRIM_SERIES_DATALIST_ID}
+                        value={form.trim_series}
+                        onChange={(e) => setForm((f) => ({ ...f, trim_series: e.target.value }))}
+                        className="h-10 border-slate-200 bg-white shadow-sm transition-shadow focus-visible:border-slate-300 focus-visible:shadow-md"
+                        placeholder="e.g. Pre-Facelift, Facelift, Base, XLE"
                         autoComplete="off"
                       />
+                      <datalist id={TRIM_SERIES_DATALIST_ID}>
+                        {TRIM_SERIES_SUGGESTIONS.map((s) => (
+                          <option key={s} value={s} />
+                        ))}
+                      </datalist>
                     </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-xs text-slate-600">Model *</Label>
-                      <Input
-                        value={form.model}
-                        onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                        className="h-9 bg-white"
-                        placeholder="Vehicle model"
-                        autoComplete="off"
-                      />
-                    </div>
-                  </>
-                )}
+                  </div>
+                </TabsContent>
 
+            <TabsContent value="production" className="mt-4 outline-none">
+              <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                <p className="text-sm font-medium text-slate-800">Production lifecycle</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{PRODUCTION_LIFECYCLE_TAB_DESCRIPTION}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Production start year *</Label>
+                  <LabelWithHint
+                    label="Production start year"
+                    hint={PRODUCTION_LIFECYCLE_FIELD_HINTS.productionStartYear}
+                    required
+                  />
                   <Select
                     value={form.production_start_year}
                     onValueChange={(v) => setForm((f) => ({ ...f, production_start_year: v }))}
                   >
-                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                    <SelectTrigger className="h-10 bg-white border-slate-200 shadow-sm focus:ring-slate-200/80">
                       <SelectValue placeholder="Start year" />
                     </SelectTrigger>
                     <SelectContent className="max-h-[min(320px,50vh)]">
@@ -990,14 +1230,17 @@ export function VehicleCatalogManager() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Production start month</Label>
+                  <LabelWithHint
+                    label="Production start month"
+                    hint={PRODUCTION_LIFECYCLE_FIELD_HINTS.productionStartMonth}
+                  />
                   <Select
                     value={form.production_start_month || "__none__"}
                     onValueChange={(v) =>
                       setForm((f) => ({ ...f, production_start_month: v === "__none__" ? "" : v }))
                     }
                   >
-                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                    <SelectTrigger className="h-10 bg-white border-slate-200 shadow-sm focus:ring-slate-200/80">
                       <SelectValue placeholder="Optional" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1010,7 +1253,10 @@ export function VehicleCatalogManager() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Production end (empty = ongoing)</Label>
+                  <LabelWithHint
+                    label="Production end year (empty = ongoing)"
+                    hint={PRODUCTION_LIFECYCLE_FIELD_HINTS.productionEndYear}
+                  />
                   <Select
                     value={form.production_end_year === "" ? "__ongoing__" : form.production_end_year}
                     onValueChange={(v) =>
@@ -1021,7 +1267,7 @@ export function VehicleCatalogManager() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                    <SelectTrigger className="h-10 bg-white border-slate-200 shadow-sm focus:ring-slate-200/80">
                       <SelectValue placeholder="End year or ongoing" />
                     </SelectTrigger>
                     <SelectContent className="max-h-[min(320px,50vh)]">
@@ -1035,7 +1281,10 @@ export function VehicleCatalogManager() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-600">Production end month</Label>
+                  <LabelWithHint
+                    label="Production end month"
+                    hint={PRODUCTION_LIFECYCLE_FIELD_HINTS.productionEndMonth}
+                  />
                   <Select
                     value={form.production_end_month || "__none__"}
                     onValueChange={(v) =>
@@ -1043,7 +1292,7 @@ export function VehicleCatalogManager() {
                     }
                     disabled={form.production_end_year === ""}
                   >
-                    <SelectTrigger className="h-9 bg-white border-slate-300">
+                    <SelectTrigger className="h-10 bg-white border-slate-200 shadow-sm focus:ring-slate-200/80">
                       <SelectValue placeholder={form.production_end_year === "" ? "Ongoing" : "Optional"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -1058,75 +1307,15 @@ export function VehicleCatalogManager() {
               </div>
             </TabsContent>
 
-            <TabsContent value="variant" className="mt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field
-                  label="Chassis code"
-                  value={form.chassis_code}
-                  onChange={update("chassis_code")}
-                  placeholder="e.g. M900A"
-                />
-                <Field
-                  label="Full model code"
-                  value={form.full_model_code}
-                  onChange={update("full_model_code")}
-                  placeholder="e.g. DBA-M900A-GBME"
-                />
-                <Field label="Trim (catalog)" value={form.catalog_trim} onChange={update("catalog_trim")} placeholder="e.g. Custom G" />
-                <Field
-                  label="Emissions prefix"
-                  value={form.emissions_prefix}
-                  onChange={update("emissions_prefix")}
-                  placeholder="e.g. DBA"
-                />
-                <Field
-                  label="Trim suffix code"
-                  value={form.trim_suffix_code}
-                  onChange={update("trim_suffix_code")}
-                  placeholder="e.g. GBME"
-                />
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label className="text-xs text-slate-600" htmlFor="catalog-trim-series">
-                    Series / facelift
-                  </Label>
-                  <Input
-                    id="catalog-trim-series"
-                    list={TRIM_SERIES_DATALIST_ID}
-                    value={form.trim_series}
-                    onChange={(e) => setForm((f) => ({ ...f, trim_series: e.target.value }))}
-                    className="h-9 bg-white border-slate-300"
-                    placeholder="e.g. Pre-Facelift, Facelift, Base, XLE"
-                    autoComplete="off"
-                  />
-                  <datalist id={TRIM_SERIES_DATALIST_ID}>
-                    {TRIM_SERIES_SUGGESTIONS.map((s) => (
-                      <option key={s} value={s} />
-                    ))}
-                  </datalist>
-                  <p className="text-[11px] leading-relaxed text-slate-500">
-                    Use separate catalog rows for major facelifts. Frame prefixes (DBA vs 5BA) can distinguish JDM phases.
-                  </p>
-                </div>
-                <Field label="Generation" value={form.generation} onChange={update("generation")} placeholder="e.g. Mk2" />
-                <Field
-                  label="Model code (legacy)"
-                  value={form.model_code}
-                  onChange={update("model_code")}
-                  placeholder="Legacy OEM field"
-                />
-                <Field
-                  label="Generation code (legacy)"
-                  value={form.generation_code}
-                  onChange={update("generation_code")}
-                  placeholder="Optional if same as chassis"
-                />
+            <TabsContent value="body" className="mt-4 outline-none">
+              <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                <p className="text-sm font-medium text-slate-800">Dimensions &amp; Body</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{DIMENSIONS_BODY_TAB_DESCRIPTION}</p>
               </div>
-            </TabsContent>
-
-            <TabsContent value="body" className="mt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
                 <EngineCatalogSelect
                   label="Body type"
+                  hint={DIMENSIONS_BODY_FIELD_HINTS.bodyType}
                   value={form.body_type}
                   onChange={(v) => setForm((f) => ({ ...f, body_type: v }))}
                   options={VEHICLE_BODY_TYPE_OPTIONS}
@@ -1134,69 +1323,108 @@ export function VehicleCatalogManager() {
                 />
                 <EngineCatalogSelect
                   label="Doors"
+                  hint={DIMENSIONS_BODY_FIELD_HINTS.doors}
                   value={form.doors}
                   onChange={(v) => setForm((f) => ({ ...f, doors: v }))}
                   options={VEHICLE_DOOR_COUNT_OPTIONS}
                   placeholder="Select doors"
                 />
-                <Field label="Length (mm)" value={form.length_mm} onChange={update("length_mm")} />
-                <Field label="Width (mm)" value={form.width_mm} onChange={update("width_mm")} />
-                <Field label="Height (mm)" value={form.height_mm} onChange={update("height_mm")} />
-                <Field label="Wheelbase (mm)" value={form.wheelbase_mm} onChange={update("wheelbase_mm")} />
-                <Field
+                <FieldWithHint
+                  label="Length (mm)"
+                  hint={DIMENSIONS_BODY_FIELD_HINTS.lengthMm}
+                  value={form.length_mm}
+                  onChange={update("length_mm")}
+                />
+                <FieldWithHint
+                  label="Width (mm)"
+                  hint={DIMENSIONS_BODY_FIELD_HINTS.widthMm}
+                  value={form.width_mm}
+                  onChange={update("width_mm")}
+                />
+                <FieldWithHint
+                  label="Height (mm)"
+                  hint={DIMENSIONS_BODY_FIELD_HINTS.heightMm}
+                  value={form.height_mm}
+                  onChange={update("height_mm")}
+                />
+                <FieldWithHint
+                  label="Wheelbase (mm)"
+                  hint={DIMENSIONS_BODY_FIELD_HINTS.wheelbaseMm}
+                  value={form.wheelbase_mm}
+                  onChange={update("wheelbase_mm")}
+                />
+                <FieldWithHint
                   label="Ground clearance (mm)"
+                  hint={DIMENSIONS_BODY_FIELD_HINTS.groundClearanceMm}
                   value={form.ground_clearance_mm}
                   onChange={update("ground_clearance_mm")}
                 />
               </div>
             </TabsContent>
 
-            <TabsContent value="engine" className="mt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Displacement (L)" value={form.engine_displacement_l} onChange={update("engine_displacement_l")} />
-                <Field label="Displacement (cc)" value={form.engine_displacement_cc} onChange={update("engine_displacement_cc")} />
-                <Field
+            <TabsContent value="engine" className="mt-4 outline-none">
+              <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                <p className="text-sm font-medium text-slate-800">Engine &amp; Transmission</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{ENGINE_TRANSMISSION_TAB_DESCRIPTION}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+                <FieldWithHint
                   label="Engine code"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.engineCode}
                   value={form.engine_code}
                   onChange={update("engine_code")}
                   placeholder="e.g. 1KR-FE"
                 />
-                <Field
+                <FieldWithHint
                   label="Engine type"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.engineType}
                   value={form.engine_type}
                   onChange={update("engine_type")}
                   placeholder="e.g. N/A, Turbo, Hybrid, Hybrid (2.0L)"
                 />
-                <Field
-                  label="Configuration"
+                <FieldWithHint
+                  label="Engine displacement L"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.engineDisplacementL}
+                  value={form.engine_displacement_l}
+                  onChange={update("engine_displacement_l")}
+                  placeholder="e.g. 1.5"
+                />
+                <FieldWithHint
+                  label="Engine displacement cc"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.engineDisplacementCc}
+                  value={form.engine_displacement_cc}
+                  onChange={update("engine_displacement_cc")}
+                  placeholder="e.g. 1496"
+                />
+                <FieldWithHint
+                  label="Engine configuration"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.engineConfiguration}
                   value={form.engine_configuration}
                   onChange={update("engine_configuration")}
-                  placeholder="e.g. I4, V6"
+                  placeholder="e.g. Inline-4, V6"
                 />
-                <Field label="Horsepower" value={form.horsepower} onChange={update("horsepower")} />
-                <Field label="Torque" value={form.torque} onChange={update("torque")} />
-                <Field label="Torque unit" value={form.torque_unit} onChange={update("torque_unit")} placeholder="Nm" />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="fueldrive" className="mt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field
-                  label="Fuel category"
-                  value={form.fuel_category}
-                  onChange={update("fuel_category")}
-                  placeholder="e.g. Gas, Hybrid"
+                <FieldWithHint
+                  label="Horsepower"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.horsepower}
+                  value={form.horsepower}
+                  onChange={update("horsepower")}
                 />
-                <Field label="Fuel grade" value={form.fuel_grade} onChange={update("fuel_grade")} placeholder="e.g. 87" />
-                <EngineCatalogSelect
-                  label="Fuel type"
-                  value={form.fuel_type}
-                  onChange={(v) => setForm((f) => ({ ...f, fuel_type: v }))}
-                  options={VEHICLE_FUEL_TYPE_OPTIONS}
-                  placeholder="Select a Fuel"
+                <FieldWithHint
+                  label="Torque"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.torque}
+                  value={form.torque}
+                  onChange={update("torque")}
+                />
+                <FieldWithHint
+                  label="Torque unit"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.torqueUnit}
+                  value={form.torque_unit}
+                  onChange={update("torque_unit")}
+                  placeholder="Nm"
                 />
                 <EngineCatalogSelect
                   label="Transmission"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.transmission}
                   value={form.transmission}
                   onChange={(v) => setForm((f) => ({ ...f, transmission: v }))}
                   options={VEHICLE_TRANSMISSION_OPTIONS}
@@ -1204,6 +1432,7 @@ export function VehicleCatalogManager() {
                 />
                 <EngineCatalogSelect
                   label="Drivetrain"
+                  hint={ENGINE_TRANSMISSION_FIELD_HINTS.drivetrain}
                   value={form.drivetrain}
                   onChange={(v) => setForm((f) => ({ ...f, drivetrain: v }))}
                   options={VEHICLE_DRIVETRAIN_OPTIONS}
@@ -1212,43 +1441,159 @@ export function VehicleCatalogManager() {
               </div>
             </TabsContent>
 
-            <TabsContent value="brakes" className="mt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field
-                  label="Front brakes"
+            <TabsContent value="fueldrive" className="mt-4 outline-none">
+              <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                <p className="text-sm font-medium text-slate-800">Fuel System &amp; Fluids</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{FUEL_SYSTEM_FLUIDS_TAB_DESCRIPTION}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+                <FieldWithHint
+                  label="Fuel category"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.fuelCategory}
+                  value={form.fuel_category}
+                  onChange={update("fuel_category")}
+                  placeholder="e.g. Gas, Hybrid"
+                />
+                <EngineCatalogSelect
+                  label="Fuel type"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.fuelType}
+                  value={form.fuel_type}
+                  onChange={(v) => setForm((f) => ({ ...f, fuel_type: v }))}
+                  options={VEHICLE_FUEL_TYPE_OPTIONS}
+                  placeholder="Select a Fuel"
+                />
+                <FieldWithHint
+                  label="Fuel grade"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.fuelGrade}
+                  value={form.fuel_grade}
+                  onChange={update("fuel_grade")}
+                  placeholder="e.g. 87, 90, ULSD"
+                />
+                <FieldWithHint
+                  label="Fuel tank capacity"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.fuelTankCapacity}
+                  value={form.fuel_tank_capacity}
+                  onChange={update("fuel_tank_capacity")}
+                />
+                <FieldWithHint
+                  label="Fuel tank unit"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.fuelTankUnit}
+                  value={form.fuel_tank_unit}
+                  onChange={update("fuel_tank_unit")}
+                  placeholder="L"
+                />
+                <FieldWithHint
+                  label="Engine oil capacity L"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.engineOilCapacityL}
+                  value={form.engine_oil_capacity_l}
+                  onChange={update("engine_oil_capacity_l")}
+                />
+                <div className="sm:col-span-2">
+                  <FieldWithHint
+                    label="Coolant capacity L"
+                    hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.coolantCapacityL}
+                    value={form.coolant_capacity_l}
+                    onChange={update("coolant_capacity_l")}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="brakes" className="mt-4 outline-none">
+              <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                <p className="text-sm font-medium text-slate-800">Wheels &amp; Brakes</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{WHEELS_BRAKES_TAB_DESCRIPTION}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+                <FieldWithHint
+                  label="Front brake type"
+                  hint={WHEELS_BRAKES_FIELD_HINTS.frontBrakeType}
                   value={form.front_brake_type}
                   onChange={update("front_brake_type")}
-                  placeholder="disc / drum"
+                  placeholder="e.g. ventilated disc, drum"
                 />
-                <Field
-                  label="Rear brakes"
+                <FieldWithHint
+                  label="Rear brake type"
+                  hint={WHEELS_BRAKES_FIELD_HINTS.rearBrakeType}
                   value={form.rear_brake_type}
                   onChange={update("rear_brake_type")}
-                  placeholder="disc / drum"
+                  placeholder="e.g. drum, solid disc"
                 />
-                <Field label="Brake size (mm)" value={form.brake_size_mm} onChange={update("brake_size_mm")} />
-                <Field label="Tire size" value={form.tire_size} onChange={update("tire_size")} placeholder="185/60R15" />
-                <Field label="Bolt pattern" value={form.bolt_pattern} onChange={update("bolt_pattern")} placeholder="5x114.3" />
-                <Field label="Wheel offset (mm)" value={form.wheel_offset_mm} onChange={update("wheel_offset_mm")} />
+                <FieldWithHint
+                  label="Brake size mm"
+                  hint={WHEELS_BRAKES_FIELD_HINTS.brakeSizeMm}
+                  value={form.brake_size_mm}
+                  onChange={update("brake_size_mm")}
+                />
+                <FieldWithHint
+                  label="Tire size"
+                  hint={WHEELS_BRAKES_FIELD_HINTS.tireSize}
+                  value={form.tire_size}
+                  onChange={update("tire_size")}
+                  placeholder="195/65R15"
+                />
+                <FieldWithHint
+                  label="Bolt pattern"
+                  hint={WHEELS_BRAKES_FIELD_HINTS.boltPattern}
+                  value={form.bolt_pattern}
+                  onChange={update("bolt_pattern")}
+                  placeholder="5x114.3"
+                />
+                <FieldWithHint
+                  label="Wheel offset mm"
+                  hint={WHEELS_BRAKES_FIELD_HINTS.wheelOffsetMm}
+                  value={form.wheel_offset_mm}
+                  onChange={update("wheel_offset_mm")}
+                  placeholder="e.g. 45"
+                />
               </div>
             </TabsContent>
 
-            <TabsContent value="capacity" className="mt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Engine oil (L)" value={form.engine_oil_capacity_l} onChange={update("engine_oil_capacity_l")} />
-                <Field label="Coolant (L)" value={form.coolant_capacity_l} onChange={update("coolant_capacity_l")} />
-                <Field label="Fuel tank capacity" value={form.fuel_tank_capacity} onChange={update("fuel_tank_capacity")} />
-                <Field label="Fuel tank unit" value={form.fuel_tank_unit} onChange={update("fuel_tank_unit")} placeholder="L" />
-                <Field label="Seating" value={form.seating_capacity} onChange={update("seating_capacity")} type="number" />
-                <Field label="Curb weight (kg)" value={form.curb_weight_kg} onChange={update("curb_weight_kg")} />
-                <Field label="GVWR (kg)" value={form.gross_vehicle_weight_kg} onChange={update("gross_vehicle_weight_kg")} />
-                <Field label="Max payload (kg)" value={form.max_payload_kg} onChange={update("max_payload_kg")} />
-                <Field label="Max towing (kg)" value={form.max_towing_kg} onChange={update("max_towing_kg")} />
+            <TabsContent value="capacity" className="mt-4 outline-none">
+              <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                <p className="text-sm font-medium text-slate-800">Weights &amp; Payload</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{WEIGHTS_PAYLOAD_TAB_DESCRIPTION}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+                <FieldWithHint
+                  label="Seating capacity"
+                  hint={WEIGHTS_PAYLOAD_FIELD_HINTS.seatingCapacity}
+                  value={form.seating_capacity}
+                  onChange={update("seating_capacity")}
+                  type="number"
+                />
+                <FieldWithHint
+                  label="Curb weight kg"
+                  hint={WEIGHTS_PAYLOAD_FIELD_HINTS.curbWeightKg}
+                  value={form.curb_weight_kg}
+                  onChange={update("curb_weight_kg")}
+                />
+                <FieldWithHint
+                  label="Gross vehicle weight kg"
+                  hint={WEIGHTS_PAYLOAD_FIELD_HINTS.grossVehicleWeightKg}
+                  value={form.gross_vehicle_weight_kg}
+                  onChange={update("gross_vehicle_weight_kg")}
+                />
+                <FieldWithHint
+                  label="Max payload kg"
+                  hint={WEIGHTS_PAYLOAD_FIELD_HINTS.maxPayloadKg}
+                  value={form.max_payload_kg}
+                  onChange={update("max_payload_kg")}
+                />
+                <div className="sm:col-span-2">
+                  <FieldWithHint
+                    label="Max towing kg"
+                    hint={WEIGHTS_PAYLOAD_FIELD_HINTS.maxTowingKg}
+                    value={form.max_towing_kg}
+                    onChange={update("max_towing_kg")}
+                  />
+                </div>
               </div>
             </TabsContent>
-          </Tabs>
+            </Tabs>
+          </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+          <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-4 sm:gap-0 sm:px-8">
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
@@ -1563,7 +1908,7 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
       <VehicleSpecItem icon={Gauge} label="Engine" value={formatEngineDisplacement(r)} />
       <VehicleSpecItem icon={CircleDot} label="Drive" value={viewText(r.drivetrain)} />
       <VehicleSpecItem icon={Fuel} label="Fuel" value={fuelSummaryLine(r)} />
-      <VehicleSpecItem icon={Armchair} label="Seats" value={viewText(r.seating_capacity)} />
+      <VehicleSpecItem icon={Armchair} label="Seating capacity" value={viewText(r.seating_capacity)} />
     </>
   );
 
@@ -1594,7 +1939,7 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
                   <VehicleSpecItem icon={Tag} label="Full model code" value={viewText(r.full_model_code)} />
-                  <VehicleSpecItem icon={Tag} label="Chassis code" value={viewText(r.chassis_code ?? r.generation_code)} />
+                  <VehicleSpecItem icon={Tag} label="Chassis code" value={viewText(r.chassis_code)} />
                   <VehicleSpecItem icon={Tag} label="Trim (catalog)" value={viewText(r.catalog_trim)} />
                   <VehicleSpecItem icon={Tag} label="Emissions prefix" value={viewText(r.emissions_prefix)} />
                   <VehicleSpecItem icon={Tag} label="Trim suffix code" value={viewText(r.trim_suffix_code)} />
@@ -1602,23 +1947,21 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={Tag} label="Series / facelift" value={viewText(r.trim_series)} />
                   <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
-                  <VehicleSpecItem icon={Tag} label="Model code (legacy)" value={viewText(r.model_code)} />
-                  <VehicleSpecItem icon={Tag} label="Generation code (legacy)" value={viewText(r.generation_code)} />
                 </div>
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Brakes & wheels">
+            <ViewSpecSection title="Wheels & brakes">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={CircleDot} label="Front brakes" value={viewText(r.front_brake_type)} />
-                  <VehicleSpecItem icon={CircleDot} label="Rear brakes" value={viewText(r.rear_brake_type)} />
-                  <VehicleSpecItem icon={Ruler} label="Brake size (mm)" value={viewText(r.brake_size_mm)} />
+                  <VehicleSpecItem icon={CircleDot} label="Front brake type" value={viewText(r.front_brake_type)} />
+                  <VehicleSpecItem icon={CircleDot} label="Rear brake type" value={viewText(r.rear_brake_type)} />
+                  <VehicleSpecItem icon={Ruler} label="Brake size mm" value={viewText(r.brake_size_mm)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={CarFront} label="Tire size" value={viewText(r.tire_size)} />
                   <VehicleSpecItem icon={Settings2} label="Bolt pattern" value={viewText(r.bolt_pattern)} />
-                  <VehicleSpecItem icon={Ruler} label="Wheel offset (mm)" value={viewText(r.wheel_offset_mm)} />
+                  <VehicleSpecItem icon={Ruler} label="Wheel offset mm" value={viewText(r.wheel_offset_mm)} />
                 </div>
               </div>
             </ViewSpecSection>
@@ -1637,38 +1980,51 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Engine & performance">
+            <ViewSpecSection title="Engine & transmission">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={Gauge} label="Displacement (L)" value={viewText(r.engine_displacement_l)} />
-                  <VehicleSpecItem icon={Gauge} label="Displacement (cc)" value={viewText(r.engine_displacement_cc)} />
-                  <VehicleSpecItem icon={Settings2} label="Configuration" value={viewText(r.engine_configuration)} />
                   <VehicleSpecItem icon={Gauge} label="Engine code" value={viewText(r.engine_code)} />
                   <VehicleSpecItem icon={Gauge} label="Engine type" value={viewText(r.engine_type)} />
-                  <VehicleSpecItem icon={Fuel} label="Fuel category" value={viewText(r.fuel_category)} />
-                  <VehicleSpecItem icon={Fuel} label="Fuel grade" value={viewText(r.fuel_grade)} />
+                  <VehicleSpecItem icon={Gauge} label="Engine displacement L" value={viewText(r.engine_displacement_l)} />
+                  <VehicleSpecItem icon={Gauge} label="Engine displacement cc" value={viewText(r.engine_displacement_cc)} />
+                  <VehicleSpecItem icon={Settings2} label="Engine configuration" value={viewText(r.engine_configuration)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={Gauge} label="Horsepower" value={viewText(r.horsepower)} />
                   <VehicleSpecItem icon={Gauge} label="Torque" value={viewText(r.torque)} />
                   <VehicleSpecItem icon={Gauge} label="Torque unit" value={viewText(r.torque_unit)} />
+                  <VehicleSpecItem icon={Settings2} label="Transmission" value={viewText(r.transmission)} />
+                  <VehicleSpecItem icon={CircleDot} label="Drivetrain" value={viewText(r.drivetrain)} />
                 </div>
               </div>
             </ViewSpecSection>
 
-            <ViewSpecSection title="Fuel & weight">
+            <ViewSpecSection title="Fuel system & fluids">
               <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
                 <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={Gauge} label="Engine oil (L)" value={viewText(r.engine_oil_capacity_l)} />
-                  <VehicleSpecItem icon={Gauge} label="Coolant (L)" value={viewText(r.coolant_capacity_l)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel category" value={viewText(r.fuel_category)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel type" value={viewText(r.fuel_type)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel grade" value={viewText(r.fuel_grade)} />
                   <VehicleSpecItem icon={Fuel} label="Fuel tank capacity" value={viewText(r.fuel_tank_capacity)} />
-                  <VehicleSpecItem icon={Fuel} label="Fuel tank unit" value={viewText(r.fuel_tank_unit)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Weight} label="Curb weight (kg)" value={viewText(r.curb_weight_kg)} />
-                  <VehicleSpecItem icon={Weight} label="GVWR (kg)" value={viewText(r.gross_vehicle_weight_kg)} />
-                  <VehicleSpecItem icon={Weight} label="Max payload (kg)" value={viewText(r.max_payload_kg)} />
-                  <VehicleSpecItem icon={Weight} label="Max towing (kg)" value={viewText(r.max_towing_kg)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel tank unit" value={viewText(r.fuel_tank_unit)} />
+                  <VehicleSpecItem icon={Gauge} label="Engine oil capacity L" value={viewText(r.engine_oil_capacity_l)} />
+                  <VehicleSpecItem icon={Gauge} label="Coolant capacity L" value={viewText(r.coolant_capacity_l)} />
+                </div>
+              </div>
+            </ViewSpecSection>
+
+            <ViewSpecSection title="Weights & payload">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
+                <div className="flex flex-col divide-y divide-slate-100">
+                  <VehicleSpecItem icon={Armchair} label="Seating capacity" value={viewText(r.seating_capacity)} />
+                  <VehicleSpecItem icon={Weight} label="Curb weight kg" value={viewText(r.curb_weight_kg)} />
+                  <VehicleSpecItem icon={Weight} label="Gross vehicle weight kg" value={viewText(r.gross_vehicle_weight_kg)} />
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
+                  <VehicleSpecItem icon={Weight} label="Max payload kg" value={viewText(r.max_payload_kg)} />
+                  <VehicleSpecItem icon={Weight} label="Max towing kg" value={viewText(r.max_towing_kg)} />
                 </div>
               </div>
             </ViewSpecSection>
@@ -1689,6 +2045,79 @@ function ViewSpecSection({ title, children }: { title: string; children: React.R
     <div>
       <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{title}</h4>
       {children}
+    </div>
+  );
+}
+
+function HintIcon({ label, hint }: { label: string; hint: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex shrink-0 rounded-full p-0.5 text-slate-400 transition-colors hover:bg-slate-200/90 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40"
+          aria-label={`Help: ${label}`}
+        >
+          <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className={CATALOG_FORM_TOOLTIP_CLASS}>
+        {hint}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function LabelWithHint({
+  label,
+  hint,
+  required,
+  htmlFor,
+}: {
+  label: string;
+  hint: string;
+  required?: boolean;
+  htmlFor?: string;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Label htmlFor={htmlFor} className="text-xs font-medium text-slate-700">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </Label>
+      <HintIcon label={label} hint={hint} />
+    </div>
+  );
+}
+
+function FieldWithHint({
+  label,
+  hint,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1">
+        <Label className="text-xs font-medium text-slate-700">{label}</Label>
+        <HintIcon label={label} hint={hint} />
+      </div>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        type={type}
+        placeholder={placeholder}
+        className="h-10 bg-white border-slate-200 shadow-sm transition-shadow focus-visible:border-slate-300 focus-visible:shadow-md"
+      />
     </div>
   );
 }

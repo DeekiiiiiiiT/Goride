@@ -15,8 +15,6 @@ export type CatalogVariantRow = {
   catalog_trim?: string | null;
   emissions_prefix?: string | null;
   trim_suffix_code?: string | null;
-  generation_code?: string | null;
-  model_code?: string | null;
   chassis_code?: string | null;
   engine_code?: string | null;
   engine_type?: string | null;
@@ -79,9 +77,6 @@ export type CatalogMatchHints = {
   full_model_code?: string | null;
   emissions_prefix?: string | null;
   trim_suffix_code?: string | null;
-  generation_code?: string | null;
-  /** Legacy OEM code; treated like generation_code for narrowing when generation_code is empty */
-  model_code?: string | null;
   chassis_code?: string | null;
   engine_code?: string | null;
   /** Free-text hint (trimmed/lowercased when matching catalog rows). */
@@ -124,9 +119,7 @@ export function pickCatalogIdFromCandidates(
 
   const fmc = norm(hints.full_model_code);
   if (fmc) {
-    const filtered = pool.filter(
-      (r) => norm(r.full_model_code) === fmc || norm(r.model_code) === fmc,
-    );
+    const filtered = pool.filter((r) => norm(r.full_model_code) === fmc);
     if (filtered.length === 0) return null;
     pool = filtered;
     if (pool.length === 1) return pool[0].id;
@@ -148,29 +141,9 @@ export function pickCatalogIdFromCandidates(
     if (pool.length === 1) return pool[0].id;
   }
 
-  const gen = norm(hints.generation_code);
-  if (gen) {
-    const filtered = pool.filter((r) => norm(r.generation_code) === gen);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const mc = norm(hints.model_code);
-  if (mc) {
-    const filtered = pool.filter(
-      (r) => norm(r.generation_code) === mc || norm(r.model_code) === mc,
-    );
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
   const ch = norm(hints.chassis_code);
   if (ch) {
-    const filtered = pool.filter(
-      (r) => norm(r.chassis_code) === ch || norm(r.generation_code) === ch,
-    );
+    const filtered = pool.filter((r) => norm(r.chassis_code) === ch);
     if (filtered.length === 0) return null;
     pool = filtered;
     if (pool.length === 1) return pool[0].id;

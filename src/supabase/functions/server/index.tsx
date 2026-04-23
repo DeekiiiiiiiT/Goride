@@ -12528,7 +12528,6 @@ const VEHICLE_CATALOG_WRITABLE_KEYS = [
   "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
   "trim_series", "generation",
   "full_model_code", "catalog_trim", "emissions_prefix", "trim_suffix_code",
-  "model_code", "generation_code",
   "chassis_code", "engine_code", "engine_type",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
   "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_category", "fuel_type", "fuel_grade", "transmission", "drivetrain",
@@ -12702,29 +12701,6 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
     row.updated_at = new Date().toISOString();
     let ins = await supabase.from("vehicle_catalog").insert(row).select().single();
 
-    // #region agent log
-    if (ins.error) {
-      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
-        body: JSON.stringify({
-          sessionId: "4a340e",
-          hypothesisId: "H-postgrest-or-migration",
-          location: "index.tsx:vehicle-catalog-create:first-insert",
-          message: "vehicle_catalog insert outcome",
-          data: {
-            code: ins.error?.code ?? null,
-            msgSnippet: String(ins.error?.message ?? "").slice(0, 240),
-            isMismatch: isVehicleCatalogSchemaMismatchError(ins.error),
-            keys: Object.keys(row).sort(),
-          },
-          timestamp: Date.now(),
-          runId: "catalog-import",
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
-
     /** Legacy DB: `year NOT NULL` only — map production_start_year → year. */
     if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
       const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(row));
@@ -12740,27 +12716,6 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       legacyRow.updated_at = row.updated_at;
       ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
     }
-
-    // #region agent log
-    if (ins.error) {
-      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
-        body: JSON.stringify({
-          sessionId: "4a340e",
-          hypothesisId: "H-after-retries",
-          location: "index.tsx:vehicle-catalog-create:after-retries",
-          message: "vehicle_catalog insert still failing",
-          data: {
-            code: ins.error?.code ?? null,
-            msgSnippet: String(ins.error?.message ?? "").slice(0, 240),
-          },
-          timestamp: Date.now(),
-          runId: "catalog-import",
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
 
     if (ins.error) throw ins.error;
     const item = catalogRowForApi((ins.data ?? {}) as Record<string, unknown>);

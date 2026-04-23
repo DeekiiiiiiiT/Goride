@@ -37,9 +37,13 @@ function hintsFromKvVehicle(v: Record<string, unknown>): CatalogMatchHints {
     full_model_code: pickStr(v, ["vehicle_catalog_full_model_code_hint", "full_model_code"]),
     emissions_prefix: pickStr(v, ["vehicle_catalog_emissions_prefix_hint", "emissions_prefix"]),
     trim_suffix_code: pickStr(v, ["vehicle_catalog_trim_suffix_hint", "trim_suffix_code"]),
-    generation_code: pickStr(v, ["vehicle_catalog_generation_hint", "generation_code"]),
-    model_code: pickStr(v, ["vehicle_catalog_model_code_hint", "model_code"]),
-    chassis_code: pickStr(v, ["vehicle_catalog_chassis_hint", "chassis_code"]),
+    /** Legacy KV used `vehicle_catalog_generation_hint` for OEM frame index; treat as chassis. */
+    chassis_code: pickStr(v, [
+      "vehicle_catalog_chassis_hint",
+      "chassis_code",
+      "vehicle_catalog_generation_hint",
+      "generation_code",
+    ]),
     engine_code: pickStr(v, ["vehicle_catalog_engine_code_hint", "engine_code"]),
     engine_type: pickStr(v, ["vehicle_catalog_engine_type_hint", "engine_type"]),
     drivetrain: pickStr(v, ["vehicle_catalog_drivetrain_hint", "drivetrain"]),
@@ -62,9 +66,9 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   const mo = model.trim().toLowerCase();
 
   const selModern =
-    "id, make, model, production_start_year, production_start_month, production_end_year, production_end_month, trim_series, generation, full_model_code, catalog_trim, emissions_prefix, trim_suffix_code, generation_code, model_code, chassis_code, engine_code, engine_type, drivetrain, fuel_type, transmission";
+    "id, make, model, production_start_year, production_start_month, production_end_year, production_end_month, trim_series, generation, full_model_code, catalog_trim, emissions_prefix, trim_suffix_code, chassis_code, engine_code, engine_type, drivetrain, fuel_type, transmission";
   const selLegacy =
-    "id, make, model, trim_series, generation_code, model_code, drivetrain, fuel_type, transmission";
+    "id, make, model, trim_series, generation_code, drivetrain, fuel_type, transmission";
 
   let data: unknown[] | null = null;
 
@@ -96,7 +100,17 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   if (candidates.length === 0) return null;
 
   const withMonth = candidates.map((r) => {
-    if ("production_start_year" in r && r.production_start_year != null) return r as CatalogVariantRow;
+    const raw = r as Record<string, unknown>;
+    const chassisFromRow =
+      (typeof raw.chassis_code === "string" && raw.chassis_code.trim() !== ""
+        ? String(raw.chassis_code).trim()
+        : null) ??
+      (typeof raw.generation_code === "string" && raw.generation_code.trim() !== ""
+        ? String(raw.generation_code).trim()
+        : null);
+    if ("production_start_year" in r && r.production_start_year != null) {
+      return { ...(r as CatalogVariantRow), chassis_code: chassisFromRow ?? (r as CatalogVariantRow).chassis_code };
+    }
     const y = year;
     return {
       ...r,
@@ -104,6 +118,7 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
       production_start_month: null,
       production_end_year: y,
       production_end_month: null,
+      chassis_code: chassisFromRow,
     } as CatalogVariantRow;
   });
 

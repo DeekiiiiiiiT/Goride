@@ -74,9 +74,6 @@ export function stripVehicleCatalogCsvAlignmentColumns(row: Record<string, unkno
     if (!ts) out.trim_series = ct;
     else if (ts !== ct) out.trim_series = `${ts} · ${ct}`;
   }
-  const fmc = typeof out.full_model_code === "string" ? out.full_model_code.trim() : "";
-  const mc = out.model_code != null && out.model_code !== "" ? String(out.model_code).trim() : "";
-  if (fmc && !mc) out.model_code = fmc;
   for (const k of VEHICLE_CATALOG_CSV_ALIGNMENT_KEYS) {
     delete out[k];
   }
