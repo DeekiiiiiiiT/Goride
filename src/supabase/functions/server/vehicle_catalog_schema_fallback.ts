@@ -97,18 +97,23 @@ const VEHICLE_CATALOG_CSV_ALIGNMENT_KEYS = [
   "fuel_grade",
 ] as const;
 
+/** Fold catalog trim into `trim_series` before dropping `catalog_trim` (CSV parity on narrow schemas). */
+export function mergeCatalogTrimIntoTrimSeriesInPlace(row: Record<string, unknown>): void {
+  const ct = typeof row.catalog_trim === "string" ? row.catalog_trim.trim() : "";
+  const ts = row.trim_series != null && row.trim_series !== "" ? String(row.trim_series).trim() : "";
+  if (ct) {
+    if (!ts) row.trim_series = ct;
+    else if (ts !== ct) row.trim_series = `${ts} · ${ct}`;
+  }
+}
+
 /**
  * Removes PIM-only columns not present on older `vehicle_catalog` rows.
  * Preserves CSV "Trim" / full model hints on legacy columns where possible.
  */
 export function stripVehicleCatalogCsvAlignmentColumns(row: Record<string, unknown>): Record<string, unknown> {
   const out = { ...row };
-  const ct = typeof out.catalog_trim === "string" ? out.catalog_trim.trim() : "";
-  const ts = out.trim_series != null && out.trim_series !== "" ? String(out.trim_series).trim() : "";
-  if (ct) {
-    if (!ts) out.trim_series = ct;
-    else if (ts !== ct) out.trim_series = `${ts} · ${ct}`;
-  }
+  mergeCatalogTrimIntoTrimSeriesInPlace(out);
   for (const k of VEHICLE_CATALOG_CSV_ALIGNMENT_KEYS) {
     delete out[k];
   }

@@ -11,6 +11,7 @@ import {
   insertRowForLegacyDb,
   isLegacyVehicleCatalogYearNotNullError,
   isVehicleCatalogSchemaMismatchError,
+  mergeCatalogTrimIntoTrimSeriesInPlace,
   parseMissingColumnFromVehicleCatalogDbError,
   stripVehicleCatalogOptionalMigrationColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
@@ -530,6 +531,7 @@ export function registerPendingVehicleCatalogRoutes(
           for (let i = 0; ins.error && isVehicleCatalogSchemaMismatchError(ins.error) && i < 48; i++) {
             const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
             if (!missing || !(missing in candidate)) break;
+            if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(candidate);
             delete candidate[missing];
             candidate.updated_at = row.updated_at;
             ins = await supabase.from("vehicle_catalog").insert(candidate).select().single();

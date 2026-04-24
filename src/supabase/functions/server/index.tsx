@@ -80,6 +80,7 @@ import {
   isLegacyVehicleCatalogYearNotNullError,
   isVehicleCatalogSchemaMismatchError,
   listVehicleCatalogWithFallback,
+  mergeCatalogTrimIntoTrimSeriesInPlace,
   parseMissingColumnFromVehicleCatalogDbError,
   patchRowForLegacyDb,
   stripVehicleCatalogOptionalMigrationColumns,
@@ -12732,6 +12733,7 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
         }).catch(() => {});
         // #endregion
         if (!missing || !(missing in candidate)) break;
+        if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(candidate);
         delete candidate[missing];
         candidate.updated_at = row.updated_at;
         ins = await supabase.from("vehicle_catalog").insert(candidate).select().single();
@@ -12853,6 +12855,7 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
       }).catch(() => {});
       // #endregion
       if (!missing || !(missing in patchCandidate)) break;
+      if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(patchCandidate);
       delete patchCandidate[missing];
       patchCandidate.updated_at = row.updated_at;
       upd = await supabase.from("vehicle_catalog").update(patchCandidate).eq("id", id).select().single();
