@@ -94,7 +94,11 @@ export async function createVehicleCatalog(
           returned: {
             trim_suffix_code: item.trim_suffix_code,
             full_model_code: item.full_model_code,
+            catalog_trim: item.catalog_trim,
+            emissions_prefix: item.emissions_prefix,
+            fuel_category: item.fuel_category,
             production_start_month: item.production_start_month,
+            production_end_month: item.production_end_month,
             engine_code: item.engine_code,
             engine_type: item.engine_type,
             trim_series: item.trim_series,
