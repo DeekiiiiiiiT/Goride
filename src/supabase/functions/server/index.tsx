@@ -80,6 +80,7 @@ import {
   isLegacyVehicleCatalogYearNotNullError,
   isVehicleCatalogSchemaMismatchError,
   listVehicleCatalogWithFallback,
+  parseMissingColumnFromVehicleCatalogDbError,
   patchRowForLegacyDb,
   stripVehicleCatalogOptionalMigrationColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
@@ -12706,15 +12707,45 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(row));
       legacyRow.updated_at = row.updated_at;
       ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
-    } else if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-      const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
-      trimmed.updated_at = row.updated_at;
-      ins = await supabase.from("vehicle_catalog").insert(trimmed).select().single();
-    }
-    if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-      const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(row));
-      legacyRow.updated_at = row.updated_at;
-      ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
+    } else {
+      /** Drop only columns the DB reports missing — avoids blanket strip losing valid CSV fields. */
+      let candidate: Record<string, unknown> = { ...row };
+      for (let i = 0; ins.error && isVehicleCatalogSchemaMismatchError(ins.error) && i < 48; i++) {
+        const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
+        // #region agent log
+        fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
+          body: JSON.stringify({
+            sessionId: "4a340e",
+            location: "index.tsx:vehicle-catalog-insert-retry",
+            message: "schema mismatch insert attempt",
+            data: {
+              attempt: i,
+              missing,
+              code: ins.error?.code,
+              errSnippet: String(ins.error?.message ?? "").slice(0, 220),
+            },
+            timestamp: Date.now(),
+            hypothesisId: "H_col_retry",
+          }),
+        }).catch(() => {});
+        // #endregion
+        if (!missing || !(missing in candidate)) break;
+        delete candidate[missing];
+        candidate.updated_at = row.updated_at;
+        ins = await supabase.from("vehicle_catalog").insert(candidate).select().single();
+      }
+      if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+        const trimmed = stripVehicleCatalogOptionalMigrationColumns(candidate);
+        trimmed.updated_at = row.updated_at;
+        ins = await supabase.from("vehicle_catalog").insert(trimmed).select().single();
+      }
+      if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+        const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(candidate));
+        legacyRow.updated_at = row.updated_at;
+        ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
+      }
     }
 
     if (ins.error) throw ins.error;
@@ -12804,13 +12835,35 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
       return c.json({ error: "No fields to update" }, 400);
     }
     let upd = await supabase.from("vehicle_catalog").update(row).eq("id", id).select().single();
+    let patchCandidate: Record<string, unknown> = { ...row };
+    for (let i = 0; upd.error && isVehicleCatalogSchemaMismatchError(upd.error) && i < 48; i++) {
+      const missing = parseMissingColumnFromVehicleCatalogDbError(upd.error);
+      // #region agent log
+      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
+        body: JSON.stringify({
+          sessionId: "4a340e",
+          location: "index.tsx:vehicle-catalog-patch-retry",
+          message: "schema mismatch patch attempt",
+          data: { attempt: i, missing, code: upd.error?.code },
+          timestamp: Date.now(),
+          hypothesisId: "H_patch_retry",
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (!missing || !(missing in patchCandidate)) break;
+      delete patchCandidate[missing];
+      patchCandidate.updated_at = row.updated_at;
+      upd = await supabase.from("vehicle_catalog").update(patchCandidate).eq("id", id).select().single();
+    }
     if (upd.error && isVehicleCatalogSchemaMismatchError(upd.error)) {
-      const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
+      const trimmed = stripVehicleCatalogOptionalMigrationColumns(patchCandidate);
       trimmed.updated_at = row.updated_at;
       upd = await supabase.from("vehicle_catalog").update(trimmed).eq("id", id).select().single();
     }
     if (upd.error && isVehicleCatalogSchemaMismatchError(upd.error)) {
-      const legacyRow = patchRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(row));
+      const legacyRow = patchRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(patchCandidate));
       legacyRow.updated_at = row.updated_at;
       upd = await supabase.from("vehicle_catalog").update(legacyRow).eq("id", id).select().single();
     }

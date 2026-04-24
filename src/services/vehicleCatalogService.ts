@@ -59,14 +59,54 @@ export async function createVehicleCatalog(
   accessToken: string,
   payload: VehicleCatalogCreatePayload,
 ): Promise<VehicleCatalogRecord> {
+  const bodyStr = jsonBodyOmitNullish(payload);
   const res = await fetch(url(), {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
-    body: jsonBodyOmitNullish(payload),
+    body: bodyStr,
   });
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
-  return data.item as VehicleCatalogRecord;
+  const item = data.item as VehicleCatalogRecord;
+  // #region agent log
+  if (
+    String(payload.make).trim() === "Toyota" &&
+    String(payload.model).trim() === "Roomy" &&
+    String(payload.chassis_code ?? "").trim() === "M910A"
+  ) {
+    const sent = JSON.parse(bodyStr) as Record<string, unknown>;
+    fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
+      body: JSON.stringify({
+        sessionId: "4a340e",
+        location: "vehicleCatalogService.ts:createVehicleCatalog",
+        message: "Roomy M910A create sent vs returned",
+        data: {
+          sentKeys: Object.keys(sent).sort(),
+          sent: {
+            trim_suffix_code: sent.trim_suffix_code,
+            full_model_code: sent.full_model_code,
+            production_start_month: sent.production_start_month,
+            engine_code: sent.engine_code,
+            engine_type: sent.engine_type,
+          },
+          returned: {
+            trim_suffix_code: item.trim_suffix_code,
+            full_model_code: item.full_model_code,
+            production_start_month: item.production_start_month,
+            engine_code: item.engine_code,
+            engine_type: item.engine_type,
+            trim_series: item.trim_series,
+          },
+        },
+        timestamp: Date.now(),
+        hypothesisId: "H_wire",
+      }),
+    }).catch(() => {});
+  }
+  // #endregion
+  return item;
 }
 
 export async function updateVehicleCatalog(

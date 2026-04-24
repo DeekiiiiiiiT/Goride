@@ -43,6 +43,30 @@ export function isVehicleCatalogSchemaMismatchError(err: { message?: string; cod
   return false;
 }
 
+/**
+ * Best-effort parse of a missing column name from Postgres / PostgREST errors (42703, schema cache).
+ * Used to retry inserts/updates after dropping only the offending key instead of stripping whole groups.
+ */
+export function parseMissingColumnFromVehicleCatalogDbError(
+  err: { message?: string; details?: string } | null,
+): string | null {
+  if (!err) return null;
+  const msg = String(err.message ?? "");
+  const det = String(err.details ?? "");
+  const blob = `${msg}\n${det}`;
+
+  let m = msg.match(/column\s+"([^"]+)"\s+of\s+relation/i);
+  if (m) return m[1];
+
+  m = msg.match(/Could not find the '([^']+)' column/i);
+  if (m) return m[1];
+
+  m = blob.match(/column\s+"([^"]+)"\s+does not exist/i);
+  if (m) return m[1];
+
+  return null;
+}
+
 /** Columns from specs-enhancement migration; strip when DB is behind migrations but core catalog exists. */
 const VEHICLE_CATALOG_SPEC_PACK_KEYS = [
   "front_brake_type",

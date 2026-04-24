@@ -11,6 +11,7 @@ import {
   insertRowForLegacyDb,
   isLegacyVehicleCatalogYearNotNullError,
   isVehicleCatalogSchemaMismatchError,
+  parseMissingColumnFromVehicleCatalogDbError,
   stripVehicleCatalogOptionalMigrationColumns,
 } from "./vehicle_catalog_schema_fallback.ts";
 import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../utils/vehicleCatalogResolution.ts";
@@ -524,17 +525,27 @@ export function registerPendingVehicleCatalogRoutes(
           );
           legacyRow.updated_at = row.updated_at;
           ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
-        } else if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-          const trimmed = stripVehicleCatalogOptionalMigrationColumns(row as Record<string, unknown>);
-          trimmed.updated_at = row.updated_at;
-          ins = await supabase.from("vehicle_catalog").insert(trimmed).select().single();
-        }
-        if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
-          const legacyRow = insertRowForLegacyDb(
-            stripVehicleCatalogOptionalMigrationColumns(row as Record<string, unknown>),
-          );
-          legacyRow.updated_at = row.updated_at;
-          ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
+        } else {
+          let candidate: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+          for (let i = 0; ins.error && isVehicleCatalogSchemaMismatchError(ins.error) && i < 48; i++) {
+            const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
+            if (!missing || !(missing in candidate)) break;
+            delete candidate[missing];
+            candidate.updated_at = row.updated_at;
+            ins = await supabase.from("vehicle_catalog").insert(candidate).select().single();
+          }
+          if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+            const trimmed = stripVehicleCatalogOptionalMigrationColumns(candidate);
+            trimmed.updated_at = row.updated_at;
+            ins = await supabase.from("vehicle_catalog").insert(trimmed).select().single();
+          }
+          if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+            const legacyRow = insertRowForLegacyDb(
+              stripVehicleCatalogOptionalMigrationColumns(candidate),
+            );
+            legacyRow.updated_at = row.updated_at;
+            ins = await supabase.from("vehicle_catalog").insert(legacyRow).select().single();
+          }
         }
         if (ins.error) throw ins.error;
         const catRow = ins.data;
