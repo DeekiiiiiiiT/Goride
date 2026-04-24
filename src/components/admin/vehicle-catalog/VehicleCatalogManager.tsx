@@ -41,6 +41,7 @@ import {
 import { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../types/csv-schemas";
 import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
 import { parseVehicleCatalogCsvWithPapa, type ParsedCatalogImportRow } from "../../../utils/vehicleCatalogCsvImport";
+import { catalogCreateDriftFieldNames } from "../../../utils/vehicleCatalogWriteDrift";
 import { toast } from "sonner@2.0.3";
 import { Button } from "../../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
@@ -681,6 +682,8 @@ export function VehicleCatalogManager() {
     imported: number;
     failed: number;
     errors: string[];
+    /** Present when API accepted rows but omitted columns the CSV had (remote DB / Edge out of date). */
+    schemaWarnings: string[];
   } | null>(null);
 
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
@@ -741,10 +744,17 @@ export function VehicleCatalogManager() {
     setImportOutcome(null);
     let imported = 0;
     const apiErrors: string[] = [];
+    const driftFieldSet = new Set<string>();
+    let driftRowCount = 0;
     for (let i = 0; i < ready.length; i++) {
       const r = ready[i];
       try {
-        await createVehicleCatalog(token, r.payload);
+        const created = await createVehicleCatalog(token, r.payload);
+        const drift = catalogCreateDriftFieldNames(r.payload, created);
+        if (drift.length) {
+          driftRowCount++;
+          drift.forEach((f) => driftFieldSet.add(f));
+        }
         imported++;
       } catch (err) {
         apiErrors.push(`Row ${r.rowIndex}: ${err instanceof Error ? err.message : String(err)}`);
@@ -752,7 +762,14 @@ export function VehicleCatalogManager() {
         setImportProgress({ current: i + 1, total: ready.length });
       }
     }
-    setImportOutcome({ imported, failed: apiErrors.length, errors: apiErrors });
+    const schemaWarnings: string[] = [];
+    if (driftFieldSet.size > 0) {
+      const fields = [...driftFieldSet].sort().join(", ");
+      schemaWarnings.push(
+        `${driftRowCount} of ${ready.length} row(s) had CSV data for: ${fields}. The API saved each row, but those columns are missing or not exposed on your Supabase Postgres database. In the Supabase SQL editor (or CLI), apply the migrations under supabase/migrations whose names include vehicle_catalog—at minimum 20260426120000_vehicle_catalog_precision_engine.sql, 20260426120100_vehicle_catalog_engine_type_free_text.sql, 20260427120000_vehicle_catalog_csv_alignment.sql, and 20260428120000_vehicle_catalog_import_parity_columns.sql—then reload the API schema. Deploy the make-server-37f42386 Edge function from this repository so the server matches the app.`,
+      );
+    }
+    setImportOutcome({ imported, failed: apiErrors.length, errors: apiErrors, schemaWarnings });
     setImportStep("result");
     if (imported > 0) {
       await load();
@@ -1731,6 +1748,17 @@ export function VehicleCatalogManager() {
                       {importOutcome.imported} vehicle{importOutcome.imported === 1 ? "" : "s"} added to the catalog.
                     </p>
                   </div>
+                </div>
+              )}
+
+              {importOutcome.schemaWarnings.length > 0 && (
+                <div className="rounded-xl border border-amber-300/90 bg-amber-50 p-4 text-sm text-amber-950">
+                  <p className="font-semibold text-amber-950">Some CSV columns were not stored</p>
+                  {importOutcome.schemaWarnings.map((w, idx) => (
+                    <p key={idx} className="mt-2 leading-relaxed text-amber-900/95">
+                      {w}
+                    </p>
+                  ))}
                 </div>
               )}
 
