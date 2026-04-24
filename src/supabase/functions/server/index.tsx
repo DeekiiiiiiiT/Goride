@@ -12714,25 +12714,6 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       let candidate: Record<string, unknown> = { ...row };
       for (let i = 0; ins.error && isVehicleCatalogSchemaMismatchError(ins.error) && i < 48; i++) {
         const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
-        // #region agent log
-        fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
-          body: JSON.stringify({
-            sessionId: "4a340e",
-            location: "index.tsx:vehicle-catalog-insert-retry",
-            message: "schema mismatch insert attempt",
-            data: {
-              attempt: i,
-              missing,
-              code: ins.error?.code,
-              errSnippet: String(ins.error?.message ?? "").slice(0, 220),
-            },
-            timestamp: Date.now(),
-            hypothesisId: "H_col_retry",
-          }),
-        }).catch(() => {});
-        // #endregion
         if (!missing || !(missing in candidate)) break;
         if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(candidate);
         delete candidate[missing];
@@ -12841,20 +12822,6 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
     let patchCandidate: Record<string, unknown> = { ...row };
     for (let i = 0; upd.error && isVehicleCatalogSchemaMismatchError(upd.error) && i < 48; i++) {
       const missing = parseMissingColumnFromVehicleCatalogDbError(upd.error);
-      // #region agent log
-      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4a340e" },
-        body: JSON.stringify({
-          sessionId: "4a340e",
-          location: "index.tsx:vehicle-catalog-patch-retry",
-          message: "schema mismatch patch attempt",
-          data: { attempt: i, missing, code: upd.error?.code },
-          timestamp: Date.now(),
-          hypothesisId: "H_patch_retry",
-        }),
-      }).catch(() => {});
-      // #endregion
       if (!missing || !(missing in patchCandidate)) break;
       if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(patchCandidate);
       delete patchCandidate[missing];
