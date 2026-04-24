@@ -43,3 +43,18 @@ ALTER TABLE public.vehicle_catalog
   DROP CONSTRAINT IF EXISTS vehicle_catalog_engine_type_check;
 
 COMMENT ON COLUMN public.vehicle_catalog.engine_type IS 'Free-text engine / induction label (e.g. Turbo, N/A)';
+
+-- PostgREST schema reload (run after ADD COLUMN, and again after any import that still looks wrong).
+-- Some PostgREST builds listen for NOTIFY with no payload; others accept 'reload schema'. Run both.
+SELECT pg_sleep(1);
+NOTIFY pgrst;
+NOTIFY pgrst, 'reload schema';
+
+-- Optional: confirm columns exist in Postgres (should list the names above):
+-- SELECT column_name FROM information_schema.columns
+-- WHERE table_schema = 'public' AND table_name = 'vehicle_catalog'
+--   AND column_name IN (
+--     'production_start_month','production_end_month','engine_code','full_model_code',
+--     'catalog_trim','emissions_prefix','trim_suffix_code','fuel_category','fuel_grade','engine_type'
+--   )
+-- ORDER BY column_name;

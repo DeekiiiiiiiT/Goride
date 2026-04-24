@@ -766,7 +766,10 @@ export function VehicleCatalogManager() {
     if (driftFieldSet.size > 0) {
       const fields = [...driftFieldSet].sort().join(", ");
       schemaWarnings.push(
-        `${driftRowCount} of ${ready.length} row(s) had CSV data for: ${fields}. The API saved each row, but those columns are missing or not exposed on your Supabase Postgres database. In the Supabase SQL editor (or CLI), apply the migrations under supabase/migrations whose names include vehicle_catalog—at minimum 20260426120000_vehicle_catalog_precision_engine.sql, 20260426120100_vehicle_catalog_engine_type_free_text.sql, 20260427120000_vehicle_catalog_csv_alignment.sql, and 20260428120000_vehicle_catalog_import_parity_columns.sql—then reload the API schema. Deploy the make-server-37f42386 Edge function from this repository so the server matches the app.`,
+        `${driftRowCount} of ${ready.length} row(s) had CSV data for: ${fields}, but the API response still had blanks. If you already added columns in SQL, run the three PostgREST reload statements from supabase/scripts/repair_vehicle_catalog_for_csv_import.sql (end of file: pg_sleep, NOTIFY pgrst, NOTIFY with reload), wait 30 seconds, purge catalog rows, then import again—or restart the project from Supabase Dashboard if reload still fails.`,
+      );
+      schemaWarnings.push(
+        `If you have not added the columns yet, run supabase/scripts/repair_vehicle_catalog_for_csv_import.sql (includes NOTIFY at the end), or apply the vehicle_catalog migrations under supabase/migrations. Then deploy the make-server-37f42386 Edge function from this repo. Confirm the dashboard project ref matches the app (see projectId in src/utils/supabase/info.tsx).`,
       );
     }
     setImportOutcome({ imported, failed: apiErrors.length, errors: apiErrors, schemaWarnings });
