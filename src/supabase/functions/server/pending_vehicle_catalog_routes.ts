@@ -530,7 +530,11 @@ export function registerPendingVehicleCatalogRoutes(
           rowRec.generation_code = rowRec.chassis_code;
         }
         row.updated_at = new Date().toISOString();
-        let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+        const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: rowRec });
+        let ins =
+          !rpcIns.error && rpcIns.data != null
+            ? { data: rpcIns.data as Record<string, unknown>, error: null as typeof rpcIns.error }
+            : await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
         if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
           const legacyRow = insertRowForLegacyDb(
             stripVehicleCatalogOptionalMigrationColumns(row as Record<string, unknown>),

@@ -12710,7 +12710,15 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       row.generation_code = row.chassis_code;
     }
     row.updated_at = new Date().toISOString();
-    let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+    /**
+     * PostgREST often **silently omits** JSON keys not in its schema cache (no error). That left brakes/tires NULL.
+     * SQL RPC writes the full row first; PostgREST is only fallback (legacy DBs, RPC errors).
+     */
+    const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
+    let ins =
+      !rpcIns.error && rpcIns.data != null
+        ? { data: rpcIns.data as Record<string, unknown>, error: null as typeof rpcIns.error }
+        : await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
 
     /** Legacy DB: `year NOT NULL` only — map production_start_year → year. */
     if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
@@ -12718,7 +12726,6 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       legacyRow.updated_at = row.updated_at;
       ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
     } else if (ins.error && isPostgrestVehicleCatalogSchemaCacheError(ins.error)) {
-      /** Stale PostgREST cache drops columns on INSERT/SELECT — bypass with SQL RPC. */
       const rpc = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
       if (!rpc.error && rpc.data != null) {
         ins = { data: rpc.data as Record<string, unknown>, error: null };
