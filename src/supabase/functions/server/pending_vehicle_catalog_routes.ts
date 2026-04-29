@@ -10,9 +10,11 @@ import {
   catalogRowForApi,
   insertRowForLegacyDb,
   isLegacyVehicleCatalogYearNotNullError,
+  isPostgrestVehicleCatalogSchemaCacheError,
   isVehicleCatalogSchemaMismatchError,
   mergeCatalogTrimIntoTrimSeriesInPlace,
   parseMissingColumnFromVehicleCatalogDbError,
+  shouldStripVehicleCatalogInsertPayloadOnRetry,
   stripVehicleCatalogOptionalMigrationColumns,
   VEHICLE_CATALOG_SUPABASE_SELECT,
 } from "./vehicle_catalog_schema_fallback.ts";
@@ -23,7 +25,7 @@ const KEYS = [
   "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
   "trim_series", "generation",
   "full_model_code", "catalog_trim", "emissions_prefix", "trim_suffix_code",
-  "chassis_code", "engine_code", "engine_type",
+  "chassis_code", "generation_code", "engine_code", "engine_type",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
   "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_category", "fuel_type", "fuel_grade", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
@@ -519,6 +521,14 @@ export function registerPendingVehicleCatalogRoutes(
         if (row.engine_type !== undefined && row.engine_type !== null && row.engine_type !== "") {
           row.engine_type = String(row.engine_type).trim();
         }
+        const rowRec = row as Record<string, unknown>;
+        if (
+          rowRec.chassis_code != null &&
+          rowRec.chassis_code !== "" &&
+          (rowRec.generation_code == null || rowRec.generation_code === "")
+        ) {
+          rowRec.generation_code = rowRec.chassis_code;
+        }
         row.updated_at = new Date().toISOString();
         let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
         if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
@@ -527,9 +537,21 @@ export function registerPendingVehicleCatalogRoutes(
           );
           legacyRow.updated_at = row.updated_at;
           ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
+        } else if (ins.error && isPostgrestVehicleCatalogSchemaCacheError(ins.error)) {
+          const rpc = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: rowRec });
+          if (!rpc.error && rpc.data != null) {
+            ins = { data: rpc.data as Record<string, unknown>, error: null };
+          }
+        }
+        if (!ins.error) {
+          /* success */
         } else {
           let candidate: Record<string, unknown> = { ...(row as Record<string, unknown>) };
-          for (let i = 0; ins.error && isVehicleCatalogSchemaMismatchError(ins.error) && i < 48; i++) {
+          for (
+            let i = 0;
+            ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error) && i < 48;
+            i++
+          ) {
             const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
             if (!missing || !(missing in candidate)) break;
             if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(candidate);
@@ -537,12 +559,12 @@ export function registerPendingVehicleCatalogRoutes(
             candidate.updated_at = row.updated_at;
             ins = await supabase.from("vehicle_catalog").insert(candidate).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
           }
-          if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+          if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
             const trimmed = stripVehicleCatalogOptionalMigrationColumns(candidate);
             trimmed.updated_at = row.updated_at;
             ins = await supabase.from("vehicle_catalog").insert(trimmed).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
           }
-          if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+          if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
             const legacyRow = insertRowForLegacyDb(
               stripVehicleCatalogOptionalMigrationColumns(candidate),
             );

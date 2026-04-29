@@ -78,11 +78,12 @@ import {
   catalogRowForApi,
   insertRowForLegacyDb,
   isLegacyVehicleCatalogYearNotNullError,
-  isVehicleCatalogSchemaMismatchError,
+  isPostgrestVehicleCatalogSchemaCacheError,
   listVehicleCatalogWithFallback,
   mergeCatalogTrimIntoTrimSeriesInPlace,
   parseMissingColumnFromVehicleCatalogDbError,
   patchRowForLegacyDb,
+  shouldStripVehicleCatalogInsertPayloadOnRetry,
   stripVehicleCatalogOptionalMigrationColumns,
   VEHICLE_CATALOG_SUPABASE_SELECT,
 } from "./vehicle_catalog_schema_fallback.ts";
@@ -12531,7 +12532,7 @@ const VEHICLE_CATALOG_WRITABLE_KEYS = [
   "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
   "trim_series", "generation",
   "full_model_code", "catalog_trim", "emissions_prefix", "trim_suffix_code",
-  "chassis_code", "engine_code", "engine_type",
+  "chassis_code", "generation_code", "engine_code", "engine_type",
   "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
   "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_category", "fuel_type", "fuel_grade", "transmission", "drivetrain",
   "horsepower", "torque", "torque_unit",
@@ -12701,6 +12702,13 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
     if (row.engine_type !== undefined && row.engine_type !== null && row.engine_type !== "") {
       row.engine_type = String(row.engine_type).trim();
     }
+    if (
+      row.chassis_code != null &&
+      row.chassis_code !== "" &&
+      (row.generation_code == null || row.generation_code === "")
+    ) {
+      row.generation_code = row.chassis_code;
+    }
     row.updated_at = new Date().toISOString();
     let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
 
@@ -12709,10 +12717,23 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(row));
       legacyRow.updated_at = row.updated_at;
       ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
+    } else if (ins.error && isPostgrestVehicleCatalogSchemaCacheError(ins.error)) {
+      /** Stale PostgREST cache drops columns on INSERT/SELECT — bypass with SQL RPC. */
+      const rpc = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
+      if (!rpc.error && rpc.data != null) {
+        ins = { data: rpc.data as Record<string, unknown>, error: null };
+      }
+    }
+    if (!ins.error) {
+      /* success */
     } else {
-      /** Drop only columns the DB reports missing — avoids blanket strip losing valid CSV fields. */
+      /** Drop only columns the DB reports missing — never for PGRST schema-cache-only errors. */
       let candidate: Record<string, unknown> = { ...row };
-      for (let i = 0; ins.error && isVehicleCatalogSchemaMismatchError(ins.error) && i < 48; i++) {
+      for (
+        let i = 0;
+        ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error) && i < 48;
+        i++
+      ) {
         const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
         if (!missing || !(missing in candidate)) break;
         if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(candidate);
@@ -12720,12 +12741,12 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
         candidate.updated_at = row.updated_at;
         ins = await supabase.from("vehicle_catalog").insert(candidate).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
       }
-      if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+      if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
         const trimmed = stripVehicleCatalogOptionalMigrationColumns(candidate);
         trimmed.updated_at = row.updated_at;
         ins = await supabase.from("vehicle_catalog").insert(trimmed).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
       }
-      if (ins.error && isVehicleCatalogSchemaMismatchError(ins.error)) {
+      if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
         const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(candidate));
         legacyRow.updated_at = row.updated_at;
         ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
@@ -12820,7 +12841,7 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
     }
     let upd = await supabase.from("vehicle_catalog").update(row).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
     let patchCandidate: Record<string, unknown> = { ...row };
-    for (let i = 0; upd.error && isVehicleCatalogSchemaMismatchError(upd.error) && i < 48; i++) {
+    for (let i = 0; upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error) && i < 48; i++) {
       const missing = parseMissingColumnFromVehicleCatalogDbError(upd.error);
       if (!missing || !(missing in patchCandidate)) break;
       if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(patchCandidate);
@@ -12828,12 +12849,12 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
       patchCandidate.updated_at = row.updated_at;
       upd = await supabase.from("vehicle_catalog").update(patchCandidate).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
     }
-    if (upd.error && isVehicleCatalogSchemaMismatchError(upd.error)) {
+    if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
       const trimmed = stripVehicleCatalogOptionalMigrationColumns(patchCandidate);
       trimmed.updated_at = row.updated_at;
       upd = await supabase.from("vehicle_catalog").update(trimmed).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
     }
-    if (upd.error && isVehicleCatalogSchemaMismatchError(upd.error)) {
+    if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
       const legacyRow = patchRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(patchCandidate));
       legacyRow.updated_at = row.updated_at;
       upd = await supabase.from("vehicle_catalog").update(legacyRow).eq("id", id).select("*").single();
