@@ -158,6 +158,8 @@ export type Permission =
   | 'vehicles.edit'
   | 'vehicles.delete'
   | 'vehicles.view'
+  /** Allow operating on a fleet vehicle that has no catalog match (platform-only). */
+  | 'vehicles.bypass_catalog_gate'
   // Fuel
   | 'fuel.approve'
   | 'fuel.reject'
@@ -229,6 +231,8 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   // Actions
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
+  // NOTE: 'vehicles.bypass_catalog_gate' is intentionally NOT granted to fleet
+  // roles — only platform_owner gets it (added explicitly below).
   'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry', 'fuel.delete_entry', 'fuel.view', 'fuel.export',
   'toll.manage', 'toll.view',
   'transactions.approve', 'transactions.reject', 'transactions.edit', 'transactions.view', 'transactions.export',
@@ -291,7 +295,9 @@ const FLEET_VIEWER_PERMISSIONS: Permission[] = [
  */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Platform (empty for now — Phase 11)
-  platform_owner: ALL_CUSTOMER_PERMISSIONS,   // fallback: if they somehow view fleet side
+  // platform_owner explicitly gets the catalog-gate bypass for emergency
+  // overrides (e.g. backfill / migration tools). No customer role gets it.
+  platform_owner: [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate'],
   platform_support: [],
   platform_analyst: [],
 

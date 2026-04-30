@@ -1,6 +1,21 @@
 export type VehicleStatus = 'Active' | 'Maintenance' | 'Inactive' | 'Decommissioned';
 export type ServiceStatus = 'OK' | 'Due Soon' | 'Overdue';
 
+/**
+ * Catalog readiness — orthogonal to operational `VehicleStatus`.
+ *
+ * - `matched`: linked to a `vehicle_catalog` row; the vehicle is allowed to
+ *   transition to Active and accept operational writes (trips, fuel, toll,
+ *   maintenance, equipment, driver assignment).
+ * - `pending_catalog`: no catalog match yet — a request sits in
+ *   `vehicle_catalog_pending_requests` waiting for platform admin approval.
+ * - `needs_info`: admin has asked the fleet for more details before approving.
+ *
+ * Server invariant: when `catalogStatus !== 'matched'`, the vehicle is
+ * forced to `status = 'Inactive'` and operational writes are blocked.
+ */
+export type VehicleCatalogStatus = 'matched' | 'pending_catalog' | 'needs_info';
+
 export type TollProvider = 'JRC' | 'T-Tag' | 'Other';
 export type TollTagStatus = 'Active' | 'Inactive' | 'Lost' | 'Damaged';
 
@@ -57,6 +72,12 @@ export interface Vehicle {
   year: string;
   /** Linked platform motor catalog row (KV); set after admin approval or auto match. */
   vehicle_catalog_id?: string;
+  /**
+   * Catalog readiness state. Server-managed: set by `POST /vehicles` and the
+   * Super Admin approve flows. Defaults to `'pending_catalog'` for any vehicle
+   * created without an auto/explicit catalog match.
+   */
+  catalogStatus?: VehicleCatalogStatus;
   /** Optional hints for resolving catalog when multiple variants share make/model/year */
   vehicle_catalog_trim_hint?: string;
   /** Market trim / grade; matches `vehicle_catalog.catalog_trim`. */

@@ -71,6 +71,14 @@ import { registerMaintenanceRoutes } from "./maintenance_routes.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import {
+  applyCatalogGateOnCreate,
+  extractVehicleIdsFromMetricsBody,
+  isEnforcementEnabled as catalogGateEnforcementEnabled,
+  loadVehicleForGate,
+  rbacUserCanBypassCatalogGate,
+  requireCatalogMatched,
+} from "./vehicle_catalog_gate.ts";
+import {
   supersedePendingRequestsForVehicle,
   upsertPendingFromKvVehicle,
 } from "./vehicle_catalog_pending_queries.ts";
@@ -1881,9 +1889,25 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/trips", async (c) => {
+app.post(
+  "/make-server-37f42386/trips",
+  requireCatalogMatched({
+    label: "POST /trips",
+    vehicleId: (_c, body) => {
+      if (!Array.isArray(body)) return null;
+      const ids = new Set<string>();
+      for (const t of body) {
+        if (t && typeof t === "object") {
+          const id = (t as { vehicleId?: unknown }).vehicleId;
+          if (typeof id === "string" && id.trim() && id !== "unknown") ids.add(id.trim());
+        }
+      }
+      return Array.from(ids);
+    },
+  }),
+  async (c) => {
   try {
-    const trips = await c.req.json();
+    const trips = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
     if (!Array.isArray(trips)) {
       return c.json({ error: "Expected array of trips" }, 400);
     }
@@ -2174,9 +2198,15 @@ app.get("/make-server-37f42386/driver-metrics", requireAuth(), async (c) => {
 });
 
 // Vehicle Metrics Endpoints
-app.post("/make-server-37f42386/vehicle-metrics", async (c) => {
+app.post(
+  "/make-server-37f42386/vehicle-metrics",
+  requireCatalogMatched({
+    label: "POST /vehicle-metrics",
+    vehicleId: (_c, body) => extractVehicleIdsFromMetricsBody(Array.isArray(body) ? { metrics: body } : body),
+  }),
+  async (c) => {
   try {
-    const metrics = await c.req.json();
+    const metrics = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
     if (!Array.isArray(metrics)) {
       return c.json({ error: "Expected array of metrics" }, 400);
     }
@@ -2245,11 +2275,33 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
     }
     vehicle = stampOrg(vehicle, c);
     const orgId = (vehicle as { organizationId?: string }).organizationId ?? null;
+    const rbacUser = c.get('rbacUser') as RbacUser | undefined;
+    const canBypass = rbacUserCanBypassCatalogGate(rbacUser);
 
     const catalogId = await resolveCatalogIdForKvVehicle(supabase, vehicle as Record<string, unknown>);
-    if (catalogId) {
-      vehicle = { ...vehicle, vehicle_catalog_id: catalogId };
+    const previous = await loadVehicleForGate(String(vehicle.id));
+
+    // Enforce the catalog gate on create / update: if no catalog match, force
+    // the vehicle into Inactive + 'pending_catalog' and reject any payload
+    // that tried to set it Active/Maintenance or assign a driver / toll /
+    // fuel scenario. In warn-only mode (ENFORCE_VEHICLE_CATALOG_GATE=warn)
+    // we still stamp catalogStatus + force Inactive but do NOT 422.
+    const gated = applyCatalogGateOnCreate(vehicle as Record<string, unknown>, catalogId, previous);
+    const enforce = catalogGateEnforcementEnabled();
+    if (gated.rejected) {
+      if (!canBypass && enforce) {
+        return c.json(
+          {
+            error: gated.rejected.message,
+            code: gated.rejected.code,
+            vehicleId: vehicle.id,
+          },
+          422,
+        );
+      }
+      console.warn(`[catalog-gate] POST /vehicles warn-only: ${gated.rejected.message} (vehicle=${vehicle.id})`);
     }
+    vehicle = gated.vehicle;
 
     await kv.set(`vehicle:${vehicle.id}`, vehicle);
 
@@ -2270,7 +2322,12 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
       }
     }
 
-    return c.json({ success: true, data: vehicle, catalogMatched: !!catalogId });
+    return c.json({
+      success: true,
+      data: vehicle,
+      catalogMatched: !!catalogId,
+      catalogStatus: (vehicle as { catalogStatus?: string }).catalogStatus ?? (catalogId ? "matched" : "pending_catalog"),
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -6911,9 +6968,21 @@ app.get("/make-server-37f42386/fuel-entries", requireAuth(), async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/fuel-entries", requireAuth(), requirePermission('fuel.create_entry'), async (c) => {
+app.post(
+  "/make-server-37f42386/fuel-entries",
+  requireAuth(),
+  requirePermission('fuel.create_entry'),
+  requireCatalogMatched({
+    label: "POST /fuel-entries",
+    vehicleId: (_c, body) => {
+      if (!body || typeof body !== "object") return null;
+      const id = (body as { vehicleId?: unknown }).vehicleId;
+      return typeof id === "string" && id.trim() ? id.trim() : null;
+    },
+  }),
+  async (c) => {
   try {
-    const entry = await c.req.json();
+    const entry = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
     if (!entry.id) {
         entry.id = crypto.randomUUID();
     }
@@ -7099,9 +7168,22 @@ app.get("/make-server-37f42386/toll-tags", requireAuth(), async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/toll-tags", requireAuth(), requirePermission('toll.manage'), async (c) => {
+app.post(
+  "/make-server-37f42386/toll-tags",
+  requireAuth(),
+  requirePermission('toll.manage'),
+  requireCatalogMatched({
+    label: "POST /toll-tags",
+    vehicleId: (_c, body) => {
+      if (!body || typeof body !== "object") return null;
+      const id = (body as { assignedVehicleId?: unknown }).assignedVehicleId;
+      // Only gate when the tag is being bound to a specific vehicle.
+      return typeof id === "string" && id.trim() ? id.trim() : null;
+    },
+  }),
+  async (c) => {
   try {
-    const tag = await c.req.json();
+    const tag = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
     if (!tag.id) {
         tag.id = crypto.randomUUID();
     }
@@ -11052,9 +11134,21 @@ app.get("/make-server-37f42386/equipment/:vehicleId", requireAuth(), async (c) =
   }
 });
 
-app.post("/make-server-37f42386/equipment", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
+app.post(
+  "/make-server-37f42386/equipment",
+  requireAuth(),
+  requirePermission('vehicles.edit'),
+  requireCatalogMatched({
+    label: "POST /equipment",
+    vehicleId: (_c, body) => {
+      if (!body || typeof body !== "object") return null;
+      const id = (body as { vehicleId?: unknown }).vehicleId;
+      return typeof id === "string" && id.trim() ? id.trim() : null;
+    },
+  }),
+  async (c) => {
   try {
-    const item = await c.req.json();
+    const item = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
     if (!item.id) {
         item.id = crypto.randomUUID();
     }
@@ -11502,9 +11596,27 @@ app.get("/make-server-37f42386/fleet/equipment/all", requireAuth(), async (c) =>
     }
 });
 
-app.post("/make-server-37f42386/fleet/equipment/bulk", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
+app.post(
+  "/make-server-37f42386/fleet/equipment/bulk",
+  requireAuth(),
+  requirePermission('vehicles.edit'),
+  requireCatalogMatched({
+    label: "POST /fleet/equipment/bulk",
+    vehicleId: (_c, body) => {
+      if (!Array.isArray(body)) return null;
+      const ids = new Set<string>();
+      for (const item of body) {
+        if (item && typeof item === "object") {
+          const id = (item as { vehicleId?: unknown }).vehicleId;
+          if (typeof id === "string" && id.trim()) ids.add(id.trim());
+        }
+      }
+      return Array.from(ids);
+    },
+  }),
+  async (c) => {
     try {
-        const items = await c.req.json();
+        const items = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
         if (!Array.isArray(items)) {
             return c.json({ error: "Expected array of items" }, 400);
         }
@@ -12888,6 +13000,107 @@ app.delete("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asy
   } catch (e: any) {
     console.error("[vehicle-catalog] delete:", e);
     return c.json({ error: e.message || "Failed to delete vehicle catalog entry" }, 500);
+  }
+});
+
+// GET /admin/vehicle-catalog-gate/audit
+// Returns the most recent catalog gate denials/warnings for platform review.
+app.get("/make-server-37f42386/admin/vehicle-catalog-gate/audit", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 100;
+    const events = await kv.getByPrefix("audit:catalog-gate:");
+    const sorted = (events || [])
+      .filter((e: unknown) => !!e && typeof e === "object")
+      .sort((a: any, b: any) => {
+        const ta = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tb = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, limit);
+    return c.json({ items: sorted, count: sorted.length });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/vehicle-catalog-gate/backfill
+// One-time / re-runnable migration: walk every vehicle:* KV row and set
+// `catalogStatus = vehicle_catalog_id ? 'matched' : 'pending_catalog'`.
+// Forces `status = 'Inactive'` for any currently Active/Maintenance vehicle
+// that does not have a catalog match. Pass { dryRun: true } to preview.
+app.post("/make-server-37f42386/admin/vehicle-catalog-gate/backfill", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const body = await c.req.json().catch(() => ({})) as { dryRun?: boolean };
+    const dryRun = body.dryRun === true;
+    const rows = await kv.getByPrefix("vehicle:");
+
+    let scanned = 0;
+    let stampedMatched = 0;
+    let stampedPending = 0;
+    let parkedForcedInactive = 0;
+    const samples: Array<{ id: string; before: { status?: string; catalogStatus?: string; vehicle_catalog_id?: string }; after: { status: string; catalogStatus: string } }> = [];
+
+    for (const v of rows ?? []) {
+      if (!v || typeof v !== "object") continue;
+      const vehicle = v as Record<string, unknown>;
+      const id = String(vehicle.id ?? "");
+      if (!id) continue;
+      scanned += 1;
+
+      const catalogId = typeof vehicle.vehicle_catalog_id === "string" ? vehicle.vehicle_catalog_id.trim() : "";
+      const desiredCatalogStatus: "matched" | "pending_catalog" = catalogId ? "matched" : "pending_catalog";
+      const currentCatalogStatus = typeof vehicle.catalogStatus === "string" ? vehicle.catalogStatus : undefined;
+      const currentStatus = typeof vehicle.status === "string" ? vehicle.status : undefined;
+
+      let nextStatus = currentStatus ?? "Inactive";
+      if (desiredCatalogStatus !== "matched" && nextStatus !== "Inactive" && nextStatus !== "Decommissioned") {
+        nextStatus = "Inactive";
+        parkedForcedInactive += 1;
+      }
+
+      if (currentCatalogStatus === desiredCatalogStatus && currentStatus === nextStatus) continue;
+
+      if (desiredCatalogStatus === "matched") stampedMatched += 1;
+      else stampedPending += 1;
+
+      if (samples.length < 25) {
+        samples.push({
+          id,
+          before: {
+            status: currentStatus,
+            catalogStatus: currentCatalogStatus,
+            vehicle_catalog_id: catalogId || undefined,
+          },
+          after: { status: nextStatus, catalogStatus: desiredCatalogStatus },
+        });
+      }
+
+      if (!dryRun) {
+        await kv.set(`vehicle:${id}`, {
+          ...vehicle,
+          status: nextStatus,
+          catalogStatus: desiredCatalogStatus,
+        });
+      }
+    }
+
+    return c.json({
+      success: true,
+      dryRun,
+      scanned,
+      stampedMatched,
+      stampedPending,
+      parkedForcedInactive,
+      samples,
+    });
+  } catch (e: any) {
+    console.error("[catalog-gate backfill]", e);
+    return c.json({ error: e.message }, 500);
   }
 });
 

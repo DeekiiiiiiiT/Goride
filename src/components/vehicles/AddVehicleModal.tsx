@@ -11,6 +11,7 @@ import { Vehicle } from '../../types/vehicle';
 import { cn } from "../ui/utils";
 import { convertPdfToImage } from '../../utils/pdf-helper';
 import { findMatchingVehicle } from '../../utils/identityMatcher';
+import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 
 interface AddVehicleModalProps {
   isOpen: boolean;
@@ -139,9 +140,13 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
   const [fitnessFile, setFitnessFile] = useState<File | null>(null);
   const [registrationFile, setRegistrationFile] = useState<File | null>(null);
 
+  // Default status is 'Inactive' — the server will force Inactive anyway when
+  // there is no catalog match (the "parked until matched" rule). The operator
+  // can flip to Active from VehicleDetail once the platform has approved the
+  // catalog entry.
   const [formData, setFormData] = useState({
     // Common
-    status: 'Active',
+    status: 'Inactive',
     
     // Fitness Certificate Fields
     make: '',
@@ -406,7 +411,10 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
             model: formData.model || 'Unknown',
             year: formData.year,
             vin: formData.vin || (plateToUse ? `${plateToUse}-VIN` : ''),
-            status: formData.status as any,
+            // Always create as Inactive. If the server confirms a catalog
+            // match the operator can promote to Active afterwards. If there
+            // is no match the gate forces Inactive anyway.
+            status: 'Inactive' as any,
             color: formData.color,
             
             bodyType: formData.bodyType,
@@ -443,18 +451,31 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         ? { ...finalVehicle, ...(saveRes.data as object) }
         : finalVehicle;
       onVehicleAdded(merged);
-      toast.success(existingVehicle ? "Vehicle updated" : "Vehicle added");
-      if (saveRes?.catalogMatched === false) {
-        toast.info(
-          "This make/model is queued for platform verification. Maintenance templates may update once it is added to the motor catalog.",
-          { duration: 8000 },
+
+      const matched = saveRes?.catalogMatched !== false && saveRes?.catalogStatus !== 'pending_catalog' && saveRes?.catalogStatus !== 'needs_info';
+      if (matched) {
+        toast.success(existingVehicle ? "Vehicle updated" : "Vehicle added and matched to motor catalog");
+      } else {
+        // Persistent, prominent message — this vehicle is parked until a
+        // platform admin approves the motor type. Operations (assigning a
+        // driver, fueling, trips) are blocked by the server until then.
+        toast.warning(
+          existingVehicle
+            ? "Vehicle updated and parked"
+            : "Vehicle added but parked",
+          {
+            description:
+              "This make/model isn't in the motor catalog yet. The vehicle stays Inactive and cannot be assigned, fueled, or driven until a platform admin approves the catalog entry.",
+            duration: 12000,
+          },
         );
       }
       handleClose();
       
     } catch (error) {
       console.error(error);
-      toast.error("Failed to save vehicle");
+      const handled = showCatalogGateToastIfApplicable(error);
+      if (!handled) toast.error("Failed to save vehicle");
     } finally {
       setIsLoading(false);
     }
@@ -462,7 +483,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
 
   const handleClose = () => {
     setFormData({
-        status: 'Active',
+        status: 'Inactive',
         make: '', model: '', year: new Date().getFullYear().toString(),
         color: '', bodyType: '', engineNumber: '', ccRating: '', fitnessIssueDate: '', fitnessExpiryDate: '',
         laNumber: '', licensePlate: '', mvid: '', vin: '', controlNumber: '', registrationIssueDate: '', registrationExpiryDate: ''
@@ -712,19 +733,29 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                 </div>
                 )}
 
-                <div className="max-w-lg mx-auto border-t pt-4">
+                <div className="max-w-lg mx-auto border-t pt-4 space-y-2">
                     <Label className="text-xs text-slate-500 mb-1.5 block">Vehicle Status</Label>
-                    <Select 
-                        value={formData.status} 
-                        onValueChange={(val) => setFormData({...formData, status: val})}
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex gap-2 text-xs text-amber-900">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div>
+                            <div className="font-semibold">New vehicles start parked.</div>
+                            <p className="mt-0.5 text-amber-800">
+                                The vehicle will be saved as <span className="font-medium">Inactive</span> while it is verified
+                                against the platform motor catalog. You'll be able to set it Active from the vehicle's detail
+                                page once it is approved.
+                            </p>
+                        </div>
+                    </div>
+                    <Select
+                        value="Inactive"
+                        onValueChange={() => {/* locked at create — see banner above */}}
+                        disabled
                     >
                     <SelectTrigger className="w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
-                        <SelectItem value="Maintenance">Maintenance</SelectItem>
+                        <SelectItem value="Inactive">Inactive (parked, pending catalog)</SelectItem>
                     </SelectContent>
                     </Select>
                 </div>

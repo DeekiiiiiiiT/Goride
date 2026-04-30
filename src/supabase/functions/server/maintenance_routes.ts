@@ -21,6 +21,7 @@ import {
 } from "../../../utils/maintenanceOverdueDetails.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
+import { requireCatalogMatched } from "./vehicle_catalog_gate.ts";
 
 function assertVehicleCatalogPlatformAccess(c: Context) {
   const rbacUser = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
@@ -634,9 +635,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
     "/make-server-37f42386/maintenance-logs",
     requireAuth(),
     requirePermission("vehicles.edit"),
+    requireCatalogMatched({
+      label: "POST /maintenance-logs",
+      vehicleId: (_c, body) => {
+        if (!body || typeof body !== "object") return null;
+        const id = (body as { vehicleId?: unknown }).vehicleId;
+        return typeof id === "string" && id.trim() ? id.trim() : null;
+      },
+    }),
     async (c) => {
       try {
-        const log = (await c.req.json()) as Record<string, unknown>;
+        const log = ((c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json())) as Record<string, unknown>;
         const vehicleId = String(log.vehicleId ?? "");
         if (!vehicleId) return c.json({ error: "vehicleId is required" }, 400);
         const id = String(log.id || crypto.randomUUID());

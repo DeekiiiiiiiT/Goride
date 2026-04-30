@@ -3,6 +3,7 @@ import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/f
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
+import { throwIfCatalogGateBlocked } from './api';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -81,6 +82,7 @@ export const fuelService = {
       body: JSON.stringify(entry)
     });
     if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, "Cannot save fuel entry — vehicle is pending catalog approval");
       const errorBody = await response.json().catch(() => ({}));
       console.error('[FuelService] Save fuel entry failed:', response.status, errorBody);
       throw new Error(errorBody.error || `Failed to save fuel entry (${response.status})`);

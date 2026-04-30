@@ -42,6 +42,7 @@ export type Permission =
   | 'nav.database_management'
   | 'drivers.create' | 'drivers.edit' | 'drivers.delete' | 'drivers.view'
   | 'vehicles.create' | 'vehicles.edit' | 'vehicles.delete' | 'vehicles.view'
+  | 'vehicles.bypass_catalog_gate'
   | 'fuel.approve' | 'fuel.reject' | 'fuel.create_entry' | 'fuel.edit_entry'
   | 'fuel.delete_entry' | 'fuel.view' | 'fuel.export'
   | 'toll.manage' | 'toll.view'
@@ -115,6 +116,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.database_management',
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
+  // 'vehicles.bypass_catalog_gate' is platform-only (added below).
   'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry',
   'fuel.delete_entry', 'fuel.view', 'fuel.export',
   'toll.manage', 'toll.view',
@@ -157,7 +159,7 @@ const FLEET_VIEWER_PERMISSIONS: Permission[] = [
 ];
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  platform_owner:   ALL_CUSTOMER_PERMISSIONS,
+  platform_owner:   [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate'],
   platform_support: [],
   platform_analyst: [],
   fleet_owner:      ALL_CUSTOMER_PERMISSIONS,

@@ -115,6 +115,8 @@ import {
   listVehicleCatalogMatches,
 } from '../../services/pendingVehicleCatalogService';
 import { formatCatalogProductionWindow, type VehicleCatalogRecord } from '../../types/vehicleCatalog';
+import { isVehicleParked, catalogStatusLabel, deriveCatalogStatus } from '../../utils/vehicleCatalogGate';
+import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
@@ -167,6 +169,23 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const showCatalogAlignmentBanner =
     Boolean(catalogPendingRow) &&
     (catalogPendingRow?.status === 'pending' || catalogPendingRow?.status === 'needs_info');
+
+  /** True when operational writes (driver assignment, fuel, trips) are blocked. */
+  const parked = isVehicleParked(vehicle);
+  const effectiveCatalogStatus = deriveCatalogStatus(vehicle);
+
+  // When a platform admin approves the pending request, the server stamps
+  // catalogStatus='matched'. Poll the pending list every 30s while parked so
+  // the banner can disappear without a manual refresh, and invalidate
+  // dependent queries the moment we detect the flip.
+  useEffect(() => {
+    if (!parked || !token) return;
+    const handle = window.setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['vehicle-catalog-pending-my'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+    }, 30_000);
+    return () => window.clearInterval(handle);
+  }, [parked, token, queryClient]);
 
   const [alignModalOpen, setAlignModalOpen] = useState(false);
   const [alignSearchMake, setAlignSearchMake] = useState('');
@@ -260,8 +279,9 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       onUpdate?.(updatedVehicle);
       setAlignModalOpen(false);
       toast.success('Vehicle aligned with motor catalog');
-    } catch {
-      toast.error('Could not save catalog alignment');
+    } catch (err) {
+      const handled = showCatalogGateToastIfApplicable(err);
+      if (!handled) toast.error('Could not save catalog alignment');
     } finally {
       setAlignSaving(false);
     }
@@ -978,23 +998,54 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         <DatePickerWithRange date={dateRange} setDate={setDateRange} />
       </div>
 
-      {showCatalogAlignmentBanner && (
+      {parked && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+          <AlertTriangle className="text-amber-700" />
+          <AlertTitle className="font-semibold">
+            {catalogPendingRow?.status === 'needs_info'
+              ? 'Action needed: platform admin requested more information'
+              : 'Vehicle is parked — pending catalog approval'}
+          </AlertTitle>
+          <AlertDescription className="text-amber-900/95 space-y-2">
+            <p>
+              This vehicle cannot be assigned to a driver, fueled, or have trips recorded against it until the platform
+              admin approves a motor catalog entry for <strong>{vehicle.year} {vehicle.make} {vehicle.model}</strong>.
+              Status is locked to <em>Inactive</em> in the meantime.
+            </p>
+            {catalogPendingRow?.status === 'needs_info' && catalogPendingRow.info_request_message && (
+              <div className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-amber-900">
+                <div className="font-semibold mb-1">Admin message</div>
+                <p className="whitespace-pre-wrap">{catalogPendingRow.info_request_message}</p>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                type="button"
+                size="sm"
+                className="bg-amber-700 text-white hover:bg-amber-800"
+                onClick={() => setAlignModalOpen(true)}
+              >
+                <ListChecks className="h-4 w-4 mr-2" />
+                Pick from catalog
+              </Button>
+              <span className="text-xs text-amber-800">
+                Status: <strong>{catalogStatusLabel(effectiveCatalogStatus)}</strong>
+                {catalogPendingRow?.id ? ` · Request #${catalogPendingRow.id.slice(0, 8)}` : ''}
+              </span>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!parked && showCatalogAlignmentBanner && (
         <Alert className="border-amber-200 bg-amber-50/90 text-amber-950">
           <BookMarked className="text-amber-700" />
-          <AlertTitle>
-            {catalogPendingRow?.status === 'needs_info'
-              ? 'Catalog alignment requested'
-              : 'Motor catalog review in progress'}
-          </AlertTitle>
+          <AlertTitle>Motor catalog review in progress</AlertTitle>
           <AlertDescription className="text-amber-900/90">
-            {catalogPendingRow?.status === 'needs_info' && catalogPendingRow.info_request_message ? (
-              <p className="whitespace-pre-wrap">{catalogPendingRow.info_request_message}</p>
-            ) : (
-              <p>
-                This vehicle is queued for catalog review. Align it with an official motor catalog entry so maintenance
-                schedules stay accurate.
-              </p>
-            )}
+            <p>
+              The current catalog match is being reviewed. Maintenance schedules may update once the platform confirms
+              the right variant.
+            </p>
             <Button
               type="button"
               size="sm"

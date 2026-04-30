@@ -320,7 +320,7 @@ export function registerPendingVehicleCatalogRoutes(
         if (!msg) return c.json({ error: "message is required" }, 400);
         const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
         const by = rbacUser?.id ?? rbacUser?.userId ?? null;
-        const { error } = await supabase
+        const { data: updated, error } = await supabase
           .from("vehicle_catalog_pending_requests")
           .update({
             status: "needs_info",
@@ -330,8 +330,26 @@ export function registerPendingVehicleCatalogRoutes(
             updated_at: new Date().toISOString(),
           })
           .eq("id", id)
-          .in("status", ["pending", "needs_info"]);
+          .in("status", ["pending", "needs_info"])
+          .select("fleet_vehicle_id")
+          .maybeSingle();
         if (error) throw error;
+        // Mirror the change onto the KV vehicle so the customer UI flips its
+        // banner from "Pending" to "Needs info" without an extra round trip.
+        const fleetVid = String((updated as { fleet_vehicle_id?: string } | null)?.fleet_vehicle_id ?? "");
+        if (fleetVid) {
+          try {
+            const raw = await kv.get(`vehicle:${fleetVid}`);
+            if (raw && typeof raw === "object") {
+              await kv.set(`vehicle:${fleetVid}`, {
+                ...(raw as Record<string, unknown>),
+                catalogStatus: "needs_info",
+              });
+            }
+          } catch (kvErr) {
+            console.warn("[catalog-pending] needs_info KV mirror failed", kvErr);
+          }
+        }
         return c.json({ success: true });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
@@ -395,7 +413,14 @@ export function registerPendingVehicleCatalogRoutes(
         const fleetId = String((reqRow as { fleet_vehicle_id: string }).fleet_vehicle_id);
         const raw = await kv.get(`vehicle:${fleetId}`);
         if (!raw || typeof raw !== "object") return c.json({ error: "Fleet vehicle not found" }, 404);
-        const vehicle = { ...(raw as Record<string, unknown>), vehicle_catalog_id: existingId };
+        // The platform admin has linked an existing catalog row — flip the
+        // fleet vehicle out of the parked state. We deliberately leave
+        // `status` alone so the operator decides when to set Active.
+        const vehicle = {
+          ...(raw as Record<string, unknown>),
+          vehicle_catalog_id: existingId,
+          catalogStatus: "matched",
+        };
         await kv.set(`vehicle:${fleetId}`, vehicle);
 
         const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
@@ -421,7 +446,7 @@ export function registerPendingVehicleCatalogRoutes(
           catalogId: existingId,
         });
 
-        return c.json({ success: true, vehicle_catalog_id: existingId, bootstrap: run });
+        return c.json({ success: true, vehicle_catalog_id: existingId, catalogStatus: "matched", bootstrap: run });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
@@ -583,7 +608,13 @@ export function registerPendingVehicleCatalogRoutes(
         const fleetId = pr.fleet_vehicle_id;
         const raw = await kv.get(`vehicle:${fleetId}`);
         if (!raw || typeof raw !== "object") return c.json({ error: "Fleet vehicle not found" }, 404);
-        const vehicle = { ...(raw as Record<string, unknown>), vehicle_catalog_id: catalogId };
+        // Fresh catalog row was just created — flip the fleet vehicle out of
+        // the parked state. Operational `status` is left to the operator.
+        const vehicle = {
+          ...(raw as Record<string, unknown>),
+          vehicle_catalog_id: catalogId,
+          catalogStatus: "matched",
+        };
         await kv.set(`vehicle:${fleetId}`, vehicle);
 
         const rbacUser = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
@@ -612,6 +643,7 @@ export function registerPendingVehicleCatalogRoutes(
         return c.json({
           success: true,
           item: catalogRowForApi((catRow ?? {}) as Record<string, unknown>),
+          catalogStatus: "matched",
           bootstrap: run,
         });
       } catch (e: unknown) {

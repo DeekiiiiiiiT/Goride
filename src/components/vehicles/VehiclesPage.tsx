@@ -68,6 +68,8 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useAuth } from '../auth/AuthContext';
 import { listMyPendingCatalogRequests } from '../../services/pendingVehicleCatalogService';
 import type { VehicleCatalogPendingRequest } from '../../types/vehicleCatalogPending';
+import { isVehicleParked } from '../../utils/vehicleCatalogGate';
+import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 
 export function VehiclesPage() {
   const { v } = useVocab();
@@ -208,11 +210,14 @@ export function VehiclesPage() {
         }
         
         const isInactive = lastTrip ? new Date(lastTrip.date) < subDays(today, 7) : true;
-        
+        // Parked vehicles (no catalog match yet) must NEVER be derived to
+        // 'Active' client-side, even if recent trips exist (legacy data).
+        const parked = isVehicleParked(vehicle);
+
         // Preserve existing metrics or override with calculated ones if available
         return {
             ...vehicle,
-            status: isInactive ? 'Inactive' : 'Active',
+            status: parked ? 'Inactive' : (isInactive ? 'Inactive' : 'Active'),
             // Prioritize manual/current assignment over historical trip logs
             // Step 3.1: Resolve lastTrip?.driverId to native Roam ID through the driver list
             currentDriverId: vehicle.currentDriverId || (() => {
@@ -258,8 +263,13 @@ export function VehiclesPage() {
             vehicle.model.toLowerCase().includes(searchQuery.toLowerCase()) || 
             vehicle.licensePlate.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (vehicle.currentDriverName || '').toLowerCase().includes(searchQuery.toLowerCase());
-          
-          const matchesStatus = statusFilter === 'all' || vehicle.status.toLowerCase() === statusFilter;
+
+          const matchesStatus =
+            statusFilter === 'all'
+              ? true
+              : statusFilter === 'pending_catalog'
+                ? isVehicleParked(vehicle)
+                : vehicle.status.toLowerCase() === statusFilter;
           const matchesService = serviceFilter === 'all' || 
              (serviceFilter === 'attention' && vehicle.serviceStatus !== 'OK') ||
              (serviceFilter === 'ok' && vehicle.serviceStatus === 'OK');
@@ -267,6 +277,11 @@ export function VehiclesPage() {
           return matchesSearch && matchesStatus && matchesService;
       });
   }, [vehicles, searchQuery, statusFilter, serviceFilter]);
+
+  const parkedVehicleCount = useMemo(
+    () => vehicles.filter(isVehicleParked).length,
+    [vehicles],
+  );
 
   // Find Selected Vehicle
   const selectedVehicle = useMemo(() => 
@@ -301,6 +316,16 @@ export function VehiclesPage() {
     // Step 2.1: Always use driver.id (native Roam ID) — never a rideshare UUID
     const resolvedDriverId = driver?.id || driverId;
 
+    // Reactivate to Active only if the vehicle has been catalog-matched.
+    // Parked vehicles are blocked server-side; we mirror that here for clarity.
+    const parked = isVehicleParked(vehicleToUpdate);
+    if (parked) {
+      toast.warning("Vehicle is parked", {
+        description: "This vehicle is pending catalog approval and cannot be assigned a driver yet.",
+      });
+      return;
+    }
+
     const updatedVehicle = {
         ...vehicleToUpdate,
         currentDriverId: resolvedDriverId,
@@ -324,9 +349,12 @@ export function VehiclesPage() {
         setIsAssignModalOpen(false);
     } catch (error) {
         console.error("Failed to save driver assignment", error);
-        toast.error("Failed to save assignment", {
-            description: "The change could not be saved to the server."
-        });
+        const handled = showCatalogGateToastIfApplicable(error);
+        if (!handled) {
+          toast.error("Failed to save assignment", {
+              description: "The change could not be saved to the server."
+          });
+        }
     }
   };
 
@@ -426,6 +454,29 @@ export function VehiclesPage() {
                   )}
               </div>
 
+              {parkedVehicleCount > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-700 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-amber-900">
+                      {parkedVehicleCount} {parkedVehicleCount === 1 ? 'vehicle is' : 'vehicles are'} pending catalog approval
+                    </div>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      These vehicles are parked — they cannot be assigned to a driver, fueled, or have trips recorded against them
+                      until a platform admin approves the motor type.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
+                    onClick={() => setStatusFilter('pending_catalog')}
+                  >
+                    Review parked
+                  </Button>
+                </div>
+              )}
+
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg border shadow-sm">
                   
                   {/* Filters (Left) */}
@@ -441,7 +492,7 @@ export function VehiclesPage() {
                       </div>
                       
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[130px]">
+                        <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
@@ -449,6 +500,7 @@ export function VehiclesPage() {
                           <SelectItem value="active">Active</SelectItem>
                           <SelectItem value="maintenance">Maintenance</SelectItem>
                           <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="pending_catalog">Pending catalog ({parkedVehicleCount})</SelectItem>
                         </SelectContent>
                       </Select>
 
@@ -536,7 +588,10 @@ export function VehiclesPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredVehicles.map(vehicle => (
+                            {filteredVehicles.map(vehicle => {
+                                const parked = isVehicleParked(vehicle);
+                                const cp = catalogPendingByFleetId.get(vehicle.id);
+                                return (
                                 <TableRow key={vehicle.id} className="hover:bg-slate-50/50">
                                     <TableCell className="pl-6">
                                         <div className="flex items-center gap-4">
@@ -546,22 +601,23 @@ export function VehiclesPage() {
                                             <div>
                                                 <div className="flex flex-wrap items-center gap-2">
                                                   <span className="font-medium text-slate-900">{vehicle.year} {vehicle.make} {vehicle.model}</span>
-                                                  {(() => {
-                                                    const cp = catalogPendingByFleetId.get(vehicle.id);
-                                                    if (!cp || (cp.status !== 'pending' && cp.status !== 'needs_info')) return null;
-                                                    return (
-                                                      <Badge
-                                                        variant="secondary"
-                                                        className={
-                                                          cp.status === 'needs_info'
-                                                            ? 'border-amber-200 bg-amber-50 text-amber-900'
-                                                            : ''
-                                                        }
-                                                      >
-                                                        {cp.status === 'needs_info' ? 'Catalog: action' : 'Catalog: review'}
-                                                      </Badge>
-                                                    );
-                                                  })()}
+                                                  {parked && (
+                                                    <Badge
+                                                      variant="secondary"
+                                                      className={
+                                                        cp?.status === 'needs_info'
+                                                          ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                          : 'border-slate-300 bg-slate-100 text-slate-700'
+                                                      }
+                                                      title={
+                                                        cp?.status === 'needs_info'
+                                                          ? 'Platform admin asked for more info before approving the motor type.'
+                                                          : 'This vehicle is parked. A platform admin must approve the motor type before the vehicle can be operated.'
+                                                      }
+                                                    >
+                                                      {cp?.status === 'needs_info' ? 'Pending catalog (action needed)' : 'Pending catalog'}
+                                                    </Badge>
+                                                  )}
                                                 </div>
                                             </div>
                                         </div>
@@ -615,17 +671,33 @@ export function VehiclesPage() {
                                                 <DropdownMenuItem onClick={() => setSelectedVehicleId(vehicle.id)}>
                                                     <FileText className="mr-2 h-4 w-4" /> View Details
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleOpenAssignModal(vehicle.id)}>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleOpenAssignModal(vehicle.id)}
+                                                  disabled={parked}
+                                                  title={parked ? 'Pending catalog approval' : undefined}
+                                                >
                                                     <UserPlus className="mr-2 h-4 w-4" /> Assign Driver
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem onClick={() => handleLogService(vehicle.id)}>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleLogService(vehicle.id)}
+                                                  disabled={parked}
+                                                  title={parked ? 'Pending catalog approval' : undefined}
+                                                >
                                                     <Wrench className="mr-2 h-4 w-4" /> Log Service
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleAddFuel(vehicle.id)}>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleAddFuel(vehicle.id)}
+                                                  disabled={parked}
+                                                  title={parked ? 'Pending catalog approval' : undefined}
+                                                >
                                                     <Fuel className="mr-2 h-4 w-4" /> Log Fuel
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleSendAlert(vehicle.id)}>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleSendAlert(vehicle.id)}
+                                                  disabled={parked}
+                                                  title={parked ? 'Pending catalog approval' : undefined}
+                                                >
                                                     <AlertTriangle className="mr-2 h-4 w-4" /> Send Alert
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
@@ -640,7 +712,8 @@ export function VehiclesPage() {
                                         </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </div>

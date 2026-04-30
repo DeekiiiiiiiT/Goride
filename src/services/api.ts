@@ -84,6 +84,23 @@ async function parseFinancialApiErrorBody(response: Response): Promise<string> {
   return raw || '(empty body)';
 }
 
+/**
+ * If the response is a 403/422 with a `VEHICLE_PENDING_CATALOG` body, throw a
+ * structured error so the UI helper in `utils/catalogGateErrors.ts` can
+ * render a consistent toast. Returns silently otherwise.
+ */
+export async function throwIfCatalogGateBlocked(response: Response, fallbackMessage: string): Promise<void> {
+  if (response.status !== 403 && response.status !== 422) return;
+  let body: any = null;
+  try { body = await response.clone().json(); } catch { /* ignore */ }
+  if (!body || body.code !== 'VEHICLE_PENDING_CATALOG') return;
+  const err = new Error(body.error || fallbackMessage) as Error & { code?: string; status?: number; details?: unknown };
+  err.code = body.code;
+  err.status = response.status;
+  err.details = body;
+  throw err;
+}
+
 export const api = {
   async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${vehicleId}`, {
@@ -248,8 +265,9 @@ export const api = {
       },
       body: JSON.stringify(trips),
     });
-    
+
     if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, "Cannot save trip — vehicle is pending catalog approval");
       let errorMessage = response.statusText;
       try {
           const errorBody = await response.json();
@@ -295,7 +313,10 @@ export const api = {
         },
         body: JSON.stringify(metrics),
       });
-      if (!response.ok) throw new Error(`Failed to save vehicle metrics`);
+      if (!response.ok) {
+        await throwIfCatalogGateBlocked(response, "Cannot save vehicle metrics — vehicle is pending catalog approval");
+        throw new Error(`Failed to save vehicle metrics`);
+      }
       return response.json();
   },
 
@@ -662,8 +683,16 @@ export const api = {
         headers: await getHeaders(),
         body: JSON.stringify(vehicle)
     });
-    if (!response.ok) throw new Error("Failed to save vehicle");
-    return response.json() as Promise<{ success?: boolean; data?: unknown; catalogMatched?: boolean }>;
+    if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, "Cannot save vehicle — pending catalog approval");
+      throw new Error("Failed to save vehicle");
+    }
+    return response.json() as Promise<{
+      success?: boolean;
+      data?: unknown;
+      catalogMatched?: boolean;
+      catalogStatus?: 'matched' | 'pending_catalog' | 'needs_info';
+    }>;
   },
 
   async deleteVehicle(id: string) {
@@ -684,7 +713,10 @@ export const api = {
         },
         body: JSON.stringify(entry)
     });
-    if (!response.ok) throw new Error("Failed to save fuel entry");
+    if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, "Cannot save fuel entry — vehicle is pending catalog approval");
+      throw new Error("Failed to save fuel entry");
+    }
     return response.json();
   },
 
@@ -1356,7 +1388,10 @@ export const api = {
         },
         body: JSON.stringify(tag)
     });
-    if (!response.ok) throw new Error("Failed to save toll tag");
+    if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, "Cannot assign toll tag — vehicle is pending catalog approval");
+      throw new Error("Failed to save toll tag");
+    }
     return response.json();
   },
 

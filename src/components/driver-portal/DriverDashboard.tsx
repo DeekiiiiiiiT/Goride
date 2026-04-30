@@ -27,6 +27,7 @@ import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { settlementService } from '../../services/settlementService';
 import { FuelEntry } from '../../types/fuel';
+import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
@@ -340,7 +341,8 @@ export function DriverDashboard() {
       
     } catch (e: any) {
       console.error("Failed to save manual trip", e);
-      toast.error(e.message || "Failed to save trip");
+      const handled = showCatalogGateToastIfApplicable(e);
+      if (!handled) toast.error(e.message || "Failed to save trip");
     }
   };
 
@@ -397,6 +399,9 @@ export function DriverDashboard() {
           setTimeout(() => window.location.reload(), 1500);
       } catch (e) {
           console.error("Failed to save fuel log", e);
+          // If the server rejected because the assigned vehicle is parked,
+          // surface a clear toast before re-throwing.
+          showCatalogGateToastIfApplicable(e);
           // Re-throw so FuelLogForm keeps the dialog open with driver's data intact
           throw e;
       }
