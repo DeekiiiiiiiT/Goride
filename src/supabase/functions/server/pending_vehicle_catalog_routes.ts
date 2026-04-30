@@ -110,6 +110,45 @@ function pendingCatalogFieldDefaults(pr: Record<string, unknown>): Record<string
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const FACET_PAGE = 1000;
+const FACET_MAX_OFFSET = 50_000;
+/** Max calendar years expanded per catalog row when production_end_year is null (ongoing). */
+const FACET_YEAR_FORWARD_SPAN = 35;
+
+function collectFacetCalendarYears(rows: Record<string, unknown>[]): number[] {
+  const set = new Set<number>();
+  const nowY = new Date().getFullYear();
+  const capHigh = nowY + 1;
+  for (const row of rows) {
+    let y0 = Number(row.production_start_year);
+    let y1Raw: number | null = null;
+    if (row.production_end_year !== undefined && row.production_end_year !== null && row.production_end_year !== "") {
+      const e = Number(row.production_end_year);
+      if (Number.isFinite(e)) y1Raw = e;
+    }
+    if (!Number.isFinite(y0) || y0 < 1900) {
+      const legacy = Number((row as { year?: unknown }).year);
+      if (Number.isFinite(legacy) && legacy >= 1900) {
+        y0 = legacy;
+        y1Raw = legacy;
+      } else {
+        continue;
+      }
+    }
+    let hi: number;
+    if (y1Raw != null && Number.isFinite(y1Raw)) {
+      hi = Math.min(y1Raw, y0 + FACET_YEAR_FORWARD_SPAN);
+    } else {
+      hi = Math.min(capHigh, y0 + FACET_YEAR_FORWARD_SPAN);
+    }
+    if (hi < y0) hi = y0;
+    for (let y = y0; y <= hi; y++) {
+      if (y >= 1900 && y <= capHigh) set.add(y);
+    }
+  }
+  return Array.from(set).sort((a, b) => a - b);
+}
+
 export function registerPendingVehicleCatalogRoutes(
   app: { get: unknown; post: unknown },
   supabase: SupabaseClient,
@@ -118,6 +157,95 @@ export function registerPendingVehicleCatalogRoutes(
     get: (path: string, ...handlers: unknown[]) => void;
     post: (path: string, ...handlers: unknown[]) => void;
   };
+
+  /**
+   * Distinct make / model / calendar-year values from `vehicle_catalog` for
+   * fleet UIs (align modal). Same permission as matches; does not expose full
+   * rows—only facet strings for dropdowns.
+   */
+  route.get(
+    "/make-server-37f42386/vehicle-catalog-facets",
+    requireAuth(),
+    requirePermission("vehicles.view"),
+    async (c) => {
+      try {
+        const level = (c.req.query("level") ?? "").trim().toLowerCase();
+        const make = (c.req.query("make") ?? "").trim();
+        const model = (c.req.query("model") ?? "").trim();
+
+        if (level === "make") {
+          const makes = new Set<string>();
+          let from = 0;
+          for (;;) {
+            const { data, error } = await supabase.from("vehicle_catalog").select("make").range(from, from + FACET_PAGE - 1);
+            if (error) throw error;
+            if (!data?.length) break;
+            for (const r of data) {
+              const m = String((r as { make?: unknown }).make ?? "").trim();
+              if (m.length >= 1) makes.add(m);
+            }
+            if (data.length < FACET_PAGE) break;
+            from += FACET_PAGE;
+            if (from > FACET_MAX_OFFSET) break;
+          }
+          const list = Array.from(makes).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+          return c.json({ makes: list });
+        }
+
+        if (level === "model") {
+          if (make.length < 2) return c.json({ error: "make is required (min 2 characters)" }, 400);
+          const models = new Set<string>();
+          let from = 0;
+          for (;;) {
+            const { data, error } = await supabase
+              .from("vehicle_catalog")
+              .select("model")
+              .ilike("make", `%${make}%`)
+              .range(from, from + FACET_PAGE - 1);
+            if (error) throw error;
+            if (!data?.length) break;
+            for (const r of data) {
+              const m = String((r as { model?: unknown }).model ?? "").trim();
+              if (m.length >= 1) models.add(m);
+            }
+            if (data.length < FACET_PAGE) break;
+            from += FACET_PAGE;
+            if (from > FACET_MAX_OFFSET) break;
+          }
+          const list = Array.from(models).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+          return c.json({ models: list });
+        }
+
+        if (level === "year") {
+          if (make.length < 2 || model.length < 2) {
+            return c.json({ error: "make and model are required (min 2 characters each)" }, 400);
+          }
+          const acc: Record<string, unknown>[] = [];
+          let from = 0;
+          for (;;) {
+            const { data, error } = await supabase
+              .from("vehicle_catalog")
+              .select("*")
+              .ilike("make", `%${make}%`)
+              .ilike("model", `%${model}%`)
+              .range(from, from + FACET_PAGE - 1);
+            if (error) throw error;
+            if (!data?.length) break;
+            acc.push(...(data as Record<string, unknown>[]));
+            if (data.length < FACET_PAGE) break;
+            from += FACET_PAGE;
+            if (from > FACET_MAX_OFFSET) break;
+          }
+          const years = collectFacetCalendarYears(acc);
+          return c.json({ years });
+        }
+
+        return c.json({ error: "Invalid level (use make, model, or year)" }, 400);
+      } catch (e: unknown) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      }
+    },
+  );
 
   route.get(
     "/make-server-37f42386/vehicle-catalog-matches",

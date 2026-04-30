@@ -74,6 +74,30 @@ export async function listVehicleCatalogMatches(
   return items;
 }
 
+export type VehicleCatalogFacetLevel = "make" | "model" | "year";
+
+export type VehicleCatalogFacetsResponse = {
+  makes?: string[];
+  models?: string[];
+  years?: number[];
+};
+
+/** Distinct catalog values for align / picker dropdowns (fleet, vehicles.view). */
+export async function fetchVehicleCatalogFacets(
+  accessToken: string,
+  params: { level: VehicleCatalogFacetLevel; make?: string; model?: string },
+): Promise<VehicleCatalogFacetsResponse> {
+  const sp = new URLSearchParams();
+  sp.set("level", params.level);
+  if (params.make) sp.set("make", params.make);
+  if (params.model) sp.set("model", params.model);
+  const res = await fetch(`${API_ENDPOINTS.fleet}/vehicle-catalog-facets?${sp.toString()}`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<VehicleCatalogFacetsResponse>;
+}
+
 export async function listVehicleCatalogMatchesWithCount(
   accessToken: string,
   params: VehicleCatalogMatchParams,

@@ -15,6 +15,7 @@ const roots = [
   "src/components/vehicles/VehicleDetail.tsx",
   "src/hooks/useMyPendingCatalogRequests.ts",
   "src/hooks/useCatalogCandidates.ts",
+  "src/hooks/useVehicleCatalogAnchorFacets.ts",
   "supabase/migrations/20260430120000_vehicle_catalog_pending_disambiguators.sql",
 ];
 

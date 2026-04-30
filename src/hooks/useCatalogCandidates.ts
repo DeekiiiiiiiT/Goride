@@ -36,6 +36,11 @@ export type CatalogCandidatesAnchors = {
   year: string;
   /** Optional chassis prefix (e.g. M900A) used to narrow the candidate set. */
   chassis?: string;
+  /**
+   * When true, the API call omits chassis_code so rows match make/model/year
+   * only. Used to populate a chassis dropdown from distinct catalog values.
+   */
+  skipChassisFilter?: boolean;
 };
 
 export type CatalogFacets = {
@@ -46,6 +51,7 @@ export type CatalogFacets = {
   body_type: string[];
   catalog_trim: string[];
   full_model_code: string[];
+  chassis_code: string[];
 };
 
 const EMPTY_FACETS: CatalogFacets = {
@@ -56,6 +62,7 @@ const EMPTY_FACETS: CatalogFacets = {
   body_type: [],
   catalog_trim: [],
   full_model_code: [],
+  chassis_code: [],
 };
 
 function distinctSorted(rows: VehicleCatalogRecord[], pick: (r: VehicleCatalogRecord) => string | null | undefined): string[] {
@@ -79,6 +86,7 @@ function deriveFacets(rows: VehicleCatalogRecord[]): CatalogFacets {
     body_type: distinctSorted(rows, (r) => r.body_type),
     catalog_trim: distinctSorted(rows, (r) => r.catalog_trim ?? null),
     full_model_code: distinctSorted(rows, (r) => r.full_model_code ?? null),
+    chassis_code: distinctSorted(rows, (r) => r.chassis_code ?? null),
   };
 }
 
@@ -105,7 +113,7 @@ export function useCatalogCandidates(anchors: CatalogCandidatesAnchors): UseCata
   useEffect(() => {
     const t = setTimeout(() => setDebounced(anchors), 300);
     return () => clearTimeout(t);
-  }, [anchors.make, anchors.model, anchors.year, anchors.chassis]);
+  }, [anchors.make, anchors.model, anchors.year, anchors.chassis, anchors.skipChassisFilter]);
 
   const enabled = Boolean(token) && anchorsAreUsable(debounced);
 
@@ -115,14 +123,15 @@ export function useCatalogCandidates(anchors: CatalogCandidatesAnchors): UseCata
       debounced.make.trim().toLowerCase(),
       debounced.model.trim().toLowerCase(),
       debounced.year.trim(),
-      (debounced.chassis ?? "").trim().toUpperCase(),
+      debounced.skipChassisFilter === true ? "__mmy__" : (debounced.chassis ?? "").trim().toUpperCase(),
     ],
     queryFn: () =>
       listVehicleCatalogMatchesWithCount(token!, {
         make: debounced.make.trim() || undefined,
         model: debounced.model.trim() || undefined,
         year: debounced.year.trim() || undefined,
-        chassis_code: debounced.chassis?.trim() || undefined,
+        chassis_code:
+          debounced.skipChassisFilter === true ? undefined : debounced.chassis?.trim() || undefined,
       }),
     enabled,
     staleTime: 60_000,

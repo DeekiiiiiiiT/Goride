@@ -36,6 +36,8 @@ export interface CatalogFacetSelectProps {
   disabled?: boolean;
   emptyHint?: string;
   optional?: boolean;
+  /** When false, no "Any" row — user must pick a real option (e.g. chassis). */
+  allowAny?: boolean;
 }
 
 export function CatalogFacetSelect(props: CatalogFacetSelectProps) {
@@ -48,32 +50,52 @@ export function CatalogFacetSelect(props: CatalogFacetSelectProps) {
     disabled = false,
     emptyHint = "Not available for this vehicle",
     optional = true,
+    allowAny = true,
   } = props;
 
   const trimmedValue = (value ?? "").trim();
   const valueInOptions = trimmedValue.length > 0 && options.includes(trimmedValue);
   const hasOptions = options.length > 0;
-  const triggerDisabled = disabled || (!loading && !hasOptions && !trimmedValue);
 
-  const selectValue = trimmedValue.length > 0 ? trimmedValue : ANY_VALUE;
-  const placeholder = loading ? "Loading..." : hasOptions ? "Select" : emptyHint;
+  const triggerDisabled = allowAny
+    ? disabled || (!loading && !hasOptions && !trimmedValue)
+    : disabled || loading || (!loading && !hasOptions);
+
+  const selectValue = allowAny
+    ? trimmedValue.length > 0
+      ? trimmedValue
+      : ANY_VALUE
+    : trimmedValue.length > 0
+      ? trimmedValue
+      : undefined;
+
+  const placeholder = loading
+    ? "Loading..."
+    : hasOptions
+      ? allowAny
+        ? "Select"
+        : "Select from catalog"
+      : emptyHint;
 
   return (
     <div>
       <Label className="text-xs text-slate-500">
         {label}
-        {optional ? " (optional)" : ""}
+        {optional ? " (optional)" : null}
       </Label>
       <Select
         value={selectValue}
-        onValueChange={(next) => onChange(next === ANY_VALUE ? "" : next)}
+        onValueChange={(next) => {
+          if (allowAny && next === ANY_VALUE) onChange("");
+          else onChange(next);
+        }}
         disabled={triggerDisabled}
       >
         <SelectTrigger>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ANY_VALUE}>{"\u2014 Any \u2014"}</SelectItem>
+          {allowAny ? <SelectItem value={ANY_VALUE}>{"\u2014 Any \u2014"}</SelectItem> : null}
           {!valueInOptions && trimmedValue.length > 0 ? (
             <SelectItem value={trimmedValue}>{trimmedValue} (not in catalog)</SelectItem>
           ) : null}

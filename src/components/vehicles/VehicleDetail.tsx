@@ -117,6 +117,7 @@ import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors'
 import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
 import { CatalogFacetSelect } from './CatalogFacetSelect';
 import { useCatalogCandidates } from '../../hooks/useCatalogCandidates';
+import { useVehicleCatalogAnchorFacets } from '../../hooks/useVehicleCatalogAnchorFacets';
 import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
@@ -206,20 +207,22 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const [alignSearchMake, setAlignSearchMake] = useState('');
   const [alignSearchModel, setAlignSearchModel] = useState('');
   const [alignSearchYear, setAlignSearchYear] = useState('');
-  const [alignSearchTrim, setAlignSearchTrim] = useState('');
   const [alignSearchChassis, setAlignSearchChassis] = useState('');
-  const [alignSearchMonth, setAlignSearchMonth] = useState('');
   const [alignSearchDrivetrain, setAlignSearchDrivetrain] = useState('');
   const [alignSearchTransmission, setAlignSearchTransmission] = useState('');
-  const [alignSearchFuelType, setAlignSearchFuelType] = useState('');
   /** The catalog row the picker has decided on (auto-match or explicit pick). */
   const [alignSelectedRow, setAlignSelectedRow] = useState<VehicleCatalogRecord | null>(null);
   const [alignPickerSource, setAlignPickerSource] = useState<CatalogVariantPickerSource | null>(null);
   const [alignSaving, setAlignSaving] = useState(false);
 
-  // DB-backed dropdown options for the align modal: same hook the
-  // AddVehicleModal uses, so the customer sees the exact same value lists in
-  // both flows.
+  // MMY-only fetch: distinct chassis codes for the mandatory chassis dropdown.
+  const { facets: alignMmyFacets, loading: alignMmyLoading } = useCatalogCandidates({
+    make: alignSearchMake,
+    model: alignSearchModel,
+    year: alignSearchYear,
+    skipChassisFilter: true,
+  });
+  // After chassis is chosen: drivetrain / transmission facets + picker narrowing.
   const { facets: alignFacets, loading: alignFacetsLoading } = useCatalogCandidates({
     make: alignSearchMake,
     model: alignSearchModel,
@@ -227,22 +230,49 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     chassis: alignSearchChassis,
   });
 
+  const {
+    makes: alignMakeOptions,
+    models: alignModelOptions,
+    years: alignYearOptions,
+    loadingMakes: alignMakesLoading,
+    loadingModels: alignModelsLoading,
+    loadingYears: alignYearsLoading,
+  } = useVehicleCatalogAnchorFacets(alignSearchMake, alignSearchModel);
+
+  const onAlignMakeChange = useCallback((v: string) => {
+    setAlignSearchMake(v);
+    setAlignSearchModel('');
+    setAlignSearchYear('');
+    setAlignSearchChassis('');
+    setAlignSearchDrivetrain('');
+    setAlignSearchTransmission('');
+  }, []);
+
+  const onAlignModelChange = useCallback((v: string) => {
+    setAlignSearchModel(v);
+    setAlignSearchYear('');
+    setAlignSearchChassis('');
+    setAlignSearchDrivetrain('');
+    setAlignSearchTransmission('');
+  }, []);
+
+  const onAlignYearChange = useCallback((v: string) => {
+    setAlignSearchYear(v);
+    setAlignSearchChassis('');
+    setAlignSearchDrivetrain('');
+    setAlignSearchTransmission('');
+  }, []);
+
   useEffect(() => {
     if (!alignModalOpen) return;
     setAlignSearchMake(vehicle.make || '');
     setAlignSearchModel(vehicle.model || '');
     setAlignSearchYear(vehicle.year || '');
-    setAlignSearchTrim(vehicle.vehicle_catalog_trim_hint?.trim() || '');
     setAlignSearchChassis(
       vehicle.vehicle_catalog_chassis_hint?.trim() || vehicle.vehicle_catalog_generation_hint?.trim() || '',
     );
-    const mh = vehicle.vehicle_catalog_production_month_hint ?? vehicle.vehicle_manufacture_month;
-    setAlignSearchMonth(
-      mh != null && Number.isFinite(Number(mh)) ? String(Number(mh)) : '',
-    );
     setAlignSearchDrivetrain(vehicle.vehicle_catalog_drivetrain_hint?.trim() || '');
     setAlignSearchTransmission(vehicle.vehicle_catalog_transmission_hint?.trim() || '');
-    setAlignSearchFuelType(vehicle.vehicle_catalog_fuel_type_hint?.trim() || '');
     setAlignSelectedRow(null);
     setAlignPickerSource(null);
   }, [
@@ -250,14 +280,10 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     vehicle.make,
     vehicle.model,
     vehicle.year,
-    vehicle.vehicle_catalog_trim_hint,
     vehicle.vehicle_catalog_chassis_hint,
     vehicle.vehicle_catalog_generation_hint,
-    vehicle.vehicle_catalog_production_month_hint,
-    vehicle.vehicle_manufacture_month,
     vehicle.vehicle_catalog_drivetrain_hint,
     vehicle.vehicle_catalog_transmission_hint,
-    vehicle.vehicle_catalog_fuel_type_hint,
   ]);
 
   const handleAlignPickerChange = useCallback(
@@ -268,15 +294,23 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     [],
   );
 
+  useEffect(() => {
+    if (!alignModalOpen) return;
+    setAlignSelectedRow(null);
+    setAlignPickerSource(null);
+  }, [alignSearchMake, alignSearchModel, alignSearchYear, alignSearchChassis, alignModalOpen]);
+
   const handleAlignSave = async () => {
     if (!fleetKey) return;
     if (!alignSelectedRow) return;
     setAlignSaving(true);
     try {
       const row = alignSelectedRow;
-      const monthNum = parseInt(alignSearchMonth.trim(), 10);
       const updatedVehicle = {
         ...vehicle,
+        make: alignSearchMake.trim() || vehicle.make,
+        model: alignSearchModel.trim() || vehicle.model,
+        year: /^\d{4}$/.test(alignSearchYear.trim()) ? alignSearchYear.trim() : vehicle.year,
         vehicle_catalog_id: row.id,
         vehicle_catalog_trim_hint: row.trim_series ?? undefined,
         vehicle_catalog_generation_hint: row.generation?.trim() || undefined,
@@ -284,8 +318,6 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         vehicle_catalog_drivetrain_hint: row.drivetrain ?? undefined,
         vehicle_catalog_fuel_type_hint: row.fuel_type ?? undefined,
         vehicle_catalog_transmission_hint: row.transmission ?? undefined,
-        vehicle_catalog_production_month_hint:
-          Number.isFinite(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : undefined,
         vehicle_catalog_engine_code_hint: row.engine_code ?? undefined,
         vehicle_catalog_engine_type_hint: row.engine_type ?? undefined,
         vehicle_catalog_full_model_code_hint: row.full_model_code ?? undefined,
@@ -2012,66 +2044,62 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
           <DialogHeader>
             <DialogTitle2>Align with motor catalog</DialogTitle2>
             <DialogDescription>
-              Confirm the make, model, and year, add any details that distinguish this vehicle from similar variants,
-              then pick the matching catalog row. We'll auto-match when only one row fits.
+              Choose make, model, and year from the catalog, then a chassis code (required). Optionally narrow with
+              drivetrain and transmission. We auto-match when only one catalog row fits.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label htmlFor="align-make">Make</Label>
-                <Input
-                  id="align-make"
-                  value={alignSearchMake}
-                  onChange={(e) => setAlignSearchMake(e.target.value)}
-                  placeholder="Toyota"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="align-model">Model</Label>
-                <Input
-                  id="align-model"
-                  value={alignSearchModel}
-                  onChange={(e) => setAlignSearchModel(e.target.value)}
-                  placeholder="Corolla"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="align-year">Year</Label>
-                <Input
-                  id="align-year"
-                  value={alignSearchYear}
-                  onChange={(e) => setAlignSearchYear(e.target.value)}
-                  inputMode="numeric"
-                  placeholder="2020"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="align-month">Month (optional)</Label>
-                <Input
-                  id="align-month"
-                  value={alignSearchMonth}
-                  onChange={(e) => setAlignSearchMonth(e.target.value)}
-                  inputMode="numeric"
-                  placeholder="1–12"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="align-chassis">Chassis code (optional)</Label>
-                <Input
-                  id="align-chassis"
-                  value={alignSearchChassis}
-                  onChange={(e) => setAlignSearchChassis(e.target.value.toUpperCase())}
-                  placeholder="e.g. M900A"
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
                 <CatalogFacetSelect
-                  label="Series / facelift / trim"
-                  value={alignSearchTrim}
-                  onChange={setAlignSearchTrim}
-                  options={alignFacets.trim_series}
-                  loading={alignFacetsLoading}
+                  label="Make"
+                  value={alignSearchMake}
+                  onChange={onAlignMakeChange}
+                  options={alignMakeOptions}
+                  loading={alignMakesLoading}
+                  optional={false}
+                  allowAny={false}
+                  emptyHint="Could not load makes from catalog"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <CatalogFacetSelect
+                  label="Model"
+                  value={alignSearchModel}
+                  onChange={onAlignModelChange}
+                  options={alignModelOptions}
+                  loading={alignModelsLoading}
+                  optional={false}
+                  allowAny={false}
+                  emptyHint={alignSearchMake.trim().length >= 2 ? "No models for this make" : "Select a make first"}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <CatalogFacetSelect
+                  label="Year"
+                  value={alignSearchYear}
+                  onChange={onAlignYearChange}
+                  options={alignYearOptions}
+                  loading={alignYearsLoading}
+                  optional={false}
+                  allowAny={false}
+                  emptyHint={
+                    alignSearchMake.trim().length >= 2 && alignSearchModel.trim().length >= 2
+                      ? "No years for this make/model"
+                      : "Select make and model first"
+                  }
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-3">
+                <CatalogFacetSelect
+                  label="Chassis code"
+                  value={alignSearchChassis}
+                  onChange={(v) => setAlignSearchChassis(v.toUpperCase())}
+                  options={alignMmyFacets.chassis_code}
+                  loading={alignMmyLoading}
+                  optional={false}
+                  allowAny={false}
+                  emptyHint="No chassis codes in the catalog for this make/model/year"
                 />
               </div>
               <div className="space-y-1.5">
@@ -2092,31 +2120,28 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                   loading={alignFacetsLoading}
                 />
               </div>
-              <div className="space-y-1.5">
-                <CatalogFacetSelect
-                  label="Fuel type"
-                  value={alignSearchFuelType}
-                  onChange={setAlignSearchFuelType}
-                  options={alignFacets.fuel_type}
-                  loading={alignFacetsLoading}
-                />
-              </div>
             </div>
-            <CatalogVariantPicker
-              make={alignSearchMake}
-              model={alignSearchModel}
-              year={alignSearchYear}
-              month={alignSearchMonth}
-              trim={alignSearchTrim}
-              drivetrain={alignSearchDrivetrain}
-              transmission={alignSearchTransmission}
-              fuel_type={alignSearchFuelType}
-              body_type={vehicle.bodyType ?? undefined}
-              chassis_code={alignSearchChassis || undefined}
-              value={alignSelectedRow?.id ?? null}
-              onChange={handleAlignPickerChange}
-              disabled={alignSaving}
-            />
+            {alignSearchChassis.trim() &&
+            /^\d{4}$/.test(alignSearchYear.trim()) &&
+            alignSearchMake.trim().length >= 2 &&
+            alignSearchModel.trim().length >= 2 ? (
+              <CatalogVariantPicker
+                make={alignSearchMake}
+                model={alignSearchModel}
+                year={alignSearchYear}
+                drivetrain={alignSearchDrivetrain}
+                transmission={alignSearchTransmission}
+                body_type={vehicle.bodyType ?? undefined}
+                chassis_code={alignSearchChassis}
+                value={alignSelectedRow?.id ?? null}
+                onChange={handleAlignPickerChange}
+                disabled={alignSaving}
+              />
+            ) : (
+              <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                Select make, model, year, and chassis above to search the motor catalog.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setAlignModalOpen(false)} disabled={alignSaving}>
@@ -2127,6 +2152,10 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
               onClick={() => void handleAlignSave()}
               disabled={
                 alignSaving ||
+                !alignSearchMake.trim() ||
+                !alignSearchModel.trim() ||
+                !/^\d{4}$/.test(alignSearchYear.trim()) ||
+                !alignSearchChassis.trim() ||
                 !alignSelectedRow ||
                 alignPickerSource === 'pending' ||
                 alignPickerSource === 'none'
