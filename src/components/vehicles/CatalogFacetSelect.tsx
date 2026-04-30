@@ -15,7 +15,11 @@
 //     they're re-opening an old vehicle with stale data), we still surface
 //     that value at the top with a "(not in catalog)" suffix so it never
 //     silently gets erased on save.
+//   - Matching against `options` is case-insensitive (e.g. fleet "TOYOTA" vs
+//     catalog "Toyota"). When only casing differs, we normalize to the
+//     catalog spelling via onChange so the parent state matches the DB.
 
+import { useEffect } from "react";
 import { Label } from "../ui/label";
 import {
   Select,
@@ -26,6 +30,18 @@ import {
 } from "../ui/select";
 
 const ANY_VALUE = "__any__";
+
+/** First catalog option whose string equals `raw` ignoring ASCII case. */
+function findCanonicalFacetOption(raw: string, options: string[]): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const lower = t.toLowerCase();
+  for (const o of options) {
+    if (typeof o !== "string") continue;
+    if (o.trim().toLowerCase() === lower) return o;
+  }
+  return null;
+}
 
 export interface CatalogFacetSelectProps {
   label: string;
@@ -54,19 +70,32 @@ export function CatalogFacetSelect(props: CatalogFacetSelectProps) {
   } = props;
 
   const trimmedValue = (value ?? "").trim();
-  const valueInOptions = trimmedValue.length > 0 && options.includes(trimmedValue);
+  const canonicalOption = findCanonicalFacetOption(trimmedValue, options);
+  const exactInList = trimmedValue.length > 0 && options.includes(trimmedValue);
+  const valueMatchesCatalog = exactInList || canonicalOption != null;
   const hasOptions = options.length > 0;
+
+  // When the fleet value differs only by case from a catalog row, snap the
+  // parent to the catalog spelling once options are available.
+  useEffect(() => {
+    if (loading) return;
+    if (!canonicalOption || canonicalOption === trimmedValue) return;
+    onChange(canonicalOption);
+  }, [loading, canonicalOption, trimmedValue, onChange]);
+
+  const valueForSelect =
+    trimmedValue.length > 0 ? (canonicalOption ?? trimmedValue) : "";
 
   const triggerDisabled = allowAny
     ? disabled || (!loading && !hasOptions && !trimmedValue)
     : disabled || loading || (!loading && !hasOptions);
 
   const selectValue = allowAny
-    ? trimmedValue.length > 0
-      ? trimmedValue
+    ? valueForSelect.length > 0
+      ? valueForSelect
       : ANY_VALUE
-    : trimmedValue.length > 0
-      ? trimmedValue
+    : valueForSelect.length > 0
+      ? valueForSelect
       : undefined;
 
   const placeholder = loading
@@ -96,7 +125,7 @@ export function CatalogFacetSelect(props: CatalogFacetSelectProps) {
         </SelectTrigger>
         <SelectContent>
           {allowAny ? <SelectItem value={ANY_VALUE}>{"\u2014 Any \u2014"}</SelectItem> : null}
-          {!valueInOptions && trimmedValue.length > 0 ? (
+          {!valueMatchesCatalog && trimmedValue.length > 0 ? (
             <SelectItem value={trimmedValue}>{trimmedValue} (not in catalog)</SelectItem>
           ) : null}
           {options.map((opt) => (
