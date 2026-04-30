@@ -7,6 +7,8 @@ const roots = [
   "src/utils/vehicleCatalogGate.ts",
   "src/utils/catalogGateErrors.ts",
   "src/components/vehicles/CatalogVariantPicker.tsx",
+  "src/components/vehicles/PendingCatalogRequestsDrawer.tsx",
+  "src/hooks/useMyPendingCatalogRequests.ts",
   "supabase/migrations/20260430120000_vehicle_catalog_pending_disambiguators.sql",
 ];
 

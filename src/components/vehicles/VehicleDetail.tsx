@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
@@ -109,14 +109,13 @@ import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { useAuth } from '../auth/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import {
-  getFleetVehicleCatalog,
-  listMyPendingCatalogRequests,
-} from '../../services/pendingVehicleCatalogService';
+import { getFleetVehicleCatalog } from '../../services/pendingVehicleCatalogService';
+import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
 import { formatCatalogProductionWindow, type VehicleCatalogRecord } from '../../types/vehicleCatalog';
 import { isVehicleParked, catalogStatusLabel, deriveCatalogStatus } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
+import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
@@ -148,11 +147,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const { session } = useAuth();
   const token = session?.access_token;
   const queryClient = useQueryClient();
-  const { data: myPendingCatalog } = useQuery({
-    queryKey: ['vehicle-catalog-pending-my'],
-    queryFn: () => listMyPendingCatalogRequests(token!),
-    enabled: Boolean(token),
-  });
+  // Centralised hook handles window-focus refetch + conditional polling.
+  const { data: myPendingCatalog } = useMyPendingCatalogRequests();
 
   const { data: linkedCatalog } = useQuery({
     queryKey: ['fleet-vehicle-catalog', vehicle.vehicle_catalog_id, token],
@@ -174,18 +170,34 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const parked = isVehicleParked(vehicle);
   const effectiveCatalogStatus = deriveCatalogStatus(vehicle);
 
-  // When a platform admin approves the pending request, the server stamps
-  // catalogStatus='matched'. Poll the pending list every 30s while parked so
-  // the banner can disappear without a manual refresh, and invalidate
-  // dependent queries the moment we detect the flip.
+  // Polling + window-focus refetch is now handled centrally by
+  // useMyPendingCatalogRequests; the hook re-fetches every 12s while any
+  // pending row exists, and on every tab focus. We still want to refresh the
+  // local 'vehicles' cache when the pending row count drops to zero so the
+  // page can re-render the unparked state without a manual reload.
   useEffect(() => {
-    if (!parked || !token) return;
-    const handle = window.setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-catalog-pending-my'] });
-      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
-    }, 30_000);
-    return () => window.clearInterval(handle);
-  }, [parked, token, queryClient]);
+    if (!parked) return;
+    queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+  }, [parked, myPendingCatalog, queryClient]);
+
+  // Success toast: detect the parked -> matched transition for THIS vehicle so
+  // the operator gets a clear "approved" signal without watching the banner.
+  // Uses a ref so the first render (when we don't know the previous state
+  // yet) never fires the toast and we don't depend on toast in deps.
+  const previousParkedRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const prev = previousParkedRef.current;
+    if (prev === true && parked === false) {
+      toast.success('Motor type approved', {
+        description: 'This vehicle is ready to operate.',
+      });
+    }
+    previousParkedRef.current = parked;
+  }, [parked]);
+
+  // Drawer state for the read-only pending-requests queue. Triggered from
+  // both the parked banner and the "review in progress" banner.
+  const [pendingDrawerOpen, setPendingDrawerOpen] = useState(false);
 
   const [alignModalOpen, setAlignModalOpen] = useState(false);
   /** Local form state for picker disambiguator inputs (seeded from vehicle hints on open). */
@@ -998,42 +1010,58 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       </div>
 
       {parked && (
-        <Alert className="border-amber-300 bg-amber-50 text-amber-950">
-          <AlertTriangle className="text-amber-700" />
-          <AlertTitle className="font-semibold">
-            {catalogPendingRow?.status === 'needs_info'
-              ? 'Action needed: platform admin requested more information'
-              : 'Vehicle is parked — pending catalog approval'}
-          </AlertTitle>
-          <AlertDescription className="text-amber-900/95 space-y-2">
-            <p>
-              This vehicle cannot be assigned to a driver, fueled, or have trips recorded against it until the platform
-              admin approves a motor catalog entry for <strong>{vehicle.year} {vehicle.make} {vehicle.model}</strong>.
-              Status is locked to <em>Inactive</em> in the meantime.
-            </p>
-            {catalogPendingRow?.status === 'needs_info' && catalogPendingRow.info_request_message && (
-              <div className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-amber-900">
-                <div className="font-semibold mb-1">Admin message</div>
-                <p className="whitespace-pre-wrap">{catalogPendingRow.info_request_message}</p>
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button
-                type="button"
-                size="sm"
-                className="bg-amber-700 text-white hover:bg-amber-800"
-                onClick={() => setAlignModalOpen(true)}
-              >
-                <ListChecks className="h-4 w-4 mr-2" />
-                Pick from catalog
-              </Button>
-              <span className="text-xs text-amber-800">
-                Status: <strong>{catalogStatusLabel(effectiveCatalogStatus)}</strong>
-                {catalogPendingRow?.id ? ` · Request #${catalogPendingRow.id.slice(0, 8)}` : ''}
-              </span>
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+              <AlertTriangle className="h-5 w-5 text-amber-700" />
             </div>
-          </AlertDescription>
-        </Alert>
+            <div className="min-w-0 flex-1 space-y-3">
+              <div>
+                <h3 className="text-lg font-semibold text-amber-900">
+                  {catalogPendingRow?.status === 'needs_info'
+                    ? 'Action needed: platform admin requested more information'
+                    : 'Vehicle is parked — pending catalog approval'}
+                </h3>
+                <p className="mt-1 text-sm text-amber-900/95">
+                  This vehicle cannot be assigned to a driver, fueled, or have trips recorded against it until the platform
+                  admin approves a motor catalog entry for <strong>{vehicle.year} {vehicle.make} {vehicle.model}</strong>.
+                  Status is locked to <em>Inactive</em> in the meantime.
+                </p>
+              </div>
+              {catalogPendingRow?.status === 'needs_info' && catalogPendingRow.info_request_message && (
+                <div className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-amber-900">
+                  <div className="font-semibold mb-1">Admin message</div>
+                  <p className="whitespace-pre-wrap">{catalogPendingRow.info_request_message}</p>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-amber-700 text-white hover:bg-amber-800"
+                  onClick={() => setAlignModalOpen(true)}
+                >
+                  <ListChecks className="h-4 w-4 mr-2" />
+                  Pick from catalog
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
+                  onClick={() => setPendingDrawerOpen(true)}
+                >
+                  <ListChecks className="h-4 w-4 mr-2" />
+                  View pending requests
+                </Button>
+                <span className="text-xs text-amber-800">
+                  Status: <strong>{catalogStatusLabel(effectiveCatalogStatus)}</strong>
+                  {catalogPendingRow?.id ? ` \u00B7 Request #${catalogPendingRow.id.slice(0, 8)}` : ''}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {!parked && showCatalogAlignmentBanner && (
@@ -1045,15 +1073,27 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
               The current catalog match is being reviewed. Maintenance schedules may update once the platform confirms
               the right variant.
             </p>
-            <Button
-              type="button"
-              size="sm"
-              className="mt-3 bg-amber-700 text-white hover:bg-amber-800"
-              onClick={() => setAlignModalOpen(true)}
-            >
-              <ListChecks className="h-4 w-4 mr-2" />
-              Align with catalog
-            </Button>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="bg-amber-700 text-white hover:bg-amber-800"
+                onClick={() => setAlignModalOpen(true)}
+              >
+                <ListChecks className="h-4 w-4 mr-2" />
+                Align with catalog
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
+                onClick={() => setPendingDrawerOpen(true)}
+              >
+                <ListChecks className="h-4 w-4 mr-2" />
+                View pending requests
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -2089,6 +2129,15 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PendingCatalogRequestsDrawer
+        open={pendingDrawerOpen}
+        onOpenChange={setPendingDrawerOpen}
+        // We're already on a vehicle detail page; we don't need to navigate
+        // away when the operator picks one. Hiding the per-row "Open vehicle"
+        // button keeps the drawer purely informational here.
+        onOpenVehicle={undefined}
+      />
 
       <Dialog open={isUpdateOdometerOpen} onOpenChange={setIsUpdateOdometerOpen}>
           <DialogContent>

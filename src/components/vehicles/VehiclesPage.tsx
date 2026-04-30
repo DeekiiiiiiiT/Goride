@@ -65,17 +65,16 @@ import {
 import { isSameDay, subDays } from "date-fns";
 import { useVocab } from '../../utils/vocabulary';
 import { usePermissions } from '../../hooks/usePermissions';
-import { useAuth } from '../auth/AuthContext';
-import { listMyPendingCatalogRequests } from '../../services/pendingVehicleCatalogService';
 import type { VehicleCatalogPendingRequest } from '../../types/vehicleCatalogPending';
 import { isVehicleParked } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
+import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
+import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
+import { ListChecks } from 'lucide-react';
 
 export function VehiclesPage() {
   const { v } = useVocab();
   const { can } = usePermissions();
-  const { session } = useAuth();
-  const catalogToken = session?.access_token;
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
@@ -97,6 +96,10 @@ export function VehiclesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [serviceFilter, setServiceFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Toggle view (Future proofing)
+
+  // Pending-catalog drawer (read-only queue surface). Triggered from the
+  // banner, the filter pill, and the per-card warning.
+  const [pendingDrawerOpen, setPendingDrawerOpen] = useState(false);
 
   // Phase 8: React Query for trips data
   const { data: trips = [], isLoading: tripsLoading } = useQuery({
@@ -138,12 +141,9 @@ export function VehiclesPage() {
     refetchOnMount: false,
   });
 
-  const { data: myCatalogPending } = useQuery({
-    queryKey: ['vehicle-catalog-pending-my'],
-    queryFn: () => listMyPendingCatalogRequests(catalogToken!),
-    enabled: Boolean(catalogToken),
-    staleTime: 60 * 1000,
-  });
+  // Centralised hook: window-focus refetch + conditional 12s polling while
+  // any pending requests exist. See useMyPendingCatalogRequests for details.
+  const { data: myCatalogPending } = useMyPendingCatalogRequests();
 
   const catalogPendingByFleetId = useMemo(() => {
     const m = new Map<string, VehicleCatalogPendingRequest>();
@@ -455,25 +455,52 @@ export function VehiclesPage() {
               </div>
 
               {parkedVehicleCount > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-700 mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-amber-900">
-                      {parkedVehicleCount} {parkedVehicleCount === 1 ? 'vehicle is' : 'vehicles are'} pending catalog approval
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                    <div className="flex-1 flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                        <AlertTriangle className="h-5 w-5 text-amber-700" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-lg font-semibold text-amber-900">
+                          {parkedVehicleCount} {parkedVehicleCount === 1 ? 'vehicle is' : 'vehicles are'} pending catalog approval
+                        </div>
+                        <p className="mt-1 text-sm text-amber-900/90">
+                          These vehicles are parked until a platform admin approves the motor type.
+                          They can't be assigned, fueled, or driven in the meantime.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <span className="inline-flex items-center rounded-full border border-amber-300 bg-white/70 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                            Can't assign driver
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-amber-300 bg-white/70 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                            Can't log fuel
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-amber-300 bg-white/70 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                            Can't record trips
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-amber-800 mt-0.5">
-                      These vehicles are parked — they cannot be assigned to a driver, fueled, or have trips recorded against them
-                      until a platform admin approves the motor type.
-                    </p>
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:gap-2 sm:shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
+                        onClick={() => setPendingDrawerOpen(true)}
+                      >
+                        <ListChecks className="h-4 w-4 mr-2" />
+                        View pending requests
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-amber-700 text-white hover:bg-amber-800"
+                        onClick={() => setStatusFilter('pending_catalog')}
+                      >
+                        Review parked
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
-                    onClick={() => setStatusFilter('pending_catalog')}
-                  >
-                    Review parked
-                  </Button>
                 </div>
               )}
 
@@ -537,6 +564,28 @@ export function VehiclesPage() {
                   </div>
               </div>
           </div>
+
+          {/* When the operator drilled into the pending-catalog view, give them
+              a one-click way to open the read-only requests drawer right above
+              the table. We only render when there is something to show so the
+              layout never jumps. */}
+          {statusFilter === 'pending_catalog' && parkedVehicleCount > 0 && (
+            <div className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-900">
+              <span>
+                Showing {parkedVehicleCount} vehicle{parkedVehicleCount === 1 ? '' : 's'} pending catalog approval.
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-amber-900 hover:bg-amber-100"
+                onClick={() => setPendingDrawerOpen(true)}
+              >
+                <ListChecks className="h-4 w-4 mr-1.5" />
+                View requests
+              </Button>
+            </div>
+          )}
 
           {/* --- CONTENT --- */}
           {filteredVehicles.length > 0 ? (
@@ -756,6 +805,15 @@ export function VehiclesPage() {
         onClose={() => setIsAddModalOpen(false)}
         onVehicleAdded={handleVehicleAdded}
         existingVehicles={manualVehicles}
+      />
+
+      <PendingCatalogRequestsDrawer
+        open={pendingDrawerOpen}
+        onOpenChange={setPendingDrawerOpen}
+        onOpenVehicle={(fleetVehicleId) => {
+          setSelectedVehicleId(fleetVehicleId);
+          setPendingDrawerOpen(false);
+        }}
       />
 
       <AlertDialog open={!!vehicleToDelete} onOpenChange={(open) => !open && setVehicleToDelete(null)}>

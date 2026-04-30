@@ -28,6 +28,7 @@ import { fuelService } from '../../services/fuelService';
 import { settlementService } from '../../services/settlementService';
 import { FuelEntry } from '../../types/fuel';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
+import { PendingCatalogRequestsDrawer } from '../vehicles/PendingCatalogRequestsDrawer';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
@@ -43,6 +44,9 @@ export function DriverDashboard() {
   const [fuelFormOpen, setFuelFormOpen] = useState(false);
   const [serviceFormOpen, setServiceFormOpen] = useState(false);
   const [manualTripFormOpen, setManualTripFormOpen] = useState(false);
+  // Drawer used by the catalog-gate toast action so a driver can see exactly
+  // which vehicle is parked and why. Read-only - drivers can't approve.
+  const [pendingDrawerOpen, setPendingDrawerOpen] = useState(false);
   
   const [metrics, setMetrics] = useState<DriverMetrics | null>(null);
   const [todayEarnings, setTodayEarnings] = useState<{
@@ -341,7 +345,10 @@ export function DriverDashboard() {
       
     } catch (e: any) {
       console.error("Failed to save manual trip", e);
-      const handled = showCatalogGateToastIfApplicable(e);
+      const handled = showCatalogGateToastIfApplicable(e, {
+        actionLabel: 'View pending requests',
+        onAction: () => setPendingDrawerOpen(true),
+      });
       if (!handled) toast.error(e.message || "Failed to save trip");
     }
   };
@@ -400,8 +407,12 @@ export function DriverDashboard() {
       } catch (e) {
           console.error("Failed to save fuel log", e);
           // If the server rejected because the assigned vehicle is parked,
-          // surface a clear toast before re-throwing.
-          showCatalogGateToastIfApplicable(e);
+          // surface a clear toast with a deep-link to the pending requests
+          // drawer so the driver can see exactly which vehicle is blocked.
+          showCatalogGateToastIfApplicable(e, {
+            actionLabel: 'View pending requests',
+            onAction: () => setPendingDrawerOpen(true),
+          });
           // Re-throw so FuelLogForm keeps the dialog open with driver's data intact
           throw e;
       }
@@ -507,6 +518,14 @@ export function DriverDashboard() {
         isAdmin={false}
         defaultVehicleId={driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle}
         initialData={tripInitialData}
+      />
+
+      <PendingCatalogRequestsDrawer
+        open={pendingDrawerOpen}
+        onOpenChange={setPendingDrawerOpen}
+        // Drivers can't navigate into VehicleDetail; the drawer stays purely
+        // informational so they can read the admin message and the linked plate.
+        onOpenVehicle={undefined}
       />
     </div>
   );
