@@ -2131,7 +2131,6 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                 year={alignSearchYear}
                 drivetrain={alignSearchDrivetrain}
                 transmission={alignSearchTransmission}
-                body_type={vehicle.bodyType ?? undefined}
                 chassis_code={alignSearchChassis}
                 value={alignSelectedRow?.id ?? null}
                 onChange={handleAlignPickerChange}
