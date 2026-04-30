@@ -6862,7 +6862,7 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
         prompt += `
         For 'fitness_certificate':
         - make, model, year, color
-        - bodyType, engineNumber, ccRating
+        - bodyType, engineNumber, ccRating, chassisNo
         - issueDate (YYYY-MM-DD), expirationDate (YYYY-MM-DD)
         `;
     }

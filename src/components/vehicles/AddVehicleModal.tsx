@@ -13,6 +13,9 @@ import { convertPdfToImage } from '../../utils/pdf-helper';
 import { findMatchingVehicle } from '../../utils/identityMatcher';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
+import { CatalogFacetSelect } from './CatalogFacetSelect';
+import { useCatalogCandidates } from '../../hooks/useCatalogCandidates';
+import { extractChassisPrefix } from '../../utils/chassisPrefix';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 
 interface AddVehicleModalProps {
@@ -183,6 +186,8 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     drivetrain: '',
     transmission: '',
     fuelType: '',
+    /** OEM chassis / frame index prefix (e.g. M900A); seeded from VIN/chassisNo on scan. */
+    chassis: '',
   });
 
   /**
@@ -208,6 +213,15 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
    * both fine to save — the server gates operational use either way.
    */
   const catalogSaveBlocked = catalogPickerSource === "pending";
+
+  // Single source of truth for the DB-backed dropdowns on the "Motor type"
+  // tab. Anchors are make + model + year + chassis prefix.
+  const { facets: catalogFacets, loading: catalogFacetsLoading } = useCatalogCandidates({
+    make: formData.make,
+    model: formData.model,
+    year: formData.year,
+    chassis: formData.chassis,
+  });
 
   const matchedVehicle = React.useMemo(() => {
       if (!formData.licensePlate) return null;
@@ -287,6 +301,12 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       const data = await scanDocument(fitnessFile, "fitness_certificate");
       console.log("Fitness Scan Result:", data);
       if (data) {
+          // Backup chassis source: fitness certificate's "Chassis No." field
+          // (server prompt extracts it as `chassisNo`). Used only when the
+          // registration scan hasn't populated chassis yet.
+          const fitnessChassisRaw = (data as { chassisNo?: unknown; vin?: unknown }).chassisNo
+              ?? (data as { chassisNo?: unknown; vin?: unknown }).vin
+              ?? "";
           newData = {
               ...newData,
               make: data.make != null ? String(data.make) : newData.make,
@@ -298,6 +318,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
               ccRating: data.ccRating != null ? String(data.ccRating) : newData.ccRating,
               fitnessIssueDate: formatDateForInput(data.issueDate) || newData.fitnessIssueDate,
               fitnessExpiryDate: formatDateForInput(data.expirationDate) || newData.fitnessExpiryDate,
+              chassis: newData.chassis || extractChassisPrefix(String(fitnessChassisRaw)),
           };
           toast.success("Certificate of Fitness processed. Review the details below.");
       } else {
@@ -321,10 +342,15 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       const data = await scanDocument(registrationFile, "vehicle_registration");
       console.log("Registration Scan Result:", data);
       if (data) {
+          const vinUpper = (data.vin || newData.vin || "").toUpperCase();
           newData = {
               ...newData,
               licensePlate: (data.plate || data.plateNumber || newData.licensePlate || "").toUpperCase(),
-              vin: (data.vin || newData.vin || "").toUpperCase(),
+              vin: vinUpper,
+              // Seed the chassis prefix from the registration VIN only when
+              // the operator hasn't typed one already. Picker uses this to
+              // narrow catalog candidates (ilike on chassis_code).
+              chassis: newData.chassis || extractChassisPrefix(vinUpper),
               mvid: data.mvid != null ? String(data.mvid) : newData.mvid,
               laNumber: data.laNumber != null ? String(data.laNumber) : newData.laNumber,
               controlNumber: data.controlNumber != null ? String(data.controlNumber) : newData.controlNumber,
@@ -431,7 +457,8 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         ? {
             vehicle_catalog_id: selectedCatalogRow.id,
             vehicle_catalog_trim_hint: trimToHint(selectedCatalogRow.trim_series ?? formData.trim),
-            vehicle_catalog_chassis_hint: trimToHint(selectedCatalogRow.chassis_code),
+            vehicle_catalog_chassis_hint:
+              trimToHint(selectedCatalogRow.chassis_code) ?? trimToHint(formData.chassis),
             vehicle_catalog_generation_hint: trimToHint(selectedCatalogRow.generation),
             vehicle_catalog_engine_code_hint: trimToHint(selectedCatalogRow.engine_code),
             vehicle_catalog_engine_type_hint: trimToHint(selectedCatalogRow.engine_type),
@@ -453,6 +480,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
             // No match yet — server will park + queue. Send everything we have
             // so the platform admin sees the full picture in the pending UI.
             vehicle_catalog_trim_hint: trimToHint(formData.trim),
+            vehicle_catalog_chassis_hint: trimToHint(formData.chassis),
             vehicle_catalog_drivetrain_hint: trimToHint(formData.drivetrain),
             vehicle_catalog_fuel_type_hint: trimToHint(formData.fuelType),
             vehicle_catalog_transmission_hint: trimToHint(formData.transmission),
@@ -585,7 +613,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         make: '', model: '', year: new Date().getFullYear().toString(),
         color: '', bodyType: '', engineNumber: '', ccRating: '', fitnessIssueDate: '', fitnessExpiryDate: '',
         laNumber: '', licensePlate: '', mvid: '', vin: '', controlNumber: '', registrationIssueDate: '', registrationExpiryDate: '',
-        trim: '', productionMonth: '', drivetrain: '', transmission: '', fuelType: ''
+        trim: '', productionMonth: '', drivetrain: '', transmission: '', fuelType: '', chassis: ''
     });
     setFitnessFile(null);
     setRegistrationFile(null);
@@ -873,13 +901,16 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <Label className="text-xs text-slate-500">Trim / series (optional)</Label>
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-slate-500">Chassis code (auto-detected from registration)</Label>
                       <Input
-                        value={formData.trim}
-                        onChange={(e) => setFormData({ ...formData, trim: e.target.value })}
-                        placeholder="e.g. XLE, Custom G"
+                        value={formData.chassis}
+                        onChange={(e) => setFormData({ ...formData, chassis: e.target.value.toUpperCase() })}
+                        placeholder="e.g. M900A"
                       />
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        We use the chassis prefix to filter the catalog. Edit if it looks wrong.
+                      </p>
                     </div>
                     <div>
                       <Label className="text-xs text-slate-500">Production month (optional)</Label>
@@ -887,65 +918,38 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                         value={formData.productionMonth}
                         onChange={(e) => setFormData({ ...formData, productionMonth: e.target.value })}
                         inputMode="numeric"
-                        placeholder="1–12"
+                        placeholder={"1\u201312"}
                       />
                     </div>
-                    <div>
-                      <Label className="text-xs text-slate-500">Drivetrain (optional)</Label>
-                      <Select
-                        value={formData.drivetrain || "_blank"}
-                        onValueChange={(v) => setFormData({ ...formData, drivetrain: v === "_blank" ? "" : v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_blank">— not sure —</SelectItem>
-                          <SelectItem value="FWD">FWD</SelectItem>
-                          <SelectItem value="RWD">RWD</SelectItem>
-                          <SelectItem value="AWD">AWD</SelectItem>
-                          <SelectItem value="4WD">4WD</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-slate-500">Transmission (optional)</Label>
-                      <Select
-                        value={formData.transmission || "_blank"}
-                        onValueChange={(v) => setFormData({ ...formData, transmission: v === "_blank" ? "" : v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_blank">— not sure —</SelectItem>
-                          <SelectItem value="AT">Automatic</SelectItem>
-                          <SelectItem value="MT">Manual</SelectItem>
-                          <SelectItem value="CVT">CVT</SelectItem>
-                          <SelectItem value="DCT">DCT</SelectItem>
-                          <SelectItem value="AMT">AMT</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <CatalogFacetSelect
+                      label="Trim / series"
+                      value={formData.trim}
+                      onChange={(v) => setFormData({ ...formData, trim: v })}
+                      options={catalogFacets.trim_series}
+                      loading={catalogFacetsLoading}
+                    />
+                    <CatalogFacetSelect
+                      label="Drivetrain"
+                      value={formData.drivetrain}
+                      onChange={(v) => setFormData({ ...formData, drivetrain: v })}
+                      options={catalogFacets.drivetrain}
+                      loading={catalogFacetsLoading}
+                    />
+                    <CatalogFacetSelect
+                      label="Transmission"
+                      value={formData.transmission}
+                      onChange={(v) => setFormData({ ...formData, transmission: v })}
+                      options={catalogFacets.transmission}
+                      loading={catalogFacetsLoading}
+                    />
                     <div className="sm:col-span-2">
-                      <Label className="text-xs text-slate-500">Fuel type (optional)</Label>
-                      <Select
-                        value={formData.fuelType || "_blank"}
-                        onValueChange={(v) => setFormData({ ...formData, fuelType: v === "_blank" ? "" : v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_blank">— not sure —</SelectItem>
-                          <SelectItem value="Gasoline">Gasoline</SelectItem>
-                          <SelectItem value="Diesel">Diesel</SelectItem>
-                          <SelectItem value="Hybrid">Hybrid</SelectItem>
-                          <SelectItem value="EV">Electric (EV)</SelectItem>
-                          <SelectItem value="LPG">LPG</SelectItem>
-                          <SelectItem value="CNG">CNG</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <CatalogFacetSelect
+                        label="Fuel type"
+                        value={formData.fuelType}
+                        onChange={(v) => setFormData({ ...formData, fuelType: v })}
+                        options={catalogFacets.fuel_type}
+                        loading={catalogFacetsLoading}
+                      />
                     </div>
                   </div>
 
@@ -960,6 +964,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                       transmission={formData.transmission}
                       fuel_type={formData.fuelType}
                       body_type={formData.bodyType}
+                      chassis_code={formData.chassis || undefined}
                       value={selectedCatalogRow?.id ?? null}
                       onChange={handleCatalogPickerChange}
                       disabled={isLoading}

@@ -115,6 +115,8 @@ import { formatCatalogProductionWindow, type VehicleCatalogRecord } from '../../
 import { isVehicleParked, catalogStatusLabel, deriveCatalogStatus } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
+import { CatalogFacetSelect } from './CatalogFacetSelect';
+import { useCatalogCandidates } from '../../hooks/useCatalogCandidates';
 import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
@@ -214,6 +216,16 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   const [alignSelectedRow, setAlignSelectedRow] = useState<VehicleCatalogRecord | null>(null);
   const [alignPickerSource, setAlignPickerSource] = useState<CatalogVariantPickerSource | null>(null);
   const [alignSaving, setAlignSaving] = useState(false);
+
+  // DB-backed dropdown options for the align modal: same hook the
+  // AddVehicleModal uses, so the customer sees the exact same value lists in
+  // both flows.
+  const { facets: alignFacets, loading: alignFacetsLoading } = useCatalogCandidates({
+    make: alignSearchMake,
+    model: alignSearchModel,
+    year: alignSearchYear,
+    chassis: alignSearchChassis,
+  });
 
   useEffect(() => {
     if (!alignModalOpen) return;
@@ -2044,49 +2056,49 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                   placeholder="1–12"
                 />
               </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="align-trim">Series / facelift / trim (optional)</Label>
-                <Input
-                  id="align-trim"
-                  value={alignSearchTrim}
-                  onChange={(e) => setAlignSearchTrim(e.target.value)}
-                  placeholder="e.g. Base, XLE"
-                />
-              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="align-chassis">Chassis code (optional)</Label>
                 <Input
                   id="align-chassis"
                   value={alignSearchChassis}
-                  onChange={(e) => setAlignSearchChassis(e.target.value)}
+                  onChange={(e) => setAlignSearchChassis(e.target.value.toUpperCase())}
                   placeholder="e.g. M900A"
                 />
               </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <CatalogFacetSelect
+                  label="Series / facelift / trim"
+                  value={alignSearchTrim}
+                  onChange={setAlignSearchTrim}
+                  options={alignFacets.trim_series}
+                  loading={alignFacetsLoading}
+                />
+              </div>
               <div className="space-y-1.5">
-                <Label htmlFor="align-drivetrain">Drivetrain (optional)</Label>
-                <Input
-                  id="align-drivetrain"
+                <CatalogFacetSelect
+                  label="Drivetrain"
                   value={alignSearchDrivetrain}
-                  onChange={(e) => setAlignSearchDrivetrain(e.target.value)}
-                  placeholder="FWD / AWD"
+                  onChange={setAlignSearchDrivetrain}
+                  options={alignFacets.drivetrain}
+                  loading={alignFacetsLoading}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="align-transmission">Transmission (optional)</Label>
-                <Input
-                  id="align-transmission"
+                <CatalogFacetSelect
+                  label="Transmission"
                   value={alignSearchTransmission}
-                  onChange={(e) => setAlignSearchTransmission(e.target.value)}
-                  placeholder="AT / CVT / MT"
+                  onChange={setAlignSearchTransmission}
+                  options={alignFacets.transmission}
+                  loading={alignFacetsLoading}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="align-fuel">Fuel type (optional)</Label>
-                <Input
-                  id="align-fuel"
+                <CatalogFacetSelect
+                  label="Fuel type"
                   value={alignSearchFuelType}
-                  onChange={(e) => setAlignSearchFuelType(e.target.value)}
-                  placeholder="Gasoline / Diesel"
+                  onChange={setAlignSearchFuelType}
+                  options={alignFacets.fuel_type}
+                  loading={alignFacetsLoading}
                 />
               </div>
             </div>
@@ -2100,6 +2112,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
               transmission={alignSearchTransmission}
               fuel_type={alignSearchFuelType}
               body_type={vehicle.bodyType ?? undefined}
+              chassis_code={alignSearchChassis || undefined}
               value={alignSelectedRow?.id ?? null}
               onChange={handleAlignPickerChange}
               disabled={alignSaving}

@@ -6,9 +6,15 @@ const roots = [
   "src/supabase/functions/server/vehicle_catalog_gate.ts",
   "src/utils/vehicleCatalogGate.ts",
   "src/utils/catalogGateErrors.ts",
+  "src/utils/chassisPrefix.ts",
+  "src/utils/chassisPrefix.test.ts",
   "src/components/vehicles/CatalogVariantPicker.tsx",
   "src/components/vehicles/PendingCatalogRequestsDrawer.tsx",
+  "src/components/vehicles/CatalogFacetSelect.tsx",
+  "src/components/vehicles/AddVehicleModal.tsx",
+  "src/components/vehicles/VehicleDetail.tsx",
   "src/hooks/useMyPendingCatalogRequests.ts",
+  "src/hooks/useCatalogCandidates.ts",
   "supabase/migrations/20260430120000_vehicle_catalog_pending_disambiguators.sql",
 ];
 
